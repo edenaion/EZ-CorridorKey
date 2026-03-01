@@ -12,8 +12,9 @@ import logging
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame, QSplitter,
+    QToolTip,
 )
-from PySide6.QtCore import Qt, Signal, QRect, QSize
+from PySide6.QtCore import Qt, Signal, QRect, QSize, QEvent
 from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent
 
 from backend import ClipEntry, ClipState
@@ -47,10 +48,12 @@ class ThumbnailCanvas(QWidget):
     THUMB_W = 110
     THUMB_H = 62
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, show_manifest_tooltip: bool = False):
         super().__init__(parent)
         self._clips: list[ClipEntry] = []
         self._model: ClipListModel | None = None
+        self._show_manifest_tooltip = show_manifest_tooltip
+        self.setMouseTracking(True)
         self.setMinimumHeight(100)
 
     def set_clips(self, clips: list[ClipEntry], model: ClipListModel) -> None:
@@ -165,6 +168,62 @@ class ThumbnailCanvas(QWidget):
         w = max(1, len(self._clips) * (self.CARD_WIDTH + self.CARD_SPACING))
         return QSize(w, 100)
 
+    def _card_at(self, x: float) -> ClipEntry | None:
+        """Return the ClipEntry under the given x position, or None."""
+        if not self._clips:
+            return None
+        idx = int(x // (self.CARD_WIDTH + self.CARD_SPACING))
+        if 0 <= idx < len(self._clips):
+            return self._clips[idx]
+        return None
+
+    def event(self, ev: QEvent) -> bool:
+        if ev.type() == QEvent.ToolTip and self._show_manifest_tooltip:
+            clip = self._card_at(ev.position().x())
+            tip = _format_manifest_tooltip(clip) if clip else ""
+            if tip:
+                QToolTip.showText(ev.globalPosition().toPoint(), tip, self)
+            else:
+                QToolTip.hideText()
+            return True
+        return super().event(ev)
+
+
+def _format_manifest_tooltip(clip: ClipEntry) -> str:
+    """Build a tooltip string from the clip's .corridorkey_manifest.json."""
+    manifest = clip._read_manifest()
+    if manifest is None:
+        return ""
+
+    lines: list[str] = [f"<b>{clip.name}</b> — Export Settings"]
+
+    # Outputs + formats
+    enabled = manifest.get("enabled_outputs", [])
+    formats = manifest.get("formats", {})
+    if enabled:
+        out_parts = []
+        for name in enabled:
+            fmt = formats.get(name, "?").upper()
+            out_parts.append(f"{name.upper()} ({fmt})")
+        lines.append(f"<b>Outputs:</b> {', '.join(out_parts)}")
+
+    # Params
+    params = manifest.get("params", {})
+    if params:
+        cs = "Linear" if params.get("input_is_linear") else "sRGB"
+        lines.append(f"<b>Color Space:</b> {cs}")
+        ds = params.get("despill_strength", 1.0)
+        lines.append(f"<b>Despill:</b> {ds:.0%}")
+        rs = params.get("refiner_scale", 1.0)
+        lines.append(f"<b>Refiner:</b> {rs:.0%}")
+        if params.get("auto_despeckle"):
+            sz = params.get("despeckle_size", 400)
+            lines.append(f"<b>Despeckle:</b> On (size {sz})")
+        else:
+            lines.append(f"<b>Despeckle:</b> Off")
+
+    return "<br>".join(lines)
+
 
 class IOTrayPanel(QWidget):
     """Bottom panel with Input and Exports thumbnail strips.
@@ -232,7 +291,7 @@ class IOTrayPanel(QWidget):
         self._export_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._export_scroll.setWidgetResizable(False)
 
-        self._export_canvas = ThumbnailCanvas()
+        self._export_canvas = ThumbnailCanvas(show_manifest_tooltip=True)
         self._export_canvas.card_clicked.connect(self.clip_clicked.emit)
         self._export_scroll.setWidget(self._export_canvas)
 

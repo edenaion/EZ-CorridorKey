@@ -2,8 +2,6 @@
 
 ## Pending
 
-- **Export settings display in GUI**: Manifest JSON is already saved alongside outputs (.corridorkey_manifest.json). Need to display these saved settings in the GUI — either in the IO tray's Exports section or as a tooltip/panel so users can recall what settings produced each result.
-
 - **Welcome screen multi-select for batch import**: Video thumbnails and video files on the welcome screen should support multi-selection. Users should be able to: (1) Ctrl+click to toggle individual files, (2) Shift+click for range selection, (3) Ctrl+A to select all, (4) Click-drag for rubber-band/marquee selection across thumbnail grid. Selected files get imported as a batch when confirmed. This enables processing multiple videos together without repeated file dialog trips.
 
 - **Verify post-inference side-by-side scrub**: The dual viewer already supports input vs output comparison (left=Original, right=Comp/FG/Matte/Processed). Need to verify: (1) after inference completes, output viewer auto-switches to COMP mode showing keyed result, (2) scrubbing works frame-by-frame across full range, (3) mode switching (COMP/FG/Matte) works on the output side. The infrastructure exists — this is a QA/verification task.
@@ -32,3 +30,4 @@
 - Collapsed sidebar — floating chevron nub, 0px width when collapsed, full space reclaimed
 - Cancel shows "Canceled" not "Failed" — already separated: cancel path uses warning signal + "Cancelled:" prefix, error path uses error signal + QMessageBox
 - ADD button supports folders or files — QMenu choice: "Import Folder..." or "Import Video(s)...", drag-drop also accepts video files
+- Export settings tooltip — hover over Exports cards in IO tray shows manifest data (outputs, formats, color space, despill, refiner, despeckle)
