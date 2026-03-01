@@ -46,7 +46,7 @@ class GPUJobWorker(QThread):
     # Signals — all carry job_id as first arg for stale detection
     progress = Signal(str, str, int, int)      # job_id, clip_name, current_frame, total_frames
     preview_ready = Signal(str, str, int, str) # job_id, clip_name, frame_index, temp_file_path
-    clip_finished = Signal(str, str)           # job_id, clip_name
+    clip_finished = Signal(str, str, str)       # job_id, clip_name, job_type_value
     warning = Signal(str, str)                 # job_id, message
     error = Signal(str, str, str)              # job_id, clip_name, error_message
     queue_empty = Signal()                     # all jobs done
@@ -117,7 +117,7 @@ class GPUJobWorker(QThread):
 
             self._queue.complete_job(job)
             if job.job_type != JobType.PREVIEW_REPROCESS:
-                self.clip_finished.emit(job_id, job.clip_name)
+                self.clip_finished.emit(job_id, job.clip_name, job.job_type.value)
 
         except JobCancelledError:
             # Use mark_cancelled() to properly clear _current_job (Codex critical fix)
@@ -159,6 +159,7 @@ class GPUJobWorker(QThread):
             self.warning.emit(job.id, message)
 
         output_config = job.params.get("_output_config")
+        frame_range = job.params.get("_frame_range")
         self._service.run_inference(
             clip=clip,
             params=params,
@@ -167,6 +168,7 @@ class GPUJobWorker(QThread):
             on_warning=on_warning,
             skip_stems=skip_stems,
             output_config=output_config,
+            frame_range=frame_range,
         )
 
     def _run_gvm(self, job: GPUJob) -> None:

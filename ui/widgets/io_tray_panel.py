@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame, QSplitter,
 )
 from PySide6.QtCore import Qt, Signal, QRect, QSize
 from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent
@@ -111,30 +111,38 @@ class ThumbnailCanvas(QWidget):
             p.setPen(QColor("#3A3A30"))
             p.drawRect(thumb_rect.adjusted(0, 0, -1, -1))
 
-        # State badge (top-right of card)
+        # State badge (top-right over thumbnail, with background pill)
         badge_color = QColor(_STATE_COLORS.get(clip.state, "#808070"))
-        p.setPen(badge_color)
         font = p.font()
         font.setPointSize(8)
         font.setBold(True)
         p.setFont(font)
-        badge_rect = QRect(rect.x() + pad, rect.y() + pad, self.CARD_WIDTH - pad * 2, 14)
-        p.drawText(badge_rect, Qt.AlignRight | Qt.AlignTop, clip.state.value)
+        badge_text = clip.state.value
+        metrics = p.fontMetrics()
+        text_w = metrics.horizontalAdvance(badge_text)
+        bg_rect = QRect(
+            rect.x() + self.CARD_WIDTH - pad - text_w - 6,
+            rect.y() + pad,
+            text_w + 6, 14,
+        )
+        p.fillRect(bg_rect, QColor(0, 0, 0, 128))
+        p.setPen(badge_color)
+        p.drawText(bg_rect, Qt.AlignCenter, badge_text)
 
-        # Clip name (below thumbnail)
+        # Clip name (below thumbnail, with background)
         text_y = rect.y() + pad + self.THUMB_H + 4
-        p.setPen(QColor("#E0E0E0"))
         font.setPointSize(9)
         font.setBold(True)
         p.setFont(font)
         name_rect = QRect(rect.x() + pad, text_y, self.CARD_WIDTH - pad * 2, 16)
         metrics = p.fontMetrics()
         elided = metrics.elidedText(clip.name, Qt.ElideRight, name_rect.width())
+        p.fillRect(name_rect, QColor(0, 0, 0, 128))
+        p.setPen(QColor("#E0E0E0"))
         p.drawText(name_rect, Qt.AlignLeft | Qt.AlignVCenter, elided)
 
-        # Frame count (below name)
+        # Frame count (below name, with background)
         if clip.input_asset:
-            p.setPen(QColor("#808070"))
             font.setPointSize(8)
             font.setBold(False)
             p.setFont(font)
@@ -142,6 +150,8 @@ class ThumbnailCanvas(QWidget):
             info_text = f"{clip.input_asset.frame_count} frames"
             if clip.input_asset.asset_type == "video":
                 info_text += " (video)"
+            p.fillRect(info_rect, QColor(0, 0, 0, 128))
+            p.setPen(QColor("#808070"))
             p.drawText(info_rect, Qt.AlignLeft | Qt.AlignVCenter, info_text)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -176,13 +186,16 @@ class IOTrayPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Content: two strips side by side
-        content = QHBoxLayout()
-        content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(0)
+        # Content: two strips in a splitter (synced with dual viewer divider)
+        self._tray_splitter = QSplitter(Qt.Horizontal)
+        self._tray_splitter.setHandleWidth(1)
+        self._tray_splitter.setStyleSheet(
+            "QSplitter::handle { background-color: #2A2910; }"
+        )
 
         # Input section
-        input_section = QVBoxLayout()
+        input_widget = QWidget()
+        input_section = QVBoxLayout(input_widget)
         input_section.setContentsMargins(0, 0, 0, 0)
         input_section.setSpacing(0)
 
@@ -201,20 +214,11 @@ class IOTrayPanel(QWidget):
         self._input_scroll.setWidget(self._input_canvas)
 
         input_section.addWidget(self._input_scroll, 1)
-
-        input_widget = QWidget()
-        input_widget.setLayout(input_section)
-        content.addWidget(input_widget, 1)
-
-        # Vertical divider
-        divider = QFrame()
-        divider.setFrameShape(QFrame.VLine)
-        divider.setFixedWidth(1)
-        divider.setStyleSheet("background-color: #2A2910;")
-        content.addWidget(divider)
+        self._tray_splitter.addWidget(input_widget)
 
         # Exports section
-        export_section = QVBoxLayout()
+        export_widget = QWidget()
+        export_section = QVBoxLayout(export_widget)
         export_section.setContentsMargins(0, 0, 0, 0)
         export_section.setSpacing(0)
 
@@ -233,12 +237,14 @@ class IOTrayPanel(QWidget):
         self._export_scroll.setWidget(self._export_canvas)
 
         export_section.addWidget(self._export_scroll, 1)
+        self._tray_splitter.addWidget(export_widget)
 
-        export_widget = QWidget()
-        export_widget.setLayout(export_section)
-        content.addWidget(export_widget, 1)
+        # Equal split by default (synced from main window)
+        self._tray_splitter.setSizes([500, 500])
+        self._tray_splitter.setStretchFactor(0, 1)
+        self._tray_splitter.setStretchFactor(1, 1)
 
-        layout.addLayout(content)
+        layout.addWidget(self._tray_splitter)
 
         # Connect to model signals for auto-rebuild
         self._model.modelReset.connect(self._rebuild)
@@ -263,3 +269,12 @@ class IOTrayPanel(QWidget):
     def refresh(self) -> None:
         """Force rebuild (called after worker completes a clip)."""
         self._rebuild()
+
+    def sync_divider(self, left_px: int) -> None:
+        """Set the IO tray divider position in pixels from the left edge.
+
+        Called by main window to align with the dual viewer's splitter.
+        """
+        total = self._tray_splitter.width()
+        right = max(1, total - left_px)
+        self._tray_splitter.setSizes([left_px, right])

@@ -80,3 +80,60 @@ def sample_clip(tmp_clip_dir):
         alpha_asset=ClipAsset(alpha_dir, "sequence"),
     )
     return clip
+
+
+@pytest.fixture
+def tmp_project_dir(sample_frame, sample_mask):
+    """Temp directory with new-format project structure (Frames/, Source/).
+
+    Layout:
+        project_root/
+            Source/
+                test_video.mp4 (dummy)
+            Frames/
+                frame_000000.png (4x4 RGB)
+                frame_000001.png
+                frame_000002.png
+            AlphaHint/
+                _alphaHint_000000.png (4x4 grayscale)
+                _alphaHint_000001.png
+                _alphaHint_000002.png
+            Output/
+                FG/ Matte/ Comp/ Processed/
+            project.json
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = os.path.join(tmpdir, "2026-03-01_093000_test")
+        source_dir = os.path.join(project_root, "Source")
+        frames_dir = os.path.join(project_root, "Frames")
+        alpha_dir = os.path.join(project_root, "AlphaHint")
+        output_root = os.path.join(project_root, "Output")
+
+        for d in [source_dir, frames_dir, alpha_dir]:
+            os.makedirs(d)
+        for subdir in ("FG", "Matte", "Comp", "Processed"):
+            os.makedirs(os.path.join(output_root, subdir))
+
+        # Dummy source video
+        with open(os.path.join(source_dir, "test_video.mp4"), "wb") as f:
+            f.write(b"\x00" * 100)
+
+        # Write frames and alpha
+        for i in range(3):
+            img_bgr = (sample_frame * 255).astype(np.uint8)
+            img_bgr = cv2.cvtColor(img_bgr, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(os.path.join(frames_dir, f"frame_{i:06d}.png"), img_bgr)
+
+            mask_u8 = (sample_mask * 255).astype(np.uint8)
+            cv2.imwrite(os.path.join(alpha_dir, f"_alphaHint_{i:06d}.png"), mask_u8)
+
+        # project.json
+        import json
+        with open(os.path.join(project_root, "project.json"), "w") as f:
+            json.dump({
+                "version": 1,
+                "display_name": "Test Project",
+                "source": {"filename": "test_video.mp4"},
+            }, f)
+
+        yield project_root

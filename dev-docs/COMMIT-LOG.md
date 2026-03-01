@@ -4,6 +4,26 @@ Running log of all commits for development history.
 
 ---
 
+### d20201f - 2026-03-01
+**Add I/O frame markers, coverage bar, project persistence, and UI polish**
+
+Key changes:
+- In/Out frame range markers (I/O/Alt+I hotkeys) with project.json persistence
+- CoverageBar dual-lane painting (alpha + inference) with dim overlay and yellow brackets
+- Frame range-aware inference (sub-clip processing, GVM always full clip)
+- backend/project.py for per-clip project.json read/write
+- ClipEntry.in_out_range field with InOutRange dataclass
+- Clip browser polish: welcome screen, recent projects, ghost frame fix
+- Parameter panel and status bar improvements
+- 267 tests (expanded from 236)
+
+---
+
+### b9367d7 - 2026-03-01 09:39
+**Add video extract pipeline, session persistence, cancel/stop, GVM progress, and brand assets**
+
+---
+
 ### b18f30b - 2026-02-28 22:35
 **Add Topaz-style welcome screen, brand polish, and transport controls**
 

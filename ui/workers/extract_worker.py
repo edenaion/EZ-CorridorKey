@@ -121,9 +121,13 @@ class ExtractWorker(QThread):
 
             total_frames = info.get("frame_count", 0)
 
-            # Target: clip_root/Input/ directory
-            input_dir = os.path.join(job.clip_root, "Input")
-            os.makedirs(input_dir, exist_ok=True)
+            # Target: Frames/ for new-format projects, Input/ for legacy
+            source_dir = os.path.join(job.clip_root, "Source")
+            if os.path.isdir(source_dir):
+                target_dir = os.path.join(job.clip_root, "Frames")
+            else:
+                target_dir = os.path.join(job.clip_root, "Input")
+            os.makedirs(target_dir, exist_ok=True)
 
             # Progress callback → signal
             def on_progress(current: int, total: int) -> None:
@@ -132,7 +136,7 @@ class ExtractWorker(QThread):
             # Run extraction
             extracted = extract_frames(
                 video_path=job.video_path,
-                out_dir=input_dir,
+                out_dir=target_dir,
                 on_progress=on_progress,
                 cancel_event=job.cancel_event,
                 total_frames=total_frames,

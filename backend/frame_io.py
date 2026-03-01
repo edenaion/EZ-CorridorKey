@@ -130,8 +130,11 @@ def read_mask_frame(fpath: str, clip_name: str = "", frame_index: int = 0) -> Op
     mask_in = cv2.imread(fpath, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED)
     if mask_in is None:
         return None
-    mask = normalize_mask_channels(mask_in, clip_name, frame_index)
-    mask = normalize_mask_dtype(mask)
+    # dtype normalization MUST happen before channel extraction, because
+    # normalize_mask_channels casts to float32 — which would make a uint8
+    # 255 into float32 255.0, skipping the /255 division in normalize_mask_dtype.
+    mask = normalize_mask_dtype(mask_in)
+    mask = normalize_mask_channels(mask, clip_name, frame_index)
     return mask
 
 

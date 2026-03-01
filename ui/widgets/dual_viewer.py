@@ -9,13 +9,14 @@ When no output exists yet (clip not processed), both viewers show the input.
 from __future__ import annotations
 
 import logging
+import os
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QImage
 
 from backend import ClipEntry
-from ui.preview.frame_index import ViewMode
+from ui.preview.frame_index import FrameIndex, ViewMode
 from ui.widgets.preview_viewport import PreviewViewport
 from ui.widgets.frame_scrubber import FrameScrubber
 
@@ -111,14 +112,23 @@ class DualViewerPanel(QWidget):
             self._scrubber.set_range(fi.frame_count)
             if fi.frame_count > 0:
                 self._scrubber.set_frame(0)
+            self._update_coverage(clip, fi)
+
+        # Restore in/out markers from clip data
+        if clip.in_out_range:
+            self._scrubber.set_in_out(clip.in_out_range.in_point, clip.in_out_range.out_point)
+        else:
+            self._scrubber.clear_in_out()
 
     def load_preview_from_file(self, file_path: str, clip_name: str, frame_index: int) -> None:
         """Forward worker preview to the output viewer."""
         self._output_viewer.load_preview_from_file(file_path, clip_name, frame_index)
-        # Also update shared scrubber range (output may have new frames)
+        # Also update shared scrubber range and coverage (output may have new frames)
         fi = self._output_viewer._frame_index
         if fi:
             self._scrubber.set_range(fi.frame_count)
+            if self._clip:
+                self._update_coverage(self._clip, fi)
 
     def show_placeholder(self, text: str = "No clip selected") -> None:
         """Show placeholder on both viewers."""
@@ -139,6 +149,50 @@ class DualViewerPanel(QWidget):
         """Reset zoom on both viewers."""
         self._input_viewer.reset_zoom()
         self._output_viewer.reset_zoom()
+
+    def set_extraction_progress(self, progress: float, total: int) -> None:
+        """Forward extraction progress to the input viewer's split view."""
+        self._input_viewer._split_view.set_extraction_progress(progress, total)
+
+    # ── In/Out Markers ──
+
+    def set_in_out(self, in_point: int | None, out_point: int | None) -> None:
+        """Forward in/out markers to the scrubber."""
+        self._scrubber.set_in_out(in_point, out_point)
+
+    def get_in_out(self) -> tuple[int | None, int | None]:
+        """Return current (in_point, out_point) from the scrubber."""
+        return self._scrubber.get_in_out()
+
+    # ── Coverage ──
+
+    def _update_coverage(self, clip: ClipEntry, fi: FrameIndex) -> None:
+        """Compute alpha and inference coverage arrays and update the scrubber."""
+        stems = fi.stems
+        if not stems:
+            self._scrubber.set_coverage([], [])
+            return
+
+        # Alpha coverage: scan AlphaHint/ directory for matching stems
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        alpha_stems: set[str] = set()
+        if os.path.isdir(alpha_dir):
+            for fname in os.listdir(alpha_dir):
+                stem, ext = os.path.splitext(fname)
+                if ext.lower() in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp'):
+                    alpha_stems.add(stem)
+
+        # Inference coverage: any output mode (FG, Matte, Comp, Processed) has this stem
+        output_modes = (ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED)
+        inference_stems: set[str] = set()
+        for mode in output_modes:
+            inference_stems |= fi.availability.get(mode, set())
+
+        # Build boolean arrays aligned to stems
+        alpha_coverage = [s in alpha_stems for s in stems]
+        inference_coverage = [s in inference_stems for s in stems]
+
+        self._scrubber.set_coverage(alpha_coverage, inference_coverage)
 
     # ── Navigation ──
 

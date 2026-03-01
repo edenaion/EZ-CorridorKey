@@ -82,7 +82,7 @@ class InvalidStateTransitionError(CorridorKeyError):
         self.target_state = target_state
         super().__init__(
             f"Clip '{clip_name}': invalid state transition "
-            f"{current_state} → {target_state}"
+            f"{current_state} -> {target_state}"
         )
 
 

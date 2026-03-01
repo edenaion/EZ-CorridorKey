@@ -2,6 +2,7 @@
 import os
 import tempfile
 
+import cv2
 import numpy as np
 import pytest
 
@@ -13,6 +14,7 @@ from backend.validators import (
     validate_write,
     ensure_output_dirs,
 )
+from backend.frame_io import read_mask_frame
 from backend.errors import (
     FrameMismatchError,
     FrameReadError,
@@ -157,3 +159,54 @@ class TestEnsureOutputDirs:
             dirs1 = ensure_output_dirs(tmpdir)
             dirs2 = ensure_output_dirs(tmpdir)
             assert dirs1 == dirs2
+
+
+# --- read_mask_frame integration (regression for dtype→channel ordering bug) ---
+
+class TestReadMaskFrameNormalization:
+    """Regression: read_mask_frame must normalize dtype BEFORE extracting channels.
+
+    Previously normalize_mask_channels ran first and cast uint8→float32,
+    so normalize_mask_dtype saw float32 and skipped the /255 division.
+    A uint8 mask of 255 came through as float32 255.0 instead of 1.0.
+    """
+
+    def test_uint8_png_normalized_to_01(self, tmp_path):
+        """uint8 PNG mask with value 255 must read back as 1.0, not 255.0."""
+        mask = np.full((64, 64), 255, dtype=np.uint8)
+        fpath = str(tmp_path / "mask.png")
+        cv2.imwrite(fpath, mask)
+
+        result = read_mask_frame(fpath)
+        assert result is not None
+        assert result.dtype == np.float32
+        assert result.max() <= 1.0, f"Mask max {result.max()} exceeds 1.0 — dtype normalization bug"
+        np.testing.assert_allclose(result, 1.0, atol=1e-5)
+
+    def test_uint8_3ch_png_normalized(self, tmp_path):
+        """3-channel uint8 PNG mask — first channel extracted AND normalized."""
+        mask = np.zeros((64, 64, 3), dtype=np.uint8)
+        mask[:, :, 0] = 200  # First channel
+        mask[:, :, 1] = 100
+        mask[:, :, 2] = 50
+        fpath = str(tmp_path / "mask_3ch.png")
+        cv2.imwrite(fpath, mask)
+
+        result = read_mask_frame(fpath)
+        assert result is not None
+        assert result.ndim == 2
+        assert result.max() <= 1.0
+        # OpenCV writes/reads BGR, so channel 0 in file = B channel.
+        # read_mask_frame extracts first channel of what cv2 reads.
+
+    def test_uint16_mask_normalized(self, tmp_path):
+        """uint16 mask must be normalized by /65535."""
+        mask = np.full((32, 32), 65535, dtype=np.uint16)
+        fpath = str(tmp_path / "mask16.png")
+        cv2.imwrite(fpath, mask)
+
+        result = read_mask_frame(fpath)
+        assert result is not None
+        assert result.dtype == np.float32
+        assert result.max() <= 1.0
+        np.testing.assert_allclose(result, 1.0, atol=1e-3)

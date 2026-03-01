@@ -59,6 +59,10 @@ class SplitViewWidget(QWidget):
         # Placeholder text
         self._placeholder = "No clip selected"
 
+        # Extraction progress overlay
+        self._extraction_progress = 0.0  # 0.0 to 1.0
+        self._extraction_total = 0
+
     # ── Public API ──
 
     def set_image(self, image: QImage | None) -> None:
@@ -87,6 +91,12 @@ class SplitViewWidget(QWidget):
 
     def set_placeholder(self, text: str) -> None:
         self._placeholder = text
+
+    def set_extraction_progress(self, progress: float, total: int) -> None:
+        """Update extraction progress overlay. Set total=0 to clear."""
+        self._extraction_progress = progress
+        self._extraction_total = total
+        self.update()
         self._single_image = None
         self._left_image = None
         self._right_image = None
@@ -116,8 +126,12 @@ class SplitViewWidget(QWidget):
             self._paint_split(painter)
         elif self._single_image:
             self._paint_single(painter)
-        else:
+        elif self._extraction_total <= 0:
             self._paint_placeholder(painter)
+
+        # Extraction progress overlay (replaces placeholder during extraction)
+        if self._extraction_total > 0:
+            self._paint_extraction_overlay(painter)
 
         painter.end()
 
@@ -186,6 +200,50 @@ class SplitViewWidget(QWidget):
         font.setPointSize(16)
         painter.setFont(font)
         painter.drawText(self.rect(), Qt.AlignCenter, self._placeholder)
+
+    def _paint_extraction_overlay(self, painter: QPainter) -> None:
+        """Draw extraction progress bar and percentage centered on the viewer."""
+        w, h = self.width(), self.height()
+        pct = int(self._extraction_progress * 100)
+        current = int(self._extraction_progress * self._extraction_total)
+
+        bar_w = int(w * 0.6)
+        bar_h = 8
+        bar_x = (w - bar_w) // 2
+
+        # "Extracting frames..." header above the bar
+        painter.setPen(QColor("#808070"))
+        font = painter.font()
+        font.setPointSize(14)
+        painter.setFont(font)
+        header_rect = QRectF(bar_x, h // 2 - 30, bar_w, 24)
+        painter.drawText(header_rect, Qt.AlignCenter, "Extracting frames...")
+
+        # Progress bar below header
+        bar_y = h // 2
+
+        # Track background
+        painter.fillRect(bar_x, bar_y, bar_w, bar_h, QColor(30, 29, 0))
+
+        # Fill
+        fill_w = int(bar_w * self._extraction_progress)
+        if fill_w > 0:
+            painter.fillRect(bar_x, bar_y, fill_w, bar_h, QColor("#FFF203"))
+
+        # Track border
+        painter.setPen(QColor("#454430"))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(bar_x, bar_y, bar_w - 1, bar_h - 1)
+
+        # Progress text below bar
+        painter.setPen(QColor("#FF8C00"))
+        font.setPointSize(11)
+        painter.setFont(font)
+        text_rect = QRectF(bar_x, bar_y + bar_h + 8, bar_w, 24)
+        painter.drawText(
+            text_rect, Qt.AlignCenter,
+            f"{pct}%  ({current}/{self._extraction_total} frames)",
+        )
 
     def _image_rect(self, img: QImage) -> QRectF:
         """Calculate the destination rect for an image with zoom/pan."""

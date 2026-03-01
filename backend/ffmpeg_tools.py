@@ -3,8 +3,8 @@
 Pure Python, no Qt deps. Provides:
 - find_ffmpeg() / find_ffprobe() — locate binaries
 - probe_video() — get fps, resolution, frame count, codec
-- extract_frames() — video → image sequence (PNG)
-- stitch_video() — image sequence → video (H.264)
+- extract_frames() — video -> image sequence (PNG)
+- stitch_video() — image sequence -> video (H.264)
 - write/read_video_metadata() — sidecar JSON for roundtrip fidelity
 """
 from __future__ import annotations
@@ -157,23 +157,56 @@ def extract_frames(
     os.makedirs(out_dir, exist_ok=True)
 
     # Probe for total if not provided
+    video_info = None
     if total_frames <= 0:
         try:
-            info = probe_video(video_path)
-            total_frames = info.get("frame_count", 0)
+            video_info = probe_video(video_path)
+            total_frames = video_info.get("frame_count", 0)
         except Exception:
             total_frames = 0
 
-    cmd = [
-        ffmpeg,
-        "-i", video_path,
-        "-start_number", "0",
-        "-vsync", "passthrough",
-        out_dir + "/" + pattern,
-        "-y",
-    ]
+    # Resume: detect existing frames and skip ahead with conservative rollback.
+    # Delete the last few frames (may be corrupt from mid-write or FFmpeg
+    # output buffering) and re-extract from that point.
+    _RESUME_ROLLBACK = 3  # frames to re-extract for safety
+    start_frame = 0
+    existing = sorted([f for f in os.listdir(out_dir) if f.lower().endswith('.png')])
+    if existing:
+        # Remove the last N frames — they may be corrupt or incomplete
+        remove_count = min(_RESUME_ROLLBACK, len(existing))
+        for fname in existing[-remove_count:]:
+            os.remove(os.path.join(out_dir, fname))
+        start_frame = max(0, len(existing) - remove_count)
+        if start_frame > 0:
+            logger.info(f"Resuming extraction from frame {start_frame} "
+                        f"({len(existing)} existed, rolled back {remove_count})")
 
-    logger.info(f"Extracting frames: {video_path} → {out_dir}")
+    if start_frame > 0 and total_frames > 0:
+        # Seek to the resume point
+        if video_info is None:
+            video_info = probe_video(video_path)
+        fps = video_info.get("fps", 24.0)
+        seek_sec = start_frame / fps
+        cmd = [
+            ffmpeg,
+            "-ss", f"{seek_sec:.4f}",
+            "-i", video_path,
+            "-start_number", str(start_frame),
+            "-vsync", "passthrough",
+            out_dir + "/" + pattern,
+            "-y",
+        ]
+    else:
+        cmd = [
+            ffmpeg,
+            "-i", video_path,
+            "-start_number", "0",
+            "-vsync", "passthrough",
+            out_dir + "/" + pattern,
+            "-y",
+        ]
+
+    logger.info(f"Extracting frames: {video_path} -> {out_dir} (start_frame={start_frame})")
 
     proc = subprocess.Popen(
         cmd,
@@ -184,7 +217,7 @@ def extract_frames(
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
 
-    last_frame = 0
+    last_frame = start_frame
     frame_re = re.compile(r"frame=\s*(\d+)")
 
     try:
@@ -203,7 +236,8 @@ def extract_frames(
 
             match = frame_re.search(line)
             if match:
-                last_frame = int(match.group(1))
+                # FFmpeg reports relative frame count; add offset for resume
+                last_frame = start_frame + int(match.group(1))
                 if on_progress and total_frames > 0:
                     on_progress(last_frame, total_frames)
 
@@ -267,7 +301,7 @@ def stitch_video(
         "-y",
     ]
 
-    logger.info(f"Stitching video: {in_dir} → {out_path}")
+    logger.info(f"Stitching video: {in_dir} -> {out_path}")
 
     proc = subprocess.Popen(
         cmd,

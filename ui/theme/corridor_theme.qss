@@ -149,8 +149,14 @@ QPushButton:disabled {
     border-color: #2A2910;
 }
 
+/* Status bar container */
+QWidget#statusBar {
+    background-color: #0E0D00;
+    border-top: 1px solid #2A2910;
+}
+
 /* Primary CTA — Run Inference */
-QPushButton#runButton {
+QWidget#statusBar QPushButton#runButton {
     background-color: #FFF203;
     color: #000000;
     font-weight: 700;
@@ -159,21 +165,21 @@ QPushButton#runButton {
     padding: 8px 20px;
 }
 
-QPushButton#runButton:hover {
-    background-color: #F3E700;
+QWidget#statusBar QPushButton#runButton:hover {
+    background-color: #FFFF66;
 }
 
-QPushButton#runButton:pressed {
+QWidget#statusBar QPushButton#runButton:pressed {
     background-color: #D1C700;
 }
 
-QPushButton#runButton:disabled {
-    background-color: #555530;
-    color: #333320;
+QWidget#statusBar QPushButton#runButton:disabled {
+    background-color: #444430;
+    color: #888870;
 }
 
 /* Stop button */
-QPushButton#stopButton {
+QWidget#statusBar QPushButton#stopButton {
     background-color: #D10000;
     color: #FFFFFF;
     font-weight: 700;
@@ -182,7 +188,7 @@ QPushButton#stopButton {
     padding: 8px 20px;
 }
 
-QPushButton#stopButton:hover {
+QWidget#statusBar QPushButton#stopButton:hover {
     background-color: #B50000;
 }
 
@@ -485,17 +491,26 @@ QLabel#projectCardMeta {
     color: #999980;
 }
 
+QPushButton#projectFolderBtn,
 QPushButton#projectDeleteBtn {
     background: transparent;
-    border: none;
-    color: #555540;
-    font-size: 14px;
-    font-weight: 700;
-    padding: 2px 6px;
+    border: 1px solid #333320;
+    border-radius: 3px;
+    color: #777760;
+    font-size: 11px;
+    padding: 0px;
+}
+
+QPushButton#projectFolderBtn:hover {
+    color: #FFF203;
+    border-color: #666640;
+    background: rgba(255, 242, 3, 0.08);
 }
 
 QPushButton#projectDeleteBtn:hover {
-    color: #D10000;
+    color: #FF4040;
+    border-color: #664040;
+    background: rgba(255, 40, 40, 0.1);
 }
 
 /* === GPU Info (Brand Bar) === */

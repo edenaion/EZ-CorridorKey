@@ -29,11 +29,18 @@ _STATUS_COLORS = {
 }
 
 _STATUS_TEXT = {
-    JobStatus.QUEUED: "QUEUED",
-    JobStatus.RUNNING: "RUNNING",
+    JobStatus.QUEUED: "STARTING...",
+    JobStatus.RUNNING: "PROCESSING",
     JobStatus.COMPLETED: "DONE",
     JobStatus.CANCELLED: "CANCELLED",
     JobStatus.FAILED: "FAILED",
+}
+
+_JOB_TYPE_LABELS = {
+    JobType.INFERENCE: "Inference",
+    JobType.GVM_ALPHA: "GVM Auto",
+    JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
+    JobType.PREVIEW_REPROCESS: "Preview",
 }
 
 
@@ -111,15 +118,11 @@ class QueuePanel(QWidget):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(8)
 
-        # Job type icon
-        type_text = {
-            JobType.INFERENCE: "INF",
-            JobType.GVM_ALPHA: "GVM",
-            JobType.VIDEOMAMA_ALPHA: "VMM",
-        }.get(job.job_type, "???")
+        # Job type label
+        type_text = _JOB_TYPE_LABELS.get(job.job_type, "???")
         type_label = QLabel(type_text)
-        type_label.setFixedWidth(30)
-        type_label.setStyleSheet("color: #808070; font-size: 10px; font-weight: 700;")
+        type_label.setFixedWidth(70)
+        type_label.setStyleSheet("color: #999980; font-size: 10px; font-weight: 700;")
         layout.addWidget(type_label)
 
         # Clip name
@@ -159,6 +162,18 @@ class QueuePanel(QWidget):
                 stage_label = QLabel("Processing...")
                 stage_label.setStyleSheet(f"color: {color}; font-size: 10px;")
                 layout.addWidget(stage_label)
+        elif job.status == JobStatus.QUEUED:
+            # Show indeterminate bar + "Starting..." so user knows work is queued
+            progress = QProgressBar()
+            progress.setFixedHeight(6)
+            progress.setFixedWidth(60)
+            progress.setTextVisible(False)
+            progress.setRange(0, 0)  # indeterminate
+            layout.addWidget(progress)
+
+            status_label = QLabel(status_text)
+            status_label.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 600;")
+            layout.addWidget(status_label)
         elif job.status == JobStatus.CANCELLED:
             status_label = QLabel(status_text)
             status_label.setStyleSheet(

@@ -1,8 +1,8 @@
 """Recent projects panel for the welcome screen.
 
 Shows a scrollable list of project cards representing recently-opened
-workspaces. Each card shows the project name, path, clip count, and
-last opened date, with a delete button.
+projects. Each card shows the project name, path, and last opened date,
+with an always-visible delete button. Right-click for rename/delete.
 """
 from __future__ import annotations
 
@@ -13,74 +13,75 @@ from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QFrame, QPushButton, QScrollArea, QMessageBox,
+    QMenu, QInputDialog,
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
 
 from ui.recent_sessions import RecentSessionsStore, RecentSession
 
 
 class RecentProjectCard(QFrame):
-    """Single project card — clickable row with delete button."""
+    """Single project card — clickable row with always-visible X button."""
 
-    clicked = Signal(str)   # workspace_path
+    clicked = Signal(str)         # workspace_path
     delete_clicked = Signal(str)  # workspace_path
+    rename_clicked = Signal(str)  # workspace_path
 
     def __init__(self, session: RecentSession, parent=None):
         super().__init__(parent)
         self._workspace_path = session.workspace_path
         self.setObjectName("projectCard")
         self.setCursor(Qt.PointingHandCursor)
-        self.setFixedHeight(56)
+        self.setFixedHeight(72)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 6, 8, 6)
-        layout.setSpacing(8)
+        layout.setContentsMargins(6, 4, 10, 4)
+        layout.setSpacing(12)
 
-        # Left: text info
+        # Left: two icon buttons, evenly distributed in full card height
+        btn_layout = QVBoxLayout()
+        btn_layout.setContentsMargins(4, 0, 4, 0)
+        btn_layout.setSpacing(0)
+
+        btn_layout.addStretch(1)
+
+        folder_btn = QPushButton("\uD83D\uDCC2")  # open folder icon
+        folder_btn.setObjectName("projectFolderBtn")
+        folder_btn.setFixedSize(16, 16)
+        folder_btn.setToolTip("Open in Explorer")
+        folder_btn.clicked.connect(self._on_open_folder)
+        btn_layout.addWidget(folder_btn, 0, Qt.AlignHCenter)
+
+        btn_layout.addStretch(2)
+
+        delete_btn = QPushButton("\u00D7")  # ×
+        delete_btn.setObjectName("projectDeleteBtn")
+        delete_btn.setFixedSize(16, 16)
+        delete_btn.setToolTip("Remove project")
+        delete_btn.clicked.connect(self._on_delete)
+        btn_layout.addWidget(delete_btn, 0, Qt.AlignHCenter)
+
+        btn_layout.addStretch(1)
+
+        layout.addLayout(btn_layout)
+
+        # Right: text info
         text_layout = QVBoxLayout()
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.setSpacing(1)
 
-        # Top row: name + clip count
-        top_row = QHBoxLayout()
-        top_row.setContentsMargins(0, 0, 0, 0)
-        top_row.setSpacing(8)
-
         name_label = QLabel(session.display_name)
         name_label.setObjectName("projectCardName")
-        top_row.addWidget(name_label)
+        text_layout.addWidget(name_label)
 
-        top_row.addStretch()
-
-        meta_parts = []
-        if session.clip_count > 0:
-            meta_parts.append(f"{session.clip_count} clip{'s' if session.clip_count != 1 else ''}")
-        try:
-            dt = datetime.fromtimestamp(session.last_opened)
-            meta_parts.append(dt.strftime("%b %d, %Y"))
-        except (ValueError, OSError):
-            pass
-        if meta_parts:
-            meta_label = QLabel("  \u00B7  ".join(meta_parts))
-            meta_label.setObjectName("projectCardMeta")
-            top_row.addWidget(meta_label)
-
-        text_layout.addLayout(top_row)
-
-        # Bottom row: path (elided)
         path_label = QLabel(session.workspace_path)
         path_label.setObjectName("projectCardPath")
         text_layout.addWidget(path_label)
 
         layout.addLayout(text_layout, 1)
-
-        # Delete button
-        delete_btn = QPushButton("\u00D7")  # ×
-        delete_btn.setObjectName("projectDeleteBtn")
-        delete_btn.setFixedSize(24, 24)
-        delete_btn.setToolTip("Remove project")
-        delete_btn.clicked.connect(self._on_delete)
-        layout.addWidget(delete_btn)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -89,6 +90,25 @@ class RecentProjectCard(QFrame):
 
     def _on_delete(self):
         self.delete_clicked.emit(self._workspace_path)
+
+    def _on_open_folder(self):
+        import subprocess
+        if os.path.isdir(self._workspace_path):
+            subprocess.Popen(["explorer", os.path.normpath(self._workspace_path)])
+
+    def _show_context_menu(self, pos):
+        menu = QMenu(self)
+        rename_action = QAction("Rename Project", self)
+        rename_action.triggered.connect(lambda: self.rename_clicked.emit(self._workspace_path))
+        menu.addAction(rename_action)
+
+        menu.addSeparator()
+
+        delete_action = QAction("Delete Project", self)
+        delete_action.triggered.connect(lambda: self.delete_clicked.emit(self._workspace_path))
+        menu.addAction(delete_action)
+
+        menu.exec(self.mapToGlobal(pos))
 
 
 class RecentProjectsPanel(QWidget):
@@ -135,8 +155,19 @@ class RecentProjectsPanel(QWidget):
 
         self.refresh()
 
+    @staticmethod
+    def _is_projects_root(path: str) -> bool:
+        """Check if a path is the Projects root directory."""
+        try:
+            from backend.project import projects_root
+            return os.path.normcase(os.path.abspath(path)) == os.path.normcase(
+                os.path.abspath(projects_root())
+            )
+        except Exception:
+            return False
+
     def refresh(self) -> None:
-        """Rebuild the card list from the store."""
+        """Rebuild the card list from the store, filtering out the Projects root."""
         # Clear existing cards (keep stretch at end)
         while self._card_layout.count() > 1:
             item = self._card_layout.takeAt(0)
@@ -144,6 +175,8 @@ class RecentProjectsPanel(QWidget):
                 item.widget().deleteLater()
 
         sessions = self._store.get_all()
+        # Filter out the Projects root — it's not a project, just the container
+        sessions = [s for s in sessions if not self._is_projects_root(s.workspace_path)]
 
         if not sessions:
             self._card_layout.insertWidget(0, self._empty_label)
@@ -157,19 +190,51 @@ class RecentProjectsPanel(QWidget):
             card = RecentProjectCard(session)
             card.clicked.connect(self.project_selected.emit)
             card.delete_clicked.connect(self._on_delete_requested)
+            card.rename_clicked.connect(self._on_rename_requested)
             self._card_layout.insertWidget(self._card_layout.count() - 1, card)
 
+    def _on_rename_requested(self, workspace_path: str) -> None:
+        """Rename a project via dialog — updates project.json display_name."""
+        from backend.project import get_display_name, set_display_name
+
+        current_name = get_display_name(workspace_path)
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Project", "Project name:", text=current_name,
+        )
+        if ok and new_name.strip() and new_name.strip() != current_name:
+            new_name = new_name.strip()
+            set_display_name(workspace_path, new_name)
+            # Update the recent sessions store entry
+            self._store.add_or_update(workspace_path, new_name, 1)
+            self.refresh()
+
     def _on_delete_requested(self, workspace_path: str) -> None:
-        """Handle delete button click with confirmation dialog."""
-        name = os.path.basename(workspace_path)
+        """Handle delete button click with two-step confirmation.
+
+        Step 1: Remove from List / Delete from Disk / Cancel
+        Step 2 (disk only): Confirm with path shown
+
+        Safety: refuses to delete the Projects root directory.
+        """
+        from backend.project import get_display_name
+        name = get_display_name(workspace_path)
+
+        # Safety: never allow disk-delete of the Projects root
+        if self._is_projects_root(workspace_path):
+            self._store.remove(workspace_path)
+            self.refresh()
+            return
 
         msg = QMessageBox(self)
         msg.setWindowTitle("Remove Project")
         msg.setText(f"Remove \"{name}\" from recent projects?")
-        msg.setInformativeText("You can remove it from the list only, or also delete the workspace files from disk.")
+        msg.setInformativeText(
+            "Remove from List: hides it from recents (files stay on disk).\n"
+            "Delete from Disk: permanently deletes the project folder."
+        )
 
         remove_btn = msg.addButton("Remove from List", QMessageBox.AcceptRole)
-        delete_btn = msg.addButton("Delete Files", QMessageBox.DestructiveRole)
+        delete_btn = msg.addButton("Delete from Disk", QMessageBox.DestructiveRole)
         msg.addButton(QMessageBox.Cancel)
         msg.setDefaultButton(remove_btn)
 
@@ -181,11 +246,22 @@ class RecentProjectsPanel(QWidget):
             self.project_deleted.emit(workspace_path)
             self.refresh()
         elif clicked == delete_btn:
-            self._store.remove(workspace_path)
-            try:
-                if os.path.isdir(workspace_path):
-                    shutil.rmtree(workspace_path)
-            except OSError as e:
-                QMessageBox.warning(self, "Delete Failed", f"Could not delete workspace:\n{e}")
-            self.project_deleted.emit(workspace_path)
-            self.refresh()
+            # Second confirmation with path shown
+            confirm = QMessageBox.warning(
+                self, "Confirm Delete",
+                f"Permanently delete this project folder?\n\n{workspace_path}",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if confirm == QMessageBox.Yes:
+                self._store.remove(workspace_path)
+                try:
+                    if os.path.isdir(workspace_path):
+                        shutil.rmtree(workspace_path)
+                except OSError as e:
+                    QMessageBox.warning(
+                        self, "Delete Failed",
+                        f"Could not delete project:\n{e}",
+                    )
+                self.project_deleted.emit(workspace_path)
+                self.refresh()

@@ -28,11 +28,14 @@ from PySide6.QtWidgets import (
     QProgressBar, QFileDialog,
 )
 from PySide6.QtCore import Qt, Slot, QTimer
-from PySide6.QtGui import QShortcut, QKeySequence, QAction, QImage
+from PySide6.QtGui import (
+    QShortcut, QKeySequence, QAction, QImage,
+    QPainter, QLinearGradient, QColor,
+)
 
 from backend import (
     CorridorKeyService, ClipEntry, ClipState, InferenceParams,
-    OutputConfig, JobType, JobStatus,
+    InOutRange, OutputConfig, JobType, JobStatus,
 )
 from backend.errors import CorridorKeyError
 from backend.job_queue import GPUJob
@@ -74,8 +77,7 @@ class MainWindow(QMainWindow):
         self._clips_dir: str | None = None
         # Track active job ID — set only once when job starts, not on every progress
         self._active_job_id: str | None = None
-        # Display name for next workspace registration (set by _on_welcome_files)
-        self._pending_display_name: str | None = None
+        self._bg_cache: QImage | None = None
 
         # Data model
         self._clip_model = ClipListModel()
@@ -116,6 +118,10 @@ class MainWindow(QMainWindow):
         # Detect device
         device = self._service.detect_device()
         logger.info(f"Compute device: {device}")
+
+        # Always start on welcome screen — user picks a project from recents or imports
+        # Deferred sync of IO tray divider with viewer splitter
+        QTimer.singleShot(0, self._sync_io_divider)
 
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
@@ -235,6 +241,10 @@ class MainWindow(QMainWindow):
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
+        # Allow clip browser to collapse to 0px
+        self._splitter.setCollapsible(0, True)
+        self._splitter.setCollapsible(1, False)
+        self._splitter.setCollapsible(2, False)
 
         self._vsplitter.addWidget(self._splitter)
 
@@ -270,6 +280,10 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+R"), self, self._on_run_inference)
         # Ctrl+Shift+R — run all ready clips
         QShortcut(QKeySequence("Ctrl+Shift+R"), self, self._on_run_all_ready)
+        # I/O markers — set in/out points on timeline
+        QShortcut(QKeySequence(Qt.Key_I), self, self._set_in_point)
+        QShortcut(QKeySequence(Qt.Key_O), self, self._set_out_point)
+        QShortcut(QKeySequence("Alt+I"), self, self._clear_in_out)
 
     def _connect_signals(self) -> None:
         # Clip browser
@@ -305,6 +319,10 @@ class MainWindow(QMainWindow):
 
         # I/O tray click → select clip
         self._io_tray.clip_clicked.connect(self._on_tray_clip_clicked)
+
+        # Sync IO tray divider with dual viewer splitter
+        self._dual_viewer._viewer_splitter.splitterMoved.connect(self._sync_io_divider)
+        self._splitter.splitterMoved.connect(self._sync_io_divider)
 
         # Extract worker signals
         self._extract_worker.progress.connect(self._on_extract_progress)
@@ -345,12 +363,19 @@ class MainWindow(QMainWindow):
     @Slot(ClipEntry)
     def _on_clip_selected(self, clip: ClipEntry) -> None:
         self._current_clip = clip
+        logger.debug(f"Clip selected: '{clip.name}' state={clip.state.value}")
 
         # Load clip into dual viewer (both input + output viewports)
         self._dual_viewer.set_clip(clip)
 
+        # Ensure run/stop buttons are in correct visibility state
+        # (guards against stale running state from crashed jobs)
+        if not self._gpu_worker.isRunning():
+            self._status_bar.set_running(False)
+
         # Enable run button only for READY or COMPLETE (reprocess) clips
         can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
+        logger.debug(f"Run button enabled: {can_run} (state={clip.state.value})")
         self._status_bar.set_run_enabled(can_run)
 
         # Enable GVM/VideoMaMa buttons based on state
@@ -361,10 +386,20 @@ class MainWindow(QMainWindow):
     def _on_clips_dir_changed(self, dir_path: str) -> None:
         logger.info(f"Scanning clips directory: {dir_path}")
         self._clips_dir = dir_path
+        # Reset status bar state on project load (no active job)
+        self._status_bar.set_running(False)
+        self._status_bar.set_run_enabled(False)
         # Ensure workspace is visible (may come from welcome screen or menu)
         self._switch_to_workspace()
         try:
-            clips = self._service.scan_clips(dir_path)
+            # Detect if this is the Projects root (no standalone videos there)
+            from backend.project import projects_root as _projects_root, get_display_name
+            is_projects = os.path.normcase(os.path.abspath(dir_path)) == os.path.normcase(
+                os.path.abspath(_projects_root())
+            )
+            clips = self._service.scan_clips(
+                dir_path, allow_standalone_videos=not is_projects,
+            )
             self._clip_model.set_clips(clips)
 
             # Generate thumbnails for all clips (background)
@@ -382,10 +417,14 @@ class MainWindow(QMainWindow):
                 self._clip_browser.select_first()
             logger.info(f"Found {len(clips)} clips")
 
-            # Register in recent sessions store
-            display_name = self._pending_display_name or os.path.basename(dir_path)
-            self._pending_display_name = None
-            self._recent_store.add_or_update(dir_path, display_name, len(clips))
+            # Register in recent sessions store — individual project folders, not root
+            if is_projects:
+                for clip in clips:
+                    name = get_display_name(clip.root_path)
+                    self._recent_store.add_or_update(clip.root_path, name, 1)
+            else:
+                display_name = os.path.basename(dir_path)
+                self._recent_store.add_or_update(dir_path, display_name, len(clips))
 
             # Auto-load session if exists (Codex: block signals during restore)
             self._try_auto_load_session(dir_path)
@@ -398,6 +437,24 @@ class MainWindow(QMainWindow):
         """Switch from welcome screen to the 3-panel workspace."""
         self._stack.setCurrentIndex(1)
 
+    def _try_auto_open_projects(self) -> None:
+        """Auto-open the Projects root if it has project folders."""
+        from backend.project import projects_root as _projects_root
+        try:
+            root = _projects_root()
+        except Exception:
+            return
+        if not os.path.isdir(root):
+            return
+        # Check for at least one subdirectory (project folder)
+        has_projects = any(
+            os.path.isdir(os.path.join(root, d))
+            for d in os.listdir(root)
+            if not d.startswith('.') and not d.startswith('_')
+        )
+        if has_projects:
+            self._on_clips_dir_changed(root)
+
     @Slot(str)
     def _on_welcome_folder(self, dir_path: str) -> None:
         """Handle folder selected from welcome screen."""
@@ -406,13 +463,30 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def _on_recent_project_opened(self, workspace_path: str) -> None:
-        """Open a workspace from the recent projects list."""
+        """Open a workspace from the recent projects list.
+
+        If the path is an individual project folder inside Projects/,
+        scan the Projects root so all clips appear in the browser.
+        """
         if not os.path.isdir(workspace_path):
             QMessageBox.warning(self, "Missing", f"Workspace no longer exists:\n{workspace_path}")
             self._recent_store.remove(workspace_path)
             self._welcome.refresh_recents()
             return
         self._switch_to_workspace()
+
+        # If this is a project subfolder inside Projects/, scan the root
+        from backend.project import projects_root as _projects_root
+        try:
+            root = _projects_root()
+            parent = os.path.normcase(os.path.abspath(os.path.dirname(workspace_path)))
+            root_norm = os.path.normcase(os.path.abspath(root))
+            if parent == root_norm:
+                # Individual project inside Projects/ — scan the root
+                self._on_clips_dir_changed(root)
+                return
+        except Exception:
+            pass
         self._on_clips_dir_changed(workspace_path)
 
     def _return_to_welcome(self) -> None:
@@ -431,42 +505,25 @@ class MainWindow(QMainWindow):
     def _on_welcome_files(self, file_paths: list) -> None:
         """Handle files selected from welcome screen.
 
-        Creates a dedicated workspace directory next to the first file,
-        restructures each selected video into its own clip subdirectory,
-        then scans ONLY that workspace — not the parent dir (which would
-        pick up every video in e.g. Downloads).
+        Creates a project folder for each video inside Projects/,
+        copies the source video into Source/, then scans the Projects root.
+        Each project is registered individually in recent sessions.
         """
         if not file_paths:
             return
 
-        import shutil
+        from backend.project import projects_root, create_project, is_video_file
 
-        # Create a workspace dir adjacent to the source files
-        parent = os.path.dirname(file_paths[0])
-        workspace = os.path.join(parent, "CorridorKey_Workspace")
-        os.makedirs(workspace, exist_ok=True)
+        root = projects_root()
 
-        _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v"}
         for fpath in file_paths:
-            ext = os.path.splitext(fpath)[1].lower()
-            if ext in _VIDEO_EXTS:
-                stem = os.path.splitext(os.path.basename(fpath))[0]
-                clip_dir = os.path.join(workspace, stem)
-                target = os.path.join(clip_dir, f"Input{ext}")
-                if not os.path.isfile(target):
-                    os.makedirs(clip_dir, exist_ok=True)
-                    shutil.copy2(fpath, target)
-                    logger.info(f"Imported video: {fpath} → {target}")
+            if is_video_file(fpath):
+                create_project(fpath)
+                logger.info(f"Created project for: {fpath}")
 
-        # Derive display name from source files for the recents list
-        if len(file_paths) == 1:
-            self._pending_display_name = os.path.splitext(os.path.basename(file_paths[0]))[0]
-        else:
-            first = os.path.splitext(os.path.basename(file_paths[0]))[0]
-            self._pending_display_name = f"{first} + {len(file_paths) - 1} more"
-
+        # _on_clips_dir_changed handles per-project recent session registration
         self._switch_to_workspace()
-        self._on_clips_dir_changed(workspace)
+        self._on_clips_dir_changed(root)
 
     def _on_open_folder(self) -> None:
         self._clip_browser._on_add_clicked()
@@ -480,6 +537,76 @@ class MainWindow(QMainWindow):
     def _on_reset_zoom(self) -> None:
         """Reset preview zoom to fit."""
         self._dual_viewer.reset_zoom()
+
+    @Slot()
+    def _sync_io_divider(self, *_args) -> None:
+        """Keep the IO tray divider aligned with the dual viewer splitter.
+
+        Calculates the absolute pixel position of the viewer's internal
+        split divider (between INPUT and OUTPUT viewports) and sets the
+        IO tray divider to the same position.
+        """
+        # Clip browser width (left offset of dual viewer within the window)
+        splitter_sizes = self._splitter.sizes()
+        if len(splitter_sizes) < 2:
+            return
+        clip_browser_w = splitter_sizes[0] + self._splitter.handleWidth()
+
+        # Dual viewer's internal split: left panel width
+        viewer_sizes = self._dual_viewer._viewer_splitter.sizes()
+        if len(viewer_sizes) < 2:
+            return
+        input_viewer_w = viewer_sizes[0]
+
+        # The IO tray divider position = clip browser width + input viewer width
+        divider_px = clip_browser_w + input_viewer_w
+        self._io_tray.sync_divider(divider_px)
+
+    # ── In/Out Markers ──
+
+    def _set_in_point(self) -> None:
+        """Set in-point at the current scrubber position."""
+        if not self._current_clip:
+            return
+        idx = self._dual_viewer._scrubber.current_frame()
+        _, out = self._dual_viewer.get_in_out()
+        # Clamp: in-point cannot exceed out-point
+        if out is not None and idx > out:
+            idx = out
+        self._dual_viewer._scrubber.set_in_point(idx)
+        self._persist_in_out()
+
+    def _set_out_point(self) -> None:
+        """Set out-point at the current scrubber position."""
+        if not self._current_clip:
+            return
+        idx = self._dual_viewer._scrubber.current_frame()
+        in_pt, _ = self._dual_viewer.get_in_out()
+        # Clamp: out-point cannot precede in-point
+        if in_pt is not None and idx < in_pt:
+            idx = in_pt
+        self._dual_viewer._scrubber.set_out_point(idx)
+        self._persist_in_out()
+
+    def _clear_in_out(self) -> None:
+        """Clear in/out markers (Alt+I)."""
+        if not self._current_clip:
+            return
+        self._dual_viewer._scrubber.clear_in_out()
+        self._current_clip.in_out_range = None
+        from backend.project import save_in_out_range
+        save_in_out_range(self._current_clip.root_path, None)
+
+    def _persist_in_out(self) -> None:
+        """Save current in/out markers to the clip and project.json."""
+        if not self._current_clip:
+            return
+        in_pt, out_pt = self._dual_viewer.get_in_out()
+        if in_pt is not None and out_pt is not None:
+            rng = InOutRange(in_point=in_pt, out_point=out_pt)
+            self._current_clip.in_out_range = rng
+            from backend.project import save_in_out_range
+            save_in_out_range(self._current_clip.root_path, rng)
 
     # ── Live Reprocess (Codex: through GPU queue, not parallel) ──
 
@@ -534,6 +661,21 @@ class MainWindow(QMainWindow):
             )
             return
 
+        # Warn if alpha doesn't cover all input frames
+        if clip.alpha_asset and clip.input_asset:
+            alpha_count = clip.alpha_asset.frame_count
+            input_count = clip.input_asset.frame_count
+            if 0 < alpha_count < input_count:
+                reply = QMessageBox.warning(
+                    self, "Incomplete Alpha",
+                    f"Alpha hints cover {alpha_count} of {input_count} frames.\n\n"
+                    "Process available frames anyway, or cancel and\n"
+                    "re-run alpha generation first?",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
+
         # Check for resume (partial outputs exist)
         resume = False
         if clip.state == ClipState.COMPLETE or clip.completed_frame_count() > 0:
@@ -560,6 +702,13 @@ class MainWindow(QMainWindow):
         # Store output config in job params
         output_config = self._param_panel.get_output_config()
         job.params["_output_config"] = output_config
+
+        # Pass in/out frame range (GVM always processes full clip)
+        if clip.in_out_range:
+            job.params["_frame_range"] = (
+                clip.in_out_range.in_point,
+                clip.in_out_range.out_point,
+            )
 
         if not self._service.job_queue.submit(job):
             QMessageBox.information(self, "Duplicate", f"'{clip.name}' is already queued.")
@@ -594,6 +743,23 @@ class MainWindow(QMainWindow):
         """Run GVM alpha generation on the selected clip."""
         if self._current_clip is None or self._current_clip.state != ClipState.RAW:
             return
+
+        # Detect partial alpha from a previous interrupted run
+        alpha_dir = os.path.join(self._current_clip.root_path, "AlphaHint")
+        if os.path.isdir(alpha_dir):
+            existing = [f for f in os.listdir(alpha_dir)
+                        if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            if existing:
+                total = (self._current_clip.input_asset.frame_count
+                         if self._current_clip.input_asset else 0)
+                reply = QMessageBox.question(
+                    self, "Partial Alpha Found",
+                    f"Found {len(existing)}/{total} alpha frames from a previous run.\n\n"
+                    "GVM will regenerate all frames from scratch.\nContinue?",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
 
         job = create_job_snapshot(self._current_clip, job_type=JobType.GVM_ALPHA)
         if not self._service.job_queue.submit(job):
@@ -689,17 +855,56 @@ class MainWindow(QMainWindow):
         if job_id == self._active_job_id:
             self._dual_viewer.load_preview_from_file(path, clip_name, frame_index)
 
-    @Slot(str, str)
-    def _on_worker_clip_finished(self, job_id: str, clip_name: str) -> None:
-        self._clip_model.update_clip_state(clip_name, ClipState.COMPLETE)
-        # Clear processing lock
+    @Slot(str, str, str)
+    def _on_worker_clip_finished(self, job_id: str, clip_name: str, job_type: str) -> None:
+        # Map job type to correct next state
+        # GVM/VideoMaMa produce AlphaHint -> clip becomes READY for inference
+        if job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value):
+            target_state = ClipState.READY
+        else:
+            target_state = ClipState.COMPLETE
+
+        self._clip_model.update_clip_state(clip_name, target_state)
+
+        # Clear processing lock and rescan assets for pipeline steps
         for clip in self._clip_model.clips:
             if clip.name == clip_name:
                 clip.set_processing(False)
+                # Rescan assets so alpha hints are discovered
+                if target_state == ClipState.READY:
+                    try:
+                        clip.find_assets()
+                    except Exception:
+                        pass  # find_assets may update state further
                 break
+
+        # Stop timer and show completion message
+        self._status_bar.stop_job_timer()
+        self._status_bar.set_running(False)
+
+        if target_state == ClipState.READY:
+            type_label = "GVM Auto" if job_type == JobType.GVM_ALPHA.value else "VideoMaMa"
+            self._status_bar.set_message(
+                f"{type_label} complete for {clip_name} -- Ready to Run Inference"
+            )
+        elif target_state == ClipState.COMPLETE:
+            self._status_bar.set_message(f"Inference complete: {clip_name}")
+
+        # Refresh views
         self._queue_panel.refresh()
         self._io_tray.refresh()
-        logger.info(f"Clip completed: {clip_name}")
+
+        # If selected clip, reload preview to show new assets
+        if self._current_clip and self._current_clip.name == clip_name:
+            self._dual_viewer.set_clip(self._current_clip)
+            self._status_bar.set_run_enabled(
+                self._current_clip.state in (ClipState.READY, ClipState.COMPLETE)
+            )
+            self._param_panel.set_videomama_enabled(
+                self._current_clip.state == ClipState.MASKED
+            )
+
+        logger.info(f"Clip finished ({job_type}): {clip_name} -> {target_state.value}")
 
     @Slot(str, str)
     def _on_worker_warning(self, job_id: str, message: str) -> None:
@@ -709,6 +914,13 @@ class MainWindow(QMainWindow):
             for clip in self._clip_model.clips:
                 if clip.name == clip_name:
                     clip.set_processing(False)
+                    # Refresh viewer to show any partial output from before cancel
+                    if self._current_clip and self._current_clip.name == clip_name:
+                        clip.find_assets()
+                        self._dual_viewer.set_clip(clip)
+                        self._status_bar.set_run_enabled(
+                            clip.state in (ClipState.READY, ClipState.COMPLETE)
+                        )
                     break
             self._status_bar.stop_job_timer()
             self._status_bar.set_running(False)
@@ -716,7 +928,7 @@ class MainWindow(QMainWindow):
             self._queue_panel.refresh()
             logger.info(f"Job cancelled: {clip_name}")
         else:
-            self._status_bar.add_warning()
+            self._status_bar.add_warning(message)
             logger.warning(f"Worker warning: {message}")
 
     @Slot(str, str, str)
@@ -728,6 +940,10 @@ class MainWindow(QMainWindow):
         for clip in self._clip_model.clips:
             if clip.name == clip_name:
                 clip.set_processing(False)
+                # Refresh viewer to show any partial output
+                if self._current_clip and self._current_clip.name == clip_name:
+                    clip.find_assets()
+                    self._dual_viewer.set_clip(clip)
                 break
         self._queue_panel.refresh()
         logger.error(f"Worker error for {clip_name}: {error_msg}")
@@ -746,8 +962,9 @@ class MainWindow(QMainWindow):
     def _auto_extract_clips(self, clips: list[ClipEntry]) -> None:
         """Auto-submit EXTRACTING clips to the extract worker.
 
-        For standalone videos (root_path == clips_dir), restructure into
-        a proper clip directory first so extraction writes to clip/Input/.
+        New-format projects (Source/ subdir) already have video in the right
+        place — extraction writes to Frames/. Legacy standalone videos
+        (root_path == clips_dir) are restructured into a clip subdirectory.
         """
         import shutil
 
@@ -764,9 +981,11 @@ class MainWindow(QMainWindow):
 
             video_path = clip.input_asset.path
 
-            # Standalone video: root_path is the parent dir, not a clip dir.
+            # New format: video already lives in Source/ — no restructuring needed.
+            # Legacy standalone video: root_path is the parent dir, not a clip dir.
             # Restructure: create clip_name/ dir and copy video as Input.ext
-            if clip.root_path == self._clips_dir:
+            source_dir = os.path.join(clip.root_path, "Source")
+            if not os.path.isdir(source_dir) and clip.root_path == self._clips_dir:
                 ext = os.path.splitext(video_path)[1]
                 clip_dir = os.path.join(self._clips_dir, clip.name)
                 target = os.path.join(clip_dir, f"Input{ext}")
@@ -784,9 +1003,21 @@ class MainWindow(QMainWindow):
 
     @Slot(str, int, int)
     def _on_extract_progress(self, clip_name: str, current: int, total: int) -> None:
-        """Update status bar with extraction progress."""
+        """Update status bar, clip card, and input viewer progress."""
         pct = int(current / total * 100) if total > 0 else 0
         self._status_bar.set_message(f"Extracting {clip_name}: {pct}%")
+        progress = current / total if total > 0 else 0.0
+        # Update clip for per-card progress bar
+        for i, clip in enumerate(self._clip_model.clips):
+            if clip.name == clip_name:
+                clip.extraction_progress = progress
+                clip.extraction_total = total
+                idx = self._clip_model.index(i)
+                self._clip_model.dataChanged.emit(idx, idx)
+                break
+        # Update input viewer overlay if this is the selected clip
+        if self._current_clip and self._current_clip.name == clip_name:
+            self._dual_viewer.set_extraction_progress(progress, total)
 
     @Slot(str, int)
     def _on_extract_finished(self, clip_name: str, frame_count: int) -> None:
@@ -794,12 +1025,23 @@ class MainWindow(QMainWindow):
         from backend.clip_state import ClipAsset
         for clip in self._clip_model.clips:
             if clip.name == clip_name:
-                # Update input asset to point to extracted sequence
-                input_dir = os.path.join(clip.root_path, "Input")
-                if os.path.isdir(input_dir):
-                    clip.input_asset = ClipAsset(input_dir, "sequence")
+                # Clear extraction progress
+                clip.extraction_progress = 0.0
+                clip.extraction_total = 0
 
-                # Transition EXTRACTING → RAW
+                # Clear input viewer overlay
+                if self._current_clip and self._current_clip.name == clip_name:
+                    self._dual_viewer.set_extraction_progress(0.0, 0)
+
+                # Update input asset to point to extracted sequence
+                # Check Frames/ (new format) then Input/ (legacy)
+                frames_dir = os.path.join(clip.root_path, "Frames")
+                input_dir = os.path.join(clip.root_path, "Input")
+                actual_dir = frames_dir if os.path.isdir(frames_dir) else input_dir
+                if os.path.isdir(actual_dir):
+                    clip.input_asset = ClipAsset(actual_dir, "sequence")
+
+                # Transition EXTRACTING -> RAW
                 clip.state = ClipState.RAW
                 self._clip_model.update_clip_state(clip_name, ClipState.RAW)
 
@@ -829,6 +1071,8 @@ class MainWindow(QMainWindow):
         self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
         for clip in self._clip_model.clips:
             if clip.name == clip_name:
+                clip.extraction_progress = 0.0
+                clip.extraction_total = 0
                 clip.error_message = error_msg
                 break
         self._status_bar.set_message("")
@@ -1114,6 +1358,59 @@ class MainWindow(QMainWindow):
             "CC BY-NC-SA 4.0 License\n\n"
             "PySide6 Desktop Application",
         )
+
+    def paintEvent(self, event) -> None:
+        """Paint dithered diagonal gradient background.
+
+        Uses a cached QImage with per-pixel noise dithering to eliminate
+        banding on subtle dark gradients. Diagonal: lower-left (darker)
+        to upper-right (lighter).
+        """
+        w, h = self.width(), self.height()
+        if w <= 0 or h <= 0:
+            return
+
+        # Cache the gradient image, regenerate only on resize
+        if (not hasattr(self, '_bg_cache')
+                or self._bg_cache is None
+                or self._bg_cache.width() != w
+                or self._bg_cache.height() != h):
+            self._bg_cache = self._render_dithered_gradient(w, h)
+
+        painter = QPainter(self)
+        painter.drawImage(0, 0, self._bg_cache)
+        painter.end()
+
+    def _render_dithered_gradient(self, w: int, h: int) -> QImage:
+        """Render a dithered diagonal gradient to a QImage."""
+        img = np.empty((h, w, 3), dtype=np.float32)
+
+        # Diagonal parameter: 0 at lower-left, 1 at upper-right
+        ys = np.linspace(1, 0, h).reshape(-1, 1)  # top=0 → 1, bottom=1 → 0
+        xs = np.linspace(0, 1, w).reshape(1, -1)
+        diag = (xs + ys) * 0.5  # 0..1 diagonal
+
+        # Color range: dark edge (10, 9, 0) to lighter center (22, 21, 2)
+        r = 10.0 + diag * 12.0
+        g = 9.0 + diag * 12.0
+        b = 0.0 + diag * 2.0
+
+        img[..., 0] = r
+        img[..., 1] = g
+        img[..., 2] = b
+
+        # Add triangular dithering noise (±0.5) to break banding
+        rng = np.random.default_rng(42)  # fixed seed for stability
+        noise = rng.uniform(-0.5, 0.5, (h, w, 3)).astype(np.float32)
+        img += noise
+
+        # Clamp and convert to uint8
+        img_u8 = np.clip(img, 0, 255).astype(np.uint8)
+
+        # numpy RGB → QImage
+        bytes_per_line = w * 3
+        qimg = QImage(img_u8.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+        return qimg.copy()  # deep copy so numpy buffer can be freed
 
     def closeEvent(self, event) -> None:
         """Clean shutdown — auto-save session, stop workers, unload engines."""

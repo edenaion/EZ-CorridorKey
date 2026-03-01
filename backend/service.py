@@ -300,9 +300,11 @@ class CorridorKeyService:
 
     # --- Clip Scanning ---
 
-    def scan_clips(self, clips_dir: str) -> list[ClipEntry]:
+    def scan_clips(
+        self, clips_dir: str, allow_standalone_videos: bool = True,
+    ) -> list[ClipEntry]:
         """Scan a directory for clip folders."""
-        return scan_clips_dir(clips_dir)
+        return scan_clips_dir(clips_dir, allow_standalone_videos=allow_standalone_videos)
 
     def get_clips_by_state(
         self,
@@ -464,6 +466,7 @@ class CorridorKeyService:
         on_warning: Optional[Callable[[str], None]] = None,
         skip_stems: Optional[set[str]] = None,
         output_config: Optional[OutputConfig] = None,
+        frame_range: Optional[tuple[int, int]] = None,
     ) -> list[FrameResult]:
         """Run CorridorKey inference on a single clip.
 
@@ -522,15 +525,25 @@ class CorridorKeyService:
         skipped: list[int] = []
         skip_stems = skip_stems or set()
 
+        # Determine frame range (in/out markers or full clip)
+        if frame_range is not None:
+            range_start = max(0, frame_range[0])
+            range_end = min(num_frames - 1, frame_range[1])
+            frame_indices = range(range_start, range_end + 1)
+            range_count = range_end - range_start + 1
+        else:
+            frame_indices = range(num_frames)
+            range_count = num_frames
+
         try:
-            for i in range(num_frames):
+            for progress_i, i in enumerate(frame_indices):
                 # Check cancellation between frames
                 if job and job.is_cancelled:
                     raise JobCancelledError(clip.name, i)
 
                 # Report progress every frame (enables responsive cancel + timer)
                 if on_progress:
-                    on_progress(clip.name, i, num_frames)
+                    on_progress(clip.name, progress_i, range_count)
 
                 try:
                     # Read input
@@ -592,7 +605,7 @@ class CorridorKeyService:
 
             # Final progress
             if on_progress:
-                on_progress(clip.name, num_frames, num_frames)
+                on_progress(clip.name, range_count, range_count)
 
         finally:
             if input_cap:
@@ -612,13 +625,16 @@ class CorridorKeyService:
                 on_warning(msg)
 
         t_total = time.monotonic() - t_start
+        range_label = f" (range {frame_range[0]}-{frame_range[1]})" if frame_range else ""
         logger.info(
-            f"Clip '{clip.name}': inference complete. {processed}/{num_frames} frames "
+            f"Clip '{clip.name}': inference complete{range_label}. {processed}/{range_count} frames "
             f"in {t_total:.1f}s ({t_total / max(processed, 1):.2f}s/frame avg)"
         )
 
-        # State transition — only set COMPLETE if ALL frames succeeded
-        if processed == num_frames:
+        # State transition — only set COMPLETE if full clip was processed
+        is_full_clip = (frame_range is None or
+                        (frame_range[0] == 0 and frame_range[1] >= num_frames - 1))
+        if processed == range_count and is_full_clip:
             try:
                 clip.transition_to(ClipState.COMPLETE)
             except Exception as e:
@@ -819,10 +835,42 @@ class CorridorKeyService:
         num_frames = len(input_frames)
         total_chunks = (num_frames + chunk_size - 1) // chunk_size
 
+        # Build output filenames from input stems for cross-directory consistency
+        if clip.input_asset and clip.input_asset.asset_type == 'sequence':
+            input_names = clip.input_asset.get_frame_files()
+        else:
+            input_names = [f"frame_{i:06d}.png" for i in range(num_frames)]
+
+        # Resume: count existing alpha frames and skip fully-completed chunks.
+        # Roll back one chunk for safety — the last chunk may be incomplete
+        # or have corrupt frames from a mid-write interruption.
+        existing_alpha = []
+        if os.path.isdir(alpha_dir):
+            existing_alpha = [f for f in os.listdir(alpha_dir)
+                              if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        n_existing = len(existing_alpha)
+        # Only skip chunks we're confident are fully complete (roll back last one)
+        completed_chunks = n_existing // chunk_size
+        start_chunk = max(0, completed_chunks - 1) if completed_chunks > 0 else 0
+        start_frame = start_chunk * chunk_size
+        # Remove frames from the rollback point onward so they get cleanly rewritten
+        if start_frame > 0 and start_frame < n_existing:
+            # Build set of stems to keep (first start_frame input names as .png)
+            keep = set()
+            for i in range(start_frame):
+                if i < len(input_names):
+                    stem = os.path.splitext(input_names[i])[0]
+                    keep.add(f"{stem}.png")
+            for fname in existing_alpha:
+                if fname not in keep:
+                    os.remove(os.path.join(alpha_dir, fname))
+            logger.info(f"VideoMaMa resuming for '{clip.name}': {n_existing} alpha frames existed, "
+                        f"rolling back to chunk {start_chunk} (frame {start_frame})")
+
         sys.path.insert(0, os.path.join(BASE_DIR, "VideoMaMaInferenceModule"))
         from VideoMaMaInferenceModule.inference import run_inference
 
-        frames_written = 0
+        frames_written = start_frame
         for chunk_idx, chunk_output in enumerate(
             run_inference(pipeline, input_frames, mask_frames, chunk_size=chunk_size)
         ):
@@ -830,14 +878,26 @@ class CorridorKeyService:
             if job and job.is_cancelled:
                 raise JobCancelledError(clip.name, frames_written)
 
-            # Write chunk frames
+            # Skip already-completed chunks
+            if chunk_idx < start_chunk:
+                if on_progress:
+                    on_progress(clip.name, chunk_idx + 1, total_chunks)
+                continue
+
+            # Write chunk frames using input stems for consistent naming
             t_chunk = time.monotonic()
             for frame in chunk_output:
                 out_bgr = cv2.cvtColor(
                     (np.clip(frame, 0.0, 1.0) * 255.0).astype(np.uint8),
                     cv2.COLOR_RGB2BGR,
                 )
-                out_path = os.path.join(alpha_dir, f"_alphaHint_{frames_written:05d}.png")
+                # Use input stem with .png extension for cross-directory consistency
+                if frames_written < len(input_names):
+                    stem = os.path.splitext(input_names[frames_written])[0]
+                    out_name = f"{stem}.png"
+                else:
+                    out_name = f"frame_{frames_written:06d}.png"
+                out_path = os.path.join(alpha_dir, out_name)
                 cv2.imwrite(out_path, out_bgr)
                 frames_written += 1
             logger.debug(f"Clip '{clip.name}' chunk {chunk_idx}: {len(chunk_output)} frames in {time.monotonic() - t_chunk:.3f}s")

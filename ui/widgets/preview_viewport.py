@@ -145,6 +145,10 @@ class PreviewViewport(QWidget):
             if self._scrubber:
                 self._scrubber.set_range(0)
             self._update_clip_info(clip)
+            # Clear any cached images from previous clip
+            self._split_view._single_image = None
+            self._split_view._left_image = None
+            self._split_view._right_image = None
             self._split_view.set_placeholder(
                 f"Extracting frames...\n{clip.name}"
             )

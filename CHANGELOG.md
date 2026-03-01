@@ -93,7 +93,7 @@ All notable changes to ez-CorridorKey are documented here.
 - job_queue.py: 4 → 41 tests (full lifecycle, cancellation, callbacks)
 - validators.py: 20 → 33 tests (edge cases documented)
 
-### Codex-Identified Issues Documented in Tests
+### Identified Issues Documented in Tests
 - VideoMaMa dtype contract: `_load_frames_for_videomama()` returns float32 [0,1] but uint8 input to `clip(x, 0, 1)*255` binarizes all non-zero values to 255
 - Callback exception safety: on_completion/on_error raising exceptions must not corrupt job queue state
 - Zero-frame COMPLETE policy: `processed == num_frames` passes when both are 0

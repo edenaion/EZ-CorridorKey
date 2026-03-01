@@ -13,7 +13,7 @@ import time
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton,
-    QProgressBar,
+    QProgressBar, QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox,
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 
@@ -35,7 +35,7 @@ class StatusBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(44)
-        self.setStyleSheet("background-color: #0E0D00; border-top: 1px solid #2A2910;")
+        self.setObjectName("statusBar")
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 4, 12, 4)
@@ -55,15 +55,24 @@ class StatusBar(QWidget):
         self._frame_label.setMinimumWidth(220)
         layout.addWidget(self._frame_label)
 
-        # Warning count
-        self._warn_label = QLabel("")
-        self._warn_label.setStyleSheet("color: #FFA500; font-size: 10px;")
-        layout.addWidget(self._warn_label)
+        # Warning count (clickable)
+        self._warn_btn = QPushButton("")
+        self._warn_btn.setObjectName("warningButton")
+        self._warn_btn.setStyleSheet(
+            "QPushButton#warningButton { color: #FFA500; font-size: 10px; "
+            "background: transparent; border: none; padding: 2px 6px; }"
+            "QPushButton#warningButton:hover { background: #2A2910; border-radius: 3px; }"
+        )
+        self._warn_btn.setCursor(Qt.PointingHandCursor)
+        self._warn_btn.clicked.connect(self._show_warnings_dialog)
+        self._warn_btn.hide()
+        layout.addWidget(self._warn_btn)
 
         # Run / Stop button (right, primary CTA like Topaz Export)
         self._run_btn = QPushButton("RUN INFERENCE")
         self._run_btn.setObjectName("runButton")
         self._run_btn.setFixedWidth(160)
+        self._run_btn.setEnabled(False)  # disabled until a READY/COMPLETE clip is selected
         self._run_btn.clicked.connect(self.run_clicked.emit)
         layout.addWidget(self._run_btn)
 
@@ -75,6 +84,7 @@ class StatusBar(QWidget):
         layout.addWidget(self._stop_btn)
 
         self._warning_count = 0
+        self._warnings: list[str] = []
 
         # Timer state
         self._job_start: float = 0.0
@@ -160,13 +170,26 @@ class StatusBar(QWidget):
         self._progress.setValue(0)
         self._frame_label.setText("")
         self._warning_count = 0
-        self._warn_label.setText("")
+        self._warnings.clear()
+        self._warn_btn.setText("")
+        self._warn_btn.setToolTip("")
+        self._warn_btn.hide()
         self._job_start = 0.0
 
-    def add_warning(self) -> None:
-        """Increment warning counter."""
+    def add_warning(self, message: str = "") -> None:
+        """Add a warning message and update the counter."""
         self._warning_count += 1
-        self._warn_label.setText(f"{self._warning_count} warnings")
+        if message:
+            self._warnings.append(message)
+        label = f"{self._warning_count} warning{'s' if self._warning_count != 1 else ''}"
+        self._warn_btn.setText(label)
+        self._warn_btn.show()
+        # Tooltip shows the latest warning
+        if self._warnings:
+            latest = self._warnings[-1]
+            if len(latest) > 120:
+                latest = latest[:117] + "..."
+            self._warn_btn.setToolTip(f"Latest: {latest}\n\nClick for all warnings")
 
     def set_run_enabled(self, enabled: bool) -> None:
         """Enable or disable the run button."""
@@ -187,3 +210,33 @@ class StatusBar(QWidget):
         elif self._last_total > 0:
             # Re-render with updated elapsed (ETA recalculates too)
             self.update_progress(self._last_current, self._last_total)
+
+    def _show_warnings_dialog(self) -> None:
+        """Show a modal dialog with all collected warnings."""
+        if not self._warnings:
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Warnings ({self._warning_count})")
+        dlg.setMinimumSize(500, 300)
+        dlg.setStyleSheet(
+            "QDialog { background: #1A1900; }"
+            "QTextEdit { background: #0E0D00; color: #CCCCAA; border: 1px solid #2A2910; "
+            "font-family: 'Consolas', monospace; font-size: 11px; }"
+        )
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(12, 12, 12, 12)
+
+        text = QTextEdit()
+        text.setReadOnly(True)
+        for i, msg in enumerate(self._warnings, 1):
+            text.append(f"[{i}] {msg}\n")
+        text.moveCursor(text.textCursor().Start)
+        layout.addWidget(text, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons.accepted.connect(dlg.accept)
+        layout.addWidget(buttons)
+
+        dlg.exec()

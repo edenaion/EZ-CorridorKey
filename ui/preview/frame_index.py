@@ -104,22 +104,42 @@ def build_frame_index(
     all_stems: set[str] = set()
 
     for mode, rel_dir in _MODE_DIRS.items():
-        dir_path = os.path.join(clip_root, rel_dir)
+        # Resolve INPUT directory — try Frames/ (new) then Input/ (legacy)
+        if mode == ViewMode.INPUT:
+            # Handle video input
+            if input_asset_type == "video":
+                if video_path and os.path.isfile(video_path):
+                    index.video_modes[mode] = video_path
+                else:
+                    # Check Source/ first (new format), then Input.* (legacy)
+                    source_dir = os.path.join(clip_root, "Source")
+                    if os.path.isdir(source_dir):
+                        video_exts = ('.mp4', '.mov', '.avi', '.mkv', '.mxf', '.webm', '.m4v')
+                        for f in os.listdir(source_dir):
+                            if f.lower().endswith(video_exts):
+                                index.video_modes[mode] = os.path.join(source_dir, f)
+                                break
+                    if mode not in index.video_modes:
+                        import glob as glob_module
+                        video_candidates = glob_module.glob(os.path.join(clip_root, "Input.*"))
+                        video_exts = ('.mp4', '.mov', '.avi', '.mkv')
+                        for vc in video_candidates:
+                            if vc.lower().endswith(video_exts):
+                                index.video_modes[mode] = vc
+                                break
+                continue
 
-        # Handle video input
-        if mode == ViewMode.INPUT and input_asset_type == "video":
-            # Use explicit video_path if provided, else scan for Input.*
-            if video_path and os.path.isfile(video_path):
-                index.video_modes[mode] = video_path
-            else:
-                import glob as glob_module
-                video_candidates = glob_module.glob(os.path.join(clip_root, "Input.*"))
-                video_exts = ('.mp4', '.mov', '.avi', '.mkv')
-                for vc in video_candidates:
-                    if vc.lower().endswith(video_exts):
-                        index.video_modes[mode] = vc
-                        break
-            continue
+            # Image sequence — try Frames/ then Input/
+            dir_path = None
+            for candidate in ("Frames", "Input"):
+                candidate_path = os.path.join(clip_root, candidate)
+                if os.path.isdir(candidate_path):
+                    dir_path = candidate_path
+                    break
+            if dir_path is None:
+                continue
+        else:
+            dir_path = os.path.join(clip_root, rel_dir)
 
         if not os.path.isdir(dir_path):
             continue
