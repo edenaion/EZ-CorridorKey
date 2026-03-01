@@ -48,6 +48,7 @@ from ui.widgets.status_bar import StatusBar
 from ui.widgets.queue_panel import QueuePanel
 from ui.widgets.io_tray_panel import IOTrayPanel
 from ui.widgets.welcome_screen import WelcomeScreen
+from ui.widgets.preferences_dialog import PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS, get_setting_bool
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
 from ui.workers.thumbnail_worker import ThumbnailGenerator
@@ -123,6 +124,9 @@ class MainWindow(QMainWindow):
         # Deferred sync of IO tray divider with viewer splitter
         QTimer.singleShot(0, self._sync_io_divider)
 
+        # Apply persisted preferences (e.g. tooltip visibility)
+        self._apply_tooltip_setting()
+
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
 
@@ -142,6 +146,10 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction("Return to Welcome", self._return_to_welcome)
         file_menu.addAction("Exit", self.close)
+
+        # Edit menu
+        edit_menu = menu_bar.addMenu("Edit")
+        edit_menu.addAction("Preferences...", self._show_preferences)
 
         # View menu
         view_menu = menu_bar.addMenu("View")
@@ -1404,6 +1412,23 @@ class MainWindow(QMainWindow):
 
     def _toggle_queue_panel(self) -> None:
         self._queue_panel.setVisible(not self._queue_panel.isVisible())
+
+    def _show_preferences(self) -> None:
+        """Open the Preferences dialog and apply changes."""
+        dlg = PreferencesDialog(self)
+        if dlg.exec() == PreferencesDialog.Accepted:
+            self._apply_tooltip_setting()
+
+    def _apply_tooltip_setting(self) -> None:
+        """Enable or disable tooltips globally based on saved preference."""
+        show = get_setting_bool(KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS)
+        if not show:
+            # Disable: clear all tooltips on the main window tree
+            for w in self.findChildren(QWidget):
+                w.setToolTip("")
+        # If enabled, tooltips stay as set during widget construction.
+        # A full re-enable would require rebuilding tooltip strings, which
+        # is unnecessary — the setting takes full effect on next app launch.
 
     def _show_about(self) -> None:
         QMessageBox.about(

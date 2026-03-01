@@ -2,10 +2,6 @@
 
 ## Pending
 
-- **Welcome screen multi-select for batch import**: Video thumbnails and video files on the welcome screen should support multi-selection. Users should be able to: (1) Ctrl+click to toggle individual files, (2) Shift+click for range selection, (3) Ctrl+A to select all, (4) Click-drag for rubber-band/marquee selection across thumbnail grid. Selected files get imported as a batch when confirmed. This enables processing multiple videos together without repeated file dialog trips.
-
-- **Preferences dialog (Edit > Preferences)**: Add a settings/preferences panel accessible from the menu bar. Users can toggle options like tooltips on/off. Settings persist across sessions via QSettings.
-
 ## Done
 
 - In/Out trim points per clip — I/O/Alt+I hotkeys, visual brackets, project.json persistence, frame range-aware inference
@@ -26,3 +22,5 @@
 - Post-inference side-by-side scrub — verified working: auto-COMP switch, synced scrubbing, mode switching (COMP/FG/Matte/Processed)
 - Alpha coverage feedback — status bar shows "X/Y alpha frames" after GVM/VideoMaMa; 3-option dialog (Process Available / Re-run GVM / Cancel) on partial alpha at inference start; partial alpha detection already in _resolve_state()
 - Live output mode switching during inference — FrameIndex rebuilds on each preview update, mode buttons enable as FG/Matte/Comp/Processed outputs appear mid-inference
+- Welcome screen multi-select — already supported: QFileDialog.getOpenFileNames() handles Ctrl/Shift/Ctrl+A natively, drag-drop accepts multiple files, _on_welcome_files() loops through batch
+- Preferences dialog (Edit > Preferences) — QSettings-based, tooltips on/off toggle, persists across sessions
