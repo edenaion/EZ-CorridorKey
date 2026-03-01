@@ -413,10 +413,8 @@ class CorridorKeyService:
         try:
             with open(tmp_path, 'w') as f:
                 json.dump(manifest, f, indent=2)
-            # Atomic rename (on Windows, need to remove target first)
-            if os.path.exists(manifest_path):
-                os.remove(manifest_path)
-            os.rename(tmp_path, manifest_path)
+            # Atomic replace (os.replace is atomic on both POSIX and Windows)
+            os.replace(tmp_path, manifest_path)
         except Exception as e:
             logger.warning(f"Failed to write manifest: {e}")
 
