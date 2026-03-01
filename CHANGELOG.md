@@ -4,6 +4,47 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [Step 2: Debug Logging] - 2026-02-28 — Comprehensive Logging Infrastructure
+
+### File-Based Session Logging
+- Dual-handler logging: console (respects `--log-level`) + file (always DEBUG)
+- Session-named log files: `logs/backend/YYMMDD_HHMMSS_corridorkey.log` (Eastern Time)
+- `EasternFormatter` subclass forces America/New_York timezone on all timestamps
+- `RotatingFileHandler` — 50MB per file, 3 backups (200MB max)
+- Frozen build aware via `get_app_dir()` for log directory path
+
+### Latency Tracking (5 GPU operations)
+- `_get_engine()` — model load time
+- `run_inference()` — total time + per-frame `process_frame` time + avg
+- `run_gvm()` — total time
+- `run_videomama()` — total time + per-chunk time
+- `reprocess_single_frame()` — total time
+- `process_frame()` in inference_engine.py — per-frame GPU time with resolution
+
+### Silent Exception Fixes (6 locations)
+- `service.py:201` — VRAM query failure now logged at DEBUG
+- `service.py:227` — torch import in `_ensure_model` now logged at DEBUG
+- `service.py:295` — torch import in `unload_engines` now logged at DEBUG
+- `service.py:628` — state transition to COMPLETE failure now logged at WARNING
+- `clip_state.py:88` — video frame count detection failure now logged at DEBUG
+- `clip_state.py:215` — manifest JSON parse failure now logged at DEBUG
+
+### inference_engine.py Modernization
+- Replaced 4 `print()` calls with proper `logging` (model load, PosEmbed mismatch, missing/unexpected keys)
+- Added `logger = logging.getLogger(__name__)` infrastructure
+
+### Entry/Exit Logging
+- `_read_input_frame()` — logs frame index at DEBUG
+- `_write_outputs()` — logs clip name, frame index, stem at DEBUG
+- `detect_device()` — logs selected device at INFO
+- `scan_clips_dir()` — logs clip count at INFO
+
+### Documentation
+- Created `dev-docs/guides/debug-log-bible.md` — process chains, log format, debug queries, module logger names
+- Added `logs/` to `.gitignore`
+
+---
+
 ## [Step 1: Test Coverage] - 2026-02-28 — Comprehensive Backend Test Suite
 
 ### New Test Files (7 created/updated)
