@@ -18,6 +18,7 @@ import sys
 import glob as glob_module
 import logging
 import threading
+import time
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Any, Callable, Optional
@@ -179,6 +180,7 @@ class CorridorKeyService:
         except ImportError:
             self._device = 'cpu'
             logger.warning("PyTorch not installed — using CPU")
+        logger.info(f"Compute device: {self._device}")
         return self._device
 
     def get_vram_info(self) -> dict[str, float]:
@@ -197,7 +199,8 @@ class CorridorKeyService:
                 'free': (total_bytes - reserved) / (1024**3),
                 'name': torch.cuda.get_device_name(0),
             }
-        except Exception:
+        except Exception as e:
+            logger.debug(f"VRAM query failed: {e}")
             return {}
 
     def _ensure_model(self, needed: _ActiveModel) -> None:
@@ -224,7 +227,7 @@ class CorridorKeyService:
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             except ImportError:
-                pass
+                logger.debug("torch not available for cache clear during model switch")
 
         self._active_model = needed
 
@@ -250,11 +253,13 @@ class CorridorKeyService:
 
         ckpt_path = ckpt_files[0]
         logger.info(f"Loading checkpoint: {os.path.basename(ckpt_path)}")
+        t0 = time.monotonic()
         self._engine = CorridorKeyEngine(
             checkpoint_path=ckpt_path,
             device=self._device,
             img_size=2048,
         )
+        logger.info(f"Engine loaded in {time.monotonic() - t0:.1f}s")
         return self._engine
 
     def _get_gvm(self):
@@ -291,7 +296,7 @@ class CorridorKeyService:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
         except ImportError:
-            pass
+            logger.debug("torch not available for cache clear during unload")
         logger.info("All engines unloaded, VRAM freed")
 
     # --- Clip Scanning ---
@@ -323,6 +328,7 @@ class CorridorKeyService:
         Returns:
             (image_float32, stem_name, is_linear_override)
         """
+        logger.debug(f"Reading input frame {frame_index} for '{clip.name}'")
         input_stem = f"{frame_index:05d}"
 
         if input_cap:
@@ -429,6 +435,7 @@ class CorridorKeyService:
     ) -> None:
         """Write output types for a single frame respecting OutputConfig."""
         cfg = output_config or OutputConfig()
+        logger.debug(f"Writing outputs for '{clip_name}' frame {frame_index} stem='{input_stem}'")
 
         pred_fg = res['fg']
         pred_alpha = res['alpha']
@@ -496,6 +503,8 @@ class CorridorKeyService:
         """
         if clip.input_asset is None or clip.alpha_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input or alpha asset")
+
+        t_start = time.monotonic()
 
         with self._gpu_lock:
             engine = self._get_engine()
@@ -568,6 +577,7 @@ class CorridorKeyService:
                         mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
 
                     # Process (GPU-locked — process_frame mutates model hooks)
+                    t_frame = time.monotonic()
                     with self._gpu_lock:
                         res = engine.process_frame(
                             img,
@@ -579,6 +589,7 @@ class CorridorKeyService:
                             despeckle_size=params.despeckle_size,
                             refiner_scale=params.refiner_scale,
                         )
+                    logger.debug(f"Clip '{clip.name}' frame {i}: process_frame {time.monotonic() - t_frame:.3f}s")
 
                     # Write outputs
                     self._write_outputs(res, dirs, input_stem, clip.name, i, cfg)
@@ -618,14 +629,18 @@ class CorridorKeyService:
             if on_warning:
                 on_warning(msg)
 
-        logger.info(f"Clip '{clip.name}': inference complete. {processed}/{num_frames} frames processed.")
+        t_total = time.monotonic() - t_start
+        logger.info(
+            f"Clip '{clip.name}': inference complete. {processed}/{num_frames} frames "
+            f"in {t_total:.1f}s ({t_total / max(processed, 1):.2f}s/frame avg)"
+        )
 
         # State transition — only set COMPLETE if ALL frames succeeded
         if processed == num_frames:
             try:
                 clip.transition_to(ClipState.COMPLETE)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Clip '{clip.name}': state transition to COMPLETE failed: {e}")
 
         return results
 
@@ -648,6 +663,7 @@ class CorridorKeyService:
         This runs through the GPU lock for thread safety.
         Does NOT write to disk — returns in-memory results for preview.
         """
+        t_start = time.monotonic()
         if clip.input_asset is None or clip.alpha_asset is None:
             return None
 
@@ -722,6 +738,7 @@ class CorridorKeyService:
                 despeckle_size=params.despeckle_size,
                 refiner_scale=params.refiner_scale,
             )
+        logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")
         return res
 
     # --- GVM Alpha Generation ---
@@ -745,6 +762,8 @@ class CorridorKeyService:
         """
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for GVM")
+
+        t_start = time.monotonic()
 
         with self._gpu_lock:
             gvm = self._get_gvm()
@@ -783,7 +802,7 @@ class CorridorKeyService:
             if on_warning:
                 on_warning(f"State transition after GVM: {e}")
 
-        logger.info(f"GVM complete for '{clip.name}': {clip.alpha_asset.frame_count} alpha frames")
+        logger.info(f"GVM complete for '{clip.name}': {clip.alpha_asset.frame_count} alpha frames in {time.monotonic() - t_start:.1f}s")
 
     # --- VideoMaMa Alpha Generation ---
 
@@ -811,6 +830,8 @@ class CorridorKeyService:
         if clip.mask_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing mask asset for VideoMaMa")
 
+        t_start = time.monotonic()
+
         with self._gpu_lock:
             pipeline = self._get_videomama_pipeline()
 
@@ -836,6 +857,7 @@ class CorridorKeyService:
                 raise JobCancelledError(clip.name, frames_written)
 
             # Write chunk frames
+            t_chunk = time.monotonic()
             for frame in chunk_output:
                 out_bgr = cv2.cvtColor(
                     (np.clip(frame, 0.0, 1.0) * 255.0).astype(np.uint8),
@@ -844,6 +866,7 @@ class CorridorKeyService:
                 out_path = os.path.join(alpha_dir, f"_alphaHint_{frames_written:05d}.png")
                 cv2.imwrite(out_path, out_bgr)
                 frames_written += 1
+            logger.debug(f"Clip '{clip.name}' chunk {chunk_idx}: {len(chunk_output)} frames in {time.monotonic() - t_chunk:.3f}s")
 
             if on_progress:
                 on_progress(clip.name, chunk_idx + 1, total_chunks)
@@ -858,7 +881,7 @@ class CorridorKeyService:
             if on_warning:
                 on_warning(f"State transition after VideoMaMa: {e}")
 
-        logger.info(f"VideoMaMa complete for '{clip.name}': {frames_written} alpha frames")
+        logger.info(f"VideoMaMa complete for '{clip.name}': {frames_written} alpha frames in {time.monotonic() - t_start:.1f}s")
 
     def _load_frames_for_videomama(
         self, asset: ClipAsset, clip_name: str

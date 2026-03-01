@@ -84,7 +84,8 @@ class ClipAsset:
                 if cap.isOpened():
                     self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 cap.release()
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Video frame count detection failed for {self.path}: {e}")
                 self.frame_count = 0
 
     def get_frame_files(self) -> list[str]:
@@ -210,7 +211,8 @@ class ClipEntry:
             import json
             with open(manifest_path, 'r') as f:
                 return json.load(f)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to read manifest at {manifest_path}: {e}")
             return None
 
     def find_assets(self) -> None:
@@ -293,4 +295,5 @@ def scan_clips_dir(clips_dir: str) -> list[ClipEntry]:
             clip.warnings.append(str(e))
             entries.append(clip)
 
+    logger.info(f"Scanned {clips_dir}: {len(entries)} clip(s) found")
     return entries

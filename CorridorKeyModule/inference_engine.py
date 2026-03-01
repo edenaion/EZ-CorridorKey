@@ -1,9 +1,14 @@
+import logging
+import math
+import os
+import time
+
+import cv2
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
-import cv2
-import os
-import math
+
+logger = logging.getLogger(__name__)
 from .core.model_transformer import GreenFormer
 from .core import color_utils as cu
 
@@ -20,7 +25,7 @@ class CorridorKeyEngine:
         self.model = self._load_model()
         
     def _load_model(self):
-        print(f"Loading CorridorKey from {self.checkpoint_path}...")
+        logger.info(f"Loading CorridorKey from {self.checkpoint_path}...")
         # Initialize Model (Hiera Backbone)
         model = GreenFormer(encoder_name='hiera_base_plus_224.mae_in1k_ft_in1k', 
                           img_size=self.img_size, 
@@ -46,7 +51,7 @@ class CorridorKeyEngine:
             # Check for PosEmbed Mismatch
             if 'pos_embed' in k and k in model_state:
                 if v.shape != model_state[k].shape:
-                    print(f"Resizing {k} from {v.shape} to {model_state[k].shape}")
+                    logger.warning(f"PosEmbed shape mismatch: resizing {k} from {v.shape} to {model_state[k].shape}")
                     # v: [1, N_src, C]
                     # target: [1, N_dst, C]
                     # We assume square grid
@@ -70,9 +75,9 @@ class CorridorKeyEngine:
             
         missing, unexpected = model.load_state_dict(new_state_dict, strict=False)
         if len(missing) > 0:
-            print(f"[Warning] Missing keys: {missing}")
+            logger.warning(f"Missing keys in checkpoint: {missing}")
         if len(unexpected) > 0:
-            print(f"[Warning] Unexpected keys: {unexpected}")
+            logger.warning(f"Unexpected keys in checkpoint: {unexpected}")
             
         return model
 
@@ -96,6 +101,8 @@ class CorridorKeyEngine:
         Returns:
              dict: {'alpha': np, 'fg': np (sRGB), 'comp': np (sRGB on Gray)}
         """
+        t0 = time.monotonic()
+
         # 1. Inputs Check & Normalization
         if image.dtype == np.uint8:
             image = image.astype(np.float32) / 255.0
@@ -196,6 +203,8 @@ class CorridorKeyEngine:
              
         comp_srgb = cu.linear_to_srgb(comp_lin)
         
+        logger.debug(f"process_frame: {h}x{w} in {time.monotonic() - t0:.3f}s")
+
         return {
             'alpha': res_alpha,        # Linear, Raw Prediction
             'fg': res_fg,              # sRGB, Raw Prediction (Straight)

@@ -9,8 +9,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+import logging.handlers
 import sys
 import os
+import time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 def get_base_dir() -> str:
@@ -42,12 +46,48 @@ sys.path.insert(0, get_base_dir())
 
 
 def setup_logging(level: str = "INFO") -> None:
-    """Configure logging with timestamped format."""
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s [%(levelname)-7s] %(name)s: %(message)s",
-        datefmt="%H:%M:%S",
+    """Configure logging with dual output: console + per-session file.
+
+    Console respects --log-level flag. File always captures DEBUG.
+    All timestamps are Eastern Time (America/New_York).
+    """
+    log_level = getattr(logging, level.upper(), logging.INFO)
+    eastern = ZoneInfo("America/New_York")
+
+    class EasternFormatter(logging.Formatter):
+        """Formatter that forces Eastern Time timestamps."""
+
+        def formatTime(self, record, datefmt=None):
+            dt = datetime.fromtimestamp(record.created, tz=eastern)
+            if datefmt:
+                return dt.strftime(datefmt)
+            return dt.strftime("%H:%M:%S")
+
+    fmt = "%(asctime)s [%(levelname)-7s] %(name)s: %(message)s"
+
+    # Console handler — respects --log-level
+    console = logging.StreamHandler()
+    console.setLevel(log_level)
+    console.setFormatter(EasternFormatter(fmt, datefmt="%H:%M:%S"))
+
+    # File handler — session-named log, always DEBUG
+    log_dir = os.path.join(get_app_dir(), "logs", "backend")
+    os.makedirs(log_dir, exist_ok=True)
+
+    session_ts = datetime.now(eastern).strftime("%y%m%d_%H%M%S")
+    log_path = os.path.join(log_dir, f"{session_ts}_corridorkey.log")
+
+    file_handler = logging.handlers.RotatingFileHandler(
+        log_path, maxBytes=50 * 1024 * 1024, backupCount=3,
     )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(EasternFormatter(fmt, datefmt="%Y-%m-%d %H:%M:%S"))
+
+    # Root logger — let handlers filter
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    root.addHandler(console)
+    root.addHandler(file_handler)
 
 
 def run_gui() -> int:

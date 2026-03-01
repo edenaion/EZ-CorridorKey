@@ -17,6 +17,7 @@ Output/*
 !Output/.gitkeep
 Ignored*/*
 !Ignored*/.gitkeep
+logs/
 CorridorKey_remote.bat
 .ipynb_checkpoints/
 .DS_Store
