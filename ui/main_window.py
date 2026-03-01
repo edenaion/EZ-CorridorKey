@@ -532,13 +532,15 @@ class MainWindow(QMainWindow):
             return
 
         from backend.project import projects_root, create_project, is_video_file
+        from ui.widgets.preferences_dialog import KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE, get_setting_bool
 
         root = projects_root()
+        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
 
         for fpath in file_paths:
             if is_video_file(fpath):
-                create_project(fpath)
-                logger.info(f"Created project for: {fpath}")
+                create_project(fpath, copy_source=copy_source)
+                logger.info(f"Created project for: {fpath} (copy={copy_source})")
 
         # _on_clips_dir_changed handles per-project recent session registration
         self._switch_to_workspace()

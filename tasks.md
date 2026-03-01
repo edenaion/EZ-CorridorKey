@@ -23,4 +23,5 @@
 - Alpha coverage feedback — status bar shows "X/Y alpha frames" after GVM/VideoMaMa; 3-option dialog (Process Available / Re-run GVM / Cancel) on partial alpha at inference start; partial alpha detection already in _resolve_state()
 - Live output mode switching during inference — FrameIndex rebuilds on each preview update, mode buttons enable as FG/Matte/Comp/Processed outputs appear mid-inference
 - Welcome screen multi-select — already supported: QFileDialog.getOpenFileNames() handles Ctrl/Shift/Ctrl+A natively, drag-drop accepts multiple files, _on_welcome_files() loops through batch
-- Preferences dialog (Edit > Preferences) — QSettings-based, tooltips on/off toggle, persists across sessions
+- Preferences dialog (Edit > Preferences) — QSettings-based, tooltips on/off toggle, copy source videos toggle, persists across sessions
+- Deletion safety — rmtree guarded by Projects root check, never deletes outside project folder; non-copy mode references original video in place

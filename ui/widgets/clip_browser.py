@@ -433,6 +433,14 @@ class ClipBrowser(QWidget):
             if confirm == QMessageBox.Yes:
                 self._remove_clip_from_model(clip)
                 try:
+                    # Safety: only delete if path is inside the Projects root
+                    from backend.project import projects_root
+                    root = os.path.realpath(projects_root())
+                    target = os.path.realpath(clip.root_path)
+                    if not target.startswith(root + os.sep):
+                        raise OSError(
+                            f"Refusing to delete outside Projects folder: {target}"
+                        )
                     if os.path.isdir(clip.root_path):
                         shutil.rmtree(clip.root_path)
                 except OSError as e:

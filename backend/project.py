@@ -49,13 +49,18 @@ def sanitize_stem(filename: str, max_len: int = 60) -> str:
     return stem[:max_len]
 
 
-def create_project(source_video_path: str) -> str:
-    """Create a new project folder and copy the source video into it.
+def create_project(source_video_path: str, *, copy_source: bool = True) -> str:
+    """Create a new project folder for a source video.
 
-    Creates: Projects/YYMMDD_HHMMSS_{stem}/Source/{original_filename}
+    When *copy_source* is True (default), the video file is copied into
+    the project's ``Source/`` directory.  When False, the project stores
+    a reference to the original file and frames are extracted in-place.
+
+    Creates: Projects/YYMMDD_HHMMSS_{stem}/
 
     Args:
         source_video_path: Absolute path to the source video file.
+        copy_source: Whether to copy the video into the project folder.
 
     Returns:
         Absolute path to the new project folder.
@@ -78,11 +83,14 @@ def create_project(source_video_path: str) -> str:
     source_dir = os.path.join(project_dir, "Source")
     os.makedirs(source_dir, exist_ok=True)
 
-    # Copy video preserving original filename
-    target = os.path.join(source_dir, filename)
-    if not os.path.isfile(target):
-        shutil.copy2(source_video_path, target)
-        logger.info(f"Copied source video: {source_video_path} -> {target}")
+    if copy_source:
+        # Copy video preserving original filename
+        target = os.path.join(source_dir, filename)
+        if not os.path.isfile(target):
+            shutil.copy2(source_video_path, target)
+            logger.info(f"Copied source video: {source_video_path} -> {target}")
+    else:
+        logger.info(f"Referencing source video in place: {source_video_path}")
 
     # Write initial project.json
     write_project_json(project_dir, {
@@ -90,8 +98,9 @@ def create_project(source_video_path: str) -> str:
         "created": datetime.now().isoformat(),
         "display_name": sanitize_stem(filename).replace("_", " "),
         "source": {
-            "original_path": source_video_path,
+            "original_path": os.path.abspath(source_video_path),
             "filename": filename,
+            "copied": copy_source,
         },
     })
 

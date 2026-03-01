@@ -245,6 +245,18 @@ class ClipEntry:
             logger.debug(f"Failed to read manifest at {manifest_path}: {e}")
             return None
 
+    def _resolve_original_path(self) -> Optional[str]:
+        """Resolve the original video path from project.json (non-copy mode)."""
+        from .project import read_project_json
+        data = read_project_json(self.root_path)
+        if not data:
+            return None
+        source = data.get("source", {})
+        path = source.get("original_path")
+        if path and os.path.isfile(path):
+            return path
+        return None
+
     def find_assets(self) -> None:
         """Scan the clip directory for Input, AlphaHint, and mask assets.
 
@@ -267,7 +279,12 @@ class ClipEntry:
                     os.path.join(source_dir, videos[0]), 'video',
                 )
             else:
-                raise ClipScanError(f"Clip '{self.name}': 'Source' dir has no video.")
+                # Source/ exists but is empty — check project.json for external reference
+                original = self._resolve_original_path()
+                if original:
+                    self.input_asset = ClipAsset(original, 'video')
+                else:
+                    raise ClipScanError(f"Clip '{self.name}': 'Source' dir has no video.")
         else:
             candidates = glob_module.glob(os.path.join(self.root_path, "[Ii]nput.*"))
             candidates = [c for c in candidates if _is_video_file(c)]

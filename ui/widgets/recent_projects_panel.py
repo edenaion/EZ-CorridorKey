@@ -256,6 +256,14 @@ class RecentProjectsPanel(QWidget):
             if confirm == QMessageBox.Yes:
                 self._store.remove(workspace_path)
                 try:
+                    # Safety: only delete if path is inside the Projects root
+                    from backend.project import projects_root
+                    root = os.path.realpath(projects_root())
+                    target = os.path.realpath(workspace_path)
+                    if not target.startswith(root + os.sep):
+                        raise OSError(
+                            f"Refusing to delete outside Projects folder: {target}"
+                        )
                     if os.path.isdir(workspace_path):
                         shutil.rmtree(workspace_path)
                 except OSError as e:

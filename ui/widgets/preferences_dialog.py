@@ -13,9 +13,11 @@ from PySide6.QtCore import QSettings, Qt
 
 # QSettings keys
 KEY_SHOW_TOOLTIPS = "ui/show_tooltips"
+KEY_COPY_SOURCE = "project/copy_source_videos"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
+DEFAULT_COPY_SOURCE = True
 
 
 def get_setting_bool(key: str, default: bool) -> bool:
@@ -51,6 +53,23 @@ class PreferencesDialog(QDialog):
         ui_layout.addWidget(self._tooltips_cb)
 
         layout.addWidget(ui_group)
+
+        # Project section
+        proj_group = QGroupBox("Project")
+        proj_layout = QVBoxLayout(proj_group)
+
+        self._copy_source_cb = QCheckBox("Copy source videos into project folder")
+        self._copy_source_cb.setToolTip(
+            "When enabled, imported videos are copied into the project folder.\n"
+            "When disabled, the project references the original file in place.\n\n"
+            "Note: Deleting a project never touches the original source file."
+        )
+        self._copy_source_cb.setChecked(
+            get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
+        )
+        proj_layout.addWidget(self._copy_source_cb)
+
+        layout.addWidget(proj_group)
         layout.addStretch(1)
 
         # Buttons
@@ -72,8 +91,13 @@ class PreferencesDialog(QDialog):
         """Persist settings and close."""
         s = QSettings()
         s.setValue(KEY_SHOW_TOOLTIPS, self._tooltips_cb.isChecked())
+        s.setValue(KEY_COPY_SOURCE, self._copy_source_cb.isChecked())
         self.accept()
 
     @property
     def show_tooltips(self) -> bool:
         return self._tooltips_cb.isChecked()
+
+    @property
+    def copy_source(self) -> bool:
+        return self._copy_source_cb.isChecked()
