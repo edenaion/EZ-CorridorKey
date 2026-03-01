@@ -82,6 +82,11 @@ class PreviewViewport(QWidget):
 
         layout.addLayout(bottom)
 
+    @property
+    def current_stem_index(self) -> int:
+        """Current stem index for reprocess targeting."""
+        return self._current_stem_idx
+
     # ── Public API ──
 
     def set_clip(self, clip: ClipEntry) -> None:
@@ -162,6 +167,13 @@ class PreviewViewport(QWidget):
     def reset_zoom(self) -> None:
         """Reset zoom to fit."""
         self._split_view.reset_zoom()
+
+    def show_reprocess_preview(self, qimage: QImage) -> None:
+        """Show a live reprocess result image in the viewport."""
+        if self._split_view.split_enabled:
+            self._split_view.set_right_image(qimage)
+        else:
+            self._split_view.set_image(qimage)
 
     # ── Navigation ──
 

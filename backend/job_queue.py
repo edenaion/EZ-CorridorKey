@@ -33,6 +33,7 @@ class JobType(Enum):
     INFERENCE = "inference"
     GVM_ALPHA = "gvm_alpha"
     VIDEOMAMA_ALPHA = "videomama_alpha"
+    PREVIEW_REPROCESS = "preview_reprocess"
 
 
 class JobStatus(Enum):
@@ -116,25 +117,40 @@ class GPUJobQueue:
         self.on_error: Optional[ErrorCallback] = None
 
     def submit(self, job: GPUJob) -> bool:
-        """Add a job to the queue. Returns False if duplicate detected."""
+        """Add a job to the queue. Returns False if duplicate detected.
+
+        PREVIEW_REPROCESS uses replacement semantics — any existing preview
+        reprocess in the queue is replaced by the new one (latest-only).
+        """
         with self._lock:
-            # Deduplication: reject if same clip+job_type already queued or running
-            for existing in self._queue:
-                if existing.clip_name == job.clip_name and existing.job_type == job.job_type:
+            # PREVIEW_REPROCESS: replace existing queued preview jobs (latest-only)
+            if job.job_type == JobType.PREVIEW_REPROCESS:
+                replaced = [
+                    j for j in self._queue
+                    if j.job_type == JobType.PREVIEW_REPROCESS
+                ]
+                for old in replaced:
+                    self._queue.remove(old)
+                    old.status = JobStatus.CANCELLED
+                    logger.debug(f"Preview reprocess [{old.id}] replaced by [{job.id}]")
+            else:
+                # Deduplication: reject if same clip+job_type already queued or running
+                for existing in self._queue:
+                    if existing.clip_name == job.clip_name and existing.job_type == job.job_type:
+                        logger.warning(
+                            f"Duplicate job rejected: {job.job_type.value} for '{job.clip_name}' "
+                            f"(already queued as {existing.id})"
+                        )
+                        return False
+                if (self._current_job
+                        and self._current_job.clip_name == job.clip_name
+                        and self._current_job.job_type == job.job_type
+                        and self._current_job.status == JobStatus.RUNNING):
                     logger.warning(
                         f"Duplicate job rejected: {job.job_type.value} for '{job.clip_name}' "
-                        f"(already queued as {existing.id})"
+                        f"(already running as {self._current_job.id})"
                     )
                     return False
-            if (self._current_job
-                    and self._current_job.clip_name == job.clip_name
-                    and self._current_job.job_type == job.job_type
-                    and self._current_job.status == JobStatus.RUNNING):
-                logger.warning(
-                    f"Duplicate job rejected: {job.job_type.value} for '{job.clip_name}' "
-                    f"(already running as {self._current_job.id})"
-                )
-                return False
 
             job.status = JobStatus.QUEUED
             self._queue.append(job)

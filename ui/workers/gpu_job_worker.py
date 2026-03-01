@@ -50,6 +50,7 @@ class GPUJobWorker(QThread):
     warning = Signal(str, str)                 # job_id, message
     error = Signal(str, str, str)              # job_id, clip_name, error_message
     queue_empty = Signal()                     # all jobs done
+    reprocess_result = Signal(str, object)     # job_id, result_dict (for preview display)
 
     def __init__(self, service: CorridorKeyService, parent=None):
         super().__init__(parent)
@@ -107,13 +108,16 @@ class GPUJobWorker(QThread):
                 self._run_gvm(job)
             elif job.job_type == JobType.VIDEOMAMA_ALPHA:
                 self._run_videomama(job)
+            elif job.job_type == JobType.PREVIEW_REPROCESS:
+                self._run_preview_reprocess(job)
             else:
                 self._queue.fail_job(job, f"Unknown job type: {job.job_type}")
                 self.error.emit(job_id, job.clip_name, f"Unknown job type: {job.job_type}")
                 return
 
             self._queue.complete_job(job)
-            self.clip_finished.emit(job_id, job.clip_name)
+            if job.job_type != JobType.PREVIEW_REPROCESS:
+                self.clip_finished.emit(job_id, job.clip_name)
 
         except JobCancelledError:
             # Use mark_cancelled() to properly clear _current_job (Codex critical fix)
@@ -154,6 +158,7 @@ class GPUJobWorker(QThread):
         def on_warning(message: str) -> None:
             self.warning.emit(job.id, message)
 
+        output_config = job.params.get("_output_config")
         self._service.run_inference(
             clip=clip,
             params=params,
@@ -161,6 +166,7 @@ class GPUJobWorker(QThread):
             on_progress=on_progress,
             on_warning=on_warning,
             skip_stems=skip_stems,
+            output_config=output_config,
         )
 
     def _run_gvm(self, job: GPUJob) -> None:
@@ -203,6 +209,21 @@ class GPUJobWorker(QThread):
             on_warning=on_warning,
             chunk_size=chunk_size,
         )
+
+    def _run_preview_reprocess(self, job: GPUJob) -> None:
+        """Run single-frame reprocess through GPU queue (Codex: no GPU bypass)."""
+        clip = job.params.get("_clip_snapshot")
+        params = job.params.get("_inference_params")
+        frame_index = job.params.get("_frame_index", 0)
+
+        if clip is None or params is None:
+            return
+
+        result = self._service.reprocess_single_frame(
+            clip=clip, params=params, frame_index=frame_index, job=job,
+        )
+        if result is not None:
+            self.reprocess_result.emit(job.id, result)
 
     def _save_preview(self, job_id: str, clip: ClipEntry, frame_index: int) -> None:
         """Save a downscaled preview of the latest comp frame to temp dir.
@@ -272,6 +293,10 @@ def create_job_snapshot(
             job_params["_skip_stems"] = clip.completed_stems()
     elif job_type == JobType.VIDEOMAMA_ALPHA:
         job_params["_chunk_size"] = chunk_size
+    elif job_type == JobType.PREVIEW_REPROCESS:
+        if params is None:
+            params = InferenceParams()
+        job_params["_inference_params"] = params
 
     return GPUJob(
         job_type=job_type,

@@ -1,11 +1,13 @@
-"""Right panel — inference parameters and alpha generation controls.
+"""Right panel — inference parameters, output config, and alpha generation controls.
 
 Provides sliders/controls for:
 - Color Space (sRGB / Linear)
 - Despill strength (0-10, maps to 0.0-1.0 internally)
 - Despeckle toggle + size
 - Refiner scale (0-30, maps to 0.0-3.0)
-- Alpha generation buttons (GVM Auto, VideoMaMa) — Phase 2 wiring
+- Live Preview toggle (debounced single-frame reprocess)
+- Output format options (FG/Matte/Comp/Processed, format selectors)
+- Alpha generation buttons (GVM Auto, VideoMaMa)
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
-from backend import InferenceParams
+from backend import InferenceParams, OutputConfig
 
 
 class ParameterPanel(QWidget):
@@ -29,6 +31,9 @@ class ParameterPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("paramPanel")
         self.setMinimumWidth(240)
+
+        # Signal suppression flag (Codex: block signals during session restore)
+        self._suppress_signals = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -44,7 +49,7 @@ class ParameterPanel(QWidget):
         cs_row.addWidget(QLabel("Color Space"))
         self._color_space = QComboBox()
         self._color_space.addItems(["sRGB", "Linear"])
-        self._color_space.currentIndexChanged.connect(lambda: self.params_changed.emit())
+        self._color_space.currentIndexChanged.connect(self._emit_changed)
         cs_row.addWidget(self._color_space)
         inf_layout.addLayout(cs_row)
 
@@ -61,14 +66,14 @@ class ParameterPanel(QWidget):
         despeckle_row = QHBoxLayout()
         self._despeckle_check = QCheckBox("Despeckle")
         self._despeckle_check.setChecked(True)
-        self._despeckle_check.stateChanged.connect(lambda: self.params_changed.emit())
+        self._despeckle_check.stateChanged.connect(self._emit_changed)
         despeckle_row.addWidget(self._despeckle_check)
 
         self._despeckle_size = QSpinBox()
         self._despeckle_size.setRange(50, 2000)
         self._despeckle_size.setValue(400)
         self._despeckle_size.setSuffix("px")
-        self._despeckle_size.valueChanged.connect(lambda: self.params_changed.emit())
+        self._despeckle_size.valueChanged.connect(self._emit_changed)
         despeckle_row.addWidget(self._despeckle_size)
         inf_layout.addLayout(despeckle_row)
 
@@ -81,7 +86,59 @@ class ParameterPanel(QWidget):
         self._refiner_slider.valueChanged.connect(self._on_refiner_changed)
         inf_layout.addWidget(self._refiner_slider)
 
+        # Live Preview toggle
+        self._live_preview = QCheckBox("Live Preview")
+        self._live_preview.setToolTip("Reprocess current frame on parameter change (requires loaded engine)")
+        inf_layout.addWidget(self._live_preview)
+
         layout.addWidget(inf_group)
+
+        # ── OUTPUT FORMAT section ──
+        out_group = QGroupBox("OUTPUT")
+        out_layout = QVBoxLayout(out_group)
+        out_layout.setSpacing(6)
+
+        # FG
+        fg_row = QHBoxLayout()
+        self._fg_check = QCheckBox("FG")
+        self._fg_check.setChecked(True)
+        fg_row.addWidget(self._fg_check)
+        self._fg_format = QComboBox()
+        self._fg_format.addItems(["exr", "png"])
+        fg_row.addWidget(self._fg_format)
+        out_layout.addLayout(fg_row)
+
+        # Matte
+        matte_row = QHBoxLayout()
+        self._matte_check = QCheckBox("Matte")
+        self._matte_check.setChecked(True)
+        matte_row.addWidget(self._matte_check)
+        self._matte_format = QComboBox()
+        self._matte_format.addItems(["exr", "png"])
+        matte_row.addWidget(self._matte_format)
+        out_layout.addLayout(matte_row)
+
+        # Comp
+        comp_row = QHBoxLayout()
+        self._comp_check = QCheckBox("Comp")
+        self._comp_check.setChecked(True)
+        comp_row.addWidget(self._comp_check)
+        self._comp_format = QComboBox()
+        self._comp_format.addItems(["png", "exr"])
+        comp_row.addWidget(self._comp_format)
+        out_layout.addLayout(comp_row)
+
+        # Processed
+        proc_row = QHBoxLayout()
+        self._proc_check = QCheckBox("Processed")
+        self._proc_check.setChecked(True)
+        proc_row.addWidget(self._proc_check)
+        self._proc_format = QComboBox()
+        self._proc_format.addItems(["exr", "png"])
+        proc_row.addWidget(self._proc_format)
+        out_layout.addLayout(proc_row)
+
+        layout.addWidget(out_group)
 
         # ── ALPHA GENERATION section ──
         alpha_group = QGroupBox("ALPHA GENERATION")
@@ -104,14 +161,23 @@ class ParameterPanel(QWidget):
 
         layout.addStretch(1)
 
+    def _emit_changed(self) -> None:
+        """Emit params_changed unless signals are suppressed."""
+        if not self._suppress_signals:
+            self.params_changed.emit()
+
     def _on_despill_changed(self, value: int) -> None:
         self._despill_label.setText(f"Despill: {value}")
-        self.params_changed.emit()
+        self._emit_changed()
 
     def _on_refiner_changed(self, value: int) -> None:
         display = value / 10.0
         self._refiner_label.setText(f"Refiner: {display:.1f}")
-        self.params_changed.emit()
+        self._emit_changed()
+
+    @property
+    def live_preview_enabled(self) -> bool:
+        return self._live_preview.isChecked()
 
     def get_params(self) -> InferenceParams:
         """Snapshot current parameter values into a frozen InferenceParams."""
@@ -123,13 +189,48 @@ class ParameterPanel(QWidget):
             refiner_scale=self._refiner_slider.value() / 10.0,
         )
 
+    def get_output_config(self) -> OutputConfig:
+        """Snapshot current output format configuration."""
+        return OutputConfig(
+            fg_enabled=self._fg_check.isChecked(),
+            fg_format=self._fg_format.currentText(),
+            matte_enabled=self._matte_check.isChecked(),
+            matte_format=self._matte_format.currentText(),
+            comp_enabled=self._comp_check.isChecked(),
+            comp_format=self._comp_format.currentText(),
+            processed_enabled=self._proc_check.isChecked(),
+            processed_format=self._proc_format.currentText(),
+        )
+
     def set_params(self, params: InferenceParams) -> None:
-        """Load parameter values (e.g. from a saved session)."""
-        self._color_space.setCurrentIndex(1 if params.input_is_linear else 0)
-        self._despill_slider.setValue(int(params.despill_strength * 10))
-        self._despeckle_check.setChecked(params.auto_despeckle)
-        self._despeckle_size.setValue(params.despeckle_size)
-        self._refiner_slider.setValue(int(params.refiner_scale * 10))
+        """Load parameter values (e.g. from a saved session).
+
+        Suppresses signals during restore to prevent event storms (Codex).
+        """
+        self._suppress_signals = True
+        try:
+            self._color_space.setCurrentIndex(1 if params.input_is_linear else 0)
+            self._despill_slider.setValue(int(params.despill_strength * 10))
+            self._despeckle_check.setChecked(params.auto_despeckle)
+            self._despeckle_size.setValue(params.despeckle_size)
+            self._refiner_slider.setValue(int(params.refiner_scale * 10))
+        finally:
+            self._suppress_signals = False
+
+    def set_output_config(self, config: OutputConfig) -> None:
+        """Load output config values (e.g. from a saved session)."""
+        self._suppress_signals = True
+        try:
+            self._fg_check.setChecked(config.fg_enabled)
+            self._fg_format.setCurrentText(config.fg_format)
+            self._matte_check.setChecked(config.matte_enabled)
+            self._matte_format.setCurrentText(config.matte_format)
+            self._comp_check.setChecked(config.comp_enabled)
+            self._comp_format.setCurrentText(config.comp_format)
+            self._proc_check.setChecked(config.processed_enabled)
+            self._proc_format.setCurrentText(config.processed_format)
+        finally:
+            self._suppress_signals = False
 
     def set_gvm_enabled(self, enabled: bool) -> None:
         """Enable/disable GVM button based on clip state."""

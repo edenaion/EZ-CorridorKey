@@ -12,11 +12,13 @@ Model Residency Policy:
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import glob as glob_module
 import logging
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Any, Callable, Optional
 
@@ -50,8 +52,11 @@ from .job_queue import GPUJob, GPUJobQueue, JobType
 
 logger = logging.getLogger(__name__)
 
-# Project paths
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Project paths — frozen-build aware
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # EXR write flags — PXR24 half-float (smallest working compression)
 _EXR_FLAGS = [
@@ -76,6 +81,49 @@ class InferenceParams:
     auto_despeckle: bool = True
     despeckle_size: int = 400
     refiner_scale: float = 1.0
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'InferenceParams':
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+
+@dataclass
+class OutputConfig:
+    """Which output types to produce and their format."""
+    fg_enabled: bool = True
+    fg_format: str = "exr"   # "exr" or "png"
+    matte_enabled: bool = True
+    matte_format: str = "exr"
+    comp_enabled: bool = True
+    comp_format: str = "png"
+    processed_enabled: bool = True
+    processed_format: str = "exr"
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> 'OutputConfig':
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        return cls(**{k: v for k, v in d.items() if k in known})
+
+    @property
+    def enabled_outputs(self) -> list[str]:
+        """Return list of enabled output names for manifest."""
+        out = []
+        if self.fg_enabled:
+            out.append("fg")
+        if self.matte_enabled:
+            out.append("matte")
+        if self.comp_enabled:
+            out.append("comp")
+        if self.processed_enabled:
+            out.append("processed")
+        return out
 
 
 @dataclass
@@ -107,6 +155,8 @@ class CorridorKeyService:
         self._active_model = _ActiveModel.NONE
         self._device: str = 'cpu'
         self._job_queue: Optional[GPUJobQueue] = None
+        # GPU mutex — serializes ALL model operations (Codex: thread safety)
+        self._gpu_lock = threading.Lock()
 
     @property
     def job_queue(self) -> GPUJobQueue:
@@ -324,6 +374,52 @@ class CorridorKeyService:
             mask = normalize_mask_dtype(mask)
             return mask
 
+    def _write_image(
+        self, img: np.ndarray, path: str, fmt: str, clip_name: str, frame_index: int,
+    ) -> None:
+        """Write a single image in the requested format."""
+        if fmt == "exr":
+            validate_write(cv2.imwrite(path, img, _EXR_FLAGS), clip_name, frame_index, path)
+        else:
+            # PNG 8-bit
+            if img.dtype != np.uint8:
+                img = (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8)
+            validate_write(cv2.imwrite(path, img), clip_name, frame_index, path)
+
+    def _write_manifest(
+        self,
+        output_root: str,
+        output_config: OutputConfig,
+        params: InferenceParams,
+    ) -> None:
+        """Write run manifest recording expected outputs/extensions per run.
+
+        Codex: base resume on manifest, not hardcoded FG/Matte intersection.
+        Uses atomic write (tmp + rename) to prevent corruption.
+        """
+        manifest = {
+            "version": 1,
+            "enabled_outputs": output_config.enabled_outputs,
+            "formats": {
+                "fg": output_config.fg_format,
+                "matte": output_config.matte_format,
+                "comp": output_config.comp_format,
+                "processed": output_config.processed_format,
+            },
+            "params": params.to_dict(),
+        }
+        manifest_path = os.path.join(output_root, ".corridorkey_manifest.json")
+        tmp_path = manifest_path + ".tmp"
+        try:
+            with open(tmp_path, 'w') as f:
+                json.dump(manifest, f, indent=2)
+            # Atomic rename (on Windows, need to remove target first)
+            if os.path.exists(manifest_path):
+                os.remove(manifest_path)
+            os.rename(tmp_path, manifest_path)
+        except Exception as e:
+            logger.warning(f"Failed to write manifest: {e}")
+
     def _write_outputs(
         self,
         res: dict,
@@ -331,37 +427,44 @@ class CorridorKeyService:
         input_stem: str,
         clip_name: str,
         frame_index: int,
+        output_config: OutputConfig | None = None,
     ) -> None:
-        """Write all output types for a single frame."""
+        """Write output types for a single frame respecting OutputConfig."""
+        cfg = output_config or OutputConfig()
+
         pred_fg = res['fg']
         pred_alpha = res['alpha']
 
-        # FG (EXR sRGB half-float)
-        fg_bgr = cv2.cvtColor(pred_fg, cv2.COLOR_RGB2BGR)
-        fg_path = os.path.join(dirs['fg'], f"{input_stem}.exr")
-        validate_write(cv2.imwrite(fg_path, fg_bgr, _EXR_FLAGS), clip_name, frame_index, fg_path)
+        # FG
+        if cfg.fg_enabled:
+            fg_bgr = cv2.cvtColor(pred_fg, cv2.COLOR_RGB2BGR)
+            fg_path = os.path.join(dirs['fg'], f"{input_stem}.{cfg.fg_format}")
+            self._write_image(fg_bgr, fg_path, cfg.fg_format, clip_name, frame_index)
 
-        # Matte (EXR linear half-float)
-        if pred_alpha.ndim == 3:
-            pred_alpha = pred_alpha[:, :, 0]
-        matte_path = os.path.join(dirs['matte'], f"{input_stem}.exr")
-        validate_write(cv2.imwrite(matte_path, pred_alpha, _EXR_FLAGS), clip_name, frame_index, matte_path)
+        # Matte
+        if cfg.matte_enabled:
+            alpha = pred_alpha
+            if alpha.ndim == 3:
+                alpha = alpha[:, :, 0]
+            matte_path = os.path.join(dirs['matte'], f"{input_stem}.{cfg.matte_format}")
+            self._write_image(alpha, matte_path, cfg.matte_format, clip_name, frame_index)
 
-        # Comp (PNG 8-bit)
-        comp_srgb = res['comp']
-        comp_bgr = cv2.cvtColor(
-            (np.clip(comp_srgb, 0.0, 1.0) * 255.0).astype(np.uint8),
-            cv2.COLOR_RGB2BGR,
-        )
-        comp_path = os.path.join(dirs['comp'], f"{input_stem}.png")
-        validate_write(cv2.imwrite(comp_path, comp_bgr), clip_name, frame_index, comp_path)
+        # Comp
+        if cfg.comp_enabled:
+            comp_srgb = res['comp']
+            comp_bgr = cv2.cvtColor(
+                (np.clip(comp_srgb, 0.0, 1.0) * 255.0).astype(np.uint8),
+                cv2.COLOR_RGB2BGR,
+            )
+            comp_path = os.path.join(dirs['comp'], f"{input_stem}.{cfg.comp_format}")
+            self._write_image(comp_bgr, comp_path, cfg.comp_format, clip_name, frame_index)
 
-        # Processed (RGBA EXR premultiplied linear)
-        if 'processed' in res:
+        # Processed (RGBA premultiplied)
+        if cfg.processed_enabled and 'processed' in res:
             proc_rgba = res['processed']
             proc_bgra = cv2.cvtColor(proc_rgba, cv2.COLOR_RGBA2BGRA)
-            proc_path = os.path.join(dirs['processed'], f"{input_stem}.exr")
-            validate_write(cv2.imwrite(proc_path, proc_bgra, _EXR_FLAGS), clip_name, frame_index, proc_path)
+            proc_path = os.path.join(dirs['processed'], f"{input_stem}.{cfg.processed_format}")
+            self._write_image(proc_bgra, proc_path, cfg.processed_format, clip_name, frame_index)
 
     # --- Processing ---
 
@@ -373,6 +476,7 @@ class CorridorKeyService:
         on_progress: Optional[Callable[[str, int, int], None]] = None,
         on_warning: Optional[Callable[[str], None]] = None,
         skip_stems: Optional[set[str]] = None,
+        output_config: Optional[OutputConfig] = None,
     ) -> list[FrameResult]:
         """Run CorridorKey inference on a single clip.
 
@@ -383,6 +487,7 @@ class CorridorKeyService:
             on_progress: Called with (clip_name, current_frame, total_frames).
             on_warning: Called with warning messages for non-fatal issues.
             skip_stems: Set of frame stems to skip (for resume support).
+            output_config: Which outputs to write and their formats.
 
         Returns:
             List of FrameResult for each frame.
@@ -394,8 +499,13 @@ class CorridorKeyService:
         if clip.input_asset is None or clip.alpha_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input or alpha asset")
 
-        engine = self._get_engine()
+        with self._gpu_lock:
+            engine = self._get_engine()
         dirs = ensure_output_dirs(clip.root_path)
+        cfg = output_config or OutputConfig()
+
+        # Write run manifest (Codex: resume must know which outputs were enabled)
+        self._write_manifest(dirs['root'], cfg, params)
 
         num_frames = validate_frame_counts(
             clip.name,
@@ -459,20 +569,21 @@ class CorridorKeyService:
                     if mask.shape[:2] != img.shape[:2]:
                         mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
 
-                    # Process
-                    res = engine.process_frame(
-                        img,
-                        mask,
-                        input_is_linear=is_linear,
-                        fg_is_straight=True,
-                        despill_strength=params.despill_strength,
-                        auto_despeckle=params.auto_despeckle,
-                        despeckle_size=params.despeckle_size,
-                        refiner_scale=params.refiner_scale,
-                    )
+                    # Process (GPU-locked — process_frame mutates model hooks)
+                    with self._gpu_lock:
+                        res = engine.process_frame(
+                            img,
+                            mask,
+                            input_is_linear=is_linear,
+                            fg_is_straight=True,
+                            despill_strength=params.despill_strength,
+                            auto_despeckle=params.auto_despeckle,
+                            despeckle_size=params.despeckle_size,
+                            refiner_scale=params.refiner_scale,
+                        )
 
                     # Write outputs
-                    self._write_outputs(res, dirs, input_stem, clip.name, i)
+                    self._write_outputs(res, dirs, input_stem, clip.name, i, cfg)
                     results.append(FrameResult(i, input_stem, True))
 
                 except FrameReadError as e:
@@ -520,6 +631,101 @@ class CorridorKeyService:
 
         return results
 
+    # --- Single-Frame Reprocess (Preview) ---
+
+    def is_engine_loaded(self) -> bool:
+        """True if the inference engine is already loaded in VRAM."""
+        return self._active_model == _ActiveModel.INFERENCE and self._engine is not None
+
+    def reprocess_single_frame(
+        self,
+        clip: ClipEntry,
+        params: InferenceParams,
+        frame_index: int,
+        job: Optional[GPUJob] = None,
+    ) -> Optional[dict]:
+        """Reprocess a single frame with current params.
+
+        Returns the result dict (fg, alpha, comp, processed) or None.
+        This runs through the GPU lock for thread safety.
+        Does NOT write to disk — returns in-memory results for preview.
+        """
+        if clip.input_asset is None or clip.alpha_asset is None:
+            return None
+
+        if job and job.is_cancelled:
+            return None
+
+        with self._gpu_lock:
+            engine = self._get_engine()
+
+        # Read the specific frame
+        input_files = clip.input_asset.get_frame_files() if clip.input_asset.asset_type == 'sequence' else []
+        if clip.input_asset.asset_type == 'video':
+            cap = cv2.VideoCapture(clip.input_asset.path)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            ret, frame = cap.read()
+            cap.release()
+            if not ret:
+                return None
+            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        else:
+            if frame_index >= len(input_files):
+                return None
+            fpath = os.path.join(clip.input_asset.path, input_files[frame_index])
+            is_exr = fpath.lower().endswith('.exr')
+            if is_exr:
+                img = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
+                if img is None:
+                    return None
+                if img.ndim == 3 and img.shape[2] == 4:
+                    img = img[:, :, :3]
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = np.maximum(img, 0.0).astype(np.float32)
+            else:
+                img = cv2.imread(fpath)
+                if img is None:
+                    return None
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+
+        # Read alpha
+        alpha_files = clip.alpha_asset.get_frame_files() if clip.alpha_asset.asset_type == 'sequence' else []
+        if clip.alpha_asset.asset_type == 'video':
+            cap = cv2.VideoCapture(clip.alpha_asset.path)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+            ret, frame = cap.read()
+            cap.release()
+            if not ret:
+                return None
+            mask = frame[:, :, 2].astype(np.float32) / 255.0
+        else:
+            if frame_index >= len(alpha_files):
+                return None
+            fpath = os.path.join(clip.alpha_asset.path, alpha_files[frame_index])
+            mask_in = cv2.imread(fpath, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED)
+            if mask_in is None:
+                return None
+            mask = normalize_mask_channels(mask_in, clip.name, frame_index)
+            mask = normalize_mask_dtype(mask)
+
+        if mask.shape[:2] != img.shape[:2]:
+            mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+        if job and job.is_cancelled:
+            return None
+
+        with self._gpu_lock:
+            res = engine.process_frame(
+                img, mask,
+                input_is_linear=params.input_is_linear,
+                fg_is_straight=True,
+                despill_strength=params.despill_strength,
+                auto_despeckle=params.auto_despeckle,
+                despeckle_size=params.despeckle_size,
+                refiner_scale=params.refiner_scale,
+            )
+        return res
+
     # --- GVM Alpha Generation ---
 
     def run_gvm(
@@ -542,7 +748,8 @@ class CorridorKeyService:
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for GVM")
 
-        gvm = self._get_gvm()
+        with self._gpu_lock:
+            gvm = self._get_gvm()
 
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         os.makedirs(alpha_dir, exist_ok=True)
@@ -606,7 +813,8 @@ class CorridorKeyService:
         if clip.mask_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing mask asset for VideoMaMa")
 
-        pipeline = self._get_videomama_pipeline()
+        with self._gpu_lock:
+            pipeline = self._get_videomama_pipeline()
 
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         os.makedirs(alpha_dir, exist_ok=True)

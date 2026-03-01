@@ -29,10 +29,14 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     app.setApplicationName("CorridorKey")
     app.setOrganizationName("Corridor Digital")
 
-    # Load Open Sans font
+    # Load Open Sans font (frozen-build aware)
     font_loaded = False
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(__file__)
     font_search_paths = [
-        os.path.join(os.path.dirname(__file__), "theme", "fonts"),
+        os.path.join(base, "theme", "fonts") if not getattr(sys, 'frozen', False) else os.path.join(base, "ui", "theme", "fonts"),
         os.path.expanduser("~/.fonts"),
         "C:/Windows/Fonts",
     ]

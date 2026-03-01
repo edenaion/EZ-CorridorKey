@@ -234,7 +234,12 @@ class ClipBrowser(QWidget):
     def select_first(self) -> None:
         """Select the first clip in the list."""
         if self._model.rowCount() > 0:
-            idx = self._model.index(0)
+            self.select_by_index(0)
+
+    def select_by_index(self, row: int) -> None:
+        """Select a clip by row index."""
+        if 0 <= row < self._model.rowCount():
+            idx = self._model.index(row)
             self._list_view.setCurrentIndex(idx)
             self._on_item_clicked(idx)
 

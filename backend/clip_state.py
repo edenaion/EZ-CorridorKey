@@ -158,37 +158,60 @@ class ClipEntry:
     def completed_frame_count(self) -> int:
         """Count existing output frames for resume support.
 
-        Uses stem intersection across FG and Matte directories
-        (both must exist for a frame to be considered complete).
-        Returns 0 if no valid outputs found.
+        Manifest-aware: reads .corridorkey_manifest.json to determine which
+        outputs were enabled. Falls back to FG+Matte intersection if no manifest.
         """
-        fg_dir = os.path.join(self.output_dir, "FG")
-        matte_dir = os.path.join(self.output_dir, "Matte")
-
-        if not os.path.isdir(fg_dir) or not os.path.isdir(matte_dir):
-            return 0
-
-        fg_stems = {os.path.splitext(f)[0] for f in os.listdir(fg_dir) if _is_image_file(f)}
-        matte_stems = {os.path.splitext(f)[0] for f in os.listdir(matte_dir) if _is_image_file(f)}
-
-        # A frame is complete only if both FG and Matte exist
-        complete_stems = fg_stems & matte_stems
-        return len(complete_stems)
+        return len(self.completed_stems())
 
     def completed_stems(self) -> set[str]:
-        """Return set of frame stems that have both FG and Matte outputs.
+        """Return set of frame stems that have all enabled outputs complete.
 
-        Used for resume: skip frames whose stems are already in this set.
+        Reads the run manifest to determine which outputs to check.
+        Falls back to FG+Matte intersection if no manifest exists.
         """
-        fg_dir = os.path.join(self.output_dir, "FG")
-        matte_dir = os.path.join(self.output_dir, "Matte")
+        manifest = self._read_manifest()
+        if manifest:
+            enabled = manifest.get("enabled_outputs", [])
+        else:
+            enabled = ["fg", "matte"]
 
-        if not os.path.isdir(fg_dir) or not os.path.isdir(matte_dir):
+        dir_map = {
+            "fg": os.path.join(self.output_dir, "FG"),
+            "matte": os.path.join(self.output_dir, "Matte"),
+            "comp": os.path.join(self.output_dir, "Comp"),
+            "processed": os.path.join(self.output_dir, "Processed"),
+        }
+
+        stem_sets = []
+        for output_name in enabled:
+            d = dir_map.get(output_name)
+            if d and os.path.isdir(d):
+                stems = {os.path.splitext(f)[0] for f in os.listdir(d) if _is_image_file(f)}
+                stem_sets.append(stems)
+            else:
+                # Required dir missing → no complete frames
+                return set()
+
+        if not stem_sets:
             return set()
 
-        fg_stems = {os.path.splitext(f)[0] for f in os.listdir(fg_dir) if _is_image_file(f)}
-        matte_stems = {os.path.splitext(f)[0] for f in os.listdir(matte_dir) if _is_image_file(f)}
-        return fg_stems & matte_stems
+        # Intersection: frame complete only if ALL enabled outputs exist
+        result = stem_sets[0]
+        for s in stem_sets[1:]:
+            result &= s
+        return result
+
+    def _read_manifest(self) -> Optional[dict]:
+        """Read the run manifest if it exists."""
+        manifest_path = os.path.join(self.output_dir, ".corridorkey_manifest.json")
+        if not os.path.isfile(manifest_path):
+            return None
+        try:
+            import json
+            with open(manifest_path, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return None
 
     def find_assets(self) -> None:
         """Scan the clip directory for Input, AlphaHint, and mask assets.
