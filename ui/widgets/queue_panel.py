@@ -74,6 +74,7 @@ class QueuePanel(QWidget):
         clear_btn = QPushButton("Clear")
         clear_btn.setFixedWidth(50)
         clear_btn.setStyleSheet("font-size: 10px; padding: 2px 6px;")
+        clear_btn.setToolTip("Clear completed and cancelled jobs from the queue history")
         clear_btn.clicked.connect(self._on_clear)
         header.addWidget(clear_btn)
 
@@ -195,6 +196,7 @@ class QueuePanel(QWidget):
                 "background: #2A2910; color: #D10000; font-size: 10px; "
                 "font-weight: 700; border: none; padding: 0;"
             )
+            cancel_btn.setToolTip("Cancel this job")
             job_id = job.id
             cancel_btn.clicked.connect(lambda checked, jid=job_id: self.cancel_job_requested.emit(jid))
             layout.addWidget(cancel_btn)

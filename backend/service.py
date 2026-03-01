@@ -369,6 +369,11 @@ class CorridorKeyService:
     ) -> None:
         """Write a single image in the requested format."""
         if fmt == "exr":
+            # EXR requires float32 — convert if uint8 (e.g. pre-converted comp)
+            if img.dtype == np.uint8:
+                img = img.astype(np.float32) / 255.0
+            elif img.dtype != np.float32:
+                img = img.astype(np.float32)
             validate_write(cv2.imwrite(path, img, EXR_WRITE_FLAGS), clip_name, frame_index, path)
         else:
             # PNG 8-bit

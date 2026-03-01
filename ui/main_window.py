@@ -180,6 +180,7 @@ class MainWindow(QMainWindow):
         # GPU info (right side of brand bar)
         self._gpu_label = QLabel("")
         self._gpu_label.setObjectName("gpuName")
+        self._gpu_label.setToolTip("Detected GPU used for inference")
         top_bar.addWidget(self._gpu_label)
 
         self._vram_label = QLabel("VRAM")
@@ -193,11 +194,13 @@ class MainWindow(QMainWindow):
         self._vram_bar.setTextVisible(False)
         self._vram_bar.setRange(0, 100)
         self._vram_bar.setValue(0)
+        self._vram_bar.setToolTip("GPU video memory usage — updates during inference")
         top_bar.addWidget(self._vram_bar)
 
         self._vram_text = QLabel("")
         self._vram_text.setObjectName("vramText")
         self._vram_text.setMinimumWidth(70)
+        self._vram_text.setToolTip("Current VRAM used / total available")
         top_bar.addWidget(self._vram_text)
 
         main_layout.addLayout(top_bar)
@@ -292,6 +295,7 @@ class MainWindow(QMainWindow):
 
         # Status bar buttons
         self._status_bar.run_clicked.connect(self._on_run_inference)
+        self._status_bar.resume_clicked.connect(self._on_resume_inference)
         self._status_bar.stop_clicked.connect(self._on_stop_inference)
 
         # GPU worker signals
@@ -376,7 +380,11 @@ class MainWindow(QMainWindow):
         # Enable run button only for READY or COMPLETE (reprocess) clips
         can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
         logger.debug(f"Run button enabled: {can_run} (state={clip.state.value})")
-        self._status_bar.set_run_enabled(can_run)
+        self._status_bar.update_button_state(
+            can_run=can_run,
+            has_partial=clip.completed_frame_count() > 0,
+            has_in_out=clip.in_out_range is not None,
+        )
 
         # Enable GVM/VideoMaMa buttons based on state
         self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
@@ -388,7 +396,9 @@ class MainWindow(QMainWindow):
         self._clips_dir = dir_path
         # Reset status bar state on project load (no active job)
         self._status_bar.set_running(False)
-        self._status_bar.set_run_enabled(False)
+        self._status_bar.update_button_state(
+            can_run=False, has_partial=False, has_in_out=False,
+        )
         # Ensure workspace is visible (may come from welcome screen or menu)
         self._switch_to_workspace()
         try:
@@ -596,6 +606,7 @@ class MainWindow(QMainWindow):
         self._current_clip.in_out_range = None
         from backend.project import save_in_out_range
         save_in_out_range(self._current_clip.root_path, None)
+        self._refresh_button_state()
 
     def _persist_in_out(self) -> None:
         """Save current in/out markers to the clip and project.json."""
@@ -607,6 +618,7 @@ class MainWindow(QMainWindow):
             self._current_clip.in_out_range = rng
             from backend.project import save_in_out_range
             save_in_out_range(self._current_clip.root_path, rng)
+        self._refresh_button_state()
 
     # ── Live Reprocess (Codex: through GPU queue, not parallel) ──
 
@@ -676,28 +688,12 @@ class MainWindow(QMainWindow):
                 if reply != QMessageBox.Yes:
                     return
 
-        # Check for resume (partial outputs exist)
-        resume = False
-        if clip.state == ClipState.COMPLETE or clip.completed_frame_count() > 0:
-            existing = clip.completed_frame_count()
-            total = clip.input_asset.frame_count if clip.input_asset else 0
-            if 0 < existing < total:
-                reply = QMessageBox.question(
-                    self, "Resume?",
-                    f"Clip '{clip.name}' has {existing}/{total} frames already processed.\n\n"
-                    "Resume from where you left off?",
-                    QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-                )
-                if reply == QMessageBox.Cancel:
-                    return
-                resume = (reply == QMessageBox.Yes)
-
         # For COMPLETE clips wanting reprocess, transition back to READY
         if clip.state == ClipState.COMPLETE:
             clip.transition_to(ClipState.READY)
 
         params = self._param_panel.get_params()
-        job = create_job_snapshot(clip, params, resume=resume)
+        job = create_job_snapshot(clip, params, resume=False)
 
         # Store output config in job params
         output_config = self._param_panel.get_output_config()
@@ -715,6 +711,48 @@ class MainWindow(QMainWindow):
             return
 
         self._start_worker_if_needed(job.id)
+
+    @Slot()
+    def _on_resume_inference(self) -> None:
+        """Resume inference — skip already-processed frames, process full clip."""
+        if self._current_clip is None:
+            return
+
+        clip = self._current_clip
+        if clip.state not in (ClipState.READY, ClipState.COMPLETE):
+            return
+
+        # For COMPLETE clips, transition back to READY
+        if clip.state == ClipState.COMPLETE:
+            clip.transition_to(ClipState.READY)
+
+        params = self._param_panel.get_params()
+        job = create_job_snapshot(clip, params, resume=True)
+
+        output_config = self._param_panel.get_output_config()
+        job.params["_output_config"] = output_config
+        # Resume always processes full clip — no in/out range
+
+        if not self._service.job_queue.submit(job):
+            QMessageBox.information(self, "Duplicate", f"'{clip.name}' is already queued.")
+            return
+
+        self._start_worker_if_needed(job.id)
+
+    def _refresh_button_state(self) -> None:
+        """Update run/resume button state based on current clip."""
+        clip = self._current_clip
+        if clip is None:
+            self._status_bar.update_button_state(
+                can_run=False, has_partial=False, has_in_out=False,
+            )
+            return
+        can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
+        self._status_bar.update_button_state(
+            can_run=can_run,
+            has_partial=clip.completed_frame_count() > 0,
+            has_in_out=clip.in_out_range is not None,
+        )
 
     @Slot()
     def _on_run_all_ready(self) -> None:
@@ -897,9 +935,7 @@ class MainWindow(QMainWindow):
         # If selected clip, reload preview to show new assets
         if self._current_clip and self._current_clip.name == clip_name:
             self._dual_viewer.set_clip(self._current_clip)
-            self._status_bar.set_run_enabled(
-                self._current_clip.state in (ClipState.READY, ClipState.COMPLETE)
-            )
+            self._refresh_button_state()
             self._param_panel.set_videomama_enabled(
                 self._current_clip.state == ClipState.MASKED
             )
@@ -918,9 +954,7 @@ class MainWindow(QMainWindow):
                     if self._current_clip and self._current_clip.name == clip_name:
                         clip.find_assets()
                         self._dual_viewer.set_clip(clip)
-                        self._status_bar.set_run_enabled(
-                            clip.state in (ClipState.READY, ClipState.COMPLETE)
-                        )
+                        self._refresh_button_state()
                     break
             self._status_bar.stop_job_timer()
             self._status_bar.set_running(False)
@@ -1055,9 +1089,7 @@ class MainWindow(QMainWindow):
                 # If this is the selected clip, reload preview
                 if self._current_clip and self._current_clip.name == clip_name:
                     self._dual_viewer.set_clip(clip)
-                    self._status_bar.set_run_enabled(
-                        clip.state in (ClipState.READY, ClipState.COMPLETE)
-                    )
+                    self._refresh_button_state()
 
                 logger.info(f"Extraction complete: {clip_name} ({frame_count} frames)")
                 break

@@ -3,15 +3,18 @@
 Horizontal slider + frame counter + step buttons. Emits frame_changed only
 after a debounce period (50ms) to coalesce rapid scrubbing events.
 
-CoverageBar sits above the slider showing two lanes:
+CoverageBar sits above the slider (same column) showing two lanes:
   - Alpha lane (white): which frames have AlphaHint
   - Inference lane (brand yellow): which frames have output
+
+MarkerOverlay draws in/out bracket lines with draggable handles,
+positioned exactly over the coverage bar + slider column.
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider, QPushButton
-from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QPainter, QColor
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider, QPushButton, QToolTip
+from PySide6.QtCore import Qt, Signal, QTimer, QPointF, QEvent
+from PySide6.QtGui import QPainter, QColor, QPolygonF
 
 
 class CoverageBar(QWidget):
@@ -24,9 +27,6 @@ class CoverageBar(QWidget):
     _ALPHA_COLOR = QColor(200, 200, 200)       # Soft white for alpha
     _INFERENCE_COLOR = QColor(255, 242, 3)      # Brand yellow #FFF203
     _TRACK_COLOR = QColor(26, 25, 0)            # Dark track
-    _MARKER_COLOR = QColor(255, 242, 3)         # Brand yellow for in/out brackets
-    _DIM_COLOR = QColor(0, 0, 0, 120)           # Semi-transparent dim overlay
-    _MARKER_WIDTH = 2
     _LANE_HEIGHT = 3
     _GAP = 1
 
@@ -35,32 +35,15 @@ class CoverageBar(QWidget):
         self.setFixedHeight(self._LANE_HEIGHT * 2 + self._GAP)
         self._alpha: list[bool] = []
         self._inference: list[bool] = []
-        self._in_point: int | None = None
-        self._out_point: int | None = None
-        self._num_frames: int = 0
 
     def set_coverage(self, alpha: list[bool], inference: list[bool]) -> None:
         self._alpha = alpha
         self._inference = inference
         self.update()
 
-    def set_in_out(self, in_point: int | None, out_point: int | None, num_frames: int) -> None:
-        self._in_point = in_point
-        self._out_point = out_point
-        self._num_frames = num_frames
-        self.update()
-
-    def clear_in_out(self) -> None:
-        self._in_point = None
-        self._out_point = None
-        self.update()
-
     def clear(self) -> None:
         self._alpha = []
         self._inference = []
-        self._in_point = None
-        self._out_point = None
-        self._num_frames = 0
         self.update()
 
     def paintEvent(self, event) -> None:
@@ -77,33 +60,6 @@ class CoverageBar(QWidget):
         # Draw inference lane (bottom)
         y_offset = self._LANE_HEIGHT + self._GAP
         self._paint_lane(painter, self._inference, y_offset, w, self._INFERENCE_COLOR)
-
-        # Draw in/out range overlay (dim excluded regions, draw bracket lines)
-        if (self._in_point is not None and self._out_point is not None
-                and self._num_frames > 0):
-            n = self._num_frames
-            total_h = self.height()
-
-            # Dim region before in-point
-            if self._in_point > 0:
-                x_in = int(self._in_point * w / n)
-                painter.fillRect(0, 0, x_in, total_h, self._DIM_COLOR)
-
-            # Dim region after out-point
-            if self._out_point < n - 1:
-                x_out = int((self._out_point + 1) * w / n)
-                painter.fillRect(x_out, 0, w - x_out, total_h, self._DIM_COLOR)
-
-            # In-point bracket line
-            x_in = int(self._in_point * w / n)
-            painter.fillRect(x_in, 0, self._MARKER_WIDTH, total_h, self._MARKER_COLOR)
-
-            # Out-point bracket line
-            x_out = int((self._out_point + 1) * w / n)
-            painter.fillRect(
-                max(0, x_out - self._MARKER_WIDTH), 0,
-                self._MARKER_WIDTH, total_h, self._MARKER_COLOR,
-            )
 
         painter.end()
 
@@ -139,6 +95,204 @@ class CoverageBar(QWidget):
             painter.fillRect(x0, y, max(1, x1 - x0), self._LANE_HEIGHT, fill_color)
 
 
+class MarkerOverlay(QWidget):
+    """Transparent overlay that paints in/out markers with draggable handles.
+
+    Parented to the center column widget so it shares the exact same
+    horizontal bounds as the coverage bar and slider.
+
+    Mouse-transparent by default (WA_TransparentForMouseEvents=True) so the
+    slider beneath works normally. Only becomes interactive when hovering
+    near a marker handle, then reverts when the mouse moves away.
+    """
+
+    in_point_dragged = Signal(int)
+    out_point_dragged = Signal(int)
+    scrub_to_frame = Signal(int)  # request scrubber jump during drag
+
+    GRAB_WIDTH = 8    # px hitbox for drag detection
+    HANDLE_W = 6      # px visible handle width
+    HANDLE_H = 8      # px handle nub height at bottom
+    MARKER_WIDTH = 2  # px bracket line width
+    MARKER_COLOR = QColor(255, 242, 3)      # Brand yellow
+    DIM_COLOR = QColor(0, 0, 0, 120)        # Semi-transparent dim
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._in_point: int | None = None
+        self._out_point: int | None = None
+        self._total: int = 0
+        self._dragging: str | None = None  # None | 'in' | 'out'
+        # Start transparent — slider gets all events by default
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+    def set_in_out(self, in_point: int | None, out_point: int | None, total: int) -> None:
+        self._in_point = in_point
+        self._out_point = out_point
+        self._total = total
+        self.update()
+
+    def clear(self) -> None:
+        self._in_point = None
+        self._out_point = None
+        self.update()
+
+    def _frame_to_x(self, frame: int) -> int:
+        if self._total <= 0:
+            return 0
+        return int(frame * self.width() / self._total)
+
+    def _x_to_frame(self, x: int) -> int:
+        if self._total <= 0 or self.width() <= 0:
+            return 0
+        return max(0, min(self._total - 1, int(x * self._total / self.width())))
+
+    def _marker_x(self, which: str) -> int | None:
+        """Return pixel x for in or out marker, or None if not set."""
+        if self._in_point is None or self._out_point is None or self._total <= 0:
+            return None
+        if which == 'in':
+            return self._frame_to_x(self._in_point)
+        else:
+            return self._frame_to_x(self._out_point + 1)
+
+    def _hit_marker(self, x: int) -> str | None:
+        """Return 'in', 'out', or None based on proximity to markers."""
+        x_in = self._marker_x('in')
+        x_out = self._marker_x('out')
+        if x_in is not None and abs(x - x_in) <= self.GRAB_WIDTH:
+            return 'in'
+        if x_out is not None and abs(x - x_out) <= self.GRAB_WIDTH:
+            return 'out'
+        return None
+
+    def paintEvent(self, event) -> None:
+        if self._in_point is None or self._out_point is None or self._total <= 0:
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        w = self.width()
+        h = self.height()
+        n = self._total
+
+        x_in = int(self._in_point * w / n)
+        x_out = int((self._out_point + 1) * w / n)
+
+        # Dim region before in-point
+        if self._in_point > 0:
+            painter.fillRect(0, 0, x_in, h, self.DIM_COLOR)
+
+        # Dim region after out-point
+        if self._out_point < n - 1:
+            painter.fillRect(x_out, 0, w - x_out, h, self.DIM_COLOR)
+
+        # In-point bracket line
+        painter.fillRect(x_in, 0, self.MARKER_WIDTH, h, self.MARKER_COLOR)
+
+        # Out-point bracket line
+        painter.fillRect(max(0, x_out - self.MARKER_WIDTH), 0,
+                         self.MARKER_WIDTH, h, self.MARKER_COLOR)
+
+        # Handle nubs at bottom (small triangles pointing inward)
+        painter.setBrush(self.MARKER_COLOR)
+        painter.setPen(Qt.NoPen)
+
+        # In-point handle: triangle pointing right at bottom-left of bracket
+        in_tri = QPolygonF([
+            QPointF(x_in, h),
+            QPointF(x_in + self.HANDLE_W, h),
+            QPointF(x_in, h - self.HANDLE_H),
+        ])
+        painter.drawPolygon(in_tri)
+
+        # Out-point handle: triangle pointing left at bottom-right of bracket
+        ox = max(0, x_out - self.MARKER_WIDTH)
+        out_tri = QPolygonF([
+            QPointF(ox + self.MARKER_WIDTH, h),
+            QPointF(ox + self.MARKER_WIDTH - self.HANDLE_W, h),
+            QPointF(ox + self.MARKER_WIDTH, h - self.HANDLE_H),
+        ])
+        painter.drawPolygon(out_tri)
+
+        painter.end()
+
+    def _become_interactive(self) -> None:
+        """Grab mouse events (near a marker handle)."""
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.SizeHorCursor)
+
+    def _become_transparent(self) -> None:
+        """Release mouse events back to the slider."""
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.unsetCursor()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            hit = self._hit_marker(int(event.position().x()))
+            if hit:
+                self._dragging = hit
+                event.accept()
+                return
+        elif event.button() == Qt.MiddleButton:
+            # Middle-click on a marker resets it to boundary
+            hit = self._hit_marker(int(event.position().x()))
+            if hit == 'in':
+                self._in_point = 0
+                self.update()
+                self.in_point_dragged.emit(0)
+                event.accept()
+                return
+            elif hit == 'out' and self._total > 0:
+                self._out_point = self._total - 1
+                self.update()
+                self.out_point_dragged.emit(self._total - 1)
+                event.accept()
+                return
+        # Missed — go transparent so slider gets future events
+        self._become_transparent()
+        event.ignore()
+
+    def mouseMoveEvent(self, event) -> None:
+        x = int(event.position().x())
+        if self._dragging:
+            frame = self._x_to_frame(x)
+            if self._dragging == 'in':
+                if self._out_point is not None:
+                    frame = min(frame, self._out_point)
+                self._in_point = frame
+            else:
+                if self._in_point is not None:
+                    frame = max(frame, self._in_point)
+                self._out_point = frame
+            self.update()
+            # Scrub the playhead so user sees current position
+            self.scrub_to_frame.emit(frame)
+            event.accept()
+        else:
+            # If mouse drifted away from marker, go transparent
+            hit = self._hit_marker(x)
+            if not hit:
+                self._become_transparent()
+            event.ignore()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._dragging:
+            if self._dragging == 'in' and self._in_point is not None:
+                self.in_point_dragged.emit(self._in_point)
+            elif self._dragging == 'out' and self._out_point is not None:
+                self.out_point_dragged.emit(self._out_point)
+            self._dragging = None
+            # Check if still near a marker
+            hit = self._hit_marker(int(event.position().x()))
+            if not hit:
+                self._become_transparent()
+            event.accept()
+        else:
+            event.ignore()
+
+
 class FrameScrubber(QWidget):
     """Frame navigation scrubber with transport controls, coverage bar, and debounced output."""
 
@@ -151,25 +305,16 @@ class FrameScrubber(QWidget):
         super().__init__(parent)
         self.setFixedHeight(40)
 
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-
-        # Coverage bar (top)
-        self._coverage_bar = CoverageBar()
-        main_layout.addWidget(self._coverage_bar)
-
-        # Transport + slider row (bottom)
-        transport = QHBoxLayout()
-        transport.setContentsMargins(8, 2, 8, 2)
-        transport.setSpacing(4)
+        row = QHBoxLayout(self)
+        row.setContentsMargins(8, 0, 8, 0)
+        row.setSpacing(4)
 
         # Frame counter label (left)
         self._frame_label = QLabel("0 / 0")
         self._frame_label.setFixedWidth(90)
         self._frame_label.setAlignment(Qt.AlignCenter)
         self._frame_label.setStyleSheet("color: #808070; font-size: 11px;")
-        transport.addWidget(self._frame_label)
+        row.addWidget(self._frame_label)
 
         # Transport controls
         btn_style = (
@@ -179,13 +324,13 @@ class FrameScrubber(QWidget):
             "QPushButton:disabled { color: #3A3A30; }"
         )
 
-        # Jump to start — text glyphs (not emoji) so CSS color is respected
+        # Jump to start
         self._start_btn = QPushButton("\u25C0\u25C0")  # ◀◀
         self._start_btn.setFixedWidth(28)
         self._start_btn.setStyleSheet(btn_style)
         self._start_btn.setToolTip("Go to first frame")
         self._start_btn.clicked.connect(self._go_start)
-        transport.addWidget(self._start_btn)
+        row.addWidget(self._start_btn)
 
         # Step back
         self._prev_btn = QPushButton("\u25C0")  # ◀
@@ -193,15 +338,46 @@ class FrameScrubber(QWidget):
         self._prev_btn.setStyleSheet(btn_style)
         self._prev_btn.setToolTip("Previous frame")
         self._prev_btn.clicked.connect(self._step_back)
-        transport.addWidget(self._prev_btn)
+        row.addWidget(self._prev_btn)
 
-        # Slider
+        # ── Center column: coverage bar + slider ──
+        self._center = QWidget()
+        center_layout = QVBoxLayout(self._center)
+        center_layout.setContentsMargins(0, 2, 0, 0)
+        center_layout.setSpacing(0)
+
+        # Coverage bar (top of center column — same width as slider)
+        self._coverage_bar = CoverageBar()
+        self._coverage_bar.setToolTip(
+            "Coverage bar — shows which frames have been processed.\n"
+            "Top lane (white): alpha hint coverage.\n"
+            "Bottom lane (yellow): inference output coverage."
+        )
+        center_layout.addWidget(self._coverage_bar)
+
+        # Slider (bottom of center column)
         self._slider = QSlider(Qt.Horizontal)
         self._slider.setMinimum(0)
         self._slider.setMaximum(0)
         self._slider.setEnabled(False)
+        self._slider.setToolTip("Scrub through frames. Left/Right arrow keys to step one frame.")
         self._slider.valueChanged.connect(self._on_slider_changed)
-        transport.addWidget(self._slider, 1)
+        center_layout.addWidget(self._slider)
+
+        row.addWidget(self._center, 1)
+
+        # Marker overlay — parented to center, sits on top
+        self._marker_overlay = MarkerOverlay(self._center)
+        self._marker_overlay.in_point_dragged.connect(self._on_in_dragged)
+        self._marker_overlay.out_point_dragged.connect(self._on_out_dragged)
+        self._marker_overlay.scrub_to_frame.connect(self._on_marker_scrub)
+        self._marker_overlay.raise_()
+
+        # Track mouse over slider/overlay to detect marker proximity + tooltips
+        self._slider.setMouseTracking(True)
+        self._slider.installEventFilter(self)
+        self._marker_overlay.installEventFilter(self)
+        self._center.installEventFilter(self)
 
         # Step forward
         self._next_btn = QPushButton("\u25B6")  # ▶
@@ -209,7 +385,7 @@ class FrameScrubber(QWidget):
         self._next_btn.setStyleSheet(btn_style)
         self._next_btn.setToolTip("Next frame")
         self._next_btn.clicked.connect(self._step_forward)
-        transport.addWidget(self._next_btn)
+        row.addWidget(self._next_btn)
 
         # Jump to end
         self._end_btn = QPushButton("\u25B6\u25B6")  # ▶▶
@@ -217,15 +393,7 @@ class FrameScrubber(QWidget):
         self._end_btn.setStyleSheet(btn_style)
         self._end_btn.setToolTip("Go to last frame")
         self._end_btn.clicked.connect(self._go_end)
-        transport.addWidget(self._end_btn)
-
-        # Total frames label (right)
-        self._total_label = QLabel("")
-        self._total_label.setFixedWidth(60)
-        self._total_label.setStyleSheet("color: #808070; font-size: 10px;")
-        transport.addWidget(self._total_label)
-
-        main_layout.addLayout(transport)
+        row.addWidget(self._end_btn)
 
         # Debounce timer (50ms, Codex recommendation)
         self._debounce = QTimer(self)
@@ -237,6 +405,35 @@ class FrameScrubber(QWidget):
         self._suppress_signal = False
         self._in_point: int | None = None
         self._out_point: int | None = None
+
+    def resizeEvent(self, event) -> None:
+        """Keep marker overlay sized to the center column."""
+        super().resizeEvent(event)
+        self._marker_overlay.setGeometry(0, 0, self._center.width(), self._center.height())
+        self._marker_overlay.raise_()
+
+    def eventFilter(self, obj, event) -> bool:
+        """Watch slider for mouse moves (marker proximity) and tooltip forwarding."""
+        if obj is self._slider:
+            if event.type() == QEvent.MouseMove:
+                x = int(event.position().x())
+                hit = self._marker_overlay._hit_marker(x)
+                if hit and not self._marker_overlay._dragging:
+                    self._marker_overlay._become_interactive()
+        # Forward tooltip events from overlay or center to correct child
+        if event.type() == QEvent.ToolTip and obj in (
+            self._marker_overlay, self._center,
+        ):
+            local_y = int(event.pos().y())
+            coverage_h = self._coverage_bar.height()
+            if local_y < coverage_h:
+                tip = self._coverage_bar.toolTip()
+            else:
+                tip = self._slider.toolTip()
+            if tip:
+                QToolTip.showText(event.globalPos(), tip, obj)
+                return True
+        return super().eventFilter(obj, event)
 
     def set_range(self, total_frames: int) -> None:
         """Configure scrubber for a clip with total_frames stems."""
@@ -303,8 +500,27 @@ class FrameScrubber(QWidget):
         return self._in_point is not None and self._out_point is not None
 
     def _sync_markers(self) -> None:
-        """Push current in/out state to coverage bar."""
-        self._coverage_bar.set_in_out(self._in_point, self._out_point, self._total)
+        """Push current in/out state to marker overlay."""
+        self._marker_overlay.set_in_out(self._in_point, self._out_point, self._total)
+
+    def _on_in_dragged(self, frame: int) -> None:
+        """Handle in-point drag from overlay."""
+        self._in_point = frame
+        self.in_point_changed.emit(frame)
+
+    def _on_out_dragged(self, frame: int) -> None:
+        """Handle out-point drag from overlay."""
+        self._out_point = frame
+        self.out_point_changed.emit(frame)
+
+    def _on_marker_scrub(self, frame: int) -> None:
+        """While dragging a marker, move the playhead and debounce the frame load."""
+        self._suppress_signal = True
+        self._slider.setValue(frame)
+        self._suppress_signal = False
+        self._update_label()
+        # Use the same debounce as normal scrubbing (50ms) to avoid flooding
+        self._debounce.start()
 
     def _on_slider_changed(self, value: int) -> None:
         self._update_label()

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
     QComboBox, QCheckBox, QSpinBox, QPushButton, QGroupBox,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEvent
 
 from backend import InferenceParams, OutputConfig
 
@@ -51,6 +51,11 @@ class ParameterPanel(QWidget):
         cs_row.addWidget(cs_label)
         self._color_space = QComboBox()
         self._color_space.addItems(["sRGB", "Linear"])
+        self._color_space.setToolTip(
+            "Input color space.\n"
+            "sRGB: standard gamma-corrected footage (most cameras).\n"
+            "Linear: raw linear-light footage (EXR sequences, CG renders)."
+        )
         self._color_space.currentIndexChanged.connect(self._emit_changed)
         cs_row.addWidget(self._color_space, 1)
         inf_layout.addLayout(cs_row)
@@ -61,6 +66,11 @@ class ParameterPanel(QWidget):
         self._despill_slider = QSlider(Qt.Horizontal)
         self._despill_slider.setRange(0, 10)
         self._despill_slider.setValue(10)
+        self._despill_slider.setToolTip(
+            "Green spill removal strength (0.0–1.0).\n"
+            "Removes green color bleed from hair, skin, and edges.\n"
+            "1.0 = full despill, 0.0 = no despill (keep original colors)."
+        )
         self._despill_slider.valueChanged.connect(self._on_despill_changed)
         inf_layout.addWidget(self._despill_slider)
 
@@ -68,12 +78,22 @@ class ParameterPanel(QWidget):
         despeckle_row = QHBoxLayout()
         self._despeckle_check = QCheckBox("Despeckle")
         self._despeckle_check.setChecked(True)
+        self._despeckle_check.setToolTip(
+            "Automatic garbage matte — removes small floating noise\n"
+            "and speckles from the alpha by discarding isolated regions\n"
+            "smaller than the size threshold."
+        )
         self._despeckle_check.stateChanged.connect(self._emit_changed)
         despeckle_row.addWidget(self._despeckle_check)
         self._despeckle_size = QSpinBox()
         self._despeckle_size.setRange(50, 2000)
         self._despeckle_size.setValue(400)
         self._despeckle_size.setSuffix("px")
+        self._despeckle_size.setToolTip(
+            "Minimum area (in pixels) for a region to survive.\n"
+            "Isolated alpha blobs smaller than this are removed.\n"
+            "Lower = keep more detail, higher = cleaner matte."
+        )
         self._despeckle_size.valueChanged.connect(self._emit_changed)
         despeckle_row.addWidget(self._despeckle_size, 1)
         inf_layout.addLayout(despeckle_row)
@@ -84,6 +104,12 @@ class ParameterPanel(QWidget):
         self._refiner_slider = QSlider(Qt.Horizontal)
         self._refiner_slider.setRange(0, 30)
         self._refiner_slider.setValue(10)
+        self._refiner_slider.setToolTip(
+            "Edge refinement strength (0.0–3.0).\n"
+            "Scales the CNN refiner's edge corrections.\n"
+            "1.0 = default, 0.0 = backbone only (no refinement),\n"
+            "higher = sharper edges but may introduce artifacts."
+        )
         self._refiner_slider.valueChanged.connect(self._on_refiner_changed)
         inf_layout.addWidget(self._refiner_slider)
 
@@ -103,10 +129,16 @@ class ParameterPanel(QWidget):
         fg_row = QHBoxLayout()
         self._fg_check = QCheckBox("FG")
         self._fg_check.setChecked(True)
+        self._fg_check.setToolTip(
+            "Foreground — despilled subject on black background.\n"
+            "Green spill removed from hair and edges.\n"
+            "Straight alpha (not premultiplied)."
+        )
         fg_row.addWidget(self._fg_check, 1)
         self._fg_format = QComboBox()
         self._fg_format.addItems(["exr", "png"])
         self._fg_format.setFixedWidth(70)
+        self._fg_format.setToolTip("EXR = 32-bit float (post-production).\nPNG = 8-bit (general use).")
         fg_row.addWidget(self._fg_format)
         out_layout.addLayout(fg_row)
 
@@ -114,10 +146,16 @@ class ParameterPanel(QWidget):
         matte_row = QHBoxLayout()
         self._matte_check = QCheckBox("Matte")
         self._matte_check.setChecked(True)
+        self._matte_check.setToolTip(
+            "Alpha matte — grayscale transparency map.\n"
+            "White = fully opaque, black = fully transparent.\n"
+            "Use in compositing software for manual keying control."
+        )
         matte_row.addWidget(self._matte_check, 1)
         self._matte_format = QComboBox()
         self._matte_format.addItems(["exr", "png"])
         self._matte_format.setFixedWidth(70)
+        self._matte_format.setToolTip("EXR = 32-bit float (post-production).\nPNG = 8-bit (general use).")
         matte_row.addWidget(self._matte_format)
         out_layout.addLayout(matte_row)
 
@@ -125,10 +163,16 @@ class ParameterPanel(QWidget):
         comp_row = QHBoxLayout()
         self._comp_check = QCheckBox("Comp")
         self._comp_check.setChecked(True)
+        self._comp_check.setToolTip(
+            "Composite — final keyed result over checkerboard.\n"
+            "Best representation of the key quality.\n"
+            "Colors match the original input faithfully."
+        )
         comp_row.addWidget(self._comp_check, 1)
         self._comp_format = QComboBox()
         self._comp_format.addItems(["png", "exr"])
         self._comp_format.setFixedWidth(70)
+        self._comp_format.setToolTip("PNG = 8-bit with transparency.\nEXR = 32-bit float (post-production).")
         comp_row.addWidget(self._comp_format)
         out_layout.addLayout(comp_row)
 
@@ -136,10 +180,16 @@ class ParameterPanel(QWidget):
         proc_row = QHBoxLayout()
         self._proc_check = QCheckBox("Processed")
         self._proc_check.setChecked(True)
+        self._proc_check.setToolTip(
+            "Processed — production-ready RGBA (premultiplied, linear).\n"
+            "Designed for import into compositing tools (Nuke, After Effects).\n"
+            "Includes despill + garbage matte cleanup applied."
+        )
         proc_row.addWidget(self._proc_check, 1)
         self._proc_format = QComboBox()
         self._proc_format.addItems(["exr", "png"])
         self._proc_format.setFixedWidth(70)
+        self._proc_format.setToolTip("EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for premultiplied data).")
         proc_row.addWidget(self._proc_format)
         out_layout.addLayout(proc_row)
 
@@ -165,6 +215,24 @@ class ParameterPanel(QWidget):
         layout.addWidget(alpha_group)
 
         layout.addStretch(1)
+
+        # Middle-click reset: map widget → (setter_callable, default_value)
+        self._middle_click_defaults: dict[QWidget, tuple] = {
+            self._despill_slider: (self._despill_slider.setValue, 10),      # 1.0
+            self._refiner_slider: (self._refiner_slider.setValue, 10),      # 1.0
+            self._despeckle_size: (self._despeckle_size.setValue, 400),      # 400px
+        }
+        for widget in self._middle_click_defaults:
+            widget.installEventFilter(self)
+
+    def eventFilter(self, obj, event) -> bool:
+        """Middle-click resets a control to its default value."""
+        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.MiddleButton:
+            if obj in self._middle_click_defaults:
+                setter, default = self._middle_click_defaults[obj]
+                setter(default)
+                return True
+        return super().eventFilter(obj, event)
 
     def _emit_changed(self) -> None:
         """Emit params_changed unless signals are suppressed."""

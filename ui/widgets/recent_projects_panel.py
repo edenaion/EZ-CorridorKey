@@ -38,12 +38,12 @@ class RecentProjectCard(QFrame):
         self.customContextMenuRequested.connect(self._show_context_menu)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 4, 10, 4)
-        layout.setSpacing(12)
+        layout.setContentsMargins(4, 4, 8, 4)
+        layout.setSpacing(6)
 
         # Left: two icon buttons, evenly distributed in full card height
         btn_layout = QVBoxLayout()
-        btn_layout.setContentsMargins(4, 0, 4, 0)
+        btn_layout.setContentsMargins(2, 0, 2, 0)
         btn_layout.setSpacing(0)
 
         btn_layout.addStretch(1)

@@ -23,6 +23,27 @@ _MODE_LABELS: dict[ViewMode, str] = {
     ViewMode.PROCESSED: "PROC",
 }
 
+_MODE_TOOLTIPS: dict[ViewMode, str] = {
+    ViewMode.INPUT: "Original input footage (unprocessed)",
+    ViewMode.FG: (
+        "Foreground — subject with green spill removed.\n"
+        "Colors may look shifted; this is the despilled intermediate."
+    ),
+    ViewMode.MATTE: (
+        "Alpha matte — white = opaque, black = transparent.\n"
+        "Shows the AI's confidence in foreground vs background."
+    ),
+    ViewMode.COMP: (
+        "Composite — final keyed result over checkerboard.\n"
+        "Best preview of key quality with faithful colors."
+    ),
+    ViewMode.PROCESSED: (
+        "Processed — production RGBA (premultiplied, linear).\n"
+        "For compositing tools (Nuke, After Effects).\n"
+        "May look washed out — this is normal for premultiplied data."
+    ),
+}
+
 
 class ViewModeBar(QWidget):
     """Horizontal bar of toggle buttons for preview view modes."""
@@ -48,6 +69,7 @@ class ViewModeBar(QWidget):
             btn.setFixedHeight(24)
             btn.setMinimumWidth(50)
             btn.setStyleSheet(self._button_style(False))
+            btn.setToolTip(_MODE_TOOLTIPS.get(mode, ""))
             self._buttons[mode] = btn
             self._button_group.addButton(btn, i)
             layout.addWidget(btn)

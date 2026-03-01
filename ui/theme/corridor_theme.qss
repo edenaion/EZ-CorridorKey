@@ -196,6 +196,25 @@ QPushButton#stopButton:pressed {
     background-color: #900000;
 }
 
+/* Resume button (secondary CTA) */
+QWidget#statusBar QPushButton#resumeButton {
+    background-color: #3A3900;
+    color: #FFF203;
+    font-weight: 700;
+    font-size: 12px;
+    border: none;
+    padding: 6px 12px;
+}
+
+QWidget#statusBar QPushButton#resumeButton:hover {
+    background-color: #504D00;
+}
+
+QWidget#statusBar QPushButton#resumeButton:disabled {
+    background-color: #2A2910;
+    color: #666650;
+}
+
 /* === Sliders === */
 QSlider::groove:horizontal {
     background: #454430;
@@ -214,7 +233,7 @@ QSlider::handle:horizontal:hover {
 }
 
 QSlider::sub-page:horizontal {
-    background: #FFF203;
+    background: #808070;
 }
 
 /* === Spinbox / LineEdit === */
@@ -453,7 +472,7 @@ QLabel#recentProjectsHeader {
     font-weight: 700;
     color: #999980;
     letter-spacing: 1px;
-    padding: 8px 12px 4px 12px;
+    padding: 8px 6px 4px 6px;
 }
 
 QLabel#recentProjectsEmpty {
@@ -466,8 +485,8 @@ QLabel#recentProjectsEmpty {
 QFrame#projectCard {
     background-color: #1A1900;
     border: 1px solid #2A2910;
-    padding: 6px 10px;
-    margin: 2px 6px;
+    padding: 4px 6px;
+    margin: 2px 4px;
 }
 
 QFrame#projectCard:hover {

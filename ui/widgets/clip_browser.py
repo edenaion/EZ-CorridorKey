@@ -1,19 +1,16 @@
-"""Left panel — clip browser with list view, drag-drop, folder selection, and watcher.
+"""Left panel — clip browser with list view, drag-drop, and folder selection.
 
 Displays clips from ClipListModel. Supports:
 - Click to select (loads in preview)
 - Multi-select (ExtendedSelection) for batch operations
 - [+ADD] button → QFileDialog to add clips directory
-- [WATCH] toggle → QFileSystemWatcher for auto-detection
 - Drag-and-drop folders
-- Processing guards: watcher won't reclassify clips being processed
 - Collapsible: hides entirely, shows floating expand button on viewer edge
 """
 from __future__ import annotations
 
 import os
 import shutil
-import time
 import logging
 
 from PySide6.QtWidgets import (
@@ -21,11 +18,11 @@ from PySide6.QtWidgets import (
     QListView, QFileDialog, QAbstractItemView, QStyledItemDelegate, QStyle,
     QMenu, QInputDialog, QMessageBox,
 )
-from PySide6.QtCore import Qt, Signal, QModelIndex, QTimer
+from PySide6.QtCore import Qt, Signal, QModelIndex
 from PySide6.QtGui import QColor, QImage, QAction
 
 from ui.models.clip_model import ClipListModel
-from backend import ClipEntry, ClipState, scan_clips_dir
+from backend import ClipEntry, ClipState
 
 logger = logging.getLogger(__name__)
 
@@ -165,14 +162,6 @@ class ClipBrowser(QWidget):
         self._clips_dir: str | None = None
         self._watcher = None
         self._watching = False
-        self._last_rescan_time = 0.0
-        self._rescan_cooldown = 2.0  # seconds
-
-        # Debounce timer for watcher events
-        self._rescan_timer = QTimer(self)
-        self._rescan_timer.setSingleShot(True)
-        self._rescan_timer.setInterval(2000)
-        self._rescan_timer.timeout.connect(self._do_rescan)
 
         self._expanded = True
         self._expanded_width = 220  # remember width for restore
@@ -234,14 +223,9 @@ class ClipBrowser(QWidget):
         btn_layout.setContentsMargins(10, 6, 10, 8)
 
         add_btn = QPushButton("+ ADD")
+        add_btn.setToolTip("Import clips — choose a folder (image sequences) or video file(s)")
         add_btn.clicked.connect(self._on_add_clicked)
         btn_layout.addWidget(add_btn)
-
-        self._watch_btn = QPushButton("WATCH")
-        self._watch_btn.setCheckable(True)
-        self._watch_btn.setToolTip("Auto-detect new clips in the folder")
-        self._watch_btn.clicked.connect(self._toggle_watch)
-        btn_layout.addWidget(self._watch_btn)
 
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
@@ -506,75 +490,11 @@ class ClipBrowser(QWidget):
                 clips.append(clip)
         return clips
 
-    # ── Folder Watch ──
+    # ── Folder Watch (legacy, disabled) ──
 
-    def _toggle_watch(self, checked: bool) -> None:
-        """Toggle folder watching on/off."""
-        if checked and self._clips_dir:
-            self._start_watching()
-        else:
-            self._stop_watching()
-
-    def _start_watching(self) -> None:
-        """Start QFileSystemWatcher on the clips directory."""
-        if not self._clips_dir or not os.path.isdir(self._clips_dir):
-            self._watch_btn.setChecked(False)
-            return
-
-        from PySide6.QtCore import QFileSystemWatcher
-
-        self._watcher = QFileSystemWatcher([self._clips_dir], self)
-        self._watcher.directoryChanged.connect(self._on_dir_changed)
-        self._watching = True
-        self._watch_btn.setStyleSheet("color: #FFF203; font-weight: 700;")
-        logger.info(f"Watching: {self._clips_dir}")
-
-    def _stop_watching(self) -> None:
-        """Stop folder watching."""
+    def stop_watching(self) -> None:
+        """Stop folder watching if active."""
         if self._watcher:
             self._watcher.deleteLater()
             self._watcher = None
         self._watching = False
-        self._watch_btn.setChecked(False)
-        self._watch_btn.setStyleSheet("")
-        logger.info("Watch stopped")
-
-    def _on_dir_changed(self, path: str) -> None:
-        """Handle filesystem change — debounced rescan.
-
-        Uses a 2-second debounce timer to avoid event storms from
-        worker writing Output/AlphaHint files (Codex finding).
-        """
-        # Debounce: restart the timer on each event
-        self._rescan_timer.start()
-
-    def _do_rescan(self) -> None:
-        """Perform the actual rescan after debounce cooldown.
-
-        Skips reclassification of clips that are currently being processed
-        (Codex: watcher non-authoritative during active processing).
-        """
-        if not self._clips_dir:
-            return
-
-        now = time.time()
-        if now - self._last_rescan_time < self._rescan_cooldown:
-            return
-        self._last_rescan_time = now
-
-        try:
-            new_clips = scan_clips_dir(self._clips_dir)
-            existing_names = {c.name for c in self._model.clips}
-            processing_names = {c.name for c in self._model.clips if c.is_processing}
-
-            for clip in new_clips:
-                if clip.name not in existing_names:
-                    # Genuinely new clip — add it
-                    self._model.add_clip(clip)
-                    logger.info(f"Watcher: new clip detected: {clip.name}")
-                elif clip.name not in processing_names:
-                    # Existing clip, not processing — safe to update state
-                    self._model.update_clip_state(clip.name, clip.state)
-
-        except Exception as e:
-            logger.warning(f"Watcher rescan failed: {e}")
