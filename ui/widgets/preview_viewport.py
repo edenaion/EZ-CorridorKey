@@ -182,15 +182,25 @@ class PreviewViewport(QWidget):
     def load_preview_from_file(self, file_path: str, clip_name: str, frame_index: int) -> None:
         """Load a worker preview image.
 
-        Gated: only applied if viewing the same clip AND in COMP mode
-        AND at the latest frame (Codex: don't override user browsing).
+        Gated: only applied if viewing the same clip AND at the latest
+        frame (Codex: don't override user browsing).  Always rebuilds
+        FrameIndex so mode buttons enable as new outputs appear.
         """
         if clip_name != self._clip_name:
             return
+
+        # Rebuild frame index so newly written outputs are discoverable
+        if self._clip:
+            asset_type = self._clip.input_asset.asset_type if self._clip.input_asset else "sequence"
+            video_path = self._clip.input_asset.path if (self._clip.input_asset and asset_type == "video") else None
+            self._frame_index = build_frame_index(self._clip.root_path, asset_type, video_path=video_path)
+            # Enable mode buttons as new output types appear during inference
+            self._mode_bar.set_available_modes(self._frame_index.available_modes())
+
+        # Only update the displayed image if in COMP mode at the latest frame
         if self._current_mode != ViewMode.COMP:
             return
 
-        # Only update if user is at or near the latest frame
         if self._frame_index and self._current_stem_idx >= 0:
             at_latest = self._current_stem_idx >= self._frame_index.frame_count - 2
             if not at_latest:
@@ -202,11 +212,7 @@ class PreviewViewport(QWidget):
         qimg = decode_frame(file_path, ViewMode.COMP)
         if qimg:
             self._split_view.set_image(qimg)
-            # Update scrubber to reflect new frame count during live inference
-            if self._clip:
-                asset_type = self._clip.input_asset.asset_type if self._clip.input_asset else "sequence"
-                video_path = self._clip.input_asset.path if (self._clip.input_asset and asset_type == "video") else None
-                self._frame_index = build_frame_index(self._clip.root_path, asset_type, video_path=video_path)
+            if self._frame_index:
                 if self._scrubber:
                     self._scrubber.set_range(self._frame_index.frame_count)
                     self._scrubber.set_frame(self._frame_index.frame_count - 1)
