@@ -679,15 +679,32 @@ class MainWindow(QMainWindow):
             alpha_count = clip.alpha_asset.frame_count
             input_count = clip.input_asset.frame_count
             if 0 < alpha_count < input_count:
-                reply = QMessageBox.warning(
-                    self, "Incomplete Alpha",
+                msg = QMessageBox(self)
+                msg.setIcon(QMessageBox.Warning)
+                msg.setWindowTitle("Incomplete Alpha")
+                msg.setText(
                     f"Alpha hints cover {alpha_count} of {input_count} frames.\n\n"
-                    "Process available frames anyway, or cancel and\n"
-                    "re-run alpha generation first?",
-                    QMessageBox.Yes | QMessageBox.No,
+                    "You can process the available range, re-run GVM to\n"
+                    "regenerate all alpha frames, or cancel."
                 )
-                if reply != QMessageBox.Yes:
+                btn_process = msg.addButton("Process Available", QMessageBox.AcceptRole)
+                btn_rerun = msg.addButton("Re-run GVM", QMessageBox.ActionRole)
+                msg.addButton(QMessageBox.Cancel)
+                msg.exec()
+                clicked = msg.clickedButton()
+                if clicked == btn_rerun:
+                    # Transition back to RAW and submit GVM job
+                    clip.transition_to(ClipState.RAW)
+                    self._clip_model.update_clip_state(clip.name, ClipState.RAW)
+                    gvm_job = create_job_snapshot(clip, job_type=JobType.GVM_ALPHA)
+                    if self._service.job_queue.submit(gvm_job):
+                        clip.set_processing(True)
+                        self._start_worker_if_needed(
+                            gvm_job.id, job_label="GVM Auto", indeterminate=False,
+                        )
                     return
+                elif clicked != btn_process:
+                    return  # Cancel
 
         # For COMPLETE clips wanting reprocess, transition back to READY
         if clip.state == ClipState.COMPLETE:
@@ -923,8 +940,14 @@ class MainWindow(QMainWindow):
 
         if target_state == ClipState.READY:
             type_label = "GVM Auto" if job_type == JobType.GVM_ALPHA.value else "VideoMaMa"
+            # Show alpha coverage count
+            alpha_info = ""
+            for c in self._clip_model.clips:
+                if c.name == clip_name and c.alpha_asset and c.input_asset:
+                    alpha_info = f" ({c.alpha_asset.frame_count}/{c.input_asset.frame_count} alpha frames)"
+                    break
             self._status_bar.set_message(
-                f"{type_label} complete for {clip_name} -- Ready to Run Inference"
+                f"{type_label} complete for {clip_name}{alpha_info} -- Ready to Run Inference"
             )
         elif target_state == ClipState.COMPLETE:
             self._status_bar.set_message(f"Inference complete: {clip_name}")

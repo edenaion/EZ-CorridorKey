@@ -4,11 +4,6 @@
 
 - **Welcome screen multi-select for batch import**: Video thumbnails and video files on the welcome screen should support multi-selection. Users should be able to: (1) Ctrl+click to toggle individual files, (2) Shift+click for range selection, (3) Ctrl+A to select all, (4) Click-drag for rubber-band/marquee selection across thumbnail grid. Selected files get imported as a batch when confirmed. This enables processing multiple videos together without repeated file dialog trips.
 
-- **Verify post-inference side-by-side scrub**: The dual viewer already supports input vs output comparison (left=Original, right=Comp/FG/Matte/Processed). Need to verify: (1) after inference completes, output viewer auto-switches to COMP mode showing keyed result, (2) scrubbing works frame-by-frame across full range, (3) mode switching (COMP/FG/Matte) works on the output side. The infrastructure exists — this is a QA/verification task.
-
-- **Alpha coverage feedback & partial run detection**: After GVM or VideoMaMa completes, show the user how many alpha frames were generated vs total input frames (e.g., "Generated 105/470 alpha hints"). On inference start, if alpha count < input count, warn the user with a dialog: "Alpha hints cover 105 of 470 frames. Process available range or re-run GVM?" Options: (1) Process available, (2) Re-run GVM for full clip, (3) Cancel. Also detect partial alpha from interrupted runs — offer to clear and re-generate.
-
-
 - **Live output mode switching during inference**: Users should be able to click between Input, FG, Matte, Comp, and Processed view modes on the right viewport while inference is still running. Since output frames are just images written to disk, switching modes should load whatever frames exist so far for that mode. Users can see partial FG, Matte, etc. results in real time as inference progresses, up to the last completed frame.
 
 
@@ -31,3 +26,5 @@
 - Cancel shows "Canceled" not "Failed" — already separated: cancel path uses warning signal + "Cancelled:" prefix, error path uses error signal + QMessageBox
 - ADD button supports folders or files — QMenu choice: "Import Folder..." or "Import Video(s)...", drag-drop also accepts video files
 - Export settings tooltip — hover over Exports cards in IO tray shows manifest data (outputs, formats, color space, despill, refiner, despeckle)
+- Post-inference side-by-side scrub — verified working: auto-COMP switch, synced scrubbing, mode switching (COMP/FG/Matte/Processed)
+- Alpha coverage feedback — status bar shows "X/Y alpha frames" after GVM/VideoMaMa; 3-option dialog (Process Available / Re-run GVM / Cancel) on partial alpha at inference start; partial alpha detection already in _resolve_state()
