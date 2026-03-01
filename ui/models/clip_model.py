@@ -15,6 +15,7 @@ from backend import ClipEntry, ClipState
 
 # State → display color mapping (matches brand palette)
 _STATE_COLORS: dict[ClipState, str] = {
+    ClipState.EXTRACTING: "#FF8C00",
     ClipState.RAW: "#808070",
     ClipState.MASKED: "#009ADA",
     ClipState.READY: "#FFF203",
@@ -131,6 +132,10 @@ class ClipListModel(QAbstractListModel):
                 idx = self.index(i)
                 self.dataChanged.emit(idx, idx, [self.ThumbnailRole])
                 return
+
+    def get_thumbnail(self, clip_name: str) -> QImage | None:
+        """Get cached thumbnail QImage for a clip, or None."""
+        return self._thumbnails.get(clip_name)
 
     @property
     def clips(self) -> list[ClipEntry]:

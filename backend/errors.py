@@ -96,3 +96,22 @@ class JobCancelledError(CorridorKeyError):
         if frame_index is not None:
             msg += f" at frame {frame_index}"
         super().__init__(msg)
+
+
+class FFmpegNotFoundError(CorridorKeyError):
+    """Raised when FFmpeg/FFprobe binaries cannot be located."""
+
+    def __init__(self):
+        super().__init__(
+            "FFmpeg not found. Install FFmpeg and ensure it is on PATH, "
+            "or place it in C:\\Program Files\\ffmpeg\\bin\\"
+        )
+
+
+class ExtractionError(CorridorKeyError):
+    """Raised when video frame extraction fails."""
+
+    def __init__(self, clip_name: str, detail: str):
+        self.clip_name = clip_name
+        self.detail = detail
+        super().__init__(f"Clip '{clip_name}': extraction failed — {detail}")

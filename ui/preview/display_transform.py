@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import logging
+import threading
 from collections import OrderedDict
 from functools import lru_cache
 
@@ -25,8 +26,10 @@ from .frame_index import ViewMode
 logger = logging.getLogger(__name__)
 
 # LRU cache for decoded QImages (max 20 frames)
+# Lock protects concurrent access from thread pool workers
 _QIMAGE_CACHE: OrderedDict[str, QImage] = OrderedDict()
-_CACHE_MAX = 20
+_CACHE_LOCK = threading.Lock()
+_CACHE_MAX = 10
 
 
 def _cache_key(path: str, mode: ViewMode) -> str:
@@ -36,7 +39,8 @@ def _cache_key(path: str, mode: ViewMode) -> str:
 
 def clear_cache() -> None:
     """Clear the frame cache (call on clip switch)."""
-    _QIMAGE_CACHE.clear()
+    with _CACHE_LOCK:
+        _QIMAGE_CACHE.clear()
 
 
 def decode_frame(path: str, mode: ViewMode) -> QImage | None:
@@ -52,16 +56,17 @@ def decode_frame(path: str, mode: ViewMode) -> QImage | None:
     Returns None if the file can't be read.
     """
     key = _cache_key(path, mode)
-    if key in _QIMAGE_CACHE:
-        _QIMAGE_CACHE.move_to_end(key)
-        return _QIMAGE_CACHE[key]
+    with _CACHE_LOCK:
+        if key in _QIMAGE_CACHE:
+            _QIMAGE_CACHE.move_to_end(key)
+            return _QIMAGE_CACHE[key]
 
     qimg = _do_decode(path, mode)
     if qimg is not None:
-        _QIMAGE_CACHE[key] = qimg
-        # Evict oldest if over limit
-        while len(_QIMAGE_CACHE) > _CACHE_MAX:
-            _QIMAGE_CACHE.popitem(last=False)
+        with _CACHE_LOCK:
+            _QIMAGE_CACHE[key] = qimg
+            while len(_QIMAGE_CACHE) > _CACHE_MAX:
+                _QIMAGE_CACHE.popitem(last=False)
 
     return qimg
 
@@ -222,9 +227,10 @@ def decode_video_frame(video_path: str, frame_index: int) -> QImage | None:
     Results are cached in the LRU cache.
     """
     key = f"video:{video_path}:{frame_index}"
-    if key in _QIMAGE_CACHE:
-        _QIMAGE_CACHE.move_to_end(key)
-        return _QIMAGE_CACHE[key]
+    with _CACHE_LOCK:
+        if key in _QIMAGE_CACHE:
+            _QIMAGE_CACHE.move_to_end(key)
+            return _QIMAGE_CACHE[key]
 
     try:
         cap = cv2.VideoCapture(video_path)
@@ -238,9 +244,10 @@ def decode_video_frame(video_path: str, frame_index: int) -> QImage | None:
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         qimg = _numpy_to_qimage(rgb)
 
-        _QIMAGE_CACHE[key] = qimg
-        while len(_QIMAGE_CACHE) > _CACHE_MAX:
-            _QIMAGE_CACHE.popitem(last=False)
+        with _CACHE_LOCK:
+            _QIMAGE_CACHE[key] = qimg
+            while len(_QIMAGE_CACHE) > _CACHE_MAX:
+                _QIMAGE_CACHE.popitem(last=False)
 
         return qimg
     except Exception as e:

@@ -1,7 +1,7 @@
 /* CorridorKey Brand Theme — Corridor Digital Identity
  * Brand yellow #FFF203 on warm near-black #141300
- * Open Sans font, zero border-radius everywhere
- * Dark-only, no light mode
+ * Gagarin font for logo/brand mark, Open Sans for all body text
+ * Zero border-radius everywhere, dark-only, no light mode
  */
 
 * {
@@ -118,9 +118,10 @@ QLabel#clipName {
 }
 
 QLabel#brandMark {
-    font-size: 16px;
+    font-family: "Gagarin", "Open Sans", sans-serif;
+    font-size: 18px;
     font-weight: 700;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
 }
 
 /* === Buttons === */
@@ -134,7 +135,8 @@ QPushButton {
 
 QPushButton:hover {
     background-color: #3A3920;
-    border-color: #5A5940;
+    border-color: #FFF203;
+    color: #FFF203;
 }
 
 QPushButton:pressed {
@@ -333,6 +335,12 @@ QTabBar::tab:hover {
 }
 
 /* === State Badges === */
+QLabel#stateBadge_EXTRACTING {
+    color: #FF8C00;
+    font-size: 10px;
+    font-weight: 700;
+}
+
 QLabel#stateBadge_RAW {
     color: #808070;
     font-size: 10px;
@@ -404,8 +412,6 @@ SplitViewWidget {
 /* === Welcome Screen === */
 QWidget#welcomeScreen {
     background-color: #141300;
-    border: 2px dashed #454430;
-    margin: 24px;
 }
 
 QLabel#welcomePrompt {
@@ -431,6 +437,80 @@ QPushButton#welcomeBrowse:pressed {
     background-color: #22A040;
 }
 
+/* === Recent Projects Panel (sidebar) === */
+QWidget#recentProjectsPanel {
+    background-color: #0E0D00;
+}
+
+QLabel#recentProjectsHeader {
+    font-size: 11px;
+    font-weight: 700;
+    color: #999980;
+    letter-spacing: 1px;
+    padding: 8px 12px 4px 12px;
+}
+
+QLabel#recentProjectsEmpty {
+    font-size: 12px;
+    color: #555540;
+    padding: 12px;
+}
+
+/* Project Card */
+QFrame#projectCard {
+    background-color: #1A1900;
+    border: 1px solid #2A2910;
+    padding: 6px 10px;
+    margin: 2px 6px;
+}
+
+QFrame#projectCard:hover {
+    border-color: #454430;
+    background-color: #1E1D13;
+}
+
+QLabel#projectCardName {
+    font-size: 12px;
+    font-weight: 700;
+    color: #E0E0E0;
+}
+
+QLabel#projectCardPath {
+    font-size: 10px;
+    color: #808070;
+}
+
+QLabel#projectCardMeta {
+    font-size: 10px;
+    color: #999980;
+}
+
+QPushButton#projectDeleteBtn {
+    background: transparent;
+    border: none;
+    color: #555540;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 2px 6px;
+}
+
+QPushButton#projectDeleteBtn:hover {
+    color: #D10000;
+}
+
+/* === GPU Info (Brand Bar) === */
+QLabel#gpuName {
+    color: #808070;
+    font-size: 10px;
+    padding-right: 6px;
+}
+
+QLabel#vramText {
+    color: #999980;
+    font-size: 10px;
+    padding-left: 4px;
+}
+
 /* === VRAM Meter === */
 QProgressBar#vramMeter {
     background: #454430;
@@ -441,4 +521,23 @@ QProgressBar#vramMeter {
 QProgressBar#vramMeter::chunk {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #22C55E, stop:0.7 #FFF203, stop:0.9 #D10000);
+}
+
+/* === IO Tray Panel === */
+QWidget#ioTrayPanel {
+    background-color: #0E0D00;
+    border-top: 1px solid #2A2910;
+}
+
+QLabel#trayHeader {
+    font-size: 11px;
+    font-weight: 700;
+    color: #999980;
+    letter-spacing: 1px;
+    padding: 4px 8px;
+}
+
+QScrollArea#trayScroll {
+    border: none;
+    background: transparent;
 }

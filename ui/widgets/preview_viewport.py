@@ -31,13 +31,17 @@ logger = logging.getLogger(__name__)
 
 
 class PreviewViewport(QWidget):
-    """Center panel frame preview with split view, scrubber, and mode switching."""
+    """Center panel frame preview with split view, scrubber, and mode switching.
+
+    When used inside DualViewerPanel, pass show_scrubber=False to hide the
+    internal scrubber (the dual viewer provides a shared one).
+    """
 
     frame_changed = Signal(int)  # current stem index
 
-    def __init__(self, parent=None):
+    def __init__(self, show_scrubber: bool = True, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(400, 300)
+        self.setMinimumSize(200, 150)
 
         # State
         self._clip: ClipEntry | None = None
@@ -45,6 +49,7 @@ class PreviewViewport(QWidget):
         self._frame_index: FrameIndex | None = None
         self._current_stem_idx: int = -1
         self._current_mode: ViewMode = ViewMode.COMP
+        self._locked_mode: ViewMode | None = None
 
         # Async decoder
         self._decoder = AsyncDecoder(self)
@@ -56,7 +61,10 @@ class PreviewViewport(QWidget):
         layout.setSpacing(0)
 
         # Top bar: view modes (left) + clip info (right)
-        top_bar = QHBoxLayout()
+        self._top_bar = QWidget()
+        self._top_bar.setFixedHeight(30)
+        self._top_bar.setStyleSheet("background: #0E0D00;")
+        top_bar = QHBoxLayout(self._top_bar)
         top_bar.setContentsMargins(0, 0, 0, 0)
         top_bar.setSpacing(0)
 
@@ -71,29 +79,34 @@ class PreviewViewport(QWidget):
         )
         top_bar.addWidget(self._clip_info)
 
-        layout.addLayout(top_bar)
+        layout.addWidget(self._top_bar)
 
         # Split view widget (center, fills space)
         self._split_view = SplitViewWidget()
         self._split_view.zoom_changed.connect(self._on_zoom_changed)
         layout.addWidget(self._split_view, 1)
 
-        # Bottom bar: scrubber + zoom indicator
-        bottom = QHBoxLayout()
-        bottom.setContentsMargins(0, 0, 0, 0)
-        bottom.setSpacing(4)
+        # Bottom bar: scrubber + zoom indicator (optional)
+        self._has_scrubber = show_scrubber
+        if show_scrubber:
+            bottom = QHBoxLayout()
+            bottom.setContentsMargins(0, 0, 0, 0)
+            bottom.setSpacing(4)
 
-        self._scrubber = FrameScrubber()
-        self._scrubber.frame_changed.connect(self._on_scrubber_frame)
-        bottom.addWidget(self._scrubber, 1)
+            self._scrubber = FrameScrubber()
+            self._scrubber.frame_changed.connect(self._on_scrubber_frame)
+            bottom.addWidget(self._scrubber, 1)
 
-        self._zoom_label = QLabel("100%")
-        self._zoom_label.setFixedWidth(50)
-        self._zoom_label.setAlignment(Qt.AlignCenter)
-        self._zoom_label.setStyleSheet("color: #808070; font-size: 10px;")
-        bottom.addWidget(self._zoom_label)
+            self._zoom_label = QLabel("100%")
+            self._zoom_label.setFixedWidth(50)
+            self._zoom_label.setAlignment(Qt.AlignCenter)
+            self._zoom_label.setStyleSheet("color: #808070; font-size: 10px;")
+            bottom.addWidget(self._zoom_label)
 
-        layout.addLayout(bottom)
+            layout.addLayout(bottom)
+        else:
+            self._scrubber = None
+            self._zoom_label = None
 
     @property
     def current_stem_index(self) -> int:
@@ -102,29 +115,57 @@ class PreviewViewport(QWidget):
 
     # ── Public API ──
 
+    def lock_mode(self, mode: ViewMode) -> None:
+        """Lock this viewport to a specific view mode and hide the mode buttons.
+
+        Used by DualViewerPanel to lock the input viewer to INPUT mode.
+        The top bar stays visible (clip info label) so both viewers align.
+        """
+        self._locked_mode = mode
+        self._current_mode = mode
+        self._mode_bar.hide()
+
     def set_clip(self, clip: ClipEntry) -> None:
         """Load a clip and build its frame index.
 
         Called when user selects a clip in the browser.
         Builds frame index atomically (Codex: snapshot, don't re-read per scrub).
+        EXTRACTING clips show a placeholder — no frames to scrub yet.
         """
+        from backend import ClipState
+
         self._clip = clip
         self._clip_name = clip.name
         clear_cache()
 
+        # EXTRACTING clips: show placeholder, no frame index
+        if clip.state == ClipState.EXTRACTING:
+            self._frame_index = None
+            self._current_stem_idx = -1
+            if self._scrubber:
+                self._scrubber.set_range(0)
+            self._update_clip_info(clip)
+            self._split_view.set_placeholder(
+                f"Extracting frames...\n{clip.name}"
+            )
+            return
+
         # Build frame index
         asset_type = clip.input_asset.asset_type if clip.input_asset else "sequence"
-        self._frame_index = build_frame_index(clip.root_path, asset_type)
+        video_path = clip.input_asset.path if (clip.input_asset and asset_type == "video") else None
+        self._frame_index = build_frame_index(clip.root_path, asset_type, video_path=video_path)
 
-        # Configure mode bar
-        available = self._frame_index.available_modes()
-        self._mode_bar.set_available_modes(available)
+        # Configure mode bar (unless locked)
+        if self._locked_mode is None:
+            available = self._frame_index.available_modes()
+            self._mode_bar.set_available_modes(available)
+            self._current_mode = self._mode_bar.current_mode()
+        else:
+            self._current_mode = self._locked_mode
 
-        # Use mode bar's selected mode (it auto-selects best available)
-        self._current_mode = self._mode_bar.current_mode()
-
-        # Configure scrubber
-        self._scrubber.set_range(self._frame_index.frame_count)
+        # Configure scrubber (if we have one)
+        if self._scrubber:
+            self._scrubber.set_range(self._frame_index.frame_count)
 
         # Update clip info label
         self._update_clip_info(clip)
@@ -160,20 +201,27 @@ class PreviewViewport(QWidget):
             # Update scrubber to reflect new frame count during live inference
             if self._clip:
                 asset_type = self._clip.input_asset.asset_type if self._clip.input_asset else "sequence"
-                self._frame_index = build_frame_index(self._clip.root_path, asset_type)
-                self._scrubber.set_range(self._frame_index.frame_count)
-                self._scrubber.set_frame(self._frame_index.frame_count - 1)
+                video_path = self._clip.input_asset.path if (self._clip.input_asset and asset_type == "video") else None
+                self._frame_index = build_frame_index(self._clip.root_path, asset_type, video_path=video_path)
+                if self._scrubber:
+                    self._scrubber.set_range(self._frame_index.frame_count)
+                    self._scrubber.set_frame(self._frame_index.frame_count - 1)
                 self._current_stem_idx = self._frame_index.frame_count - 1
 
     def show_placeholder(self, text: str = "No clip selected") -> None:
         """Show placeholder text."""
         self._split_view.set_placeholder(text)
-        self._scrubber.set_range(0)
+        if self._scrubber:
+            self._scrubber.set_range(0)
         self._clip_info.setText("")
         self._clip = None
         self._clip_name = ""
         self._frame_index = None
         self._current_stem_idx = -1
+
+    def navigate_to_frame(self, stem_index: int) -> None:
+        """Public method for external scrubber to drive navigation."""
+        self._navigate_to(stem_index)
 
     def _update_clip_info(self, clip: ClipEntry) -> None:
         """Update the clip info label with resolution, frame count, and type."""
@@ -215,7 +263,8 @@ class PreviewViewport(QWidget):
             return
         stem_index = min(stem_index, self._frame_index.frame_count - 1)
         self._current_stem_idx = stem_index
-        self._scrubber.set_frame(stem_index)
+        if self._scrubber:
+            self._scrubber.set_frame(stem_index)
         self.frame_changed.emit(stem_index)
         self._request_frame(stem_index, self._current_mode)
 
@@ -307,4 +356,5 @@ class PreviewViewport(QWidget):
 
     @Slot(float)
     def _on_zoom_changed(self, zoom: float) -> None:
-        self._zoom_label.setText(f"{int(zoom * 100)}%")
+        if self._zoom_label:
+            self._zoom_label.setText(f"{int(zoom * 100)}%")

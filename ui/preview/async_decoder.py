@@ -46,9 +46,14 @@ class _DecodeTask(QRunnable):
             else:
                 qimg = decode_frame(self._path, self._mode)
             self.signals.finished.emit(self._stem_index, self._mode.value, qimg)
+        except RuntimeError:
+            pass  # Signal source deleted — task outlived its decoder
         except Exception as e:
             logger.warning(f"Async decode failed: {e}")
-            self.signals.finished.emit(self._stem_index, self._mode.value, None)
+            try:
+                self.signals.finished.emit(self._stem_index, self._mode.value, None)
+            except RuntimeError:
+                pass  # Signal source deleted
 
 
 class AsyncDecoder(QObject):
@@ -56,6 +61,8 @@ class AsyncDecoder(QObject):
 
     Only the latest decode request is honored — older requests are
     discarded when their results arrive (stale check via request_id).
+
+    Keeps references to in-flight signal objects to prevent premature GC.
     """
 
     frame_decoded = Signal(int, str, object)  # stem_index, mode_value, QImage|None
@@ -65,6 +72,9 @@ class AsyncDecoder(QObject):
         self._pool = QThreadPool.globalInstance()
         self._pool.setMaxThreadCount(2)  # limit decode concurrency
         self._current_request_id = 0
+        # Hold references to in-flight signal objects so they aren't GC'd
+        # before the callback fires. Keyed by request_id.
+        self._pending_signals: dict[int, _DecodeSignals] = {}
 
     def request_decode(self, path: str, mode: ViewMode, stem_index: int,
                        video_path: str | None = None,
@@ -74,6 +84,10 @@ class AsyncDecoder(QObject):
         req_id = self._current_request_id
 
         task = _DecodeTask(req_id, path, mode, stem_index, video_path, video_frame_index)
+
+        # Keep a strong reference to the signals object
+        self._pending_signals[req_id] = task.signals
+
         task.signals.finished.connect(
             lambda si, mv, qi, rid=req_id: self._on_decoded(rid, si, mv, qi)
         )
@@ -82,6 +96,9 @@ class AsyncDecoder(QObject):
     def _on_decoded(self, request_id: int, stem_index: int,
                     mode_value: str, qimage: object) -> None:
         """Handle decode completion — discard if stale."""
+        # Release the signal reference
+        self._pending_signals.pop(request_id, None)
+
         if request_id != self._current_request_id:
             return  # Stale request, newer one superseded it
         self.frame_decoded.emit(stem_index, mode_value, qimage)

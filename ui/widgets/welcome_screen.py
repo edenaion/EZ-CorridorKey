@@ -1,7 +1,9 @@
-"""Welcome screen — Topaz-style drop zone shown before any clips are loaded.
+"""Welcome screen — full-area drop zone with small recents sidebar.
 
-Centered layout with dashed border, brand clapperboard icon, drop prompt, and Browse button.
-Accepts drag-and-drop of video files or folders. Entire area is clickable.
+The entire center area is a clickable/droppable zone (brand logo, prompt,
+browse button) — exactly like the original welcome screen. A small panel
+on the left shows recent projects as clickable cards. Clicks on the
+drop zone open the file dialog; clicks on project cards open that project.
 """
 from __future__ import annotations
 
@@ -9,117 +11,63 @@ import os
 import sys
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QPushButton, QFileDialog, QSizePolicy,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QFileDialog, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QRect, QPoint, QRectF
-from PySide6.QtGui import QPainter, QColor, QPen, QPolygon, QImage
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPixmap
+
+from ui.recent_sessions import RecentSessionsStore
+from ui.widgets.recent_projects_panel import RecentProjectsPanel
 
 # Video extensions accepted for drag-and-drop
 _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v"}
 # Image sequence extensions
 _IMAGE_EXTS = {".exr", ".png", ".tif", ".tiff", ".jpg", ".jpeg", ".dpx"}
 
-_YELLOW = QColor("#FFF203")
-_BLACK = QColor("#0A0A00")
-_DARK = QColor("#1A1900")
+
+def _load_brand_logo(size: int) -> QPixmap | None:
+    """Load corridorkey.png from theme dir, scaled to size x size."""
+    if getattr(sys, 'frozen', False):
+        base = os.path.join(sys._MEIPASS, "ui", "theme")
+    else:
+        base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "theme")
+    logo_path = os.path.join(base, "corridorkey.png")
+    if os.path.isfile(logo_path):
+        px = QPixmap(logo_path)
+        if not px.isNull():
+            return px.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    return None
 
 
-class ClapperIcon(QWidget):
-    """Custom-painted clapperboard icon in brand colors (black + yellow).
+class _DropZone(QWidget):
+    """Full-area clickable drop zone — the main content of the welcome screen.
 
-    Renders the Corridor Crew logo on the board body.
+    Contains the brand logo, prompt text, and browse button. Clicking
+    anywhere on this widget opens the file dialog.
     """
 
-    def __init__(self, size: int = 96, parent=None):
-        super().__init__(parent)
-        self._size = size
-        self.setFixedSize(size, size)
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-
-        # Load brand logo for the board body
-        self._logo: QImage | None = None
-        if getattr(sys, 'frozen', False):
-            base = os.path.join(sys._MEIPASS, "ui", "theme")
-        else:
-            base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "theme")
-        logo_path = os.path.join(base, "corridorkey.png")
-        if os.path.isfile(logo_path):
-            self._logo = QImage(logo_path)
-
-    def paintEvent(self, event) -> None:
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        p.setRenderHint(QPainter.SmoothPixmapTransform)
-        s = self._size
-
-        # Scale factors
-        def sx(v): return int(v * s / 96)
-        def sy(v): return int(v * s / 96)
-
-        # Board body (bottom portion) — black with yellow border
-        board = QRect(sx(12), sy(38), sx(72), sy(46))
-        p.setPen(QPen(_YELLOW, 2))
-        p.setBrush(_BLACK)
-        p.drawRect(board)
-
-        # Draw logo centered on the board body
-        if self._logo and not self._logo.isNull():
-            logo_size = sx(34)
-            logo_x = sx(12) + (sx(72) - logo_size) // 2
-            logo_y = sy(38) + (sy(46) - logo_size) // 2
-            p.drawImage(QRectF(logo_x, logo_y, logo_size, logo_size),
-                        self._logo, QRectF(self._logo.rect()))
-
-        # Clapper top (hinged part) — yellow with black stripes
-        clapper = QPolygon([
-            QPoint(sx(8), sy(36)),
-            QPoint(sx(18), sy(12)),
-            QPoint(sx(86), sy(12)),
-            QPoint(sx(86), sy(36)),
-        ])
-        p.setPen(QPen(_BLACK, 2))
-        p.setBrush(_YELLOW)
-        p.drawPolygon(clapper)
-
-        # Diagonal stripes on clapper (the classic clapperboard pattern)
-        p.setPen(Qt.NoPen)
-        p.setBrush(_BLACK)
-        stripe_positions = [24, 42, 60, 78]
-        for x_pos in stripe_positions:
-            stripe = QPolygon([
-                QPoint(sx(x_pos), sy(12)),
-                QPoint(sx(x_pos + 6), sy(12)),
-                QPoint(sx(x_pos + 2), sy(36)),
-                QPoint(sx(x_pos - 4), sy(36)),
-            ])
-            p.drawPolygon(stripe)
-
-        p.end()
-
-
-class WelcomeScreen(QWidget):
-    """Full-window clickable drop zone shown on startup before a clips folder is opened.
-
-    The entire area is clickable (opens file dialog). Also accepts drag-and-drop.
-    """
-
-    folder_selected = Signal(str)   # emitted with a directory path
-    files_selected = Signal(list)   # emitted with a list of file paths
+    browse_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAcceptDrops(True)
-        self.setObjectName("welcomeScreen")
+        self.setAcceptDrops(False)  # Parent handles DnD
         self.setCursor(Qt.PointingHandCursor)
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        # Brand clapperboard icon
-        icon = ClapperIcon(96)
-        layout.addWidget(icon, alignment=Qt.AlignCenter)
+        # Brand logo (PNG scaled up)
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignCenter)
+        logo_label.setStyleSheet("background: transparent;")
+        logo_px = _load_brand_logo(160)
+        if logo_px:
+            logo_label.setPixmap(logo_px)
+        layout.addWidget(logo_label, alignment=Qt.AlignCenter)
 
-        layout.addSpacing(16)
+        layout.addSpacing(20)
 
         # Prompt text
         prompt = QLabel("Drop Videos or Click to Import")
@@ -129,16 +77,74 @@ class WelcomeScreen(QWidget):
 
         layout.addSpacing(12)
 
-        # Browse button (also clickable, but entire area works too)
+        # Browse button
         browse_btn = QPushButton("Browse...")
         browse_btn.setObjectName("welcomeBrowse")
         browse_btn.setFixedWidth(200)
         browse_btn.setCursor(Qt.PointingHandCursor)
-        browse_btn.clicked.connect(self._on_browse)
+        browse_btn.clicked.connect(self.browse_requested.emit)
         layout.addWidget(browse_btn, alignment=Qt.AlignCenter)
 
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self.browse_requested.emit()
+        else:
+            super().mousePressEvent(event)
+
+
+class WelcomeScreen(QWidget):
+    """Full-window welcome screen: small recents sidebar + full drop zone.
+
+    Layout:
+    ┌─────────────┬────────────────────────────────────────────┐
+    │ RECENT      │                                            │
+    │ PROJECTS    │          [Brand Logo]                      │
+    │             │  Drop Videos or Click to Import             │
+    │ [Card 1]   │          [Browse...]                        │
+    │ [Card 2]   │                                            │
+    │ [Card 3]   │                                            │
+    │             │                                            │
+    └─────────────┴────────────────────────────────────────────┘
+    """
+
+    folder_selected = Signal(str)     # directory path
+    files_selected = Signal(list)     # list of file paths
+    recent_project_opened = Signal(str)  # workspace path from recents
+
+    def __init__(self, store: RecentSessionsStore, parent=None):
+        super().__init__(parent)
+        self._store = store
+        self.setAcceptDrops(True)
+        self.setObjectName("welcomeScreen")
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Left: recent projects sidebar (fixed width)
+        self._recents_panel = RecentProjectsPanel(store)
+        self._recents_panel.setFixedWidth(320)
+        self._recents_panel.project_selected.connect(self.recent_project_opened.emit)
+        self._recents_panel.project_deleted.connect(self._on_project_deleted)
+        layout.addWidget(self._recents_panel)
+
+        # Divider line
+        divider = QWidget()
+        divider.setFixedWidth(1)
+        divider.setStyleSheet("background-color: #2A2910;")
+        layout.addWidget(divider)
+
+        # Right: full drop zone (fills all remaining space)
+        self._drop_zone = _DropZone()
+        self._drop_zone.browse_requested.connect(self._on_browse)
+        layout.addWidget(self._drop_zone, 1)
+
+    def refresh_recents(self) -> None:
+        """Refresh the recent projects list from the store."""
+        self._recents_panel.refresh()
+
     def _on_browse(self) -> None:
-        """Open file dialog — users can pick video files or a folder."""
+        """Open file dialog — users can pick video files."""
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Select Video Files", "",
             "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)",
@@ -146,12 +152,9 @@ class WelcomeScreen(QWidget):
         if paths:
             self.files_selected.emit(paths)
 
-    def mousePressEvent(self, event) -> None:
-        """Clicking anywhere on the welcome screen opens the file dialog."""
-        if event.button() == Qt.LeftButton:
-            self._on_browse()
-        else:
-            super().mousePressEvent(event)
+    def _on_project_deleted(self, workspace_path: str) -> None:
+        """Handle project deletion — already removed from store by the panel."""
+        pass  # Panel handles store removal and refresh itself
 
     # ── Drag and drop ──
 

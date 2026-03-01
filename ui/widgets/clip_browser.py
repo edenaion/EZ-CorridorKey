@@ -16,7 +16,7 @@ import logging
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListView, QFileDialog, QAbstractItemView, QStyledItemDelegate,
+    QListView, QFileDialog, QAbstractItemView, QStyledItemDelegate, QStyle,
 )
 from PySide6.QtCore import Qt, Signal, QModelIndex, QTimer
 from PySide6.QtGui import QColor, QImage
@@ -44,11 +44,11 @@ class ClipCardDelegate(QStyledItemDelegate):
         text_left = thumb_left + thumb_w + 6  # text starts after thumbnail
 
         # Selected background
-        if option.state & QAbstractItemView.State(0x8000):  # State_Selected
+        if option.state & QStyle.StateFlag.State_Selected:
             painter.fillRect(rect, QColor("#252413"))
             painter.setPen(QColor("#FFF203"))
             painter.drawRect(rect.adjusted(0, 0, -1, -1))
-        elif option.state & QAbstractItemView.State(0x2000):  # State_MouseOver
+        elif option.state & QStyle.StateFlag.State_MouseOver:
             painter.fillRect(rect, QColor("#1E1D13"))
             painter.setPen(QColor("#454430"))
             painter.drawRect(rect.adjusted(0, 0, -1, -1))
@@ -145,22 +145,45 @@ class ClipBrowser(QWidget):
         self._rescan_timer.setInterval(2000)
         self._rescan_timer.timeout.connect(self._do_rescan)
 
+        self._expanded = True
+        self._expanded_width = 220  # remember width for restore
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header
-        header = QHBoxLayout()
-        header.setContentsMargins(10, 8, 10, 8)
-        title = QLabel("CLIPS")
-        title.setObjectName("sectionHeader")
-        header.addWidget(title)
+        # Header with collapse chevron
+        self._header_widget = QWidget()
+        header = QHBoxLayout(self._header_widget)
+        header.setContentsMargins(4, 4, 4, 4)
+        header.setSpacing(4)
+
+        self._chevron = QPushButton("\u25C0")  # ◀
+        self._chevron.setFixedSize(20, 20)
+        self._chevron.setStyleSheet(
+            "QPushButton { background: transparent; color: #808070; border: none; "
+            "font-size: 10px; padding: 0; }"
+            "QPushButton:hover { color: #FFF203; }"
+        )
+        self._chevron.setToolTip("Collapse clip panel")
+        self._chevron.clicked.connect(self.toggle_collapse)
+        header.addWidget(self._chevron)
+
+        self._title = QLabel("CLIPS")
+        self._title.setObjectName("sectionHeader")
+        header.addWidget(self._title)
         header.addStretch()
 
         self._count_label = QLabel("0")
         self._count_label.setStyleSheet("color: #808070; font-size: 11px;")
         header.addWidget(self._count_label)
-        layout.addLayout(header)
+        layout.addWidget(self._header_widget)
+
+        # Content area (hidden when collapsed)
+        self._content = QWidget()
+        content_layout = QVBoxLayout(self._content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
 
         # List view — ExtendedSelection for batch ops
         self._list_view = QListView()
@@ -178,7 +201,7 @@ class ClipBrowser(QWidget):
         # Fixed row height (48px to fit 40px thumbnail + padding)
         self._list_view.setStyleSheet("QListView::item { height: 48px; }")
 
-        layout.addWidget(self._list_view, 1)
+        content_layout.addWidget(self._list_view, 1)
 
         # Bottom buttons
         btn_layout = QHBoxLayout()
@@ -195,7 +218,9 @@ class ClipBrowser(QWidget):
         btn_layout.addWidget(self._watch_btn)
 
         btn_layout.addStretch()
-        layout.addLayout(btn_layout)
+        content_layout.addLayout(btn_layout)
+
+        layout.addWidget(self._content, 1)
 
         # Accept drops
         self.setAcceptDrops(True)
@@ -204,6 +229,51 @@ class ClipBrowser(QWidget):
         model.clip_count_changed.connect(
             lambda count: self._count_label.setText(str(count))
         )
+
+    _COLLAPSED_WIDTH = 28
+
+    def toggle_collapse(self) -> None:
+        """Toggle between expanded and collapsed states.
+
+        Collapsed: tiny nub with just the chevron at top-left.
+        Expanded: full clip browser with list, buttons, etc.
+        """
+        from PySide6.QtWidgets import QSplitter
+        splitter = self.parent()
+        is_splitter = isinstance(splitter, QSplitter)
+
+        self._expanded = not self._expanded
+        self._content.setVisible(self._expanded)
+        self._title.setVisible(self._expanded)
+        self._count_label.setVisible(self._expanded)
+
+        if self._expanded:
+            self._chevron.setText("\u25C0")  # ◀
+            self._chevron.setToolTip("Collapse clip panel")
+            self._header_widget.layout().setContentsMargins(4, 4, 4, 4)
+            self.setMinimumWidth(140)
+            self.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
+            if is_splitter:
+                sizes = splitter.sizes()
+                if len(sizes) >= 2:
+                    delta = self._expanded_width - sizes[0]
+                    sizes[0] = self._expanded_width
+                    sizes[1] = max(100, sizes[1] - delta)
+                    splitter.setSizes(sizes)
+        else:
+            if is_splitter:
+                sizes = splitter.sizes()
+                if len(sizes) >= 2 and sizes[0] > 40:
+                    self._expanded_width = sizes[0]
+                    freed = sizes[0] - self._COLLAPSED_WIDTH
+                    sizes[0] = self._COLLAPSED_WIDTH
+                    sizes[1] = sizes[1] + freed
+                    splitter.setSizes(sizes)
+            self._chevron.setText("\u25B6")  # ▶
+            self._chevron.setToolTip("Expand clip panel")
+            self._header_widget.layout().setContentsMargins(4, 4, 0, 0)
+            self.setMinimumWidth(self._COLLAPSED_WIDTH)
+            self.setMaximumWidth(self._COLLAPSED_WIDTH)
 
     def _on_item_clicked(self, index: QModelIndex) -> None:
         clip = self._model.get_clip(index.row())

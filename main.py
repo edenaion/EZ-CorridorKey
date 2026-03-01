@@ -7,11 +7,14 @@ Usage:
 """
 from __future__ import annotations
 
+import os
+# Enable OpenEXR support in OpenCV — must be set before cv2 is imported anywhere
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
+
 import argparse
 import logging
 import logging.handlers
 import sys
-import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -93,11 +96,14 @@ def run_gui() -> int:
     """Launch the PySide6 desktop application."""
     from ui.app import create_app
     from ui.main_window import MainWindow
+    from ui.recent_sessions import RecentSessionsStore
     from backend import CorridorKeyService
 
     app = create_app()
     service = CorridorKeyService()
-    window = MainWindow(service)
+    store = RecentSessionsStore()
+    store.prune_missing()
+    window = MainWindow(service, store)
     window.show()
     return app.exec()
 

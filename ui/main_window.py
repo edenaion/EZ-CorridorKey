@@ -1,15 +1,18 @@
-"""Main window — 3-panel QSplitter layout with menu bar.
+"""Main window — dual viewer layout with I/O tray and menu bar.
 
 Layout:
-    ┌──────────┬──────────────────────┬──────────────┐
-    │  Clips   │    Preview           │  Parameters  │
-    │  Browser │    Viewport          │    Panel     │
-    │ (220px)  │    (fills)           │  (280px)     │
-    ├──────────┴──────────────────────┴──────────────┤
-    │  Queue Panel (collapsible, per-job progress)   │
-    ├────────────────────────────────────────────────┤
-    │  Status Bar (progress, VRAM, GPU, run/stop)    │
-    └────────────────────────────────────────────────┘
+    ┌─[CORRIDORKEY]──────────────────[GPU | VRAM ██ X/YGB]─┐
+    ├──────────┬──────────┬──────────┬──────────────────────┤
+    │  Clips   │ INPUT    │ OUTPUT   │  Parameters          │
+    │  Browser │ Viewer   │ Viewer   │    Panel             │
+    │ (220px)  │ (fills)  │ (fills)  │  (280px)             │
+    ├──────────┴──────────┴──────────┴──────────────────────┤
+    │  INPUT (N)               │  EXPORTS (N)               │
+    ├──────────────────────────────────────────────────────┤
+    │  Queue Panel (collapsible, per-job progress)         │
+    ├──────────────────────────────────────────────────────┤
+    │  [progress]  frame counter  warnings  [RUN/STOP]     │
+    └──────────────────────────────────────────────────────┘
 """
 from __future__ import annotations
 
@@ -22,6 +25,7 @@ import numpy as np
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QVBoxLayout, QWidget,
     QLabel, QHBoxLayout, QMessageBox, QStackedWidget,
+    QProgressBar, QFileDialog,
 )
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QShortcut, QKeySequence, QAction, QImage
@@ -35,14 +39,17 @@ from backend.job_queue import GPUJob
 
 from ui.models.clip_model import ClipListModel
 from ui.widgets.clip_browser import ClipBrowser
-from ui.widgets.preview_viewport import PreviewViewport
+from ui.widgets.dual_viewer import DualViewerPanel
 from ui.widgets.parameter_panel import ParameterPanel
 from ui.widgets.status_bar import StatusBar
 from ui.widgets.queue_panel import QueuePanel
+from ui.widgets.io_tray_panel import IOTrayPanel
 from ui.widgets.welcome_screen import WelcomeScreen
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
 from ui.workers.thumbnail_worker import ThumbnailGenerator
+from ui.workers.extract_worker import ExtractWorker
+from ui.recent_sessions import RecentSessionsStore
 
 logger = logging.getLogger(__name__)
 
@@ -54,17 +61,21 @@ _SESSION_VERSION = 1
 class MainWindow(QMainWindow):
     """CorridorKey main application window."""
 
-    def __init__(self, service: CorridorKeyService | None = None):
+    def __init__(self, service: CorridorKeyService | None = None,
+                 store: RecentSessionsStore | None = None):
         super().__init__()
         self.setWindowTitle("CORRIDORKEY")
         self.setMinimumSize(1100, 650)
         self.resize(1400, 800)
 
         self._service = service or CorridorKeyService()
+        self._recent_store = store or RecentSessionsStore()
         self._current_clip: ClipEntry | None = None
         self._clips_dir: str | None = None
         # Track active job ID — set only once when job starts, not on every progress
         self._active_job_id: str | None = None
+        # Display name for next workspace registration (set by _on_welcome_files)
+        self._pending_display_name: str | None = None
 
         # Data model
         self._clip_model = ClipListModel()
@@ -88,12 +99,19 @@ class MainWindow(QMainWindow):
         # Workers
         self._gpu_worker = GPUJobWorker(self._service, parent=self)
         self._gpu_monitor = GPUMonitor(interval_ms=2000, parent=self)
+        self._extract_worker = ExtractWorker(parent=self)
 
         # Connect signals
         self._connect_signals()
 
         # Start GPU monitoring
         self._gpu_monitor.start()
+
+        # Periodic auto-save for crash recovery (every 60s)
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setInterval(60_000)
+        self._autosave_timer.timeout.connect(self._auto_save_session)
+        self._autosave_timer.start()
 
         # Detect device
         device = self._service.detect_device()
@@ -114,6 +132,9 @@ class MainWindow(QMainWindow):
         load_action.setShortcut(QKeySequence("Ctrl+O"))
 
         file_menu.addSeparator()
+        file_menu.addAction("Export Video...", self._on_export_video)
+        file_menu.addSeparator()
+        file_menu.addAction("Return to Welcome", self._return_to_welcome)
         file_menu.addAction("Exit", self.close)
 
         # View menu
@@ -141,7 +162,7 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Top bar with brand mark
+        # Top bar with brand mark (left) + GPU/VRAM info (right)
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(12, 6, 12, 6)
 
@@ -150,32 +171,60 @@ class MainWindow(QMainWindow):
         top_bar.addWidget(brand)
         top_bar.addStretch()
 
+        # GPU info (right side of brand bar)
+        self._gpu_label = QLabel("")
+        self._gpu_label.setObjectName("gpuName")
+        top_bar.addWidget(self._gpu_label)
+
+        self._vram_label = QLabel("VRAM")
+        self._vram_label.setStyleSheet("color: #808070; font-size: 10px;")
+        top_bar.addWidget(self._vram_label)
+
+        self._vram_bar = QProgressBar()
+        self._vram_bar.setObjectName("vramMeter")
+        self._vram_bar.setFixedWidth(80)
+        self._vram_bar.setFixedHeight(8)
+        self._vram_bar.setTextVisible(False)
+        self._vram_bar.setRange(0, 100)
+        self._vram_bar.setValue(0)
+        top_bar.addWidget(self._vram_bar)
+
+        self._vram_text = QLabel("")
+        self._vram_text.setObjectName("vramText")
+        self._vram_text.setMinimumWidth(70)
+        top_bar.addWidget(self._vram_text)
+
         main_layout.addLayout(top_bar)
 
         # Stacked widget: page 0 = welcome, page 1 = workspace
         self._stack = QStackedWidget()
 
         # Page 0 — Welcome/drop screen
-        self._welcome = WelcomeScreen()
+        self._welcome = WelcomeScreen(self._recent_store)
         self._welcome.folder_selected.connect(self._on_welcome_folder)
         self._welcome.files_selected.connect(self._on_welcome_files)
+        self._welcome.recent_project_opened.connect(self._on_recent_project_opened)
         self._stack.addWidget(self._welcome)
 
-        # Page 1 — Workspace (3-panel splitter + queue)
+        # Page 1 — Workspace (vertical splitter: top panels + I/O tray)
         workspace = QWidget()
         ws_layout = QVBoxLayout(workspace)
         ws_layout.setContentsMargins(0, 0, 0, 0)
         ws_layout.setSpacing(0)
 
+        # Vertical splitter: top = 3-panel horizontal splitter, bottom = I/O tray
+        self._vsplitter = QSplitter(Qt.Vertical)
+
+        # Horizontal splitter: clip browser | dual viewer | param panel
         self._splitter = QSplitter(Qt.Horizontal)
 
         # Left — Clip Browser
         self._clip_browser = ClipBrowser(self._clip_model)
         self._splitter.addWidget(self._clip_browser)
 
-        # Center — Preview Viewport
-        self._preview = PreviewViewport()
-        self._splitter.addWidget(self._preview)
+        # Center — Dual Viewer (input + output side by side)
+        self._dual_viewer = DualViewerPanel()
+        self._splitter.addWidget(self._dual_viewer)
 
         # Right — Parameter Panel
         self._param_panel = ParameterPanel()
@@ -187,7 +236,18 @@ class MainWindow(QMainWindow):
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
 
-        ws_layout.addWidget(self._splitter, 1)
+        self._vsplitter.addWidget(self._splitter)
+
+        # Bottom — I/O Tray Panel
+        self._io_tray = IOTrayPanel(self._clip_model)
+        self._vsplitter.addWidget(self._io_tray)
+
+        # Top fills, tray is fixed height
+        self._vsplitter.setStretchFactor(0, 1)
+        self._vsplitter.setStretchFactor(1, 0)
+        self._vsplitter.setSizes([600, 140])
+
+        ws_layout.addWidget(self._vsplitter, 1)
 
         # Queue panel (collapsible, above status bar)
         self._queue_panel = QueuePanel(self._service.job_queue)
@@ -229,9 +289,9 @@ class MainWindow(QMainWindow):
         self._gpu_worker.queue_empty.connect(self._on_queue_empty)
         self._gpu_worker.reprocess_result.connect(self._on_reprocess_result)
 
-        # GPU monitor
-        self._gpu_monitor.vram_updated.connect(self._status_bar.update_vram)
-        self._gpu_monitor.gpu_name.connect(self._status_bar.set_gpu_name)
+        # GPU monitor → top bar widgets (not status bar)
+        self._gpu_monitor.vram_updated.connect(self._update_vram)
+        self._gpu_monitor.gpu_name.connect(self._set_gpu_name)
 
         # Queue panel cancel signals
         self._queue_panel.cancel_job_requested.connect(self._on_cancel_job)
@@ -243,14 +303,51 @@ class MainWindow(QMainWindow):
         # Parameter panel — live reprocess (debounced, Codex: coalesce stale)
         self._param_panel.params_changed.connect(self._on_params_changed)
 
+        # I/O tray click → select clip
+        self._io_tray.clip_clicked.connect(self._on_tray_clip_clicked)
+
+        # Extract worker signals
+        self._extract_worker.progress.connect(self._on_extract_progress)
+        self._extract_worker.finished.connect(self._on_extract_finished)
+        self._extract_worker.error.connect(self._on_extract_error)
+
+    # ── GPU Header ──
+
+    @Slot(dict)
+    def _update_vram(self, info: dict) -> None:
+        """Update VRAM meter in the top bar."""
+        if not info.get("available"):
+            self._vram_text.setText("No GPU")
+            self._vram_bar.setValue(0)
+            return
+        pct = info.get("usage_pct", 0)
+        used = info.get("used_gb", 0)
+        total = info.get("total_gb", 0)
+        self._vram_bar.setValue(int(pct))
+        self._vram_text.setText(f"{used:.1f}/{total:.1f}GB")
+
+    @Slot(str)
+    def _set_gpu_name(self, name: str) -> None:
+        """Display GPU name in the top bar."""
+        short = name.replace("NVIDIA GeForce ", "").replace("NVIDIA ", "")
+        self._gpu_label.setText(short)
+
+    @Slot(object)
+    def _on_tray_clip_clicked(self, clip: ClipEntry) -> None:
+        """Handle clip clicked in I/O tray — select it in browser and preview."""
+        for i, c in enumerate(self._clip_model.clips):
+            if c.name == clip.name:
+                self._clip_browser.select_by_index(i)
+                break
+
     # ── Clip Selection ──
 
     @Slot(ClipEntry)
     def _on_clip_selected(self, clip: ClipEntry) -> None:
         self._current_clip = clip
 
-        # Load clip into preview (builds FrameIndex, configures scrubber + modes)
-        self._preview.set_clip(clip)
+        # Load clip into dual viewer (both input + output viewports)
+        self._dual_viewer.set_clip(clip)
 
         # Enable run button only for READY or COMPLETE (reprocess) clips
         can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
@@ -278,9 +375,17 @@ class MainWindow(QMainWindow):
                         clip.input_asset.path, clip.input_asset.asset_type,
                     )
 
+            # Auto-submit EXTRACTING clips to extract worker
+            self._auto_extract_clips(clips)
+
             if clips:
                 self._clip_browser.select_first()
             logger.info(f"Found {len(clips)} clips")
+
+            # Register in recent sessions store
+            display_name = self._pending_display_name or os.path.basename(dir_path)
+            self._pending_display_name = None
+            self._recent_store.add_or_update(dir_path, display_name, len(clips))
 
             # Auto-load session if exists (Codex: block signals during restore)
             self._try_auto_load_session(dir_path)
@@ -299,15 +404,69 @@ class MainWindow(QMainWindow):
         self._switch_to_workspace()
         self._on_clips_dir_changed(dir_path)
 
+    @Slot(str)
+    def _on_recent_project_opened(self, workspace_path: str) -> None:
+        """Open a workspace from the recent projects list."""
+        if not os.path.isdir(workspace_path):
+            QMessageBox.warning(self, "Missing", f"Workspace no longer exists:\n{workspace_path}")
+            self._recent_store.remove(workspace_path)
+            self._welcome.refresh_recents()
+            return
+        self._switch_to_workspace()
+        self._on_clips_dir_changed(workspace_path)
+
+    def _return_to_welcome(self) -> None:
+        """Save session and return to the welcome screen."""
+        if self._clips_dir:
+            try:
+                self._on_save_session()
+            except Exception:
+                pass
+        self._stack.setCurrentIndex(0)
+        self._welcome.refresh_recents()
+        self._clips_dir = None
+        self._current_clip = None
+
     @Slot(list)
     def _on_welcome_files(self, file_paths: list) -> None:
-        """Handle files selected from welcome screen — use parent dir as clips dir."""
+        """Handle files selected from welcome screen.
+
+        Creates a dedicated workspace directory next to the first file,
+        restructures each selected video into its own clip subdirectory,
+        then scans ONLY that workspace — not the parent dir (which would
+        pick up every video in e.g. Downloads).
+        """
         if not file_paths:
             return
-        # Use the directory of the first file as the clips directory
-        dir_path = os.path.dirname(file_paths[0])
+
+        import shutil
+
+        # Create a workspace dir adjacent to the source files
+        parent = os.path.dirname(file_paths[0])
+        workspace = os.path.join(parent, "CorridorKey_Workspace")
+        os.makedirs(workspace, exist_ok=True)
+
+        _VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v"}
+        for fpath in file_paths:
+            ext = os.path.splitext(fpath)[1].lower()
+            if ext in _VIDEO_EXTS:
+                stem = os.path.splitext(os.path.basename(fpath))[0]
+                clip_dir = os.path.join(workspace, stem)
+                target = os.path.join(clip_dir, f"Input{ext}")
+                if not os.path.isfile(target):
+                    os.makedirs(clip_dir, exist_ok=True)
+                    shutil.copy2(fpath, target)
+                    logger.info(f"Imported video: {fpath} → {target}")
+
+        # Derive display name from source files for the recents list
+        if len(file_paths) == 1:
+            self._pending_display_name = os.path.splitext(os.path.basename(file_paths[0]))[0]
+        else:
+            first = os.path.splitext(os.path.basename(file_paths[0]))[0]
+            self._pending_display_name = f"{first} + {len(file_paths) - 1} more"
+
         self._switch_to_workspace()
-        self._on_clips_dir_changed(dir_path)
+        self._on_clips_dir_changed(workspace)
 
     def _on_open_folder(self) -> None:
         self._clip_browser._on_add_clicked()
@@ -316,11 +475,11 @@ class MainWindow(QMainWindow):
 
     def _on_toggle_split(self, checked: bool) -> None:
         """Toggle split view in preview."""
-        self._preview.set_split_mode(checked)
+        self._dual_viewer.set_split_mode(checked)
 
     def _on_reset_zoom(self) -> None:
         """Reset preview zoom to fit."""
-        self._preview.reset_zoom()
+        self._dual_viewer.reset_zoom()
 
     # ── Live Reprocess (Codex: through GPU queue, not parallel) ──
 
@@ -340,7 +499,7 @@ class MainWindow(QMainWindow):
         if not self._service.is_engine_loaded():
             return
 
-        frame_idx = max(0, self._preview.current_stem_index)
+        frame_idx = max(0, self._dual_viewer.current_stem_index)
         params = self._param_panel.get_params()
         job = create_job_snapshot(clip, params, job_type=JobType.PREVIEW_REPROCESS)
         job.params["_frame_index"] = frame_idx
@@ -357,7 +516,7 @@ class MainWindow(QMainWindow):
         rgb = (np.clip(comp, 0.0, 1.0) * 255.0).astype(np.uint8)
         h, w = rgb.shape[:2]
         qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
-        self._preview.show_reprocess_preview(qimg)
+        self._dual_viewer.show_reprocess_preview(qimg)
 
     # ── Inference Control ──
 
@@ -441,7 +600,7 @@ class MainWindow(QMainWindow):
             return
 
         self._current_clip.set_processing(True)
-        self._start_worker_if_needed(job.id)
+        self._start_worker_if_needed(job.id, job_label="GVM Auto", indeterminate=False)
 
     @Slot()
     def _on_run_videomama(self) -> None:
@@ -454,9 +613,14 @@ class MainWindow(QMainWindow):
             return
 
         self._current_clip.set_processing(True)
-        self._start_worker_if_needed(job.id)
+        self._start_worker_if_needed(job.id, job_label="VideoMaMa", indeterminate=True)
 
-    def _start_worker_if_needed(self, first_job_id: str | None = None) -> None:
+    def _start_worker_if_needed(
+        self,
+        first_job_id: str | None = None,
+        job_label: str = "Inference",
+        indeterminate: bool = False,
+    ) -> None:
         """Ensure GPU worker is running and show queue panel."""
         if first_job_id and self._active_job_id is None:
             self._active_job_id = first_job_id
@@ -468,13 +632,30 @@ class MainWindow(QMainWindow):
 
         self._status_bar.set_running(True)
         self._status_bar.reset_progress()
+        self._status_bar.start_job_timer(label=job_label, indeterminate=indeterminate)
         self._queue_panel.refresh()
         self._queue_panel.show()
 
     @Slot()
     def _on_stop_inference(self) -> None:
-        self._service.job_queue.cancel_all()
-        self._status_bar.set_running(False)
+        # Guard: only cancel if a job is actually running
+        if not self._status_bar._stop_btn.isVisible():
+            return
+        queue = self._service.job_queue
+        if not queue.current_job and not queue.has_pending:
+            return
+
+        reply = QMessageBox.question(
+            self, "Cancel Processing",
+            "Are you sure you want to cancel?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        queue.cancel_all()
+        self._status_bar.set_message("Cancelling...")
         self._queue_panel.refresh()
         logger.info("Inference cancelled by user")
 
@@ -506,7 +687,7 @@ class MainWindow(QMainWindow):
     def _on_worker_preview(self, job_id: str, clip_name: str, frame_index: int, path: str) -> None:
         # Only update preview if this is the active job
         if job_id == self._active_job_id:
-            self._preview.load_preview_from_file(path, clip_name, frame_index)
+            self._dual_viewer.load_preview_from_file(path, clip_name, frame_index)
 
     @Slot(str, str)
     def _on_worker_clip_finished(self, job_id: str, clip_name: str) -> None:
@@ -517,15 +698,31 @@ class MainWindow(QMainWindow):
                 clip.set_processing(False)
                 break
         self._queue_panel.refresh()
+        self._io_tray.refresh()
         logger.info(f"Clip completed: {clip_name}")
 
     @Slot(str, str)
     def _on_worker_warning(self, job_id: str, message: str) -> None:
-        self._status_bar.add_warning()
-        logger.warning(f"Worker warning: {message}")
+        if message.startswith("Cancelled:"):
+            # Job was cancelled — clear processing lock on the clip
+            clip_name = message.removeprefix("Cancelled:").strip()
+            for clip in self._clip_model.clips:
+                if clip.name == clip_name:
+                    clip.set_processing(False)
+                    break
+            self._status_bar.stop_job_timer()
+            self._status_bar.set_running(False)
+            self._status_bar.set_message(f"Cancelled: {clip_name}")
+            self._queue_panel.refresh()
+            logger.info(f"Job cancelled: {clip_name}")
+        else:
+            self._status_bar.add_warning()
+            logger.warning(f"Worker warning: {message}")
 
     @Slot(str, str, str)
     def _on_worker_error(self, job_id: str, clip_name: str, error_msg: str) -> None:
+        self._status_bar.stop_job_timer()
+        self._status_bar.set_running(False)
         self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
         # Clear processing lock
         for clip in self._clip_model.clips:
@@ -539,9 +736,183 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_queue_empty(self) -> None:
         self._status_bar.set_running(False)
+        self._status_bar.stop_job_timer()
         self._active_job_id = None
         self._queue_panel.refresh()
         logger.info("All jobs completed")
+
+    # ── Video Extraction ──
+
+    def _auto_extract_clips(self, clips: list[ClipEntry]) -> None:
+        """Auto-submit EXTRACTING clips to the extract worker.
+
+        For standalone videos (root_path == clips_dir), restructure into
+        a proper clip directory first so extraction writes to clip/Input/.
+        """
+        import shutil
+
+        extracting = [c for c in clips if c.state == ClipState.EXTRACTING]
+        if not extracting:
+            return
+
+        if not self._extract_worker.isRunning():
+            self._extract_worker.start()
+
+        for clip in extracting:
+            if not (clip.input_asset and clip.input_asset.asset_type == "video"):
+                continue
+
+            video_path = clip.input_asset.path
+
+            # Standalone video: root_path is the parent dir, not a clip dir.
+            # Restructure: create clip_name/ dir and copy video as Input.ext
+            if clip.root_path == self._clips_dir:
+                ext = os.path.splitext(video_path)[1]
+                clip_dir = os.path.join(self._clips_dir, clip.name)
+                target = os.path.join(clip_dir, f"Input{ext}")
+                if not os.path.isfile(target):
+                    os.makedirs(clip_dir, exist_ok=True)
+                    shutil.copy2(video_path, target)
+                    logger.info(f"Restructured standalone video: {video_path} → {target}")
+                clip.root_path = clip_dir
+                clip.input_asset.path = target
+
+            self._extract_worker.submit(
+                clip.name, clip.input_asset.path, clip.root_path,
+            )
+        logger.info(f"Auto-extraction queued: {len(extracting)} clip(s)")
+
+    @Slot(str, int, int)
+    def _on_extract_progress(self, clip_name: str, current: int, total: int) -> None:
+        """Update status bar with extraction progress."""
+        pct = int(current / total * 100) if total > 0 else 0
+        self._status_bar.set_message(f"Extracting {clip_name}: {pct}%")
+
+    @Slot(str, int)
+    def _on_extract_finished(self, clip_name: str, frame_count: int) -> None:
+        """Handle extraction complete — update clip to RAW with image sequence."""
+        from backend.clip_state import ClipAsset
+        for clip in self._clip_model.clips:
+            if clip.name == clip_name:
+                # Update input asset to point to extracted sequence
+                input_dir = os.path.join(clip.root_path, "Input")
+                if os.path.isdir(input_dir):
+                    clip.input_asset = ClipAsset(input_dir, "sequence")
+
+                # Transition EXTRACTING → RAW
+                clip.state = ClipState.RAW
+                self._clip_model.update_clip_state(clip_name, ClipState.RAW)
+
+                # Regenerate thumbnail from sequence
+                if clip.input_asset:
+                    self._thumb_gen.generate(
+                        clip.name, clip.root_path,
+                        clip.input_asset.path, clip.input_asset.asset_type,
+                    )
+
+                # If this is the selected clip, reload preview
+                if self._current_clip and self._current_clip.name == clip_name:
+                    self._dual_viewer.set_clip(clip)
+                    self._status_bar.set_run_enabled(
+                        clip.state in (ClipState.READY, ClipState.COMPLETE)
+                    )
+
+                logger.info(f"Extraction complete: {clip_name} ({frame_count} frames)")
+                break
+
+        self._io_tray.refresh()
+        self._status_bar.set_message("")
+
+    @Slot(str, str)
+    def _on_extract_error(self, clip_name: str, error_msg: str) -> None:
+        """Handle extraction failure."""
+        self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
+        for clip in self._clip_model.clips:
+            if clip.name == clip_name:
+                clip.error_message = error_msg
+                break
+        self._status_bar.set_message("")
+        logger.error(f"Extraction failed for {clip_name}: {error_msg}")
+
+    # ── Export Video ──
+
+    def _on_export_video(self) -> None:
+        """Export output image sequence as video file."""
+        if self._current_clip is None:
+            QMessageBox.information(self, "No Clip", "Select a clip first.")
+            return
+
+        clip = self._current_clip
+        if clip.state != ClipState.COMPLETE:
+            QMessageBox.warning(
+                self, "Not Complete",
+                f"Clip '{clip.name}' must be COMPLETE to export video.",
+            )
+            return
+
+        # Find output directory with frames (prefer Comp, fall back to FG)
+        comp_dir = os.path.join(clip.output_dir, "Comp")
+        fg_dir = os.path.join(clip.output_dir, "FG")
+        if os.path.isdir(comp_dir) and os.listdir(comp_dir):
+            source_dir = comp_dir
+        elif os.path.isdir(fg_dir) and os.listdir(fg_dir):
+            source_dir = fg_dir
+        else:
+            QMessageBox.warning(self, "No Output", "No output frames found to export.")
+            return
+
+        # Read video metadata for fps
+        from backend.ffmpeg_tools import read_video_metadata, stitch_video, find_ffmpeg
+        if not find_ffmpeg():
+            QMessageBox.critical(
+                self, "FFmpeg Not Found",
+                "FFmpeg is required for video export.\n"
+                "Install FFmpeg and add it to your PATH.",
+            )
+            return
+
+        metadata = read_video_metadata(clip.root_path)
+        fps = metadata.get("fps", 24.0) if metadata else 24.0
+
+        # Ask for output path
+        default_name = f"{clip.name}_export.mp4"
+        out_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Video", default_name,
+            "MP4 Video (*.mp4);;All Files (*)",
+        )
+        if not out_path:
+            return
+
+        # Determine frame pattern from first file
+        frames = sorted(os.listdir(source_dir))
+        if not frames:
+            return
+
+        # Detect pattern (frame_000000.png → frame_%06d.png)
+        first = frames[0]
+        ext = os.path.splitext(first)[1]
+        pattern = f"frame_%06d{ext}"
+
+        self._status_bar.set_message(f"Exporting {clip.name}...")
+
+        try:
+            stitch_video(
+                in_dir=source_dir,
+                out_path=out_path,
+                fps=fps,
+                pattern=pattern,
+            )
+            self._status_bar.set_message("")
+            QMessageBox.information(
+                self, "Export Complete",
+                f"Video exported:\n{out_path}",
+            )
+        except Exception as e:
+            self._status_bar.set_message("")
+            QMessageBox.critical(
+                self, "Export Failed",
+                f"Failed to export video:\n{e}",
+            )
 
     # ── Session Save/Load (Codex: JSON sidecar, atomic write, version) ──
 
@@ -570,6 +941,11 @@ class MainWindow(QMainWindow):
 
         # Splitter sizes
         data["splitter_sizes"] = self._splitter.sizes()
+        data["vsplitter_sizes"] = self._vsplitter.sizes()
+
+        # Workspace path (for absolute reference)
+        if self._clips_dir:
+            data["workspace_path"] = self._clips_dir
 
         # Selected clip
         if self._current_clip:
@@ -607,13 +983,27 @@ class MainWindow(QMainWindow):
         if "split_view" in data:
             checked = bool(data["split_view"])
             self._split_action.setChecked(checked)
-            self._preview.set_split_mode(checked)
+            self._dual_viewer.set_split_mode(checked)
 
-        # Restore splitter sizes
+        # Restore splitter sizes (validate: must have 3 panels, none at 0)
         if "splitter_sizes" in data:
             try:
                 sizes = [int(s) for s in data["splitter_sizes"]]
-                self._splitter.setSizes(sizes)
+                if len(sizes) == 3 and all(s > 0 for s in sizes):
+                    self._splitter.setSizes(sizes)
+                else:
+                    logger.info("Ignoring invalid splitter_sizes, using defaults")
+            except Exception:
+                pass
+
+        # Restore vertical splitter sizes (validate: must have 2 panels)
+        if "vsplitter_sizes" in data:
+            try:
+                sizes = [int(s) for s in data["vsplitter_sizes"]]
+                if len(sizes) == 2 and all(s > 0 for s in sizes):
+                    self._vsplitter.setSizes(sizes)
+                else:
+                    logger.info("Ignoring invalid vsplitter_sizes, using defaults")
             except Exception:
                 pass
 
@@ -660,6 +1050,27 @@ class MainWindow(QMainWindow):
                 except OSError:
                     pass
 
+    def _auto_save_session(self) -> None:
+        """Periodic auto-save for crash recovery (called by timer)."""
+        if self._clips_dir and self._stack.currentIndex() == 1:
+            path = self._session_path()
+            if not path:
+                return
+            data = self._build_session_data()
+            tmp_path = path + ".tmp"
+            try:
+                with open(tmp_path, 'w') as f:
+                    json.dump(data, f, indent=2)
+                if os.path.exists(path):
+                    os.remove(path)
+                os.rename(tmp_path, path)
+            except OSError:
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
+
     @Slot()
     def _on_load_session(self) -> None:
         """Load session from JSON sidecar."""
@@ -689,6 +1100,7 @@ class MainWindow(QMainWindow):
 
     def _reset_layout(self) -> None:
         self._splitter.setSizes([220, 700, 280])
+        self._vsplitter.setSizes([600, 140])
 
     def _toggle_queue_panel(self) -> None:
         self._queue_panel.setVisible(not self._queue_panel.isVisible())
@@ -704,7 +1116,7 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event) -> None:
-        """Clean shutdown — auto-save session, stop worker, unload engines."""
+        """Clean shutdown — auto-save session, stop workers, unload engines."""
         # Auto-save session on close
         if self._clips_dir:
             try:
@@ -713,6 +1125,9 @@ class MainWindow(QMainWindow):
                 pass
 
         self._gpu_monitor.stop()
+        if self._extract_worker.isRunning():
+            self._extract_worker.stop()
+            self._extract_worker.wait(5000)
         if self._gpu_worker.isRunning():
             self._gpu_worker.stop()
             self._gpu_worker.wait(5000)

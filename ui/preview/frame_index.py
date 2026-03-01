@@ -84,7 +84,11 @@ class FrameIndex:
         return mode in self.video_modes
 
 
-def build_frame_index(clip_root: str, input_asset_type: str = "sequence") -> FrameIndex:
+def build_frame_index(
+    clip_root: str,
+    input_asset_type: str = "sequence",
+    video_path: str | None = None,
+) -> FrameIndex:
     """Build a FrameIndex by scanning all relevant directories.
 
     Scans Input/ and Output/{FG,Matte,Comp,Processed} for image files,
@@ -93,6 +97,8 @@ def build_frame_index(clip_root: str, input_asset_type: str = "sequence") -> Fra
     Args:
         clip_root: Path to the clip's root directory.
         input_asset_type: 'sequence' or 'video' (affects Input mode).
+        video_path: Direct path to video file (for standalone video clips
+                    where the video isn't at clip_root/Input.*).
     """
     index = FrameIndex()
     all_stems: set[str] = set()
@@ -102,15 +108,17 @@ def build_frame_index(clip_root: str, input_asset_type: str = "sequence") -> Fra
 
         # Handle video input
         if mode == ViewMode.INPUT and input_asset_type == "video":
-            # Video mode — mark as video, stems come from other dirs
-            # We'll check for the video file existence
-            import glob as glob_module
-            video_candidates = glob_module.glob(os.path.join(clip_root, "Input.*"))
-            video_exts = ('.mp4', '.mov', '.avi', '.mkv')
-            for vc in video_candidates:
-                if vc.lower().endswith(video_exts):
-                    index.video_modes[mode] = vc
-                    break
+            # Use explicit video_path if provided, else scan for Input.*
+            if video_path and os.path.isfile(video_path):
+                index.video_modes[mode] = video_path
+            else:
+                import glob as glob_module
+                video_candidates = glob_module.glob(os.path.join(clip_root, "Input.*"))
+                video_exts = ('.mp4', '.mov', '.avi', '.mkv')
+                for vc in video_candidates:
+                    if vc.lower().endswith(video_exts):
+                        index.video_modes[mode] = vc
+                        break
             continue
 
         if not os.path.isdir(dir_path):
@@ -129,6 +137,21 @@ def build_frame_index(clip_root: str, input_asset_type: str = "sequence") -> Fra
 
     # Build ordered stem list using natural sort
     index.stems = natsorted(list(all_stems))
+
+    # For video input with no image stems, generate stems from frame count
+    if ViewMode.INPUT in index.video_modes and not index.stems:
+        vpath = index.video_modes[ViewMode.INPUT]
+        try:
+            import cv2
+            cap = cv2.VideoCapture(vpath)
+            if cap.isOpened():
+                count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                cap.release()
+                if count > 0:
+                    # Generate synthetic stem names for video-only clips
+                    index.stems = [f"frame_{i:06d}" for i in range(count)]
+        except Exception:
+            pass
 
     # For video input, mark all stems as available (seekable)
     if ViewMode.INPUT in index.video_modes:

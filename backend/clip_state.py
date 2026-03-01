@@ -1,24 +1,28 @@
 """Clip entry data model and state machine.
 
 State Machine:
-    RAW       — Input asset found, no alpha hint yet
-    MASKED    — User mask provided (for VideoMaMa workflow)
-    READY     — Alpha hint available (from GVM or VideoMaMa), ready for inference
-    COMPLETE  — Inference outputs written
-    ERROR     — Processing failed (can retry)
+    EXTRACTING — Video input being extracted to image sequence
+    RAW        — Input asset found, no alpha hint yet
+    MASKED     — User mask provided (for VideoMaMa workflow)
+    READY      — Alpha hint available (from GVM or VideoMaMa), ready for inference
+    COMPLETE   — Inference outputs written
+    ERROR      — Processing failed (can retry)
 
 Transitions:
-    RAW → MASKED      (user provides VideoMaMa mask)
-    RAW → READY       (GVM auto-generates alpha)
-    RAW → ERROR       (GVM/scan fails)
-    MASKED → READY    (VideoMaMa generates alpha from user mask)
-    MASKED → ERROR    (VideoMaMa fails)
-    READY → COMPLETE  (inference succeeds)
-    READY → ERROR     (inference fails)
-    ERROR → RAW       (retry from scratch)
-    ERROR → MASKED    (retry with mask)
-    ERROR → READY     (retry inference)
-    COMPLETE → READY  (reprocess with different params)
+    EXTRACTING → RAW   (extraction completes)
+    EXTRACTING → ERROR (extraction fails)
+    RAW → MASKED       (user provides VideoMaMa mask)
+    RAW → READY        (GVM auto-generates alpha)
+    RAW → ERROR        (GVM/scan fails)
+    MASKED → READY     (VideoMaMa generates alpha from user mask)
+    MASKED → ERROR     (VideoMaMa fails)
+    READY → COMPLETE   (inference succeeds)
+    READY → ERROR      (inference fails)
+    ERROR → RAW        (retry from scratch)
+    ERROR → MASKED     (retry with mask)
+    ERROR → READY      (retry inference)
+    ERROR → EXTRACTING (retry extraction)
+    COMPLETE → READY   (reprocess with different params)
 """
 from __future__ import annotations
 
@@ -35,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 class ClipState(Enum):
+    EXTRACTING = "EXTRACTING"
     RAW = "RAW"
     MASKED = "MASKED"
     READY = "READY"
@@ -44,11 +49,12 @@ class ClipState(Enum):
 
 # Valid transitions: from_state -> set of allowed to_states
 _TRANSITIONS: dict[ClipState, set[ClipState]] = {
+    ClipState.EXTRACTING: {ClipState.RAW, ClipState.ERROR},
     ClipState.RAW: {ClipState.MASKED, ClipState.READY, ClipState.ERROR},
     ClipState.MASKED: {ClipState.READY, ClipState.ERROR},
     ClipState.READY: {ClipState.COMPLETE, ClipState.ERROR},
     ClipState.COMPLETE: {ClipState.READY},  # reprocess with different params
-    ClipState.ERROR: {ClipState.RAW, ClipState.MASKED, ClipState.READY},
+    ClipState.ERROR: {ClipState.RAW, ClipState.MASKED, ClipState.READY, ClipState.EXTRACTING},
 }
 
 
@@ -262,38 +268,66 @@ class ClipEntry:
         Does NOT set COMPLETE purely from has_outputs — that caused
         premature state flips during folder watch rescans. Instead,
         only the service layer sets COMPLETE after verified processing.
+
+        Video-only clips (no Input/ dir, only Input.mp4) need extraction
+        before they can be processed — they start as EXTRACTING.
         """
         if self.alpha_asset is not None:
             self.state = ClipState.READY
         elif self.mask_asset is not None:
             self.state = ClipState.MASKED
+        elif (self.input_asset is not None
+              and self.input_asset.asset_type == "video"):
+            # Video input needs extraction to image sequence
+            self.state = ClipState.EXTRACTING
         else:
             self.state = ClipState.RAW
 
 
 def scan_clips_dir(clips_dir: str) -> list[ClipEntry]:
-    """Scan a directory for clip folders and return ClipEntry instances."""
+    """Scan a directory for clip folders and standalone video files.
+
+    Folder clips: subdirectories containing Input/ or Input.* video.
+    Standalone videos: .mp4/.mov/.avi/.mkv files at the top level are
+    treated as single-video clips (root_path = parent dir, video_path
+    set directly as input asset).
+
+    Folders without valid input assets are skipped (not added as broken clips).
+    """
     entries: list[ClipEntry] = []
     if not os.path.isdir(clips_dir):
         logger.warning(f"Clips directory not found: {clips_dir}")
         return entries
 
+    seen_names: set[str] = set()
+
     for item in sorted(os.listdir(clips_dir)):
         item_path = os.path.join(clips_dir, item)
-        if not os.path.isdir(item_path):
-            continue
-        # Skip hidden and special directories
+
+        # Skip hidden and special items
         if item.startswith('.') or item.startswith('_'):
             continue
 
-        clip = ClipEntry(name=item, root_path=item_path)
-        try:
-            clip.find_assets()
+        if os.path.isdir(item_path):
+            clip = ClipEntry(name=item, root_path=item_path)
+            try:
+                clip.find_assets()
+                entries.append(clip)
+                seen_names.add(item)
+            except ClipScanError as e:
+                # Skip folders without valid input assets
+                logger.debug(str(e))
+
+        elif os.path.isfile(item_path) and _is_video_file(item_path):
+            # Standalone video file → treat as a clip needing extraction
+            stem = os.path.splitext(item)[0]
+            if stem in seen_names:
+                continue  # folder clip already exists with this name
+            clip = ClipEntry(name=stem, root_path=clips_dir)
+            clip.input_asset = ClipAsset(item_path, 'video')
+            clip.state = ClipState.EXTRACTING
             entries.append(clip)
-        except ClipScanError as e:
-            logger.warning(str(e))
-            clip.warnings.append(str(e))
-            entries.append(clip)
+            seen_names.add(stem)
 
     logger.info(f"Scanned {clips_dir}: {len(entries)} clip(s) found")
     return entries

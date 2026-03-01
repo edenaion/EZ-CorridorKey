@@ -528,8 +528,8 @@ class CorridorKeyService:
                 if job and job.is_cancelled:
                     raise JobCancelledError(clip.name, i)
 
-                # Report progress
-                if on_progress and i % 5 == 0:
+                # Report progress every frame (enables responsive cancel + timer)
+                if on_progress:
                     on_progress(clip.name, i, num_frames)
 
                 try:
@@ -732,16 +732,32 @@ class CorridorKeyService:
         if on_progress:
             on_progress(clip.name, 0, 1)
 
-        # Check cancel before starting (GVM call is monolithic)
+        # Check cancel before starting
         if job and job.is_cancelled:
             raise JobCancelledError(clip.name, 0)
+
+        # Per-batch progress callback — GVM iterates over frames internally
+        def _gvm_progress(batch_idx: int, total_batches: int) -> None:
+            if on_progress:
+                on_progress(clip.name, batch_idx, total_batches)
+            # Check cancel between batches
+            if job and job.is_cancelled:
+                raise JobCancelledError(clip.name, batch_idx)
 
         try:
             gvm.process_sequence(
                 input_path=clip.input_asset.path,
+                output_dir=clip.root_path,
+                num_frames_per_batch=1,
+                decode_chunk_size=1,
+                denoise_steps=1,
                 mode='matte',
+                write_video=False,
                 direct_output_dir=alpha_dir,
+                progress_callback=_gvm_progress,
             )
+        except JobCancelledError:
+            raise
         except Exception as e:
             if job and job.is_cancelled:
                 raise JobCancelledError(clip.name, 0)

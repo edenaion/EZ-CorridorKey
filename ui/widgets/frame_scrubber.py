@@ -38,16 +38,16 @@ class FrameScrubber(QWidget):
             "QPushButton:disabled { color: #3A3A30; }"
         )
 
-        # Jump to start
-        self._start_btn = QPushButton("\u23EE")  # ⏮
-        self._start_btn.setFixedWidth(24)
+        # Jump to start — text glyphs (not emoji) so CSS color is respected
+        self._start_btn = QPushButton("\u25C0\u25C0")  # ◀◀
+        self._start_btn.setFixedWidth(28)
         self._start_btn.setStyleSheet(btn_style)
         self._start_btn.setToolTip("Go to first frame")
         self._start_btn.clicked.connect(self._go_start)
         layout.addWidget(self._start_btn)
 
         # Step back
-        self._prev_btn = QPushButton("\u23F4")  # ⏴
+        self._prev_btn = QPushButton("\u25C0")  # ◀
         self._prev_btn.setFixedWidth(24)
         self._prev_btn.setStyleSheet(btn_style)
         self._prev_btn.setToolTip("Previous frame")
@@ -63,7 +63,7 @@ class FrameScrubber(QWidget):
         layout.addWidget(self._slider, 1)
 
         # Step forward
-        self._next_btn = QPushButton("\u23F5")  # ⏵
+        self._next_btn = QPushButton("\u25B6")  # ▶
         self._next_btn.setFixedWidth(24)
         self._next_btn.setStyleSheet(btn_style)
         self._next_btn.setToolTip("Next frame")
@@ -71,8 +71,8 @@ class FrameScrubber(QWidget):
         layout.addWidget(self._next_btn)
 
         # Jump to end
-        self._end_btn = QPushButton("\u23ED")  # ⏭
-        self._end_btn.setFixedWidth(24)
+        self._end_btn = QPushButton("\u25B6\u25B6")  # ▶▶
+        self._end_btn.setFixedWidth(28)
         self._end_btn.setStyleSheet(btn_style)
         self._end_btn.setToolTip("Go to last frame")
         self._end_btn.clicked.connect(self._go_end)

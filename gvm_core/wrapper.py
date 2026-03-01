@@ -97,7 +97,7 @@ class GVMProcessor:
         self.pipe = self.pipe.to(self.device, dtype=torch.float16)
         logging.info("Models loaded.")
 
-    def process_sequence(self, input_path, output_dir, 
+    def process_sequence(self, input_path, output_dir,
                          num_frames_per_batch=8,
                          denoise_steps=1,
                          max_frames=None,
@@ -108,7 +108,8 @@ class GVMProcessor:
                          noise_type='zeros',
                          mode='matte',
                          write_video=True,
-                         direct_output_dir=None):
+                         direct_output_dir=None,
+                         progress_callback=None):
         """
         Process a single video or directory of images.
         """
@@ -218,7 +219,10 @@ class GVMProcessor:
         upper_bound = 240./255.
         lower_bound = 25./ 255.
 
-        for batch_id, batch in tqdm(enumerate(dataloader), total=len(dataloader), desc=f"Inferencing {file_name}"):
+        total_batches = len(dataloader)
+        for batch_id, batch in tqdm(enumerate(dataloader), total=total_batches, desc=f"Inferencing {file_name}"):
+            if progress_callback is not None:
+                progress_callback(batch_id, total_batches)
             filenames = []
             if is_video:
                 b, _, h, w = batch.shape

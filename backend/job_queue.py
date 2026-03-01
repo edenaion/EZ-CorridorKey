@@ -34,6 +34,8 @@ class JobType(Enum):
     GVM_ALPHA = "gvm_alpha"
     VIDEOMAMA_ALPHA = "videomama_alpha"
     PREVIEW_REPROCESS = "preview_reprocess"
+    VIDEO_EXTRACT = "video_extract"
+    VIDEO_STITCH = "video_stitch"
 
 
 class JobStatus(Enum):

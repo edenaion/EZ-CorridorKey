@@ -1,0 +1,53 @@
+/* ============================================
+   ez-CorridorKey Color Tokens
+   Based on Corridor Digital brand identity
+   Source: corridordigital.com live CSS extraction
+   ============================================ */
+
+:root {
+  /* ---- Brand Primary ---- */
+  --color-brand-accent: #FFF203;           /* Electric chartreuse yellow — THE signature color */
+  --color-brand-accent-hover: #F3E700;     /* Slightly dimmed yellow for hover states */
+  --color-brand-accent-active: #D1C700;    /* Pressed/active yellow */
+
+  /* ---- Backgrounds (warm near-blacks, NOT pure black) ---- */
+  --color-bg-deepest: #0E0D00;             /* Nav bar, deepest layer */
+  --color-bg-primary: #141300;             /* Main body background */
+  --color-bg-secondary: #1A1900;           /* Alternating sections */
+  --color-bg-card: #1E1D13;               /* Cards, panels, content containers */
+  --color-bg-elevated: #454430;            /* Hover states, mid-tier surfaces */
+
+  /* ---- Text ---- */
+  --color-text-primary: #FFFFFF;           /* Primary text — pure white */
+  --color-text-secondary: #C8C8C8;         /* Subdued white for metadata */
+  --color-text-muted: #9CA3AF;             /* Cool gray for tertiary text */
+  --color-text-accent: #FFF203;            /* Brand yellow for highlighted text */
+  --color-text-disabled: #6C6C6C;          /* Disabled/inactive text */
+
+  /* ---- Interactive / Semantic ---- */
+  --color-link: #009ADA;                   /* Hyperlinks, interactive blue */
+  --color-success: #22C55E;                /* Success states */
+  --color-warning: #EC942C;                /* Warning/caution */
+  --color-error: #D10000;                  /* Error, destructive, live indicator */
+  --color-info: #009ADA;                   /* Info (matches link blue) */
+
+  /* ---- Borders ---- */
+  --color-border-primary: #565546;         /* Dark olive border — section separators */
+  --color-border-secondary: #6C6C6C;       /* Neutral gray border */
+  --color-border-accent: #FFF203;          /* Yellow border for active/featured elements */
+  --color-border-subtle: #2F2F2F;          /* Barely-there card separation */
+
+  /* ---- VFX Domain (green screen context) ---- */
+  --color-greenscreen: #00FF00;            /* Chroma key green — the adversary */
+  --color-greenscreen-muted: #2D5A2D;      /* Subdued green for indicators */
+
+  /* ---- Shadows ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.7);
+  --shadow-glow: 0 0 20px rgba(255, 242, 3, 0.3);  /* Yellow accent glow */
+}
+
+/* Coolors.co Palette (core 5):
+   https://coolors.co/0e0d00-141300-fff203-009ada-ffffff
+*/
