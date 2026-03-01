@@ -4,6 +4,33 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [Step 3: Refactor] - 2026-02-28 — Frame I/O Consolidation & Dead Code Removal
+
+### New Module: `backend/frame_io.py`
+- Unified frame reading functions: `read_image_frame()`, `read_video_frame_at()`, `read_video_frames()`, `read_mask_frame()`, `read_video_mask_at()`
+- Handles EXR (linear float, BGRA stripping) and standard formats (uint8 → float32) in one place
+- Optional `gamma_correct_exr` parameter for VideoMaMa's linear→sRGB conversion
+- `read_video_frames()` accepts optional `processor` callable for custom per-frame transforms
+- `EXR_WRITE_FLAGS` constant moved here from `service.py`
+
+### `backend/service.py` (946 → 877 lines, -69 lines)
+- `_read_input_frame()` — sequence path now delegates to `frame_io.read_image_frame()`
+- `_read_alpha_frame()` — sequence path now delegates to `frame_io.read_mask_frame()`
+- `reprocess_single_frame()` — replaced 50 lines of inline frame reading with `frame_io` calls
+- `_load_frames_for_videomama()` — simplified from 30 lines to 7 using `frame_io`
+- `_load_mask_frames_for_videomama()` — simplified using `read_video_frames()` with processor
+- Removed `normalize_mask_channels`, `normalize_mask_dtype` imports (now internal to `frame_io`)
+
+### Dead Code Removal
+- `main.py` — removed unused `import time` (added in Step 2, never used)
+- `ui/main_window.py` — removed unused `import tempfile`
+
+### Test Adaptation
+- `test_invalid_format.py` — updated `_EXR_FLAGS` reference to `frame_io.EXR_WRITE_FLAGS`
+- All 224 tests pass, 0 regressions
+
+---
+
 ## [Step 2: Debug Logging] - 2026-02-28 — Comprehensive Logging Infrastructure
 
 ### File-Based Session Logging

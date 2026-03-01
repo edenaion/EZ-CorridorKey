@@ -39,7 +39,7 @@ class TestWriteImageFormats:
 
     def test_exr_format_passes_exr_flags(self, tmp_path):
         """'exr' must forward the EXR flags list to cv2.imwrite."""
-        from backend import service as svc_module
+        from backend.frame_io import EXR_WRITE_FLAGS
 
         service = _make_service()
         img = _float32_frame()
@@ -53,7 +53,7 @@ class TestWriteImageFormats:
         # Third positional arg must be the EXR flags list
         assert args[0] == out_path
         assert args[1] is img
-        assert args[2] == svc_module._EXR_FLAGS
+        assert args[2] == EXR_WRITE_FLAGS
 
     def test_png_format_converts_float_to_uint8(self, tmp_path):
         """'png' must clip to [0,1] and cast to uint8 before writing."""

@@ -12,7 +12,6 @@ import logging
 import logging.handlers
 import sys
 import os
-import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 

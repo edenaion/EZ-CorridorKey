@@ -43,11 +43,17 @@ from .errors import (
 )
 from .validators import (
     validate_frame_counts,
-    normalize_mask_channels,
-    normalize_mask_dtype,
     validate_frame_read,
     validate_write,
     ensure_output_dirs,
+)
+from .frame_io import (
+    EXR_WRITE_FLAGS,
+    read_image_frame,
+    read_mask_frame,
+    read_video_frame_at,
+    read_video_frames,
+    read_video_mask_at,
 )
 from .job_queue import GPUJob, GPUJobQueue, JobType
 
@@ -58,13 +64,6 @@ if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# EXR write flags — PXR24 half-float (smallest working compression)
-_EXR_FLAGS = [
-    cv2.IMWRITE_EXR_TYPE, cv2.IMWRITE_EXR_TYPE_HALF,
-    cv2.IMWRITE_EXR_COMPRESSION, cv2.IMWRITE_EXR_COMPRESSION_PXR24,
-]
-
 
 class _ActiveModel(Enum):
     """Tracks which heavy model is currently loaded in VRAM."""
@@ -340,21 +339,9 @@ class CorridorKeyService:
         else:
             fpath = os.path.join(clip.input_asset.path, input_files[frame_index])
             input_stem = os.path.splitext(input_files[frame_index])[0]
-            is_exr = fpath.lower().endswith('.exr')
-
-            if is_exr:
-                img = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
-                validate_frame_read(img, clip.name, frame_index, fpath)
-                # Handle BGRA EXR — strip alpha channel
-                if img.ndim == 3 and img.shape[2] == 4:
-                    img = img[:, :, :3]
-                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                return np.maximum(img_rgb, 0.0).astype(np.float32), input_stem, input_is_linear
-            else:
-                img_bgr = cv2.imread(fpath)
-                validate_frame_read(img_bgr, clip.name, frame_index, fpath)
-                img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-                return img_rgb.astype(np.float32) / 255.0, input_stem, input_is_linear
+            img = read_image_frame(fpath)
+            validate_frame_read(img, clip.name, frame_index, fpath)
+            return img, input_stem, input_is_linear
 
     def _read_alpha_frame(
         self,
@@ -371,13 +358,8 @@ class CorridorKeyService:
             return frame[:, :, 2].astype(np.float32) / 255.0
         else:
             fpath = os.path.join(clip.alpha_asset.path, alpha_files[frame_index])
-            mask_in = cv2.imread(fpath, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED)
-            validate_frame_read(mask_in, clip.name, frame_index, fpath)
-
-            # Normalize channels — always extract to single channel
-            mask = normalize_mask_channels(mask_in, clip.name, frame_index)
-            # Normalize dtype to float32 [0, 1]
-            mask = normalize_mask_dtype(mask)
+            mask = read_mask_frame(fpath, clip.name, frame_index)
+            validate_frame_read(mask, clip.name, frame_index, fpath)
             return mask
 
     def _write_image(
@@ -385,7 +367,7 @@ class CorridorKeyService:
     ) -> None:
         """Write a single image in the requested format."""
         if fmt == "exr":
-            validate_write(cv2.imwrite(path, img, _EXR_FLAGS), clip_name, frame_index, path)
+            validate_write(cv2.imwrite(path, img, EXR_WRITE_FLAGS), clip_name, frame_index, path)
         else:
             # PNG 8-bit
             if img.dtype != np.uint8:
@@ -673,54 +655,30 @@ class CorridorKeyService:
         with self._gpu_lock:
             engine = self._get_engine()
 
-        # Read the specific frame
-        input_files = clip.input_asset.get_frame_files() if clip.input_asset.asset_type == 'sequence' else []
+        # Read the specific input frame
         if clip.input_asset.asset_type == 'video':
-            cap = cv2.VideoCapture(clip.input_asset.path)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-            ret, frame = cap.read()
-            cap.release()
-            if not ret:
-                return None
-            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            img = read_video_frame_at(clip.input_asset.path, frame_index)
         else:
+            input_files = clip.input_asset.get_frame_files()
             if frame_index >= len(input_files):
                 return None
-            fpath = os.path.join(clip.input_asset.path, input_files[frame_index])
-            is_exr = fpath.lower().endswith('.exr')
-            if is_exr:
-                img = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
-                if img is None:
-                    return None
-                if img.ndim == 3 and img.shape[2] == 4:
-                    img = img[:, :, :3]
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = np.maximum(img, 0.0).astype(np.float32)
-            else:
-                img = cv2.imread(fpath)
-                if img is None:
-                    return None
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            img = read_image_frame(os.path.join(clip.input_asset.path, input_files[frame_index]))
+        if img is None:
+            return None
 
-        # Read alpha
-        alpha_files = clip.alpha_asset.get_frame_files() if clip.alpha_asset.asset_type == 'sequence' else []
+        # Read the specific alpha frame
         if clip.alpha_asset.asset_type == 'video':
-            cap = cv2.VideoCapture(clip.alpha_asset.path)
-            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-            ret, frame = cap.read()
-            cap.release()
-            if not ret:
-                return None
-            mask = frame[:, :, 2].astype(np.float32) / 255.0
+            mask = read_video_mask_at(clip.alpha_asset.path, frame_index)
         else:
+            alpha_files = clip.alpha_asset.get_frame_files()
             if frame_index >= len(alpha_files):
                 return None
-            fpath = os.path.join(clip.alpha_asset.path, alpha_files[frame_index])
-            mask_in = cv2.imread(fpath, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED)
-            if mask_in is None:
-                return None
-            mask = normalize_mask_channels(mask_in, clip.name, frame_index)
-            mask = normalize_mask_dtype(mask)
+            mask = read_mask_frame(
+                os.path.join(clip.alpha_asset.path, alpha_files[frame_index]),
+                clip.name, frame_index,
+            )
+        if mask is None:
+            return None
 
         if mask.shape[:2] != img.shape[:2]:
             mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
@@ -887,60 +845,33 @@ class CorridorKeyService:
         self, asset: ClipAsset, clip_name: str
     ) -> list[np.ndarray]:
         """Load input frames for VideoMaMa, applying gamma correction for EXR."""
-        frames = []
         if asset.asset_type == 'video':
-            cap = cv2.VideoCapture(asset.path)
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-                frames.append(img_rgb)
-            cap.release()
-        else:
-            for fname in asset.get_frame_files():
-                fpath = os.path.join(asset.path, fname)
-                is_exr = fpath.lower().endswith('.exr')
-                if is_exr:
-                    img = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
-                    if img is None:
-                        continue
-                    if img.ndim == 3 and img.shape[2] == 4:
-                        img = img[:, :, :3]
-                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    # Gamma correction: linear EXR → sRGB for VideoMaMa
-                    img_rgb = np.power(np.maximum(img_rgb, 0.0), 1.0 / 2.2).astype(np.float32)
-                    frames.append(img_rgb)
-                else:
-                    img = cv2.imread(fpath)
-                    if img is None:
-                        continue
-                    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-                    frames.append(img_rgb)
+            return read_video_frames(asset.path)
+        frames = []
+        for fname in asset.get_frame_files():
+            fpath = os.path.join(asset.path, fname)
+            img = read_image_frame(fpath, gamma_correct_exr=True)
+            if img is not None:
+                frames.append(img)
         return frames
 
     def _load_mask_frames_for_videomama(
         self, asset: ClipAsset, clip_name: str
     ) -> list[np.ndarray]:
         """Load mask frames for VideoMaMa with binary thresholding."""
-        masks = []
+        def _threshold_mask(bgr_frame: np.ndarray) -> np.ndarray:
+            gray = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2GRAY)
+            _, binary = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
+            return binary.astype(np.float32) / 255.0
+
         if asset.asset_type == 'video':
-            cap = cv2.VideoCapture(asset.path)
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                # Binary threshold at 10 (matching CLI behavior)
-                _, binary = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
-                masks.append(binary.astype(np.float32) / 255.0)
-            cap.release()
-        else:
-            for fname in asset.get_frame_files():
-                fpath = os.path.join(asset.path, fname)
-                mask = cv2.imread(fpath, cv2.IMREAD_GRAYSCALE)
-                if mask is None:
-                    continue
-                _, binary = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
-                masks.append(binary.astype(np.float32) / 255.0)
+            return read_video_frames(asset.path, processor=_threshold_mask)
+        masks = []
+        for fname in asset.get_frame_files():
+            fpath = os.path.join(asset.path, fname)
+            mask = cv2.imread(fpath, cv2.IMREAD_GRAYSCALE)
+            if mask is None:
+                continue
+            _, binary = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
+            masks.append(binary.astype(np.float32) / 255.0)
         return masks
