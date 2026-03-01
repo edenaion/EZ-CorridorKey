@@ -116,7 +116,7 @@ class CorridorKeyEngine:
              # Resize in Linear
              img_resized_lin = cv2.resize(image, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
              # Convert to sRGB for Model
-             img_resized = cu.to_srgb(img_resized_lin)
+             img_resized = cu.linear_to_srgb(img_resized_lin)
         else:
              # Standard sRGB Resize
              img_resized = cv2.resize(image, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)

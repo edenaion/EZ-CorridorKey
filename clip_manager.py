@@ -562,7 +562,12 @@ def run_inference(clips):
         for d in [fg_dir, matte_dir, comp_dir, proc_dir]:
             os.makedirs(d, exist_ok=True)
             
-        num_frames = min(clip.input_asset.frame_count, clip.alpha_asset.frame_count)
+        input_count = clip.input_asset.frame_count
+        alpha_count = clip.alpha_asset.frame_count
+        if input_count != alpha_count:
+            logger.warning(f"Clip '{clip.name}': frame count mismatch — input has {input_count}, alpha has {alpha_count}. Truncating to {min(input_count, alpha_count)}.")
+        num_frames = min(input_count, alpha_count)
+        skipped_frames = []
         
         input_cap = None
         alpha_cap = None
@@ -603,13 +608,19 @@ def run_inference(clips):
                 is_exr = fpath.lower().endswith('.exr')
                 if is_exr:
                     img_linear = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
-                    if img_linear is None: continue
+                    if img_linear is None:
+                        logger.warning(f"Clip '{clip.name}': failed to read input frame {i} ({fpath}), skipping.")
+                        skipped_frames.append(i)
+                        continue
                     img_linear_rgb = cv2.cvtColor(img_linear, cv2.COLOR_BGR2RGB)
                     # Support overriding EXR behavior if user picked 's'
                     img_srgb = np.maximum(img_linear_rgb, 0.0) 
                 else:
                     img_bgr = cv2.imread(fpath)
-                    if img_bgr is None: continue
+                    if img_bgr is None:
+                        logger.warning(f"Clip '{clip.name}': failed to read input frame {i} ({fpath}), skipping.")
+                        skipped_frames.append(i)
+                        continue
                     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
                     img_srgb = img_rgb.astype(np.float32) / 255.0
             
@@ -623,13 +634,14 @@ def run_inference(clips):
                 fpath = os.path.join(clip.alpha_asset.path, alpha_files[i])
                 mask_in = cv2.imread(fpath, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED)
                 
-                if mask_in is None: continue
+                if mask_in is None:
+                    logger.warning(f"Clip '{clip.name}': failed to read alpha frame {i} ({fpath}), skipping.")
+                    skipped_frames.append(i)
+                    continue
                 
                 if mask_in.ndim == 3:
-                     if mask_in.shape[2] == 3:
-                         mask_linear = mask_in[:, :, 0]
-                     else:
-                         mask_linear = mask_in
+                     # Always extract first channel regardless of channel count (3ch, 4ch, 2ch EXR)
+                     mask_linear = mask_in[:, :, 0]
                 else:
                     mask_linear = mask_in
                 
@@ -671,18 +683,24 @@ def run_inference(clips):
             # Save FG
             # pred_fg is RGB 0-1 float. Convert to BGR for OpenCV
             fg_bgr = cv2.cvtColor(pred_fg, cv2.COLOR_RGB2BGR)
-            cv2.imwrite(os.path.join(fg_dir, f"{input_stem}.exr"), fg_bgr, exr_flags)
-            
+            fg_path = os.path.join(fg_dir, f"{input_stem}.exr")
+            if not cv2.imwrite(fg_path, fg_bgr, exr_flags):
+                logger.error(f"Clip '{clip.name}': failed to write FG frame {i} ({fg_path})")
+
             # Save Matte
             if pred_alpha.ndim == 3: pred_alpha = pred_alpha[:, :, 0]
             # Matte is single channel linear float
-            cv2.imwrite(os.path.join(matte_dir, f"{input_stem}.exr"), pred_alpha, exr_flags)
-            
+            matte_path = os.path.join(matte_dir, f"{input_stem}.exr")
+            if not cv2.imwrite(matte_path, pred_alpha, exr_flags):
+                logger.error(f"Clip '{clip.name}': failed to write Matte frame {i} ({matte_path})")
+
             # 5. Generate Reference Comp
             comp_srgb = res['comp']
             # Save Comp (PNG 8-bit)
             comp_bgr = cv2.cvtColor((np.clip(comp_srgb, 0.0, 1.0) * 255.0).astype(np.uint8), cv2.COLOR_RGB2BGR)
-            cv2.imwrite(os.path.join(comp_dir, f"{input_stem}.png"), comp_bgr)
+            comp_path = os.path.join(comp_dir, f"{input_stem}.png")
+            if not cv2.imwrite(comp_path, comp_bgr):
+                logger.error(f"Clip '{clip.name}': failed to write Comp frame {i} ({comp_path})")
 
             # 6. Save Processed (RGBA EXR)
             if 'processed' in res:
@@ -690,12 +708,16 @@ def run_inference(clips):
                 proc_rgba = res['processed']
                 # Convert to BGRA for OpenCV
                 proc_bgra = cv2.cvtColor(proc_rgba, cv2.COLOR_RGBA2BGRA)
-                cv2.imwrite(os.path.join(proc_dir, f"{input_stem}.exr"), proc_bgra, exr_flags)
+                proc_path = os.path.join(proc_dir, f"{input_stem}.exr")
+                if not cv2.imwrite(proc_path, proc_bgra, exr_flags):
+                    logger.error(f"Clip '{clip.name}': failed to write Processed frame {i} ({proc_path})")
 
-        print("") 
+        print("")
         if input_cap: input_cap.release()
         if alpha_cap: alpha_cap.release()
-        logger.info(f"Clip {clip.name} Complete.")
+        if skipped_frames:
+            logger.warning(f"Clip '{clip.name}': {len(skipped_frames)} frame(s) skipped due to read failures: {skipped_frames[:20]}{'...' if len(skipped_frames) > 20 else ''}")
+        logger.info(f"Clip {clip.name} Complete. Processed {num_frames - len(skipped_frames)}/{num_frames} frames.")
 
 def organize_target(target_dir):
     """
