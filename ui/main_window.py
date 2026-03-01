@@ -292,6 +292,7 @@ class MainWindow(QMainWindow):
         # Clip browser
         self._clip_browser.clip_selected.connect(self._on_clip_selected)
         self._clip_browser.clips_dir_changed.connect(self._on_clips_dir_changed)
+        self._clip_browser.files_imported.connect(self._on_welcome_files)
 
         # Status bar buttons
         self._status_bar.run_clicked.connect(self._on_run_inference)

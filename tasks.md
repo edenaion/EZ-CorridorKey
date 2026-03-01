@@ -2,12 +2,7 @@
 
 ## Pending
 
-- **Export settings tracking**: When inference produces exports, save the settings used (color space, despill, despeckle, refiner, output formats) alongside the output — either as a sidecar JSON file in the Output/ folder, or displayed in the GUI's Exports section so users can recall what settings produced each result.
-
-- **Squished parameter fields**: Color Space dropdown and Despeckle spinbox get truncated/clipped in the right panel during inference. The 240px minimum panel width plus margins doesn't leave enough room. Need to fix layout so these fields display their full text.
-
-- **Collapsed sidebar takes too much space**: When the left clip browser is collapsed, it still occupies a full-height 28px column. Should be reduced to ONLY a tiny chevron nub at the top-left corner, with ALL horizontal space reclaimed by the dual viewer panels.
-
+- **Export settings display in GUI**: Manifest JSON is already saved alongside outputs (.corridorkey_manifest.json). Need to display these saved settings in the GUI — either in the IO tray's Exports section or as a tooltip/panel so users can recall what settings produced each result.
 
 - **Welcome screen multi-select for batch import**: Video thumbnails and video files on the welcome screen should support multi-selection. Users should be able to: (1) Ctrl+click to toggle individual files, (2) Shift+click for range selection, (3) Ctrl+A to select all, (4) Click-drag for rubber-band/marquee selection across thumbnail grid. Selected files get imported as a batch when confirmed. This enables processing multiple videos together without repeated file dialog trips.
 
@@ -18,11 +13,8 @@
 
 - **Live output mode switching during inference**: Users should be able to click between Input, FG, Matte, Comp, and Processed view modes on the right viewport while inference is still running. Since output frames are just images written to disk, switching modes should load whatever frames exist so far for that mode. Users can see partial FG, Matte, etc. results in real time as inference progresses, up to the last completed frame.
 
-- **ADD button should support folders or files**: The "+ADD" button in the clip browser sidebar should let users choose between importing a folder (image sequences) or individual file(s) (video files). Either/or choice — not limited to folder-only.
 
 - **Preferences dialog (Edit > Preferences)**: Add a settings/preferences panel accessible from the menu bar. Users can toggle options like tooltips on/off. Settings persist across sessions via QSettings.
-
-- **Cancel shows "Canceled" not "Failed"**: When a user cancels/stops inference, the status message and any UI indicators should say "Canceled" rather than "Failed". Canceled is an intentional user action, not an error.
 
 ## Done
 
@@ -36,3 +28,7 @@
 - WATCH button removed from clip browser sidebar
 - Coverage bar aligned with slider + draggable in/out markers
 - RUN/RESUME split buttons — contextual two-button layout replaces resume modal dialog
+- Squished parameter fields — fixed layout widths so Color Space and Despeckle display properly
+- Collapsed sidebar — floating chevron nub, 0px width when collapsed, full space reclaimed
+- Cancel shows "Canceled" not "Failed" — already separated: cancel path uses warning signal + "Cancelled:" prefix, error path uses error signal + QMessageBox
+- ADD button supports folders or files — QMenu choice: "Import Folder..." or "Import Video(s)...", drag-drop also accepts video files

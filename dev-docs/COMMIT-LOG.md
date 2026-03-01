@@ -4,6 +4,20 @@ Running log of all commits for development history.
 
 ---
 
+### 7aa22ee - 2026-03-01 18:29
+**Add split RUN/RESUME buttons, draggable markers, middle-click reset, and EXR write fix**
+
+Key changes:
+- Replace resume modal dialog with contextual two-button layout (RUN/RESUME)
+- Draggable in/out markers via MarkerOverlay with mouse-transparent pass-through
+- Middle-click resets parameter sliders and markers to defaults
+- Fix EXR write assertion: promote uint8 to float32 before half-float encoding
+- Scrubber slider color changed from yellow to gray
+- Tooltip forwarding through overlay via event filter
+- Debounced marker drag to prevent frame loading flood
+
+---
+
 ### d20201f - 2026-03-01
 **Add I/O frame markers, coverage bar, project persistence, and UI polish**
 

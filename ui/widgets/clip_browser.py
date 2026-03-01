@@ -152,6 +152,7 @@ class ClipBrowser(QWidget):
 
     clip_selected = Signal(ClipEntry)
     clips_dir_changed = Signal(str)
+    files_imported = Signal(list)   # list of video file paths to import
     clip_deleted = Signal(str)     # clip root_path — project folder removed
     clip_renamed = Signal(str, str)  # clip_name, new_display_name
 
@@ -449,6 +450,18 @@ class ClipBrowser(QWidget):
                 return
 
     def _on_add_clicked(self) -> None:
+        menu = QMenu(self)
+        menu.addAction("Import Folder...", self._import_folder)
+        menu.addAction("Import Video(s)...", self._import_videos)
+        # Show menu below the +ADD button
+        btn = self.sender()
+        if btn:
+            menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+        else:
+            menu.exec(self.mapToGlobal(self.rect().bottomLeft()))
+
+    def _import_folder(self) -> None:
+        """Open folder dialog for image sequence directories."""
         dir_path = QFileDialog.getExistingDirectory(
             self, "Select Clips Directory", "",
             QFileDialog.ShowDirsOnly,
@@ -457,17 +470,35 @@ class ClipBrowser(QWidget):
             self._clips_dir = dir_path
             self.clips_dir_changed.emit(dir_path)
 
+    def _import_videos(self) -> None:
+        """Open file dialog for individual video files."""
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Select Video Files", "",
+            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)",
+        )
+        if paths:
+            self.files_imported.emit(paths)
+
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
     def dropEvent(self, event) -> None:
+        from backend.project import is_video_file
+        folders = []
+        files = []
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if os.path.isdir(path):
-                self._clips_dir = path
-                self.clips_dir_changed.emit(path)
-                break
+                folders.append(path)
+            elif os.path.isfile(path) and is_video_file(path):
+                files.append(path)
+        # Prefer folder if dropped, otherwise import video files
+        if folders:
+            self._clips_dir = folders[0]
+            self.clips_dir_changed.emit(folders[0])
+        elif files:
+            self.files_imported.emit(files)
 
     def select_first(self) -> None:
         """Select the first clip in the list."""
