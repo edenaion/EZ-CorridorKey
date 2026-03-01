@@ -1,11 +1,10 @@
-"""Bottom status bar — progress, VRAM meter, GPU info, and action buttons.
+"""Bottom status bar — GPU info, progress, and action buttons.
 
-Contains:
-- [RUN INFERENCE] / [STOP] button
-- Progress bar with frame counter
-- VRAM usage meter
-- GPU name badge
-- Warning/error count indicator
+Layout (left to right):
+- GPU name + VRAM meter (left)
+- Progress bar + frame counter (center, fills)
+- Warning count
+- [RUN INFERENCE] / [STOP] button (right, primary CTA)
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from PySide6.QtCore import Qt, Signal
 
 
 class StatusBar(QWidget):
-    """Bottom bar with run/stop, progress, and GPU monitoring."""
+    """Bottom bar with GPU info, progress, and run/stop CTA."""
 
     run_clicked = Signal()
     stop_clicked = Signal()
@@ -31,38 +30,10 @@ class StatusBar(QWidget):
         layout.setContentsMargins(12, 4, 12, 4)
         layout.setSpacing(12)
 
-        # Run / Stop button
-        self._run_btn = QPushButton("RUN INFERENCE")
-        self._run_btn.setObjectName("runButton")
-        self._run_btn.setFixedWidth(160)
-        self._run_btn.clicked.connect(self.run_clicked.emit)
-        layout.addWidget(self._run_btn)
-
-        self._stop_btn = QPushButton("STOP")
-        self._stop_btn.setObjectName("stopButton")
-        self._stop_btn.setFixedWidth(80)
-        self._stop_btn.clicked.connect(self.stop_clicked.emit)
-        self._stop_btn.hide()
-        layout.addWidget(self._stop_btn)
-
-        # Progress bar
-        self._progress = QProgressBar()
-        self._progress.setFixedHeight(6)
-        self._progress.setTextVisible(False)
-        self._progress.setRange(0, 100)
-        self._progress.setValue(0)
-        layout.addWidget(self._progress, 1)
-
-        # Frame counter
-        self._frame_label = QLabel("")
-        self._frame_label.setStyleSheet("color: #999980; font-size: 11px;")
-        self._frame_label.setMinimumWidth(100)
-        layout.addWidget(self._frame_label)
-
-        # Separator
-        sep = QLabel("|")
-        sep.setStyleSheet("color: #2A2910;")
-        layout.addWidget(sep)
+        # GPU name (left)
+        self._gpu_label = QLabel("")
+        self._gpu_label.setStyleSheet("color: #808070; font-size: 10px;")
+        layout.addWidget(self._gpu_label)
 
         # VRAM meter
         vram_layout = QHBoxLayout()
@@ -88,15 +59,43 @@ class StatusBar(QWidget):
 
         layout.addLayout(vram_layout)
 
-        # GPU name
-        self._gpu_label = QLabel("")
-        self._gpu_label.setStyleSheet("color: #808070; font-size: 10px;")
-        layout.addWidget(self._gpu_label)
+        # Separator
+        sep = QLabel("|")
+        sep.setStyleSheet("color: #2A2910;")
+        layout.addWidget(sep)
+
+        # Progress bar (center, fills)
+        self._progress = QProgressBar()
+        self._progress.setFixedHeight(6)
+        self._progress.setTextVisible(False)
+        self._progress.setRange(0, 100)
+        self._progress.setValue(0)
+        layout.addWidget(self._progress, 1)
+
+        # Frame counter
+        self._frame_label = QLabel("")
+        self._frame_label.setStyleSheet("color: #999980; font-size: 11px;")
+        self._frame_label.setMinimumWidth(100)
+        layout.addWidget(self._frame_label)
 
         # Warning count
         self._warn_label = QLabel("")
         self._warn_label.setStyleSheet("color: #FFA500; font-size: 10px;")
         layout.addWidget(self._warn_label)
+
+        # Run / Stop button (right, primary CTA like Topaz Export)
+        self._run_btn = QPushButton("RUN INFERENCE")
+        self._run_btn.setObjectName("runButton")
+        self._run_btn.setFixedWidth(160)
+        self._run_btn.clicked.connect(self.run_clicked.emit)
+        layout.addWidget(self._run_btn)
+
+        self._stop_btn = QPushButton("STOP")
+        self._stop_btn.setObjectName("stopButton")
+        self._stop_btn.setFixedWidth(80)
+        self._stop_btn.clicked.connect(self.stop_clicked.emit)
+        self._stop_btn.hide()
+        layout.addWidget(self._stop_btn)
 
         self._warning_count = 0
 

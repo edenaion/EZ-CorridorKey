@@ -21,7 +21,7 @@ import cv2
 import numpy as np
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QVBoxLayout, QWidget,
-    QLabel, QHBoxLayout, QMessageBox,
+    QLabel, QHBoxLayout, QMessageBox, QStackedWidget,
 )
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import QShortcut, QKeySequence, QAction, QImage
@@ -39,6 +39,7 @@ from ui.widgets.preview_viewport import PreviewViewport
 from ui.widgets.parameter_panel import ParameterPanel
 from ui.widgets.status_bar import StatusBar
 from ui.widgets.queue_panel import QueuePanel
+from ui.widgets.welcome_screen import WelcomeScreen
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
 from ui.workers.thumbnail_worker import ThumbnailGenerator
@@ -144,14 +145,28 @@ class MainWindow(QMainWindow):
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(12, 6, 12, 6)
 
-        brand = QLabel("CORRIDORKEY")
+        brand = QLabel('<span style="color:#FFF203;">CORRIDOR</span><span style="color:#2CC350;">KEY</span>')
         brand.setObjectName("brandMark")
         top_bar.addWidget(brand)
         top_bar.addStretch()
 
         main_layout.addLayout(top_bar)
 
-        # 3-panel splitter
+        # Stacked widget: page 0 = welcome, page 1 = workspace
+        self._stack = QStackedWidget()
+
+        # Page 0 — Welcome/drop screen
+        self._welcome = WelcomeScreen()
+        self._welcome.folder_selected.connect(self._on_welcome_folder)
+        self._welcome.files_selected.connect(self._on_welcome_files)
+        self._stack.addWidget(self._welcome)
+
+        # Page 1 — Workspace (3-panel splitter + queue)
+        workspace = QWidget()
+        ws_layout = QVBoxLayout(workspace)
+        ws_layout.setContentsMargins(0, 0, 0, 0)
+        ws_layout.setSpacing(0)
+
         self._splitter = QSplitter(Qt.Horizontal)
 
         # Left — Clip Browser
@@ -172,12 +187,16 @@ class MainWindow(QMainWindow):
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
 
-        main_layout.addWidget(self._splitter, 1)
+        ws_layout.addWidget(self._splitter, 1)
 
         # Queue panel (collapsible, above status bar)
         self._queue_panel = QueuePanel(self._service.job_queue)
-        self._queue_panel.hide()  # hidden by default, shown when jobs are queued
-        main_layout.addWidget(self._queue_panel)
+        self._queue_panel.hide()
+        ws_layout.addWidget(self._queue_panel)
+
+        self._stack.addWidget(workspace)
+
+        main_layout.addWidget(self._stack, 1)
 
     def _build_status_bar(self) -> None:
         self._status_bar = StatusBar()
@@ -245,6 +264,8 @@ class MainWindow(QMainWindow):
     def _on_clips_dir_changed(self, dir_path: str) -> None:
         logger.info(f"Scanning clips directory: {dir_path}")
         self._clips_dir = dir_path
+        # Ensure workspace is visible (may come from welcome screen or menu)
+        self._switch_to_workspace()
         try:
             clips = self._service.scan_clips(dir_path)
             self._clip_model.set_clips(clips)
@@ -267,6 +288,26 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Failed to scan clips: {e}")
             QMessageBox.critical(self, "Scan Error", f"Failed to scan clips directory:\n{e}")
+
+    def _switch_to_workspace(self) -> None:
+        """Switch from welcome screen to the 3-panel workspace."""
+        self._stack.setCurrentIndex(1)
+
+    @Slot(str)
+    def _on_welcome_folder(self, dir_path: str) -> None:
+        """Handle folder selected from welcome screen."""
+        self._switch_to_workspace()
+        self._on_clips_dir_changed(dir_path)
+
+    @Slot(list)
+    def _on_welcome_files(self, file_paths: list) -> None:
+        """Handle files selected from welcome screen — use parent dir as clips dir."""
+        if not file_paths:
+            return
+        # Use the directory of the first file as the clips directory
+        dir_path = os.path.dirname(file_paths[0])
+        self._switch_to_workspace()
+        self._on_clips_dir_changed(dir_path)
 
     def _on_open_folder(self) -> None:
         self._clip_browser._on_add_clicked()

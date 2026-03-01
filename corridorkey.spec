@@ -21,8 +21,9 @@ ROOT = os.path.dirname(os.path.abspath(SPEC))
 
 # Data files to bundle
 datas = [
-    # Theme QSS and fonts
+    # Theme QSS, fonts, and icon
     (os.path.join(ROOT, 'ui', 'theme', 'corridor_theme.qss'), os.path.join('ui', 'theme')),
+    (os.path.join(ROOT, 'ui', 'theme', 'corridorkey.png'), os.path.join('ui', 'theme')),
 ]
 
 # Add fonts directory if it exists
@@ -94,7 +95,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # TODO: Add icon when available
+    icon=os.path.join(ROOT, 'ui', 'theme', 'corridorkey.ico'),
 )
 
 coll = COLLECT(

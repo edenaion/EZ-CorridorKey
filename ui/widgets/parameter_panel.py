@@ -54,7 +54,7 @@ class ParameterPanel(QWidget):
         inf_layout.addLayout(cs_row)
 
         # Despill Strength (slider 0-10 → 0.0-1.0)
-        self._despill_label = QLabel("Despill: 10")
+        self._despill_label = QLabel("Despill: 1.0")
         inf_layout.addWidget(self._despill_label)
         self._despill_slider = QSlider(Qt.Horizontal)
         self._despill_slider.setRange(0, 10)
@@ -167,7 +167,8 @@ class ParameterPanel(QWidget):
             self.params_changed.emit()
 
     def _on_despill_changed(self, value: int) -> None:
-        self._despill_label.setText(f"Despill: {value}")
+        display = value / 10.0
+        self._despill_label.setText(f"Despill: {display:.1f}")
         self._emit_changed()
 
     def _on_refiner_changed(self, value: int) -> None:

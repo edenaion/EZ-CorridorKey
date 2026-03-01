@@ -120,7 +120,6 @@ QLabel#clipName {
 QLabel#brandMark {
     font-size: 16px;
     font-weight: 700;
-    color: #FFF203;
     letter-spacing: 2px;
 }
 
@@ -196,14 +195,14 @@ QSlider::groove:horizontal {
 }
 
 QSlider::handle:horizontal {
-    background: #FFF203;
+    background: #2CC350;
     width: 14px;
     height: 14px;
     margin: -5px 0;
 }
 
 QSlider::handle:horizontal:hover {
-    background: #FFFF66;
+    background: #3DD662;
 }
 
 QSlider::sub-page:horizontal {
@@ -400,6 +399,36 @@ ViewModeBar {
 /* === Split View === */
 SplitViewWidget {
     background-color: #0A0A00;
+}
+
+/* === Welcome Screen === */
+QWidget#welcomeScreen {
+    background-color: #141300;
+    border: 2px dashed #454430;
+    margin: 24px;
+}
+
+QLabel#welcomePrompt {
+    font-size: 16px;
+    font-weight: 600;
+    color: #999980;
+}
+
+QPushButton#welcomeBrowse {
+    background-color: #2CC350;
+    color: #000000;
+    font-weight: 700;
+    font-size: 14px;
+    border: none;
+    padding: 10px 24px;
+}
+
+QPushButton#welcomeBrowse:hover {
+    background-color: #3DD662;
+}
+
+QPushButton#welcomeBrowse:pressed {
+    background-color: #22A040;
 }
 
 /* === VRAM Meter === */

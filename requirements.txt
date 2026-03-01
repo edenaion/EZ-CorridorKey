@@ -15,4 +15,6 @@ tqdm
 accelerate
 transformers
 matplotlib
+pynvml
 PySide6>=6.7.0
+tzdata

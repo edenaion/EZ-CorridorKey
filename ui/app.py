@@ -6,7 +6,7 @@ import os
 import logging
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtGui import QFontDatabase, QFont
+from PySide6.QtGui import QFontDatabase, QFont, QIcon
 from PySide6.QtCore import Qt
 
 from ui.theme import load_stylesheet
@@ -37,8 +37,10 @@ def create_app(argv: list[str] | None = None) -> QApplication:
         base = os.path.dirname(__file__)
     font_search_paths = [
         os.path.join(base, "theme", "fonts") if not getattr(sys, 'frozen', False) else os.path.join(base, "ui", "theme", "fonts"),
-        os.path.expanduser("~/.fonts"),
-        "C:/Windows/Fonts",
+        os.path.expanduser("~/.fonts"),                    # Linux
+        os.path.expanduser("~/Library/Fonts"),             # macOS
+        "/System/Library/Fonts",                           # macOS system
+        "C:/Windows/Fonts",                                # Windows
     ]
     for font_dir in font_search_paths:
         if not os.path.isdir(font_dir):
@@ -54,9 +56,15 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     else:
         # Fallback — use system sans-serif
         logger.info("Open Sans not found, using system sans-serif")
-        app.setFont(QFont("Segoe UI", 13))
+        fallback = "Segoe UI" if sys.platform == "win32" else "Helvetica"
+        app.setFont(QFont(fallback, 13))
 
     # Apply brand stylesheet
     app.setStyleSheet(load_stylesheet())
+
+    # Set app icon (window title bar + taskbar)
+    icon_path = os.path.join(base, "theme", "corridorkey.png") if not getattr(sys, 'frozen', False) else os.path.join(base, "ui", "theme", "corridorkey.png")
+    if os.path.isfile(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     return app

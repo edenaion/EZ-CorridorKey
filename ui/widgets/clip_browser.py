@@ -16,10 +16,10 @@ import logging
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QListView, QFileDialog, QAbstractItemView,
+    QListView, QFileDialog, QAbstractItemView, QStyledItemDelegate,
 )
 from PySide6.QtCore import Qt, Signal, QModelIndex, QTimer
-from PySide6.QtGui import QStyledItemDelegate, QColor, QImage
+from PySide6.QtGui import QColor, QImage
 
 from ui.models.clip_model import ClipListModel
 from backend import ClipEntry, ClipState, scan_clips_dir

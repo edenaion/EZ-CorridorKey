@@ -55,10 +55,23 @@ class PreviewViewport(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # View mode bar (top)
+        # Top bar: view modes (left) + clip info (right)
+        top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(0, 0, 0, 0)
+        top_bar.setSpacing(0)
+
         self._mode_bar = ViewModeBar()
         self._mode_bar.mode_changed.connect(self._on_mode_changed)
-        layout.addWidget(self._mode_bar)
+        top_bar.addWidget(self._mode_bar)
+
+        self._clip_info = QLabel("")
+        self._clip_info.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._clip_info.setStyleSheet(
+            "color: #808070; font-size: 11px; padding-right: 8px; background: #0E0D00;"
+        )
+        top_bar.addWidget(self._clip_info)
+
+        layout.addLayout(top_bar)
 
         # Split view widget (center, fills space)
         self._split_view = SplitViewWidget()
@@ -113,6 +126,9 @@ class PreviewViewport(QWidget):
         # Configure scrubber
         self._scrubber.set_range(self._frame_index.frame_count)
 
+        # Update clip info label
+        self._update_clip_info(clip)
+
         if self._frame_index.frame_count > 0:
             self._navigate_to(0)
         else:
@@ -153,10 +169,26 @@ class PreviewViewport(QWidget):
         """Show placeholder text."""
         self._split_view.set_placeholder(text)
         self._scrubber.set_range(0)
+        self._clip_info.setText("")
         self._clip = None
         self._clip_name = ""
         self._frame_index = None
         self._current_stem_idx = -1
+
+    def _update_clip_info(self, clip: ClipEntry) -> None:
+        """Update the clip info label with resolution, frame count, and type."""
+        parts = []
+        asset = clip.input_asset
+        if asset:
+            # Frame count
+            parts.append(f"{asset.frame_count} frames")
+            # Asset type
+            if asset.asset_type == "video":
+                parts.append("video")
+            else:
+                parts.append("sequence")
+        parts.append(clip.state.value)
+        self._clip_info.setText("  \u00B7  ".join(parts))  # middle dot separator
 
     def set_split_mode(self, enabled: bool) -> None:
         """Toggle split view on/off."""

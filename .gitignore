@@ -6,6 +6,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 env.bak/
 venv.bak/
@@ -21,6 +22,9 @@ logs/
 CorridorKey_remote.bat
 .ipynb_checkpoints/
 .DS_Store
+
+# Screenshots (may contain PII)
+screenshot*.png
 
 # IDE
 .vscode/
