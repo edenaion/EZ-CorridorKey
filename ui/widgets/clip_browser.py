@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QListView, QFileDialog, QAbstractItemView,
 )
 from PySide6.QtCore import Qt, Signal, QModelIndex, QTimer
-from PySide6.QtGui import QStyledItemDelegate, QColor
+from PySide6.QtGui import QStyledItemDelegate, QColor, QImage
 
 from ui.models.clip_model import ClipListModel
 from backend import ClipEntry, ClipState, scan_clips_dir
@@ -38,6 +38,11 @@ class ClipCardDelegate(QStyledItemDelegate):
         painter.save()
         rect = option.rect
 
+        # Thumbnail area (left side)
+        thumb_w, thumb_h = 60, 40
+        thumb_left = rect.x() + 4
+        text_left = thumb_left + thumb_w + 6  # text starts after thumbnail
+
         # Selected background
         if option.state & QAbstractItemView.State(0x8000):  # State_Selected
             painter.fillRect(rect, QColor("#252413"))
@@ -50,7 +55,18 @@ class ClipCardDelegate(QStyledItemDelegate):
         else:
             painter.fillRect(rect, QColor("#1E1D13"))
 
-        # State badge
+        # Thumbnail
+        thumb = index.data(ClipListModel.ThumbnailRole)
+        thumb_y = rect.y() + (rect.height() - thumb_h) // 2
+        if isinstance(thumb, QImage) and not thumb.isNull():
+            painter.drawImage(thumb_left, thumb_y, thumb)
+        else:
+            # Placeholder dark rect
+            painter.fillRect(thumb_left, thumb_y, thumb_w, thumb_h, QColor("#0A0A00"))
+            painter.setPen(QColor("#3A3A30"))
+            painter.drawRect(thumb_left, thumb_y, thumb_w - 1, thumb_h - 1)
+
+        # State badge (after thumbnail)
         state_colors = {
             ClipState.RAW: "#808070",
             ClipState.MASKED: "#009ADA",
@@ -64,7 +80,7 @@ class ClipCardDelegate(QStyledItemDelegate):
         badge_font.setPointSize(9)
         badge_font.setBold(True)
         painter.setFont(badge_font)
-        badge_rect = rect.adjusted(8, 6, -rect.width() + 78, 0)
+        badge_rect = rect.adjusted(text_left - rect.x(), 6, -rect.width() + text_left - rect.x() + 70, 0)
         painter.drawText(badge_rect, Qt.AlignLeft | Qt.AlignTop, clip.state.value)
 
         # Processing indicator
@@ -79,7 +95,7 @@ class ClipCardDelegate(QStyledItemDelegate):
         name_font.setPointSize(11)
         name_font.setBold(True)
         painter.setFont(name_font)
-        name_rect = rect.adjusted(80, 4, -8, -16)
+        name_rect = rect.adjusted(text_left - rect.x() + 48, 4, -8, -16)
         painter.drawText(name_rect, Qt.AlignLeft | Qt.AlignVCenter, clip.name)
 
         # Frame count
@@ -92,7 +108,7 @@ class ClipCardDelegate(QStyledItemDelegate):
             detail_text = f"{clip.input_asset.frame_count} frames"
             if clip.input_asset.asset_type == "video":
                 detail_text += " (video)"
-            detail_rect = rect.adjusted(80, 18, -8, -2)
+            detail_rect = rect.adjusted(text_left - rect.x() + 48, 18, -8, -2)
             painter.drawText(detail_rect, Qt.AlignLeft | Qt.AlignVCenter, detail_text)
 
         # Warning indicator
@@ -159,8 +175,8 @@ class ClipBrowser(QWidget):
         delegate = ClipCardDelegate(self._list_view)
         self._list_view.setItemDelegate(delegate)
 
-        # Fixed row height
-        self._list_view.setStyleSheet("QListView::item { height: 44px; }")
+        # Fixed row height (48px to fit 40px thumbnail + padding)
+        self._list_view.setStyleSheet("QListView::item { height: 48px; }")
 
         layout.addWidget(self._list_view, 1)
 

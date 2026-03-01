@@ -1,0 +1,106 @@
+"""View mode toggle bar — switches between Input/FG/Matte/Comp/Processed.
+
+Uses QButtonGroup with exclusive selection. Active button highlighted
+with brand yellow. Buttons are enabled/disabled based on which output
+directories actually have frames (via FrameIndex availability).
+
+Codex finding: dropped ALPHA mode (identical to MATTE source).
+"""
+from __future__ import annotations
+
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QButtonGroup
+from PySide6.QtCore import Signal
+
+from ui.preview.frame_index import ViewMode
+
+
+# Display labels for each mode
+_MODE_LABELS: dict[ViewMode, str] = {
+    ViewMode.INPUT: "INPUT",
+    ViewMode.FG: "FG",
+    ViewMode.MATTE: "MATTE",
+    ViewMode.COMP: "COMP",
+    ViewMode.PROCESSED: "PROC",
+}
+
+
+class ViewModeBar(QWidget):
+    """Horizontal bar of toggle buttons for preview view modes."""
+
+    mode_changed = Signal(str)  # emits ViewMode.value
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(30)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 2, 8, 2)
+        layout.setSpacing(2)
+
+        self._button_group = QButtonGroup(self)
+        self._button_group.setExclusive(True)
+        self._buttons: dict[ViewMode, QPushButton] = {}
+
+        for i, mode in enumerate(ViewMode):
+            btn = QPushButton(_MODE_LABELS[mode])
+            btn.setCheckable(True)
+            btn.setEnabled(False)
+            btn.setFixedHeight(24)
+            btn.setMinimumWidth(50)
+            btn.setStyleSheet(self._button_style(False))
+            self._buttons[mode] = btn
+            self._button_group.addButton(btn, i)
+            layout.addWidget(btn)
+
+        # Default to COMP
+        self._buttons[ViewMode.COMP].setChecked(True)
+
+        self._button_group.idClicked.connect(self._on_mode_clicked)
+        layout.addStretch()
+
+    def set_available_modes(self, modes: list[ViewMode]) -> None:
+        """Enable buttons for modes that have frames."""
+        mode_set = set(modes)
+        for mode, btn in self._buttons.items():
+            btn.setEnabled(mode in mode_set)
+
+        # If current mode is unavailable, switch to first available
+        current = self.current_mode()
+        if current not in mode_set and mode_set:
+            # Prefer COMP, then INPUT, then first available
+            for fallback in [ViewMode.COMP, ViewMode.INPUT]:
+                if fallback in mode_set:
+                    self._buttons[fallback].setChecked(True)
+                    self._on_mode_clicked(list(ViewMode).index(fallback))
+                    return
+            first = list(mode_set)[0]
+            self._buttons[first].setChecked(True)
+            self._on_mode_clicked(list(ViewMode).index(first))
+
+    def current_mode(self) -> ViewMode:
+        """Return the currently selected ViewMode."""
+        checked_id = self._button_group.checkedId()
+        if checked_id >= 0:
+            return list(ViewMode)[checked_id]
+        return ViewMode.COMP
+
+    def _on_mode_clicked(self, button_id: int) -> None:
+        mode = list(ViewMode)[button_id]
+        # Update button styles
+        for m, btn in self._buttons.items():
+            btn.setStyleSheet(self._button_style(m == mode))
+        self.mode_changed.emit(mode.value)
+
+    @staticmethod
+    def _button_style(active: bool) -> str:
+        if active:
+            return (
+                "QPushButton { background-color: #FFF203; color: #000000; "
+                "font-weight: 700; font-size: 10px; padding: 2px 6px; border: none; }"
+            )
+        return (
+            "QPushButton { background-color: #1A1900; color: #808070; "
+            "font-size: 10px; padding: 2px 6px; border: 1px solid #2A2910; }"
+            "QPushButton:hover { border-color: #454430; color: #E0E0E0; }"
+            "QPushButton:disabled { color: #3A3A30; border-color: #1A1900; }"
+        )

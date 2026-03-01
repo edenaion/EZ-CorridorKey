@@ -88,10 +88,14 @@ class ClipAsset:
                 self.frame_count = 0
 
     def get_frame_files(self) -> list[str]:
-        """Return sorted list of frame filenames for sequence assets."""
+        """Return naturally sorted list of frame filenames for sequence assets.
+
+        Uses natural sort so frame_2 sorts before frame_10 (not lexicographic).
+        """
         if self.asset_type != 'sequence' or not os.path.isdir(self.path):
             return []
-        return sorted([f for f in os.listdir(self.path) if _is_image_file(f)])
+        from ui.preview.natural_sort import natsorted
+        return natsorted([f for f in os.listdir(self.path) if _is_image_file(f)])
 
 
 @dataclass

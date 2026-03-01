@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QLabel, QHBoxLayout, QMessageBox,
 )
 from PySide6.QtCore import Qt, Slot, QTimer
-from PySide6.QtGui import QShortcut, QKeySequence
+from PySide6.QtGui import QShortcut, QKeySequence, QAction
 
 from backend import (
     CorridorKeyService, ClipEntry, ClipState, InferenceParams, JobType, JobStatus,
@@ -35,6 +35,7 @@ from ui.widgets.status_bar import StatusBar
 from ui.widgets.queue_panel import QueuePanel
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
+from ui.workers.thumbnail_worker import ThumbnailGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,10 @@ class MainWindow(QMainWindow):
 
         # Data model
         self._clip_model = ClipListModel()
+
+        # Thumbnail generator (background, Codex: no QPixmap off main thread)
+        self._thumb_gen = ThumbnailGenerator(self)
+        self._thumb_gen.thumbnail_ready.connect(self._clip_model.set_thumbnail)
 
         # Build UI
         self._build_menu_bar()
@@ -89,6 +94,15 @@ class MainWindow(QMainWindow):
         view_menu = menu_bar.addMenu("View")
         view_menu.addAction("Reset Layout", self._reset_layout)
         view_menu.addAction("Toggle Queue Panel", self._toggle_queue_panel)
+
+        # Split view toggle (checkable)
+        self._split_action = QAction("Split View", self)
+        self._split_action.setCheckable(True)
+        self._split_action.setShortcut(QKeySequence("Ctrl+D"))
+        self._split_action.triggered.connect(self._on_toggle_split)
+        view_menu.addAction(self._split_action)
+
+        view_menu.addAction("Reset Zoom", self._on_reset_zoom)
 
         # Help menu
         help_menu = menu_bar.addMenu("Help")
@@ -145,7 +159,7 @@ class MainWindow(QMainWindow):
         self.centralWidget().layout().addWidget(self._status_bar)
 
     def _setup_shortcuts(self) -> None:
-        """Keyboard shortcuts (Codex item 33)."""
+        """Keyboard shortcuts."""
         # Escape — stop/cancel
         QShortcut(QKeySequence(Qt.Key_Escape), self, self._on_stop_inference)
         # Ctrl+R — run inference on selected clip
@@ -186,11 +200,9 @@ class MainWindow(QMainWindow):
     @Slot(ClipEntry)
     def _on_clip_selected(self, clip: ClipEntry) -> None:
         self._current_clip = clip
-        self._preview.show_placeholder(f"Selected: {clip.name}\nState: {clip.state.value}")
 
-        # If clip has outputs, show first frame
-        if clip.has_outputs:
-            self._preview.load_frame_from_dir(clip.output_dir, 0)
+        # Load clip into preview (builds FrameIndex, configures scrubber + modes)
+        self._preview.set_clip(clip)
 
         # Enable run button only for READY or COMPLETE (reprocess) clips
         can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
@@ -206,6 +218,15 @@ class MainWindow(QMainWindow):
         try:
             clips = self._service.scan_clips(dir_path)
             self._clip_model.set_clips(clips)
+
+            # Generate thumbnails for all clips (background)
+            for clip in clips:
+                if clip.input_asset:
+                    self._thumb_gen.generate(
+                        clip.name, clip.root_path,
+                        clip.input_asset.path, clip.input_asset.asset_type,
+                    )
+
             if clips:
                 self._clip_browser.select_first()
             logger.info(f"Found {len(clips)} clips")
@@ -215,6 +236,16 @@ class MainWindow(QMainWindow):
 
     def _on_open_folder(self) -> None:
         self._clip_browser._on_add_clicked()
+
+    # ── View Controls ──
+
+    def _on_toggle_split(self, checked: bool) -> None:
+        """Toggle split view in preview."""
+        self._preview.set_split_mode(checked)
+
+    def _on_reset_zoom(self) -> None:
+        """Reset preview zoom to fit."""
+        self._preview.reset_zoom()
 
     # ── Inference Control ──
 

@@ -385,6 +385,23 @@ QLabel#previewLabel {
     background-color: #0A0A00;
 }
 
+/* === Frame Scrubber === */
+FrameScrubber {
+    background-color: #0E0D00;
+    border-top: 1px solid #2A2910;
+}
+
+/* === View Mode Bar === */
+ViewModeBar {
+    background-color: #0E0D00;
+    border-bottom: 1px solid #2A2910;
+}
+
+/* === Split View === */
+SplitViewWidget {
+    background-color: #0A0A00;
+}
+
 /* === VRAM Meter === */
 QProgressBar#vramMeter {
     background: #454430;

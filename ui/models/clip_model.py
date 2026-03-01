@@ -6,8 +6,10 @@ the view updates automatically.
 """
 from __future__ import annotations
 
+from collections import OrderedDict
+
 from PySide6.QtCore import QAbstractListModel, QModelIndex, Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QImage
 
 from backend import ClipEntry, ClipState
 
@@ -31,12 +33,17 @@ class ClipListModel(QAbstractListModel):
 
     ClipEntryRole = Qt.UserRole
     StateColorRole = Qt.UserRole + 1
+    ThumbnailRole = Qt.UserRole + 2
 
     clip_count_changed = Signal(int)  # emitted when clip count changes
+
+    # Max cached thumbnails (LRU, Codex: avoid unbounded memory)
+    _THUMB_CACHE_MAX = 100
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._clips: list[ClipEntry] = []
+        self._thumbnails: OrderedDict[str, QImage] = OrderedDict()
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self._clips)
@@ -53,6 +60,8 @@ class ClipListModel(QAbstractListModel):
             return clip
         elif role == self.StateColorRole:
             return QColor(_STATE_COLORS.get(clip.state, "#808070"))
+        elif role == self.ThumbnailRole:
+            return self._thumbnails.get(clip.name)
         elif role == Qt.ToolTipRole:
             lines = [f"State: {clip.state.value}"]
             if clip.input_asset:
@@ -108,6 +117,20 @@ class ClipListModel(QAbstractListModel):
     def clips_by_state(self, state: ClipState) -> list[ClipEntry]:
         """Filter clips by state."""
         return [c for c in self._clips if c.state == state]
+
+    def set_thumbnail(self, clip_name: str, qimage: QImage) -> None:
+        """Store a thumbnail QImage for a clip (called from main thread)."""
+        self._thumbnails[clip_name] = qimage
+        self._thumbnails.move_to_end(clip_name)
+        # Evict oldest if over limit
+        while len(self._thumbnails) > self._THUMB_CACHE_MAX:
+            self._thumbnails.popitem(last=False)
+        # Notify view to repaint
+        for i, clip in enumerate(self._clips):
+            if clip.name == clip_name:
+                idx = self.index(i)
+                self.dataChanged.emit(idx, idx, [self.ThumbnailRole])
+                return
 
     @property
     def clips(self) -> list[ClipEntry]:
