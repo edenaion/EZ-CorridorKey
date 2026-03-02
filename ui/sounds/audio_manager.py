@@ -52,7 +52,7 @@ class UIAudio:
     _loaded = False
     _muted = False
     _last_play_time: float = 0.0
-    _DEBOUNCE_MS = 0.06  # 60ms debounce — prevents double-fire on dialog close
+    _DEBOUNCE_MS = 0.20  # 200ms debounce — prevents double-fire on dialog close
 
     @classmethod
     def _ensure_loaded(cls) -> None:
