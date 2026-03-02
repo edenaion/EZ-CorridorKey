@@ -2,12 +2,12 @@
 
 Layout:
     ┌─[CORRIDORKEY]──────────────────[GPU | VRAM ██ X/YGB]─┐
-    ├──────────┬──────────┬──────────┬──────────────────────┤
-    │  Clips   │ INPUT    │ OUTPUT   │  Parameters          │
-    │  Browser │ Viewer   │ Viewer   │    Panel             │
-    │ (220px)  │ (fills)  │ (fills)  │  (280px)             │
-    ├──────────┴──────────┴──────────┴──────────────────────┤
-    │  INPUT (N)               │  EXPORTS (N)               │
+    ├──────────────────────┬───────────────────────────────┤
+    │  INPUT    │ OUTPUT   │  Parameters                    │
+    │  Viewer   │ Viewer   │    Panel                       │
+    │  (fills)  │ (fills)  │  (280px)                       │
+    ├───────────┴──────────┴───────────────────────────────┤
+    │  INPUT (N)  [+ADD]       │  EXPORTS (N)               │
     ├──────────────────────────────────────────────────────┤
     │  Queue Panel (collapsible, per-job progress)         │
     ├──────────────────────────────────────────────────────┤
@@ -25,7 +25,7 @@ import numpy as np
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QVBoxLayout, QWidget,
     QLabel, QHBoxLayout, QMessageBox, QStackedWidget,
-    QProgressBar, QFileDialog,
+    QProgressBar, QFileDialog, QInputDialog,
 )
 from PySide6.QtCore import Qt, Slot, QTimer
 from PySide6.QtGui import (
@@ -41,7 +41,6 @@ from backend.errors import CorridorKeyError
 from backend.job_queue import GPUJob
 
 from ui.models.clip_model import ClipListModel
-from ui.widgets.clip_browser import ClipBrowser
 from ui.widgets.dual_viewer import DualViewerPanel
 from ui.widgets.parameter_panel import ParameterPanel
 from ui.widgets.status_bar import StatusBar
@@ -79,6 +78,8 @@ class MainWindow(QMainWindow):
         # Track active job ID — set only once when job starts, not on every progress
         self._active_job_id: str | None = None
         self._bg_cache: QImage | None = None
+        # Batch pipeline: clip names queued for GVM→inference auto-chain
+        self._batch_clips: set[str] = set()
 
         # Data model
         self._clip_model = ClipListModel()
@@ -150,6 +151,9 @@ class MainWindow(QMainWindow):
         # Edit menu
         edit_menu = menu_bar.addMenu("Edit")
         edit_menu.addAction("Preferences...", self._show_preferences)
+        edit_menu.addSeparator()
+        edit_menu.addAction("Export Annotation Masks", self._on_export_masks)
+        edit_menu.addAction("Clear Annotations", self._on_clear_annotations)
 
         # View menu
         view_menu = menu_bar.addMenu("View")
@@ -229,17 +233,13 @@ class MainWindow(QMainWindow):
         ws_layout.setContentsMargins(0, 0, 0, 0)
         ws_layout.setSpacing(0)
 
-        # Vertical splitter: top = 3-panel horizontal splitter, bottom = I/O tray
+        # Vertical splitter: top = viewer+params, bottom = I/O tray
         self._vsplitter = QSplitter(Qt.Vertical)
 
-        # Horizontal splitter: clip browser | dual viewer | param panel
+        # Horizontal splitter: dual viewer | param panel
         self._splitter = QSplitter(Qt.Horizontal)
 
-        # Left — Clip Browser
-        self._clip_browser = ClipBrowser(self._clip_model)
-        self._splitter.addWidget(self._clip_browser)
-
-        # Center — Dual Viewer (input + output side by side)
+        # Left — Dual Viewer (input + output side by side)
         self._dual_viewer = DualViewerPanel()
         self._splitter.addWidget(self._dual_viewer)
 
@@ -247,15 +247,12 @@ class MainWindow(QMainWindow):
         self._param_panel = ParameterPanel()
         self._splitter.addWidget(self._param_panel)
 
-        # Set initial sizes (220, fill, 280)
-        self._splitter.setSizes([220, 700, 280])
-        self._splitter.setStretchFactor(0, 0)
-        self._splitter.setStretchFactor(1, 1)
-        self._splitter.setStretchFactor(2, 0)
-        # Allow clip browser to collapse to 0px
-        self._splitter.setCollapsible(0, True)
+        # Viewer fills, param panel fixed width
+        self._splitter.setSizes([920, 280])
+        self._splitter.setStretchFactor(0, 1)
+        self._splitter.setStretchFactor(1, 0)
+        self._splitter.setCollapsible(0, False)
         self._splitter.setCollapsible(1, False)
-        self._splitter.setCollapsible(2, False)
 
         self._vsplitter.addWidget(self._splitter)
 
@@ -263,9 +260,11 @@ class MainWindow(QMainWindow):
         self._io_tray = IOTrayPanel(self._clip_model)
         self._vsplitter.addWidget(self._io_tray)
 
-        # Top fills, tray is fixed height
+        # Top fills by default, tray can be dragged up freely
         self._vsplitter.setStretchFactor(0, 1)
         self._vsplitter.setStretchFactor(1, 0)
+        self._vsplitter.setCollapsible(0, False)
+        self._vsplitter.setCollapsible(1, False)
         self._vsplitter.setSizes([600, 140])
 
         ws_layout.addWidget(self._vsplitter, 1)
@@ -287,8 +286,8 @@ class MainWindow(QMainWindow):
 
     def _setup_shortcuts(self) -> None:
         """Keyboard shortcuts."""
-        # Escape — stop/cancel
-        QShortcut(QKeySequence(Qt.Key_Escape), self, self._on_stop_inference)
+        # Escape — stop/cancel + exit annotation mode
+        QShortcut(QKeySequence(Qt.Key_Escape), self, self._on_escape)
         # Ctrl+R — run inference on selected clip
         QShortcut(QKeySequence("Ctrl+R"), self, self._on_run_inference)
         # Ctrl+Shift+R — run all ready clips
@@ -299,16 +298,142 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Alt+I"), self, self._clear_in_out)
         # Space — play/pause
         QShortcut(QKeySequence(Qt.Key_Space), self, self._toggle_playback)
+        # Annotation: 1 = green (foreground), 2 = red (background)
+        QShortcut(QKeySequence(Qt.Key_1), self, self._toggle_annotation_fg)
+        QShortcut(QKeySequence(Qt.Key_2), self, self._toggle_annotation_bg)
+        # Ctrl+Z — undo annotation stroke
+        QShortcut(QKeySequence("Ctrl+Z"), self, self._undo_annotation)
 
     def _toggle_playback(self) -> None:
         """Forward Space key to the scrubber's play/pause toggle."""
         self._dual_viewer.toggle_playback()
 
+    def _on_escape(self) -> None:
+        """Escape: exit annotation mode first, then fall through to stop."""
+        iv = self._dual_viewer.input_viewer
+        if iv.annotation_mode:
+            iv.set_annotation_mode(None)
+            return
+        self._on_stop_inference()
+
+    def _toggle_annotation_fg(self) -> None:
+        """Hotkey 1: toggle green (foreground) annotation brush."""
+        iv = self._dual_viewer.input_viewer
+        if iv.annotation_mode == "fg":
+            iv.set_annotation_mode(None)
+        else:
+            iv.set_annotation_mode("fg")
+
+    def _toggle_annotation_bg(self) -> None:
+        """Hotkey 2: toggle red (background) annotation brush."""
+        iv = self._dual_viewer.input_viewer
+        if iv.annotation_mode == "bg":
+            iv.set_annotation_mode(None)
+        else:
+            iv.set_annotation_mode("bg")
+
+    def _undo_annotation(self) -> None:
+        """Ctrl+Z: undo last annotation stroke on current frame."""
+        iv = self._dual_viewer.input_viewer
+        if iv.annotation_mode and iv.current_stem_index >= 0:
+            if iv.annotation_model.undo(iv.current_stem_index):
+                iv._split_view.update()
+
+    def _on_export_masks(self) -> None:
+        """Export annotation strokes as VideoMamaMaskHint PNGs and refresh clip."""
+        clip = self._current_clip
+        if clip is None:
+            return
+        iv = self._dual_viewer.input_viewer
+        model = iv.annotation_model
+        if not model.has_annotations():
+            QMessageBox.information(
+                self, "No Annotations",
+                "Paint green (1) and red (2) strokes on frames first.",
+            )
+            return
+
+        fi = iv._frame_index
+        if fi is None:
+            return
+
+        # Get input dimensions from the first frame
+        from backend.frame_io import read_image_frame
+        sample_path = fi.get_path(
+            next(iter(fi.availability.keys())), 0
+        )
+        if sample_path is None:
+            return
+        sample = read_image_frame(sample_path)
+        if sample is None:
+            return
+        h, w = sample.shape[:2]
+
+        # Export masks
+        mask_dir = model.export_masks(clip.root_path, fi.stems, w, h)
+        logger.info(f"Exported annotation masks to {mask_dir}")
+
+        # If AlphaHint already exists, it must be removed so the clip drops
+        # to MASKED state (otherwise READY takes priority and VideoMaMa
+        # button stays disabled). Ask the user first since this is destructive.
+        import shutil
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        if os.path.isdir(alpha_dir):
+            reply = QMessageBox.question(
+                self, "Replace Existing Alpha?",
+                "This clip already has an AlphaHint (from GVM or a previous run).\n\n"
+                "To use your annotations with VideoMaMa, the existing AlphaHint "
+                "must be removed so it can be regenerated.\n\n"
+                "Remove existing AlphaHint and proceed?",
+            )
+            if reply != QMessageBox.Yes:
+                return
+            shutil.rmtree(alpha_dir)
+            logger.info(f"Removed existing AlphaHint/ to allow re-generation")
+
+        # Re-scan clip assets to detect the new VideoMamaMaskHint directory
+        clip.find_assets()
+
+        # Update button states — VideoMaMa should now be enabled
+        self._param_panel.set_videomama_enabled(
+            clip.state == ClipState.MASKED
+        )
+        self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
+
+        # Update annotation info on param panel
+        self._param_panel.set_annotation_info(
+            model.annotated_frame_count(), fi.frame_count
+        )
+
+        QMessageBox.information(
+            self, "Masks Exported",
+            f"Exported {fi.frame_count} mask frames "
+            f"({model.annotated_frame_count()} annotated).\n"
+            f"Click VIDEOMAMA to generate the alpha hint.",
+        )
+
+    def _on_clear_annotations(self) -> None:
+        """Clear all annotations on the current clip."""
+        iv = self._dual_viewer.input_viewer
+        iv.clear_annotations()
+        self._param_panel.set_annotation_info(0, 0)
+
+    def _update_annotation_info(self) -> None:
+        """Update parameter panel with current annotation count."""
+        iv = self._dual_viewer.input_viewer
+        model = iv.annotation_model
+        fi = iv._frame_index
+        total = fi.frame_count if fi else 0
+        self._param_panel.set_annotation_info(
+            model.annotated_frame_count(), total
+        )
+
     def _connect_signals(self) -> None:
-        # Clip browser
-        self._clip_browser.clip_selected.connect(self._on_clip_selected)
-        self._clip_browser.clips_dir_changed.connect(self._on_clips_dir_changed)
-        self._clip_browser.files_imported.connect(self._on_welcome_files)
+        # I/O tray — clip selection, import, drag-and-drop
+        self._io_tray.clip_clicked.connect(self._on_tray_clip_clicked)
+        self._io_tray.selection_changed.connect(self._on_selection_changed)
+        self._io_tray.clips_dir_changed.connect(self._on_clips_dir_changed)
+        self._io_tray.files_imported.connect(self._on_welcome_files)
 
         # Status bar buttons
         self._status_bar.run_clicked.connect(self._on_run_inference)
@@ -331,19 +456,21 @@ class MainWindow(QMainWindow):
         # Queue panel cancel signals
         self._queue_panel.cancel_job_requested.connect(self._on_cancel_job)
 
-        # Parameter panel — wire GVM/VideoMaMa buttons
+        # Parameter panel — wire GVM/VideoMaMa buttons + annotation export
         self._param_panel.gvm_requested.connect(self._on_run_gvm)
         self._param_panel.videomama_requested.connect(self._on_run_videomama)
+        self._param_panel.export_masks_requested.connect(self._on_export_masks)
+
+        # Annotation stroke finished → update annotation counter
+        self._dual_viewer.input_viewer._split_view.stroke_finished.connect(
+            self._update_annotation_info
+        )
 
         # Parameter panel — live reprocess (debounced, Codex: coalesce stale)
         self._param_panel.params_changed.connect(self._on_params_changed)
 
-        # I/O tray click → select clip
-        self._io_tray.clip_clicked.connect(self._on_tray_clip_clicked)
-
         # Sync IO tray divider with dual viewer splitter
         self._dual_viewer._viewer_splitter.splitterMoved.connect(self._sync_io_divider)
-        self._splitter.splitterMoved.connect(self._sync_io_divider)
 
         # Extract worker signals
         self._extract_worker.progress.connect(self._on_extract_progress)
@@ -373,11 +500,28 @@ class MainWindow(QMainWindow):
 
     @Slot(object)
     def _on_tray_clip_clicked(self, clip: ClipEntry) -> None:
-        """Handle clip clicked in I/O tray — select it in browser and preview."""
-        for i, c in enumerate(self._clip_model.clips):
-            if c.name == clip.name:
-                self._clip_browser.select_by_index(i)
-                break
+        """Handle clip clicked in I/O tray — select it and load preview."""
+        self._on_clip_selected(clip)
+
+    @Slot(list)
+    def _on_selection_changed(self, clips: list) -> None:
+        """Handle multi-select change in I/O tray — update button state."""
+        batch_count = len(clips)
+        if batch_count > 1:
+            # Multi-select: enable batch run if at least one clip is processable
+            self._status_bar.update_button_state(
+                can_run=True,
+                has_partial=False,
+                has_in_out=False,
+                batch_count=batch_count,
+            )
+        elif batch_count == 1:
+            # Single clip: use normal button state
+            self._refresh_button_state()
+        else:
+            self._status_bar.update_button_state(
+                can_run=False, has_partial=False, has_in_out=False,
+            )
 
     # ── Clip Selection ──
 
@@ -385,6 +529,11 @@ class MainWindow(QMainWindow):
     def _on_clip_selected(self, clip: ClipEntry) -> None:
         self._current_clip = clip
         logger.debug(f"Clip selected: '{clip.name}' state={clip.state.value}")
+
+        # Highlight in I/O tray (single-select unless multi-select is active)
+        batch_count = self._io_tray.selected_count()
+        if batch_count <= 1:
+            self._io_tray.set_selected(clip.name)
 
         # Load clip into dual viewer (both input + output viewports)
         self._dual_viewer.set_clip(clip)
@@ -401,14 +550,22 @@ class MainWindow(QMainWindow):
             can_run=can_run,
             has_partial=clip.completed_frame_count() > 0,
             has_in_out=clip.in_out_range is not None,
+            batch_count=batch_count if batch_count > 1 else 0,
         )
 
         # Enable GVM/VideoMaMa buttons based on state
         self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
-        self._param_panel.set_videomama_enabled(clip.state == ClipState.MASKED)
+        # VideoMaMa: enable if MASKED, or if mask_asset exists (even if READY/COMPLETE)
+        self._param_panel.set_videomama_enabled(
+            clip.state == ClipState.MASKED or clip.mask_asset is not None
+        )
 
     @Slot(str)
-    def _on_clips_dir_changed(self, dir_path: str) -> None:
+    def _on_clips_dir_changed(
+        self, dir_path: str, *,
+        skip_session_restore: bool = False,
+        select_clip: str | None = None,
+    ) -> None:
         logger.info(f"Scanning clips directory: {dir_path}")
         self._clips_dir = dir_path
         # Reset status bar state on project load (no active job)
@@ -441,20 +598,49 @@ class MainWindow(QMainWindow):
             self._auto_extract_clips(clips)
 
             if clips:
-                self._clip_browser.select_first()
+                # Select the requested clip (e.g. newly imported), fall back to last
+                target = None
+                if select_clip:
+                    for clip in clips:
+                        if clip.name == select_clip:
+                            target = clip
+                            break
+                if target is None:
+                    target = clips[-1]  # newest (timestamps sort ascending)
+                self._on_clip_selected(target)
             logger.info(f"Found {len(clips)} clips")
 
-            # Register in recent sessions store — individual project folders, not root
+            # Register in recent sessions store — per-project, not per-clip
             if is_projects:
+                from backend.project import is_v2_project, get_clip_dirs
+                # Group clips by their project container
+                registered: set[str] = set()
                 for clip in clips:
-                    name = get_display_name(clip.root_path)
-                    self._recent_store.add_or_update(clip.root_path, name, 1)
+                    # Find the project dir this clip belongs to
+                    # v2: clip.root_path is .../project_dir/clips/clip_name
+                    # v1: clip.root_path IS the project dir
+                    clip_parent = os.path.dirname(clip.root_path)
+                    if os.path.basename(clip_parent) == "clips":
+                        project_path = os.path.dirname(clip_parent)
+                    else:
+                        project_path = clip.root_path
+                    norm_proj = os.path.normcase(os.path.abspath(project_path))
+                    if norm_proj not in registered:
+                        registered.add(norm_proj)
+                        proj_name = get_display_name(project_path)
+                        clip_count = len(get_clip_dirs(project_path))
+                        self._recent_store.add_or_update(
+                            project_path, proj_name, clip_count,
+                        )
             else:
                 display_name = os.path.basename(dir_path)
                 self._recent_store.add_or_update(dir_path, display_name, len(clips))
 
             # Auto-load session if exists (Codex: block signals during restore)
-            self._try_auto_load_session(dir_path)
+            # Skip restore when creating new projects — prevents old session
+            # from overriding the newly-added clip selection.
+            if not skip_session_restore:
+                self._try_auto_load_session(dir_path)
 
         except Exception as e:
             logger.error(f"Failed to scan clips: {e}")
@@ -532,11 +718,10 @@ class MainWindow(QMainWindow):
 
     @Slot(list)
     def _on_welcome_files(self, file_paths: list) -> None:
-        """Handle files selected from welcome screen.
+        """Handle files selected from welcome screen or +ADD import.
 
-        Creates a project folder for each video inside Projects/,
-        copies the source video into Source/, then scans the Projects root.
-        Each project is registered individually in recent sessions.
+        Creates ONE project folder for all selected videos, with each
+        video as a separate clip nested inside clips/.
         """
         if not file_paths:
             return
@@ -547,17 +732,38 @@ class MainWindow(QMainWindow):
         root = projects_root()
         copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
 
-        for fpath in file_paths:
-            if is_video_file(fpath):
-                create_project(fpath, copy_source=copy_source)
-                logger.info(f"Created project for: {fpath} (copy={copy_source})")
+        video_paths = [f for f in file_paths if is_video_file(f)]
+        if not video_paths:
+            return
 
-        # _on_clips_dir_changed handles per-project recent session registration
+        # Multi-video: ask user to name the project
+        display_name = None
+        if len(video_paths) > 1:
+            name, ok = QInputDialog.getText(
+                self, "Name Your Project",
+                "Give your project a name:",
+            )
+            if not ok:
+                return  # user cancelled
+            display_name = name.strip() or None
+
+        # Create ONE project with all videos as clips
+        project_dir = create_project(
+            video_paths, copy_source=copy_source, display_name=display_name,
+        )
+        logger.info(
+            f"Created project with {len(video_paths)} clip(s): "
+            f"{os.path.basename(project_dir)} (copy={copy_source})"
+        )
+
+        # Scan Projects root — select the last clip from the new project
         self._switch_to_workspace()
-        self._on_clips_dir_changed(root)
+        self._on_clips_dir_changed(
+            root, skip_session_restore=True, select_clip=None,
+        )
 
     def _on_open_folder(self) -> None:
-        self._clip_browser._on_add_clicked()
+        self._io_tray.show_add_menu()
 
     # ── View Controls ──
 
@@ -573,25 +779,13 @@ class MainWindow(QMainWindow):
     def _sync_io_divider(self, *_args) -> None:
         """Keep the IO tray divider aligned with the dual viewer splitter.
 
-        Calculates the absolute pixel position of the viewer's internal
-        split divider (between INPUT and OUTPUT viewports) and sets the
-        IO tray divider to the same position.
+        Sets the IO tray divider to match the viewer's internal split
+        position (between INPUT and OUTPUT viewports).
         """
-        # Clip browser width (left offset of dual viewer within the window)
-        splitter_sizes = self._splitter.sizes()
-        if len(splitter_sizes) < 2:
-            return
-        clip_browser_w = splitter_sizes[0] + self._splitter.handleWidth()
-
-        # Dual viewer's internal split: left panel width
         viewer_sizes = self._dual_viewer._viewer_splitter.sizes()
         if len(viewer_sizes) < 2:
             return
-        input_viewer_w = viewer_sizes[0]
-
-        # The IO tray divider position = clip browser width + input viewer width
-        divider_px = clip_browser_w + input_viewer_w
-        self._io_tray.sync_divider(divider_px)
+        self._io_tray.sync_divider(viewer_sizes[0])
 
     # ── In/Out Markers ──
 
@@ -682,6 +876,11 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_run_inference(self) -> None:
+        # If multiple clips are selected, dispatch to batch pipeline
+        if self._io_tray.selected_count() > 1:
+            self._on_run_batch()
+            return
+
         if self._current_clip is None:
             return
 
@@ -780,6 +979,7 @@ class MainWindow(QMainWindow):
     def _refresh_button_state(self) -> None:
         """Update run/resume button state based on current clip."""
         clip = self._current_clip
+        batch_count = self._io_tray.selected_count()
         if clip is None:
             self._status_bar.update_button_state(
                 can_run=False, has_partial=False, has_in_out=False,
@@ -790,6 +990,7 @@ class MainWindow(QMainWindow):
             can_run=can_run,
             has_partial=clip.completed_frame_count() > 0,
             has_in_out=clip.in_out_range is not None,
+            batch_count=batch_count if batch_count > 1 else 0,
         )
 
     @Slot()
@@ -813,6 +1014,58 @@ class MainWindow(QMainWindow):
             first_job = self._service.job_queue.next_job()
             self._start_worker_if_needed(first_job.id if first_job else None)
             logger.info(f"Batch queued: {queued} clips")
+
+    def _on_run_batch(self) -> None:
+        """Batch pipeline: queue GVM for RAW clips, then inference for READY/COMPLETE.
+
+        For RAW clips, GVM runs first; on completion, inference is auto-chained
+        via _batch_clips tracking in _on_worker_clip_finished.
+        """
+        selected = self._io_tray.get_selected_clips()
+        if not selected:
+            return
+
+        params = self._param_panel.get_params()
+        output_config = self._param_panel.get_output_config()
+
+        # Separate clips by state
+        raw_clips = [c for c in selected if c.state == ClipState.RAW]
+        ready_clips = [c for c in selected
+                       if c.state in (ClipState.READY, ClipState.COMPLETE)]
+
+        # Track RAW clips for GVM→inference auto-chain
+        self._batch_clips = {c.name for c in raw_clips}
+
+        queued = 0
+        first_job_id = None
+
+        # Phase 1: queue all GVM jobs first
+        for clip in raw_clips:
+            job = create_job_snapshot(clip, job_type=JobType.GVM_ALPHA)
+            if self._service.job_queue.submit(job):
+                clip.set_processing(True)
+                if first_job_id is None:
+                    first_job_id = job.id
+                queued += 1
+
+        # Phase 2: queue inference jobs for already-READY clips
+        for clip in ready_clips:
+            if clip.state == ClipState.COMPLETE:
+                clip.transition_to(ClipState.READY)
+            job = create_job_snapshot(clip, params)
+            job.params["_output_config"] = output_config
+            if self._service.job_queue.submit(job):
+                if first_job_id is None:
+                    first_job_id = job.id
+                queued += 1
+
+        if queued > 0:
+            label = "Batch" if raw_clips else "Inference"
+            self._start_worker_if_needed(first_job_id, job_label=label)
+            logger.info(
+                f"Batch pipeline queued: {len(raw_clips)} GVM + "
+                f"{len(ready_clips)} inference = {queued} jobs"
+            )
 
     @Slot()
     def _on_run_gvm(self) -> None:
@@ -897,6 +1150,7 @@ class MainWindow(QMainWindow):
             return
 
         queue.cancel_all()
+        self._batch_clips.clear()
         self._status_bar.set_message("Cancelling...")
         self._queue_panel.refresh()
         logger.info("Inference cancelled by user")
@@ -954,9 +1208,27 @@ class MainWindow(QMainWindow):
                         pass  # find_assets may update state further
                 break
 
-        # Stop timer and show completion message
+        # Batch auto-chain: GVM completed on a batch clip → queue inference
+        if target_state == ClipState.READY and clip_name in self._batch_clips:
+            self._batch_clips.discard(clip_name)
+            for clip in self._clip_model.clips:
+                if clip.name == clip_name:
+                    params = self._param_panel.get_params()
+                    job = create_job_snapshot(clip, params)
+                    job.params["_output_config"] = self._param_panel.get_output_config()
+                    if self._service.job_queue.submit(job):
+                        logger.info(f"Batch auto-chain: queued inference for {clip_name}")
+                    break
+
+        # Stop timer; only exit running state if no more jobs are pending
+        has_more = self._service.job_queue.has_pending or self._batch_clips
         self._status_bar.stop_job_timer()
-        self._status_bar.set_running(False)
+        if not has_more:
+            self._status_bar.set_running(False)
+        else:
+            # Reset progress for next job in the queue
+            self._status_bar.reset_progress()
+            self._status_bar.start_job_timer(label="Batch")
 
         if target_state == ClipState.READY:
             type_label = "GVM Auto" if job_type == JobType.GVM_ALPHA.value else "VideoMaMa"
@@ -982,6 +1254,7 @@ class MainWindow(QMainWindow):
             self._refresh_button_state()
             self._param_panel.set_videomama_enabled(
                 self._current_clip.state == ClipState.MASKED
+                or self._current_clip.mask_asset is not None
             )
 
         logger.info(f"Clip finished ({job_type}): {clip_name} -> {target_state.value}")
@@ -1032,6 +1305,7 @@ class MainWindow(QMainWindow):
         self._status_bar.set_running(False)
         self._status_bar.stop_job_timer()
         self._active_job_id = None
+        self._batch_clips.clear()
         self._queue_panel.refresh()
         logger.info("All jobs completed")
 
@@ -1305,11 +1579,11 @@ class MainWindow(QMainWindow):
             self._split_action.setChecked(checked)
             self._dual_viewer.set_split_mode(checked)
 
-        # Restore splitter sizes (validate: must have 3 panels, none at 0)
+        # Restore splitter sizes (validate: must have 2 panels, none at 0)
         if "splitter_sizes" in data:
             try:
                 sizes = [int(s) for s in data["splitter_sizes"]]
-                if len(sizes) == 3 and all(s > 0 for s in sizes):
+                if len(sizes) == 2 and all(s > 0 for s in sizes):
                     self._splitter.setSizes(sizes)
                 else:
                     logger.info("Ignoring invalid splitter_sizes, using defaults")
@@ -1338,9 +1612,9 @@ class MainWindow(QMainWindow):
         # Restore selected clip
         if "selected_clip" in data:
             clip_name = data["selected_clip"]
-            for i, clip in enumerate(self._clip_model.clips):
+            for clip in self._clip_model.clips:
                 if clip.name == clip_name:
-                    self._clip_browser.select_by_index(i)
+                    self._on_clip_selected(clip)
                     break
 
     @Slot()
