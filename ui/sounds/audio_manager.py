@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import random
+import time
 
 from PySide6.QtCore import QUrl, QObject, QEvent
 from PySide6.QtMultimedia import QSoundEffect
@@ -50,6 +51,8 @@ class UIAudio:
     _inference_done_sfx: QSoundEffect | None = None
     _loaded = False
     _muted = False
+    _last_play_time: float = 0.0
+    _DEBOUNCE_MS = 0.06  # 60ms debounce — prevents double-fire on dialog close
 
     @classmethod
     def _ensure_loaded(cls) -> None:
@@ -83,6 +86,10 @@ class UIAudio:
               db_offset: float = 0.0) -> None:
         if cls._muted:
             return
+        now = time.monotonic()
+        if now - cls._last_play_time < cls._DEBOUNCE_MS:
+            return
+        cls._last_play_time = now
         vol = _BASE_VOLUME + random.uniform(-variance, variance)
         if db_offset:
             vol *= 10 ** (db_offset / 20.0)
