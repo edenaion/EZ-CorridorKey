@@ -203,6 +203,10 @@ class DualViewerPanel(QWidget):
         self._output_viewer.navigate_to_frame(stem_index)
         self.frame_changed.emit(stem_index)
 
+    def toggle_playback(self) -> None:
+        """Forward play/pause to the scrubber."""
+        self._scrubber.toggle_playback()
+
     @Slot(float)
     def _on_zoom_changed(self, zoom: float) -> None:
         self._zoom_label.setText(f"{int(zoom * 100)}%")

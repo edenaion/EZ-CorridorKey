@@ -295,6 +295,12 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence(Qt.Key_I), self, self._set_in_point)
         QShortcut(QKeySequence(Qt.Key_O), self, self._set_out_point)
         QShortcut(QKeySequence("Alt+I"), self, self._clear_in_out)
+        # Space — play/pause
+        QShortcut(QKeySequence(Qt.Key_Space), self, self._toggle_playback)
+
+    def _toggle_playback(self) -> None:
+        """Forward Space key to the scrubber's play/pause toggle."""
+        self._dual_viewer.toggle_playback()
 
     def _connect_signals(self) -> None:
         # Clip browser

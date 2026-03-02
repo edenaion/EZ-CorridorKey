@@ -340,6 +340,14 @@ class FrameScrubber(QWidget):
         self._prev_btn.clicked.connect(self._step_back)
         row.addWidget(self._prev_btn)
 
+        # Play/Pause toggle
+        self._play_btn = QPushButton("\u25B6")  # ▶ (play icon)
+        self._play_btn.setFixedWidth(24)
+        self._play_btn.setStyleSheet(btn_style)
+        self._play_btn.setToolTip("Play / Pause (Space)")
+        self._play_btn.clicked.connect(self.toggle_playback)
+        row.addWidget(self._play_btn)
+
         # ── Center column: coverage bar + slider ──
         self._center = QWidget()
         center_layout = QVBoxLayout(self._center)
@@ -401,6 +409,12 @@ class FrameScrubber(QWidget):
         self._debounce.setInterval(50)
         self._debounce.timeout.connect(self._emit_frame)
 
+        # Playback timer (24fps default)
+        self._playback_timer = QTimer(self)
+        self._playback_timer.setInterval(42)  # ~24fps
+        self._playback_timer.timeout.connect(self._playback_tick)
+        self._playing = False
+
         self._total = 0
         self._suppress_signal = False
         self._in_point: int | None = None
@@ -437,6 +451,8 @@ class FrameScrubber(QWidget):
 
     def set_range(self, total_frames: int) -> None:
         """Configure scrubber for a clip with total_frames stems."""
+        if self._playing:
+            self._stop_playback()
         self._total = total_frames
         enabled = total_frames > 0
         self._slider.setEnabled(enabled)
@@ -444,6 +460,7 @@ class FrameScrubber(QWidget):
         self._slider.setTickInterval(max(1, total_frames // 20))
         self._start_btn.setEnabled(enabled)
         self._prev_btn.setEnabled(enabled)
+        self._play_btn.setEnabled(enabled)
         self._next_btn.setEnabled(enabled)
         self._end_btn.setEnabled(enabled)
         self._update_label()
@@ -548,9 +565,62 @@ class FrameScrubber(QWidget):
     def _go_end(self) -> None:
         self._slider.setValue(self._slider.maximum())
 
+    # ── Playback ──
+
+    def toggle_playback(self) -> None:
+        """Toggle play/pause state."""
+        if self._playing:
+            self._stop_playback()
+        else:
+            self._start_playback()
+
+    def _start_playback(self) -> None:
+        if self._total <= 1:
+            return
+        self._playing = True
+        self._play_btn.setText("\u275A\u275A")  # ❚❚ (pause icon)
+        self._play_btn.setToolTip("Pause (Space)")
+        self._playback_timer.start()
+
+    def _stop_playback(self) -> None:
+        self._playing = False
+        self._playback_timer.stop()
+        self._play_btn.setText("\u25B6")  # ▶ (play icon)
+        self._play_btn.setToolTip("Play (Space)")
+
+    def _playback_tick(self) -> None:
+        """Advance one frame during playback. Loops within in/out range if set."""
+        from PySide6.QtCore import QSettings
+        loop_enabled = QSettings().value("playback/loop", True, type=bool)
+
+        current = self._slider.value()
+
+        # Determine playback bounds
+        if self._in_point is not None and self._out_point is not None:
+            lo, hi = self._in_point, self._out_point
+        else:
+            lo, hi = 0, self._slider.maximum()
+
+        next_frame = current + 1
+        if next_frame > hi:
+            if loop_enabled:
+                next_frame = lo
+            else:
+                self._stop_playback()
+                return
+
+        self._slider.setValue(next_frame)
+
+    def set_fps(self, fps: float) -> None:
+        """Set playback frame rate."""
+        if fps > 0:
+            self._playback_timer.setInterval(int(1000.0 / fps))
+
     def keyPressEvent(self, event) -> None:
-        """Left/Right arrows for stepping, I/O for in/out markers."""
-        if event.key() == Qt.Key_Left:
+        """Space for play/pause, Left/Right for stepping, I/O for markers."""
+        if event.key() == Qt.Key_Space:
+            self.toggle_playback()
+        elif event.key() == Qt.Key_Left:
             self._step_back()
         elif event.key() == Qt.Key_Right:
             self._step_forward()

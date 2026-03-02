@@ -14,10 +14,12 @@ from PySide6.QtCore import QSettings, Qt
 # QSettings keys
 KEY_SHOW_TOOLTIPS = "ui/show_tooltips"
 KEY_COPY_SOURCE = "project/copy_source_videos"
+KEY_LOOP_PLAYBACK = "playback/loop"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
 DEFAULT_COPY_SOURCE = True
+DEFAULT_LOOP_PLAYBACK = True
 
 
 def get_setting_bool(key: str, default: bool) -> bool:
@@ -70,6 +72,22 @@ class PreferencesDialog(QDialog):
         proj_layout.addWidget(self._copy_source_cb)
 
         layout.addWidget(proj_group)
+
+        # Playback section
+        play_group = QGroupBox("Playback")
+        play_layout = QVBoxLayout(play_group)
+
+        self._loop_cb = QCheckBox("Loop playback within in/out range")
+        self._loop_cb.setToolTip(
+            "When enabled, playback loops back to the in-point\n"
+            "after reaching the out-point (or start/end if no range)."
+        )
+        self._loop_cb.setChecked(
+            get_setting_bool(KEY_LOOP_PLAYBACK, DEFAULT_LOOP_PLAYBACK)
+        )
+        play_layout.addWidget(self._loop_cb)
+
+        layout.addWidget(play_group)
         layout.addStretch(1)
 
         # Buttons
@@ -92,6 +110,7 @@ class PreferencesDialog(QDialog):
         s = QSettings()
         s.setValue(KEY_SHOW_TOOLTIPS, self._tooltips_cb.isChecked())
         s.setValue(KEY_COPY_SOURCE, self._copy_source_cb.isChecked())
+        s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
         self.accept()
 
     @property
