@@ -37,7 +37,7 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("save_session",       "Save Session",                 "Global",     "Ctrl+S",       "_on_save_session",    menu_action=True),
     ShortcutDef("open_project",       "Open Project",                 "Global",     "Ctrl+O",       "_on_open_project",    menu_action=True),
     ShortcutDef("toggle_mute",        "Toggle Mute",                  "Global",     "Ctrl+M",       "_toggle_mute"),
-    ShortcutDef("welcome_screen",     "Welcome Screen",               "Global",     "Home",         "_return_to_welcome"),
+    ShortcutDef("welcome_screen",     "Return to Home",               "Global",     "Home",         "_return_to_welcome"),
     ShortcutDef("delete_clips",       "Remove Selected Clips",        "Global",     "Del",          "_on_delete_selected_clips"),
     ShortcutDef("toggle_queue",       "Toggle Queue",                 "Global",     "Q",            "_toggle_queue_panel"),
     # Timeline

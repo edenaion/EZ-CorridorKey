@@ -33,6 +33,7 @@ class StatusBar(QWidget):
     """Bottom bar with progress, elapsed timer, and run/resume/stop CTAs."""
 
     run_clicked = Signal()
+    extract_clicked = Signal()
     resume_clicked = Signal()
     stop_clicked = Signal()
 
@@ -88,7 +89,8 @@ class StatusBar(QWidget):
             "Requires a READY or COMPLETE clip with alpha hints.\n"
             "Respects in/out range if set (I/O hotkeys)."
         )
-        self._run_btn.clicked.connect(self.run_clicked.emit)
+        self._run_mode = "inference"  # "inference" or "extraction"
+        self._run_btn.clicked.connect(self._on_run_clicked)
         layout.addWidget(self._run_btn)
 
         # Divider between run and resume
@@ -159,9 +161,16 @@ class StatusBar(QWidget):
             self._resume_btn.hide()
         self._stop_btn.setVisible(running)
 
+    def _on_run_clicked(self) -> None:
+        """Route run button click to the appropriate signal."""
+        if self._run_mode == "extraction":
+            self.extract_clicked.emit()
+        else:
+            self.run_clicked.emit()
+
     def update_button_state(
         self, can_run: bool, has_partial: bool, has_in_out: bool,
-        batch_count: int = 0,
+        batch_count: int = 0, needs_extraction: bool = False,
     ) -> None:
         """Update run/resume button visibility and text based on clip state.
 
@@ -170,19 +179,27 @@ class StatusBar(QWidget):
             has_partial: Whether partial inference outputs exist on disk.
             has_in_out: Whether in/out markers are set on the scrubber.
             batch_count: Number of clips selected (>1 = batch mode).
+            needs_extraction: Whether the clip needs frame extraction first.
         """
-        if batch_count > 1:
+        if needs_extraction:
+            self._run_btn.setText("RUN EXTRACTION")
+            self._run_btn.setEnabled(True)
+            self._run_mode = "extraction"
+        elif batch_count > 1:
             self._run_btn.setText(f"RUN {batch_count} CLIPS")
             self._run_btn.setEnabled(True)
+            self._run_mode = "inference"
         elif has_in_out:
             self._run_btn.setText("RUN SELECTED")
             self._run_btn.setEnabled(can_run)
+            self._run_mode = "inference"
         else:
             self._run_btn.setText("RUN INFERENCE")
             self._run_btn.setEnabled(can_run)
+            self._run_mode = "inference"
 
         # Show resume only when partial outputs exist, single clip, and can run
-        show_resume = can_run and has_partial and batch_count <= 1
+        show_resume = can_run and has_partial and batch_count <= 1 and not needs_extraction
         self._resume_btn.setVisible(show_resume)
         self._btn_divider.setVisible(show_resume)
 

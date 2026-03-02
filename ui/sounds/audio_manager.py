@@ -93,10 +93,8 @@ class UIAudio:
 
     @classmethod
     def hover(cls, key: str = "") -> None:
-        """Play hover sound with ±8% volume variance."""
-        cls._ensure_loaded()
-        if cls._hover_sfx:
-            cls._play(cls._hover_sfx, db_offset=-1.5)
+        """Hover sound — disabled (kept as no-op so callers don't break)."""
+        return
 
     @classmethod
     def user_cancel(cls) -> None:

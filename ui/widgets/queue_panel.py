@@ -1,9 +1,7 @@
-"""Collapsible queue panel showing per-job progress.
+"""Collapsible queue sidebar — left panel in the main horizontal splitter.
 
-The header bar ("QUEUE") is always pinned at its position. When expanded,
-the job list appears ABOVE the header — the header itself never moves.
-Jobs grow upward: the first job sits directly on top of the header,
-subsequent jobs stack above it.
+Collapsed: narrow 24px tab with vertical "Q" label.
+Expanded: ~240px panel with header, scrollable job list, and Clear All.
 
 Progress bars update in-place (no widget rebuild per frame) so the bar
 moves smoothly instead of stuttering on every progress tick.
@@ -12,9 +10,9 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QProgressBar, QScrollArea, QFrame,
+    QProgressBar, QScrollArea, QFrame, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtCore import Qt, Signal, QEvent, QPropertyAnimation, QEasingCurve
 
 from backend.job_queue import GPUJobQueue, GPUJob, JobStatus, JobType
 
@@ -29,7 +27,7 @@ _STATUS_COLORS = {
 }
 
 _STATUS_TEXT = {
-    JobStatus.QUEUED: "STARTING...",
+    JobStatus.QUEUED: "QUEUED",
     JobStatus.RUNNING: "PROCESSING",
     JobStatus.COMPLETED: "DONE",
     JobStatus.CANCELLED: "CANCELLED",
@@ -43,9 +41,9 @@ _JOB_TYPE_LABELS = {
     JobType.PREVIEW_REPROCESS: "Preview",
 }
 
-_HEADER_H = 26
-_ROW_H = 30      # approximate height per job row
-_BODY_MAX_H = 160
+_COLLAPSED_W = 24
+_EXPANDED_W = 240
+_ROW_H = 60  # taller rows for vertical stacked layout
 
 
 class _JobRowCache:
@@ -65,150 +63,165 @@ class _JobRowCache:
 
 
 class QueuePanel(QWidget):
-    """Fixed header bar with a popup job list that expands upward."""
+    """Collapsible left sidebar showing GPU job queue."""
 
     cancel_job_requested = Signal(str)  # job_id
 
     def __init__(self, queue: GPUJobQueue, parent=None):
         super().__init__(parent)
         self._queue = queue
-        self.setFixedHeight(_HEADER_H)
-        self.setStyleSheet(
-            "QueuePanel { background-color: #0E0D00; border-top: 1px solid #2A2910; }"
-        )
+        self._collapsed = True
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 2, 8, 2)
-        layout.setSpacing(6)
+        self.setStyleSheet("background-color: #0E0D00;")
+        self.setMinimumWidth(_COLLAPSED_W)
+        self.setMaximumWidth(_EXPANDED_W)
+        self.setFixedWidth(_COLLAPSED_W)
 
-        # "QUEUE ▲" button — up arrow = collapsed (click to open upward)
-        self._header_btn = QPushButton("QUEUE \u25B2")  # ▲ collapsed
-        self._header_btn.setCursor(Qt.PointingHandCursor)
-        self._header_btn.setStyleSheet(
-            "QPushButton { color: #CCCCAA; background: transparent; border: none; "
-            "font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 0; }"
-            "QPushButton:hover { color: #FFF203; }"
+        # Main layout holds either the collapsed tab or the expanded panel
+        self._main_layout = QVBoxLayout(self)
+        self._main_layout.setContentsMargins(0, 0, 0, 0)
+        self._main_layout.setSpacing(0)
+
+        # ── Collapsed tab: vertical "Q ▶" button ──
+        self._tab = QPushButton("Q")
+        self._tab.setCursor(Qt.PointingHandCursor)
+        self._tab.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        self._tab.setFixedWidth(_COLLAPSED_W)
+        self._tab.setStyleSheet(
+            "QPushButton { color: #CCCCAA; background: #0E0D00; "
+            "border: none; border-right: 1px solid #2A2910; "
+            "font-size: 12px; font-weight: 700; padding: 0; }"
+            "QPushButton:hover { color: #FFF203; background: #1A1900; }"
         )
-        self._header_btn.setToolTip("Toggle queue panel (Q)")
-        self._header_btn.clicked.connect(self.toggle_collapsed)
-        layout.addWidget(self._header_btn)
+        self._tab.setToolTip("Expand queue (Q)")
+        self._tab.clicked.connect(self.toggle_collapsed)
+        self._main_layout.addWidget(self._tab)
+
+        # ── Expanded panel ──
+        self._panel = QWidget()
+        self._panel.setStyleSheet(
+            "background-color: #0E0D00; border-right: 1px solid #2A2910;"
+        )
+        panel_layout = QVBoxLayout(self._panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.setSpacing(0)
+
+        # Header bar
+        header = QWidget()
+        header.setFixedHeight(28)
+        header.setStyleSheet("background: #1A1900; border-bottom: 1px solid #2A2910;")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(8, 2, 4, 2)
+        header_layout.setSpacing(4)
+
+        title = QLabel("QUEUE")
+        title.setStyleSheet(
+            "color: #CCCCAA; font-size: 11px; font-weight: 700; "
+            "letter-spacing: 1px; background: transparent; border: none;"
+        )
+        header_layout.addWidget(title)
 
         self._count_label = QLabel("")
-        self._count_label.setStyleSheet("color: #808070; font-size: 10px;")
-        layout.addWidget(self._count_label)
+        self._count_label.setStyleSheet(
+            "color: #808070; font-size: 10px; background: transparent; border: none;"
+        )
+        header_layout.addWidget(self._count_label)
 
-        self._clear_btn = QPushButton("Clear All")
-        self._clear_btn.setFixedWidth(64)
-        self._clear_btn.setFixedHeight(20)
+        header_layout.addStretch()
+
+        self._clear_btn = QPushButton("Clear")
+        self._clear_btn.setFixedHeight(18)
+        self._clear_btn.setCursor(Qt.PointingHandCursor)
         self._clear_btn.setStyleSheet(
-            "QPushButton { font-size: 10px; padding: 2px 8px; "
-            "background: #1A1900; border: 1px solid #2A2910; color: #999980; }"
+            "QPushButton { font-size: 9px; padding: 1px 6px; "
+            "background: transparent; border: 1px solid #2A2910; "
+            "color: #555540; }"
             "QPushButton:hover { color: #CCCCAA; border-color: #454430; }"
         )
-        self._clear_btn.setToolTip("Clear completed and cancelled jobs from the list")
+        self._clear_btn.setToolTip("Clear completed and cancelled jobs")
         self._clear_btn.clicked.connect(self._on_clear)
-        self._clear_btn.hide()
-        layout.addWidget(self._clear_btn)
+        header_layout.addWidget(self._clear_btn)
 
-        layout.addStretch()
-
-        # Body — popup that appears ABOVE the header, flush against it
-        self._body = QWidget(parent)
-        self._body.setStyleSheet(
-            "background-color: #0E0D00; border: 1px solid #2A2910; "
-            "border-bottom: none;"
+        collapse_btn = QPushButton("\u25C0")  # ◀
+        collapse_btn.setFixedSize(20, 20)
+        collapse_btn.setCursor(Qt.PointingHandCursor)
+        collapse_btn.setStyleSheet(
+            "QPushButton { color: #808070; background: transparent; "
+            "border: none; font-size: 10px; padding: 0; }"
+            "QPushButton:hover { color: #FFF203; }"
         )
-        body_layout = QVBoxLayout(self._body)
-        body_layout.setContentsMargins(4, 2, 4, 0)
-        body_layout.setSpacing(2)
+        collapse_btn.setToolTip("Collapse queue (Q)")
+        collapse_btn.clicked.connect(self.toggle_collapsed)
+        header_layout.addWidget(collapse_btn)
 
+        panel_layout.addWidget(header)
+
+        # Scrollable job list
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        scroll.setMaximumHeight(_BODY_MAX_H)
+        scroll.setStyleSheet(
+            "QScrollArea { border: none; background: transparent; }"
+        )
         self._scroll = scroll
 
         self._job_container = QWidget()
+        self._job_container.setStyleSheet("background: transparent; border: none;")
         self._job_layout = QVBoxLayout(self._job_container)
         self._job_layout.setContentsMargins(0, 0, 0, 0)
-        self._job_layout.setSpacing(2)
+        self._job_layout.setSpacing(1)
+        self._job_layout.addStretch()
 
         scroll.setWidget(self._job_container)
-        body_layout.addWidget(scroll, 1)
+        panel_layout.addWidget(scroll, 1)
 
-        self._body.hide()
-        self._collapsed = True
+        self._panel.hide()
+        self._main_layout.addWidget(self._panel)
 
-        # Cached row widgets keyed by job_id — avoids full rebuild on progress ticks
+        # Cached row widgets keyed by job_id
         self._row_cache: dict[str, _JobRowCache] = {}
-        # Ordered list of job_ids currently displayed (for structure comparison)
         self._displayed_ids: list[str] = []
 
-        # Hover/click sounds on interactive buttons
-        self._sound_btns = {self._header_btn, self._clear_btn}
-        for btn in self._sound_btns:
-            btn.installEventFilter(self)
+        # Sound on collapse tab click
+        self._tab.installEventFilter(self)
 
     def eventFilter(self, obj, event):
-        if obj in self._sound_btns:
+        if obj is self._tab:
             from ui.sounds.audio_manager import UIAudio
-            if event.type() == QEvent.Enter and obj.isVisible():
-                UIAudio.hover(key=f"btn:{obj.text().replace(' ', '')}")
-            elif event.type() == QEvent.MouseButtonPress:
+            if event.type() == QEvent.MouseButtonPress:
                 UIAudio.click()
         return super().eventFilter(obj, event)
 
     def toggle_collapsed(self) -> None:
-        """Toggle the job list popup above the header."""
+        """Toggle between collapsed tab and expanded sidebar."""
         self._collapsed = not self._collapsed
-        self._body.setVisible(not self._collapsed)
-        self._clear_btn.setVisible(not self._collapsed)
         if self._collapsed:
-            self._header_btn.setText("QUEUE \u25B2")  # ▲ up to open
-            self._header_btn.setToolTip("Expand queue panel (Q)")
+            self._panel.hide()
+            self._tab.show()
+            self.setFixedWidth(_COLLAPSED_W)
         else:
-            self._header_btn.setText("QUEUE \u25BC")  # ▼ down to close
-            self._header_btn.setToolTip("Collapse queue panel (Q)")
-        self.reposition()
-
-    def reposition(self) -> None:
-        """Position the body popup directly above the header bar — flush, no gap."""
-        if not self._body.isVisible():
-            return
-        my_geo = self.geometry()
-        job_count = self._job_layout.count()
-        if job_count == 0:
-            self._body.hide()
-            return
-        content_h = job_count * (_ROW_H + 2) + 6
-        body_h = min(content_h, _BODY_MAX_H)
-        self._body.setFixedWidth(my_geo.width())
-        self._body.setFixedHeight(body_h)
-        self._body.move(my_geo.x(), my_geo.y() - body_h)
-        self._body.raise_()
+            self._tab.hide()
+            self._panel.show()
+            self.setFixedWidth(_EXPANDED_W)
 
     def refresh(self) -> None:
         """Update the job list — rebuild only when structure changes,
         otherwise update progress bars in-place for smooth animation."""
         jobs = self._queue.all_jobs_snapshot
         count = len(jobs)
-        self._count_label.setText(f"{count} job{'s' if count != 1 else ''}" if count else "")
+        self._count_label.setText(f"({count})" if count else "")
 
-        # Build the ordered id list (reversed — newest closest to header)
-        new_ids = [job.id for job in reversed(jobs)]
+        new_ids = [job.id for job in jobs]
 
-        # If the set of jobs or their order changed, do a full rebuild
         if new_ids != self._displayed_ids:
             self._full_rebuild(jobs)
             return
 
-        # Otherwise just update progress in-place (fast path — no widget churn)
+        # Fast path: update progress in-place
         for job in jobs:
             cache = self._row_cache.get(job.id)
             if cache is None:
                 continue
-            # Only update if something actually changed
             if (job.status == cache.last_status
                     and job.current_frame == cache.last_current
                     and job.total_frames == cache.last_total):
@@ -217,92 +230,107 @@ class QueuePanel(QWidget):
 
     def _full_rebuild(self, jobs: list[GPUJob]) -> None:
         """Destroy all rows and recreate from scratch."""
-        # Clear layout
+        # Clear layout (keep the stretch at the end)
         while self._job_layout.count() > 0:
             item = self._job_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self._row_cache.clear()
 
-        # Reversed: newest job closest to QUEUE bar (bottom of layout)
-        for job in reversed(jobs):
+        for job in jobs:
             row, cache = self._create_job_row(job)
             self._job_layout.addWidget(row)
             self._row_cache[job.id] = cache
 
-        self._displayed_ids = [job.id for job in reversed(jobs)]
-
-        if not self._collapsed:
-            self.reposition()
+        self._job_layout.addStretch()
+        self._displayed_ids = [job.id for job in jobs]
 
     def _create_job_row(self, job: GPUJob) -> tuple[QFrame, _JobRowCache]:
-        """Create a single job row widget and return (frame, cache)."""
+        """Create a single job row — vertical stack: type+clip, progress/status."""
         row = QFrame()
         row.setFixedHeight(_ROW_H)
-        row.setStyleSheet("background-color: #1A1900; padding: 2px 6px;")
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(8)
+        row.setStyleSheet(
+            "QFrame { background-color: #1A1900; border-bottom: 1px solid #151400; }"
+        )
+        layout = QVBoxLayout(row)
+        layout.setContentsMargins(8, 4, 8, 4)
+        layout.setSpacing(2)
 
-        # Job type label
+        # Top line: job type + clip name
+        top = QHBoxLayout()
+        top.setSpacing(6)
+
         type_text = _JOB_TYPE_LABELS.get(job.job_type, "???")
         type_label = QLabel(type_text)
-        type_label.setFixedWidth(70)
-        type_label.setStyleSheet("color: #999980; font-size: 10px; font-weight: 700;")
-        layout.addWidget(type_label)
+        type_label.setStyleSheet(
+            "color: #999980; font-size: 9px; font-weight: 700; "
+            "letter-spacing: 0.5px; border: none; background: transparent;"
+        )
+        top.addWidget(type_label)
 
-        # Clip name
-        name_label = QLabel(job.clip_name)
-        name_label.setStyleSheet("font-size: 11px;")
-        name_label.setMinimumWidth(100)
-        layout.addWidget(name_label)
+        top.addStretch()
 
-        # Status / Progress — create all possible widgets, show/hide as needed
-        color = _STATUS_COLORS.get(job.status, "#808070")
-
-        # Progress bar (used for RUNNING and QUEUED states)
-        progress_bar = QProgressBar()
-        progress_bar.setFixedHeight(6)
-        progress_bar.setFixedWidth(100)
-        progress_bar.setTextVisible(False)
-        layout.addWidget(progress_bar)
-
-        # Frame counter label (e.g. "65/499")
-        frame_label = QLabel("")
-        frame_label.setStyleSheet("color: #999980; font-size: 10px;")
-        layout.addWidget(frame_label)
-
-        # Status text label (e.g. "DONE", "CANCELLED", "Processing...")
-        status_label = QLabel("")
-        status_label.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 600;")
-        layout.addWidget(status_label)
-
-        layout.addStretch()
-
-        # Dismiss button — only on finished jobs
+        # Dismiss button for finished jobs
         if job.status in (JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED):
-            dismiss_btn = QPushButton("\u25C0")  # ◀
-            dismiss_btn.setFixedSize(18, 18)
+            dismiss_btn = QPushButton("\u2715")  # ✕
+            dismiss_btn.setFixedSize(14, 14)
             dismiss_btn.setCursor(Qt.PointingHandCursor)
             dismiss_btn.setStyleSheet(
                 "QPushButton { background: transparent; color: #555540; "
                 "font-size: 9px; border: none; padding: 0; }"
                 "QPushButton:hover { color: #999980; }"
             )
-            dismiss_btn.setToolTip("Dismiss from list")
+            dismiss_btn.setToolTip("Dismiss")
             job_id = job.id
             dismiss_btn.clicked.connect(
                 lambda checked, jid=job_id: self._dismiss_job(jid)
             )
-            layout.addWidget(dismiss_btn)
+            top.addWidget(dismiss_btn)
+
+        layout.addLayout(top)
+
+        # Clip name (truncated)
+        name_label = QLabel(job.clip_name)
+        name_label.setStyleSheet(
+            "color: #CCCCAA; font-size: 10px; border: none; background: transparent;"
+        )
+        name_label.setMaximumWidth(_EXPANDED_W - 20)
+        layout.addWidget(name_label)
+
+        # Bottom line: progress bar + frame count / status text
+        bottom = QHBoxLayout()
+        bottom.setSpacing(4)
+
+        progress_bar = QProgressBar()
+        progress_bar.setFixedHeight(4)
+        progress_bar.setTextVisible(False)
+        progress_bar.setStyleSheet(
+            "QProgressBar { background: #151400; border: none; border-radius: 2px; }"
+            "QProgressBar::chunk { background: #FFF203; border-radius: 2px; }"
+        )
+        bottom.addWidget(progress_bar, 1)
+
+        frame_label = QLabel("")
+        frame_label.setStyleSheet(
+            "color: #999980; font-size: 9px; border: none; background: transparent;"
+        )
+        bottom.addWidget(frame_label)
+
+        status_label = QLabel("")
+        status_label.setStyleSheet(
+            "color: #808070; font-size: 9px; font-weight: 600; "
+            "border: none; background: transparent;"
+        )
+        bottom.addWidget(status_label)
+
+        layout.addLayout(bottom)
 
         cache = _JobRowCache(row, progress_bar, frame_label, status_label)
         self._update_row_in_place(cache, job)
         return row, cache
 
     def _update_row_in_place(self, cache: _JobRowCache, job: GPUJob) -> None:
-        """Update a cached row's widgets to reflect current job state.
-        This is the fast path — no widget creation/destruction."""
+        """Update a cached row's widgets to reflect current job state."""
         color = _STATUS_COLORS.get(job.status, "#808070")
         status_text = _STATUS_TEXT.get(job.status, "?")
 
@@ -315,44 +343,48 @@ class QueuePanel(QWidget):
                 pct = int(job.current_frame / job.total_frames * 100)
                 pb.setRange(0, 100)
                 pb.setValue(pct)
-                pb.setFixedWidth(100)
                 pb.show()
                 fl.setText(f"{job.current_frame}/{job.total_frames}")
                 fl.show()
                 sl.hide()
             else:
-                # Indeterminate — only reset range if not already indeterminate
                 if cache.last_total != 0 or cache.last_status != JobStatus.RUNNING:
                     pb.setRange(0, 0)
-                pb.setFixedWidth(100)
                 pb.show()
                 fl.hide()
                 sl.setText("Processing...")
-                sl.setStyleSheet(f"color: {color}; font-size: 10px;")
+                sl.setStyleSheet(
+                    f"color: {color}; font-size: 9px; border: none; background: transparent;"
+                )
                 sl.show()
         elif job.status == JobStatus.QUEUED:
             if cache.last_status != JobStatus.QUEUED:
                 pb.setRange(0, 0)
-            pb.setFixedWidth(60)
             pb.show()
             fl.hide()
             sl.setText(status_text)
-            sl.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 600;")
+            sl.setStyleSheet(
+                f"color: {color}; font-size: 9px; font-weight: 600; "
+                "border: none; background: transparent;"
+            )
             sl.show()
         elif job.status == JobStatus.CANCELLED:
             pb.hide()
             fl.hide()
             sl.setText(status_text)
             sl.setStyleSheet(
-                f"color: {color}; font-size: 10px; text-decoration: line-through;"
+                f"color: {color}; font-size: 9px; text-decoration: line-through; "
+                "border: none; background: transparent;"
             )
             sl.show()
         else:
-            # COMPLETED, FAILED, etc.
             pb.hide()
             fl.hide()
             sl.setText(status_text)
-            sl.setStyleSheet(f"color: {color}; font-size: 10px; font-weight: 600;")
+            sl.setStyleSheet(
+                f"color: {color}; font-size: 9px; font-weight: 600; "
+                "border: none; background: transparent;"
+            )
             sl.show()
 
         cache.last_status = job.status

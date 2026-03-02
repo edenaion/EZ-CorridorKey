@@ -550,13 +550,13 @@ class IOTrayPanel(QWidget):
 
         menu.addSeparator()
 
-        # Clear Outputs
-        label_clear = f"Clear Outputs ({n} clips)" if multi else "Clear Outputs"
+        # Clear Outputs — only show when there are outputs to clear
         any_outputs = any(c.has_outputs for c in selected)
-        clear_action = QAction(label_clear, self)
-        clear_action.setEnabled(any_outputs)
-        clear_action.triggered.connect(lambda: self._clear_outputs_batch(selected))
-        menu.addAction(clear_action)
+        if any_outputs:
+            label_clear = f"Clear Outputs ({n} clips)" if multi else "Clear Outputs"
+            clear_action = QAction(label_clear, self)
+            clear_action.triggered.connect(lambda: self._clear_outputs_batch(selected))
+            menu.addAction(clear_action)
 
         # Remove...
         label_remove = f"Remove ({n} clips)..." if multi else "Remove..."

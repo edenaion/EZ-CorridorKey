@@ -195,7 +195,6 @@ class MainWindow(QMainWindow):
         # Always start on welcome screen — user picks a project from recents or imports
         # Deferred sync of IO tray divider with viewer splitter
         QTimer.singleShot(0, self._sync_io_divider)
-        QTimer.singleShot(0, self._position_queue_panel)
 
         # Apply persisted preferences (e.g. tooltip visibility, sound mute)
         self._apply_tooltip_setting()
@@ -303,10 +302,14 @@ class MainWindow(QMainWindow):
         # Vertical splitter: top = viewer+params, bottom = I/O tray
         self._vsplitter = QSplitter(Qt.Vertical)
 
-        # Horizontal splitter: dual viewer | param panel
+        # Horizontal splitter: queue sidebar | dual viewer | param panel
         self._splitter = QSplitter(Qt.Horizontal)
 
-        # Left — Dual Viewer (input + output side by side)
+        # Left — Queue Sidebar (collapsible)
+        self._queue_panel = QueuePanel(self._service.job_queue)
+        self._splitter.addWidget(self._queue_panel)
+
+        # Center — Dual Viewer (input + output side by side)
         self._dual_viewer = DualViewerPanel()
         self._splitter.addWidget(self._dual_viewer)
 
@@ -314,12 +317,14 @@ class MainWindow(QMainWindow):
         self._param_panel = ParameterPanel()
         self._splitter.addWidget(self._param_panel)
 
-        # Viewer fills, param panel fixed width
-        self._splitter.setSizes([920, 280])
-        self._splitter.setStretchFactor(0, 1)
-        self._splitter.setStretchFactor(1, 0)
+        # Queue collapsed, viewer fills, param panel fixed width
+        self._splitter.setSizes([24, 920, 280])
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setStretchFactor(2, 0)
         self._splitter.setCollapsible(0, False)
         self._splitter.setCollapsible(1, False)
+        self._splitter.setCollapsible(2, False)
 
         self._vsplitter.addWidget(self._splitter)
 
@@ -345,13 +350,6 @@ class MainWindow(QMainWindow):
         self.centralWidget().layout().addWidget(self._status_bar)
         # Hidden until user opens a project (welcome screen has no use for it)
         self._status_bar.hide()
-
-        # Queue panel — overlay parented to central widget, sits above status bar
-        # Hidden on welcome screen, shown when workspace opens
-        self._queue_panel = QueuePanel(self._service.job_queue, parent=self.centralWidget())
-        self._queue_panel._collapsed = False
-        self._queue_panel.toggle_collapsed()  # start collapsed (header-only)
-        self._queue_panel.hide()
 
     def _setup_shortcuts(self) -> None:
         """Wire keyboard shortcuts from the centralized registry."""
@@ -657,6 +655,7 @@ class MainWindow(QMainWindow):
 
         # Status bar buttons
         self._status_bar.run_clicked.connect(self._on_run_inference)
+        self._status_bar.extract_clicked.connect(self._on_extract_current_clip)
         self._status_bar.resume_clicked.connect(self._on_resume_inference)
         self._status_bar.stop_clicked.connect(self._on_stop_inference)
 
@@ -765,12 +764,14 @@ class MainWindow(QMainWindow):
 
         # Enable run button only for READY or COMPLETE (reprocess) clips
         can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
+        needs_extraction = clip.state == ClipState.EXTRACTING
         logger.debug(f"Run button enabled: {can_run} (state={clip.state.value})")
         self._status_bar.update_button_state(
             can_run=can_run,
             has_partial=clip.completed_frame_count() > 0,
             has_in_out=clip.in_out_range is not None,
             batch_count=batch_count if batch_count > 1 else 0,
+            needs_extraction=needs_extraction,
         )
 
         # Enable GVM/VideoMaMa buttons based on state
@@ -876,8 +877,6 @@ class MainWindow(QMainWindow):
         """Switch from welcome screen to the 3-panel workspace."""
         self._stack.setCurrentIndex(1)
         self._status_bar.show()
-        self._queue_panel.show()
-        QTimer.singleShot(0, self._position_queue_panel)
 
     @Slot(str)
     def _on_welcome_folder(self, dir_path: str) -> None:
@@ -918,8 +917,6 @@ class MainWindow(QMainWindow):
                 pass
         self._stack.setCurrentIndex(0)
         self._status_bar.hide()
-        self._queue_panel.hide()
-        self._queue_panel._body.hide()
         self._welcome.refresh_recents()
         self._clips_dir = None
         self._current_clip = None
@@ -1639,6 +1636,13 @@ class MainWindow(QMainWindow):
         self._status_bar.start_job_timer(label="Extracting")
         logger.info(f"Auto-extraction queued: {len(extracting)} clip(s)")
 
+    def _on_extract_current_clip(self) -> None:
+        """Handle RUN EXTRACTION button — extract the currently selected clip."""
+        clip = self._current_clip
+        if not clip or clip.state != ClipState.EXTRACTING:
+            return
+        self._on_extract_requested([clip])
+
     @Slot(list)
     def _on_extract_requested(self, clips: list) -> None:
         """Handle right-click → Run Extraction on selected clips."""
@@ -2026,20 +2030,6 @@ class MainWindow(QMainWindow):
     def _toggle_queue_panel(self) -> None:
         self._queue_panel.toggle_collapsed()
 
-    def _position_queue_panel(self) -> None:
-        """Pin queue header bar to bottom of central widget, above status bar."""
-        central = self.centralWidget()
-        if central is None:
-            return
-        cw, ch = central.width(), central.height()
-        sb_h = self._status_bar.height() if self._status_bar.isVisible() else 0
-        h = self._queue_panel.height()
-        self._queue_panel.setFixedWidth(cw)
-        self._queue_panel.move(0, ch - sb_h - h)
-        self._queue_panel.raise_()
-        # Also reposition the body popup if expanded
-        self._queue_panel.reposition()
-
     def _show_preferences(self) -> None:
         """Open the Preferences dialog and apply changes."""
         dlg = PreferencesDialog(self)
@@ -2144,9 +2134,6 @@ class MainWindow(QMainWindow):
         qimg = QImage(img_u8.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         return qimg.copy()  # deep copy so numpy buffer can be freed
 
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._position_queue_panel()
 
     def closeEvent(self, event) -> None:
         """Clean shutdown — auto-save session, stop workers, unload engines."""

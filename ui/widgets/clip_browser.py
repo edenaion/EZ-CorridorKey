@@ -338,10 +338,10 @@ class ClipBrowser(QWidget):
 
         menu.addSeparator()
 
-        clear_action = QAction("Clear Outputs", self)
-        clear_action.setEnabled(clip.has_outputs)
-        clear_action.triggered.connect(lambda: self._clear_outputs(clip))
-        menu.addAction(clear_action)
+        if clip.has_outputs:
+            clear_action = QAction("Clear Outputs", self)
+            clear_action.triggered.connect(lambda: self._clear_outputs(clip))
+            menu.addAction(clear_action)
 
         delete_action = QAction("Delete Project", self)
         delete_action.triggered.connect(lambda: self._delete_clip(clip))

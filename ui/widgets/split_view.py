@@ -264,11 +264,13 @@ class SplitViewWidget(QWidget):
         bar_x = (w - bar_w) // 2
 
         # "Extracting frames..." header above the bar
-        painter.setPen(QColor("#808070"))
         font = painter.font()
         font.setPointSize(14)
         painter.setFont(font)
-        header_rect = QRectF(bar_x, h // 2 - 30, bar_w, 24)
+        header_rect = QRectF(bar_x, h // 2 - 30, bar_w, 28)
+        # Semi-transparent background for readability
+        painter.fillRect(header_rect.adjusted(-8, -2, 8, 2), QColor(0, 0, 0, 140))
+        painter.setPen(QColor("#FFFFFF"))
         painter.drawText(header_rect, Qt.AlignCenter, "Extracting frames...")
 
         # Progress bar below header
@@ -288,10 +290,12 @@ class SplitViewWidget(QWidget):
         painter.drawRect(bar_x, bar_y, bar_w - 1, bar_h - 1)
 
         # Progress text below bar
-        painter.setPen(QColor("#FF8C00"))
         font.setPointSize(11)
         painter.setFont(font)
         text_rect = QRectF(bar_x, bar_y + bar_h + 8, bar_w, 24)
+        # Semi-transparent background for readability
+        painter.fillRect(text_rect.adjusted(-8, -2, 8, 2), QColor(0, 0, 0, 140))
+        painter.setPen(QColor("#FF8C00"))
         painter.drawText(
             text_rect, Qt.AlignCenter,
             f"{pct}%  ({current}/{self._extraction_total} frames)",
