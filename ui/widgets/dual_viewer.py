@@ -114,11 +114,15 @@ class DualViewerPanel(QWidget):
                 self._scrubber.set_frame(0)
             self._update_coverage(clip, fi)
 
-        # Restore in/out markers from clip data
+        # Restore in/out markers from clip data, default to full range
         if clip.in_out_range:
             self._scrubber.set_in_out(clip.in_out_range.in_point, clip.in_out_range.out_point)
         else:
-            self._scrubber.clear_in_out()
+            total = fi.frame_count if fi else 0
+            if total > 0:
+                self._scrubber.set_in_out(0, total - 1)
+            else:
+                self._scrubber.clear_in_out()
 
     def load_preview_from_file(self, file_path: str, clip_name: str, frame_index: int) -> None:
         """Forward worker preview to the output viewer."""

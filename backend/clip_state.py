@@ -438,6 +438,11 @@ def scan_clips_dir(
         logger.warning(f"Clips directory not found: {clips_dir}")
         return entries
 
+    # If the directory itself is a v2 project, scan its clips directly
+    from .project import is_v2_project
+    if is_v2_project(clips_dir):
+        return scan_project_clips(clips_dir)
+
     seen_names: set[str] = set()
 
     for item in sorted(os.listdir(clips_dir)):

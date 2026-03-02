@@ -139,7 +139,7 @@ class MainWindow(QMainWindow):
         # Session save/load
         save_action = file_menu.addAction("Save Session", self._on_save_session)
         save_action.setShortcut(QKeySequence("Ctrl+S"))
-        load_action = file_menu.addAction("Load Session...", self._on_load_session)
+        load_action = file_menu.addAction("Open Project...", self._on_open_project)
         load_action.setShortcut(QKeySequence("Ctrl+O"))
 
         file_menu.addSeparator()
@@ -756,10 +756,10 @@ class MainWindow(QMainWindow):
             f"{os.path.basename(project_dir)} (copy={copy_source})"
         )
 
-        # Scan Projects root — select the last clip from the new project
+        # Open the new project (not the Projects root — each project is isolated)
         self._switch_to_workspace()
         self._on_clips_dir_changed(
-            root, skip_session_restore=True, select_clip=None,
+            project_dir, skip_session_restore=True, select_clip=None,
         )
 
     def _on_open_folder(self) -> None:
@@ -1666,13 +1666,17 @@ class MainWindow(QMainWindow):
                         pass
 
     @Slot()
-    def _on_load_session(self) -> None:
-        """Load session from JSON sidecar."""
-        path = self._session_path()
-        if not path or not os.path.isfile(path):
-            QMessageBox.information(self, "No Session", "No saved session found in current folder.")
+    def _on_open_project(self) -> None:
+        """Open a project folder via directory picker (Ctrl+O)."""
+        from backend.project import projects_root
+        start_dir = projects_root()
+        folder = QFileDialog.getExistingDirectory(
+            self, "Open Project", start_dir,
+        )
+        if not folder:
             return
-        self._load_session_from(path)
+        self._switch_to_workspace()
+        self._on_clips_dir_changed(folder, skip_session_restore=False)
 
     def _try_auto_load_session(self, clips_dir: str) -> None:
         """Auto-load session if .corridorkey_session.json exists in clips dir."""
