@@ -4,6 +4,26 @@ Running log of all commits for development history.
 
 ---
 
+### 70c51f6 - 2026-03-02 13:19
+**Queue panel: floating overlay, vertical QUEUE tab, splitter alignment**
+
+---
+
+### a9df37a - 2026-03-02 13:06
+**Move queue panel to collapsible left sidebar, UI polish pass**
+
+---
+
+### 9afd225 - 2026-03-02 12:42
+**Add hotkeys dialog, remove split view, fix queue panel progress stutter**
+
+---
+
+### 15611e8 - 2026-03-02 10:22
+**Add UI sound system, context-aware import, escape cancel, extraction controls**
+
+---
+
 ### (uncommitted) - 2026-03-02
 **Interactive annotation overlay, VideoMaMa pipeline fixes, and code hygiene cleanup**
 

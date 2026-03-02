@@ -1,14 +1,17 @@
-"""Minimal UI sound manager — hover sounds with amplitude variance.
+"""Minimal UI sound manager — click sounds with amplitude variance.
 
 Uses QSoundEffect for low-latency WAV playback.
 Volume varies ±8% on each play for organic feel.
+
+Unified click sound system: install ButtonClickFilter on QApplication
+and every QPushButton automatically gets a click sound on press.
 """
 from __future__ import annotations
 
 import os
 import random
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, QObject, QEvent
 from PySide6.QtMultimedia import QSoundEffect
 
 
@@ -92,9 +95,11 @@ class UIAudio:
             cls._play(cls._click_sfx, variance=0.10, db_offset=-2.0)
 
     @classmethod
-    def hover(cls, key: str = "") -> None:
-        """Hover sound — disabled (kept as no-op so callers don't break)."""
-        return
+    def hover(cls) -> None:
+        """Hover sound — only used on the welcome/home screen."""
+        cls._ensure_loaded()
+        if cls._hover_sfx:
+            cls._play(cls._hover_sfx)
 
     @classmethod
     def user_cancel(cls) -> None:
@@ -130,3 +135,28 @@ class UIAudio:
         cls._ensure_loaded()
         if cls._inference_done_sfx:
             cls._play(cls._inference_done_sfx)
+
+
+class ButtonClickFilter(QObject):
+    """App-level event filter — plays click sound on any QPushButton press.
+
+    Install once on QApplication and every button gets the sound automatically.
+    No per-widget wiring needed.
+    """
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.MouseButtonPress:
+            from PySide6.QtWidgets import QPushButton
+            if isinstance(obj, QPushButton) and obj.isEnabled():
+                UIAudio.click()
+        return False
+
+
+def install_global_click_sound(app: QObject) -> None:
+    """Install the unified click sound filter on the application.
+
+    Call once during app startup:
+        install_global_click_sound(app)
+    """
+    filt = ButtonClickFilter(app)
+    app.installEventFilter(filt)

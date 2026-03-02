@@ -1,13 +1,9 @@
-"""Right panel — inference parameters, output config, and alpha generation controls.
+"""Right panel — alpha generation, inference parameters, and output config.
 
-Provides sliders/controls for:
-- Color Space (sRGB / Linear)
-- Despill strength (0-10, maps to 0.0-1.0 internally)
-- Despeckle toggle + size
-- Refiner scale (0-30, maps to 0.0-3.0)
-- Live Preview toggle (debounced single-frame reprocess)
-- Output format options (FG/Matte/Comp/Processed, format selectors)
-- Alpha generation buttons (GVM Auto, VideoMaMa)
+Sections follow the pipeline order:
+1. Alpha Generation — GVM Auto (automatic) or VideoMaMa (manual masks)
+2. Inference — Color Space, Despill, Despeckle, Refiner, Live Preview
+3. Output — FG/Matte/Comp/Processed format selectors
 """
 from __future__ import annotations
 
@@ -56,7 +52,56 @@ class ParameterPanel(QWidget):
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(4)
 
-        # ── INFERENCE section ──
+        # ── ALPHA GENERATION section (Step 1) ──
+        alpha_group = QGroupBox("ALPHA GENERATION")
+        alpha_layout = QVBoxLayout(alpha_group)
+        alpha_layout.setSpacing(8)
+
+        self._gvm_btn = QPushButton("GVM AUTO")
+        self._gvm_btn.setEnabled(False)
+        self._gvm_btn.setToolTip(
+            "Auto-generate alpha hint for the entire clip.\n"
+            "Uses GVM to predict foreground/background separation.\n"
+            "Available when clip is in RAW state (frames extracted)."
+        )
+        self._gvm_btn.clicked.connect(self.gvm_requested.emit)
+        alpha_layout.addWidget(self._gvm_btn)
+
+        or_label = QLabel("— or —")
+        or_label.setAlignment(Qt.AlignCenter)
+        or_label.setStyleSheet("color: #808070; font-size: 11px;")
+        alpha_layout.addWidget(or_label)
+
+        self._videomama_btn = QPushButton("VIDEOMAMA")
+        self._videomama_btn.setEnabled(False)
+        self._videomama_btn.setToolTip(
+            "Generate alpha from painted annotations via VideoMaMa.\n\n"
+            "1. Paint masks on frames with hotkey 1 (green/foreground)\n"
+            "   or 2 (red/background)\n"
+            "2. Click Export Masks to save annotations\n"
+            "3. Click VIDEOMAMA to generate alpha\n\n"
+            "Tip: Annotate keyframes where the subject changes shape\n"
+            "or overlaps complex backgrounds — more frames = better results."
+        )
+        self._videomama_btn.clicked.connect(self.videomama_requested.emit)
+        alpha_layout.addWidget(self._videomama_btn)
+
+        self._export_masks_btn = QPushButton("EXPORT MASKS")
+        self._export_masks_btn.setEnabled(False)
+        self._export_masks_btn.setToolTip(
+            "Export painted annotations as VideoMamaMaskHint.\n"
+            "Then click VIDEOMAMA to generate alpha from your masks."
+        )
+        self._export_masks_btn.clicked.connect(self.export_masks_requested.emit)
+        alpha_layout.addWidget(self._export_masks_btn)
+
+        self._annotation_info = QLabel("")
+        self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
+        alpha_layout.addWidget(self._annotation_info)
+
+        layout.addWidget(alpha_group)
+
+        # ── INFERENCE section (Step 2) ──
         inf_group = QGroupBox("INFERENCE")
         inf_layout = QVBoxLayout(inf_group)
         inf_layout.setSpacing(8)
@@ -137,7 +182,7 @@ class ParameterPanel(QWidget):
 
         layout.addWidget(inf_group)
 
-        # ── OUTPUT FORMAT section ──
+        # ── OUTPUT FORMAT section (Step 3) ──
         out_group = QGroupBox("OUTPUT")
         out_layout = QVBoxLayout(out_group)
         out_layout.setSpacing(6)
@@ -212,48 +257,6 @@ class ParameterPanel(QWidget):
 
         layout.addWidget(out_group)
 
-        # ── ALPHA GENERATION section ──
-        alpha_group = QGroupBox("ALPHA GENERATION")
-        alpha_layout = QVBoxLayout(alpha_group)
-        alpha_layout.setSpacing(8)
-
-        self._gvm_btn = QPushButton("GVM AUTO")
-        self._gvm_btn.setEnabled(False)
-        self._gvm_btn.setToolTip("Auto-generate alpha hint via GVM (RAW clips only)")
-        self._gvm_btn.clicked.connect(self.gvm_requested.emit)
-        alpha_layout.addWidget(self._gvm_btn)
-
-        self._videomama_btn = QPushButton("VIDEOMAMA")
-        self._videomama_btn.setEnabled(False)
-        self._videomama_btn.setToolTip("Generate alpha from user mask via VideoMaMa (MASKED clips only)")
-        self._videomama_btn.clicked.connect(self.videomama_requested.emit)
-        alpha_layout.addWidget(self._videomama_btn)
-
-        # Annotation export
-        alpha_layout.addSpacing(8)
-        self._annotation_label = QLabel(
-            "Annotate: press 1 (green) / 2 (red)\n"
-            "Shift+drag to resize brush"
-        )
-        self._annotation_label.setStyleSheet("color: #808070; font-size: 10px;")
-        self._annotation_label.setWordWrap(True)
-        alpha_layout.addWidget(self._annotation_label)
-
-        self._export_masks_btn = QPushButton("EXPORT MASKS")
-        self._export_masks_btn.setEnabled(False)
-        self._export_masks_btn.setToolTip(
-            "Export painted annotations as VideoMamaMaskHint.\n"
-            "Then click VIDEOMAMA to generate alpha from your masks."
-        )
-        self._export_masks_btn.clicked.connect(self.export_masks_requested.emit)
-        alpha_layout.addWidget(self._export_masks_btn)
-
-        self._annotation_info = QLabel("")
-        self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
-        alpha_layout.addWidget(self._annotation_info)
-
-        layout.addWidget(alpha_group)
-
         layout.addStretch(1)
 
         scroll.setWidget(inner)
@@ -268,27 +271,8 @@ class ParameterPanel(QWidget):
         for widget in self._middle_click_defaults:
             widget.installEventFilter(self)
 
-        # Hover sound on action buttons (only when enabled)
-        self._hover_btns = {self._gvm_btn, self._videomama_btn, self._export_masks_btn}
-        for btn in self._hover_btns:
-            btn.installEventFilter(self)
-
-        # Hover sound on output checkboxes (only when unchecked — i.e. clickable to enable)
-        self._hover_checks = {self._fg_check, self._matte_check, self._comp_check, self._proc_check}
-        for chk in self._hover_checks:
-            chk.installEventFilter(self)
-
     def eventFilter(self, obj, event) -> bool:
-        """Middle-click resets a control; hover/click sound on action buttons and output checkboxes."""
-        from ui.sounds.audio_manager import UIAudio
-        if event.type() == QEvent.Enter:
-            if obj in self._hover_btns and obj.isEnabled():
-                UIAudio.hover(key=f"btn:{obj.objectName() or obj.text()}")
-            elif obj in self._hover_checks and not obj.isChecked():
-                UIAudio.hover(key=f"chk:{obj.text()}")
-        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
-            if (obj in self._hover_btns and obj.isEnabled()) or obj in self._hover_checks:
-                UIAudio.click()
+        """Middle-click resets a control to its default value."""
         if event.type() == QEvent.MouseButtonPress and event.button() == Qt.MiddleButton:
             if obj in self._middle_click_defaults:
                 setter, default = self._middle_click_defaults[obj]

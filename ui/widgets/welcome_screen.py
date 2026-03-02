@@ -103,11 +103,9 @@ class _DropZone(QWidget):
         layout.addWidget(browse_btn, alignment=Qt.AlignCenter)
 
     def eventFilter(self, obj, event):
-        from ui.sounds.audio_manager import UIAudio
         if event.type() == QEvent.Enter and obj.objectName() == "welcomeBrowse":
-            UIAudio.hover(key="btn:welcomeBrowse")
-        elif event.type() == QEvent.MouseButtonPress and obj.objectName() == "welcomeBrowse":
-            UIAudio.click()
+            from ui.sounds.audio_manager import UIAudio
+            UIAudio.hover()
         return super().eventFilter(obj, event)
 
     def mousePressEvent(self, event) -> None:

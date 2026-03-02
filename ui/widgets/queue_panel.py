@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QScrollArea, QFrame, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtCore import Qt, Signal
 
 from backend.job_queue import GPUJobQueue, GPUJob, JobStatus, JobType
 
@@ -99,9 +99,6 @@ class QueuePanel(QWidget):
         self._main_layout.addWidget(self._tab)
         self._apply_tab_style()
 
-        # Sound on tab click
-        self._tab.installEventFilter(self)
-
         # ── Content panel (shown when expanded) ──
         self._panel = QWidget()
         self._panel.setStyleSheet(
@@ -175,13 +172,6 @@ class QueuePanel(QWidget):
         # Cached row widgets keyed by job_id
         self._row_cache: dict[str, _JobRowCache] = {}
         self._displayed_ids: list[str] = []
-
-    def eventFilter(self, obj, event):
-        if obj is self._tab:
-            from ui.sounds.audio_manager import UIAudio
-            if event.type() == QEvent.MouseButtonPress:
-                UIAudio.click()
-        return super().eventFilter(obj, event)
 
     def _apply_tab_style(self) -> None:
         """Update tab color based on collapsed/expanded state."""

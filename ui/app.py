@@ -100,4 +100,8 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     elif os.path.isfile(png_icon):
         app.setWindowIcon(QIcon(png_icon))
 
+    # Install unified click sound — every QPushButton gets click sound automatically
+    from ui.sounds.audio_manager import install_global_click_sound
+    install_global_click_sound(app)
+
     return app

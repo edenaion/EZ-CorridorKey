@@ -63,7 +63,8 @@ _SESSION_VERSION = 1
 class _Toast(QLabel):
     """Non-blocking notification that auto-fades after a duration. Click to dismiss."""
 
-    def __init__(self, parent: QWidget, text: str, duration_ms: int = 4000):
+    def __init__(self, parent: QWidget, text: str, duration_ms: int = 4000,
+                 center: bool = False):
         super().__init__(text, parent)
         self.setWordWrap(True)
         self.setAlignment(Qt.AlignCenter)
@@ -73,11 +74,18 @@ class _Toast(QLabel):
         )
         self.setFixedWidth(380)
         self.adjustSize()
-        # Position bottom-center, above the status bar
-        self.move(
-            (parent.width() - self.width()) // 2,
-            parent.height() - self.height() - 60,
-        )
+        if center:
+            # Position center of window
+            self.move(
+                (parent.width() - self.width()) // 2,
+                (parent.height() - self.height()) // 2,
+            )
+        else:
+            # Position bottom-center, above the status bar
+            self.move(
+                (parent.width() - self.width()) // 2,
+                parent.height() - self.height() - 60,
+            )
         # Fade-out animation
         self._opacity = QGraphicsOpacityEffect(self)
         self._opacity.setOpacity(1.0)
@@ -147,6 +155,8 @@ class MainWindow(QMainWindow):
         self._bg_cache: QImage | None = None
         # Batch pipeline: clip names queued for GVM→inference auto-chain
         self._batch_clips: set[str] = set()
+        # Debug console (lazy-created on first toggle)
+        self._debug_console: DebugConsoleWidget | None = None
 
         # Data model
         self._clip_model = ClipListModel()
@@ -237,7 +247,16 @@ class MainWindow(QMainWindow):
 
         # Help menu
         help_menu = menu_bar.addMenu("Help")
+        help_menu.addAction("Console", self._toggle_debug_console)
+        help_menu.addSeparator()
         help_menu.addAction("About", self._show_about)
+
+        # Click sound on any menu action
+        menu_bar.triggered.connect(lambda _: self._menu_click_sound())
+
+    def _menu_click_sound(self) -> None:
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.click()
 
     def _build_central(self) -> None:
         central = QWidget()
@@ -359,6 +378,11 @@ class MainWindow(QMainWindow):
         reg = self._shortcut_registry
         self._save_action.setShortcut(QKeySequence(reg.get_key("save_session")))
         self._open_action.setShortcut(QKeySequence(reg.get_key("open_project")))
+        # Debug console shortcut needs ApplicationShortcut context so F12
+        # works even when the console window itself has focus
+        sc = reg._shortcuts.get("debug_console")
+        if sc is not None:
+            sc.setContext(Qt.ApplicationShortcut)
 
     def _toggle_mute(self) -> None:
         """Toggle UI sounds on/off and show a brief overlay indicator."""
@@ -454,6 +478,7 @@ class MainWindow(QMainWindow):
                 new_state = ClipState.RAW if has_frames else ClipState.ERROR
                 self._clip_model.update_clip_state(clip.name, new_state)
         self._io_tray.refresh()
+        self._refresh_button_state()
         logger.info("Frame extraction cancelled by user")
 
     def _cancel_inference(self) -> None:
@@ -470,7 +495,8 @@ class MainWindow(QMainWindow):
         logger.info("Processing cancelled by user")
         if is_videomama:
             _Toast(self, "GPU is finishing the current chunk.\n"
-                         "VideoMaMa will stop after it completes.")
+                         "VideoMaMa will stop after it completes.",
+                   center=True)
 
     def _toggle_annotation_fg(self) -> None:
         """Hotkey 1: toggle green (foreground) annotation brush."""
@@ -625,10 +651,25 @@ class MainWindow(QMainWindow):
             self._on_clear_annotations()
 
     def _on_clear_annotations(self) -> None:
-        """Clear all annotations on the current clip."""
+        """Clear all annotations on the current clip and remove exported masks."""
         iv = self._dual_viewer.input_viewer
         iv.clear_annotations()
         self._update_annotation_info()
+
+        # Remove exported mask directory so VideoMaMa button disables
+        clip = self._current_clip
+        if clip is not None:
+            import shutil
+            mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
+            if os.path.isdir(mask_dir):
+                shutil.rmtree(mask_dir, ignore_errors=True)
+                logger.info(f"Removed mask hints: {mask_dir}")
+            clip.mask_asset = None
+            clip.find_assets()
+            self._param_panel.set_videomama_enabled(
+                clip.state == ClipState.MASKED
+                or clip.mask_asset is not None
+            )
 
     def _update_annotation_info(self) -> None:
         """Update parameter panel with current annotation count and scrubber markers."""
@@ -665,6 +706,7 @@ class MainWindow(QMainWindow):
         self._gpu_worker.preview_ready.connect(self._on_worker_preview)
         self._gpu_worker.clip_finished.connect(self._on_worker_clip_finished)
         self._gpu_worker.warning.connect(self._on_worker_warning)
+        self._gpu_worker.status_update.connect(self._on_worker_status)
         self._gpu_worker.error.connect(self._on_worker_error)
         self._gpu_worker.queue_empty.connect(self._on_queue_empty)
         self._gpu_worker.reprocess_result.connect(self._on_reprocess_result)
@@ -694,6 +736,12 @@ class MainWindow(QMainWindow):
 
         # Reposition queue overlay when vertical splitter is dragged
         self._vsplitter.splitterMoved.connect(self._position_queue_panel)
+
+        # Scrubber in/out marker drags → persist + refresh button state
+        scrubber = self._dual_viewer._scrubber
+        scrubber.in_point_changed.connect(lambda _: self._persist_in_out())
+        scrubber.out_point_changed.connect(lambda _: self._persist_in_out())
+        scrubber.range_cleared.connect(self._clear_in_out)
 
         # Extract worker signals
         self._extract_worker.progress.connect(self._on_extract_progress)
@@ -1078,8 +1126,8 @@ class MainWindow(QMainWindow):
         # Clamp: in-point cannot exceed out-point
         if out is not None and idx > out:
             idx = out
+        # set_in_point emits in_point_changed → _persist_in_out
         self._dual_viewer._scrubber.set_in_point(idx)
-        self._persist_in_out()
 
     def _set_out_point(self) -> None:
         """Set out-point at the current scrubber position."""
@@ -1090,8 +1138,8 @@ class MainWindow(QMainWindow):
         # Clamp: out-point cannot precede in-point
         if in_pt is not None and idx < in_pt:
             idx = in_pt
+        # set_out_point emits out_point_changed → _persist_in_out
         self._dual_viewer._scrubber.set_out_point(idx)
-        self._persist_in_out()
 
     def _clear_in_out(self) -> None:
         """Clear in/out markers (Alt+I)."""
@@ -1461,6 +1509,18 @@ class MainWindow(QMainWindow):
 
         self._queue_panel.refresh()
 
+    @Slot(str, str)
+    def _on_worker_status(self, job_id: str, message: str) -> None:
+        """Phase status from long-running jobs (e.g. VideoMaMa loading phases).
+
+        Always update — status signals fire during loading phases before
+        progress signals arrive, so _active_job_id may not match yet.
+        Also set _active_job_id if not already set.
+        """
+        if self._active_job_id is None:
+            self._active_job_id = job_id
+        self._status_bar.set_phase(message)
+
     @Slot(str, str, int, str)
     def _on_worker_preview(self, job_id: str, clip_name: str, frame_index: int, path: str) -> None:
         # Only update preview if this is the active job
@@ -1487,7 +1547,12 @@ class MainWindow(QMainWindow):
                     try:
                         clip.find_assets()
                     except Exception:
-                        pass  # find_assets may update state further
+                        pass
+                    # find_assets calls _resolve_state() which demotes
+                    # partial-alpha clips to RAW — override: GVM/VideoMaMa
+                    # completion is authoritative, clip is READY for inference
+                    clip.state = target_state
+                    self._clip_model.update_clip_state(clip_name, target_state)
                 break
 
         # Batch auto-chain: GVM completed on a batch clip → queue inference
@@ -2033,6 +2098,16 @@ class MainWindow(QMainWindow):
     def _toggle_queue_panel(self) -> None:
         self._queue_panel.toggle_collapsed()
 
+    def _toggle_debug_console(self) -> None:
+        """Toggle the in-app debug console (F12)."""
+        from ui.widgets.debug_console import DebugConsoleWidget
+        if self._debug_console is None:
+            self._debug_console = DebugConsoleWidget()
+        if self._debug_console.isVisible():
+            self._debug_console.hide()
+        else:
+            self._debug_console.show()
+
     def _show_preferences(self) -> None:
         """Open the Preferences dialog and apply changes."""
         dlg = PreferencesDialog(self)
@@ -2076,7 +2151,7 @@ class MainWindow(QMainWindow):
             "<p><b>Special Thanks</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
-            '<a href="https://www.edzisk.com">Ed Zisk</a> — GUI, workflow enhancements<br>'
+            '<a href="https://www.edzisk.com">Ed Zisk</a> — GUI, workflow, SFX<br>'
             '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo'
             "</p>"
         )
@@ -2169,4 +2244,6 @@ class MainWindow(QMainWindow):
             self._gpu_worker.stop()
             self._gpu_worker.wait(5000)
         self._service.unload_engines()
+        if self._debug_console is not None:
+            self._debug_console.close_permanently()
         super().closeEvent(event)

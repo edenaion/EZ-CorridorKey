@@ -4,6 +4,8 @@ import cv2
 import random
 import logging
 import time
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 
 from easydict import EasyDict
@@ -73,7 +75,7 @@ class GVMProcessor:
             seed = int(time.time())
         seed_all(seed)
         
-        logging.info(f"Loading GVM models from {model_base}...")
+        logger.info(f"Loading GVM models from {model_base}...")
         self.vae = AutoencoderKLTemporalDecoder.from_pretrained(model_base, subfolder="vae", torch_dtype=torch.float16)
         self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(model_base, subfolder="scheduler")
         
@@ -95,7 +97,7 @@ class GVMProcessor:
                 self.pipe.load_lora_weights(lora_base)
                 
         self.pipe = self.pipe.to(self.device, dtype=torch.float16)
-        logging.info("Models loaded.")
+        logger.info("Models loaded.")
 
     def process_sequence(self, input_path, output_dir,
                          num_frames_per_batch=8,
@@ -126,7 +128,7 @@ class GVMProcessor:
         else:
             image_files = sorted([f for f in input_path.iterdir() if f.is_file() and f.suffix.lower() in ['.jpg', '.png', '.jpeg', '.exr']])
             if not image_files:
-                logging.warning(f"No images found in {input_path}")
+                logger.warning(f"No images found in {input_path}")
                 return
             # Use cv2 for EXR support if needed
             first_img_path = str(image_files[0])
@@ -205,7 +207,7 @@ class GVMProcessor:
             # Create output directory for this specific file
             file_output_dir = osp.join(output_dir, file_name)
             os.makedirs(file_output_dir, exist_ok=True)
-            logging.info(f"Processing {input_path} -> {file_output_dir}")
+            logger.info(f"Processing {input_path} -> {file_output_dir}")
             
             writer_alpha = VideoWriter(osp.join(file_output_dir, f"{file_name}_alpha.mp4"), frame_rate=fps) if write_video else None
             writer_alpha_seq = ImageSequenceWriter(osp.join(file_output_dir, "alpha_seq"), extension='png')
@@ -275,4 +277,4 @@ class GVMProcessor:
         
         if writer_alpha: writer_alpha.close()
         writer_alpha_seq.close()
-        logging.info(f"Finished {file_name}")
+        logger.info(f"Finished {file_name}")

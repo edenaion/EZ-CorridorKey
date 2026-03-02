@@ -6,9 +6,12 @@ with an always-visible delete button. Right-click for rename/delete.
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -85,13 +88,13 @@ class RecentProjectCard(QFrame):
 
     def enterEvent(self, event):
         from ui.sounds.audio_manager import UIAudio
-        UIAudio.hover(key=f"project:{self._workspace_path}")
+        UIAudio.hover()
         super().enterEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             from ui.sounds.audio_manager import UIAudio
-            UIAudio.click()
+            UIAudio.click()  # ProjectCard is not QPushButton, manual click needed
             self.clicked.emit(self._workspace_path)
         super().mousePressEvent(event)
 
@@ -268,12 +271,15 @@ class RecentProjectsPanel(QWidget):
                     root = os.path.realpath(projects_root())
                     target = os.path.realpath(workspace_path)
                     if not target.startswith(root + os.sep):
+                        logger.warning(f"Refusing to delete outside Projects folder: {target}")
                         raise OSError(
                             f"Refusing to delete outside Projects folder: {target}"
                         )
                     if os.path.isdir(workspace_path):
+                        logger.info(f"Deleting project folder: {workspace_path}")
                         shutil.rmtree(workspace_path)
                 except OSError as e:
+                    logger.error(f"Failed to delete project: {e}")
                     QMessageBox.warning(
                         self, "Delete Failed",
                         f"Could not delete project:\n{e}",

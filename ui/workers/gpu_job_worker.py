@@ -48,6 +48,7 @@ class GPUJobWorker(QThread):
     preview_ready = Signal(str, str, int, str) # job_id, clip_name, frame_index, temp_file_path
     clip_finished = Signal(str, str, str)       # job_id, clip_name, job_type_value
     warning = Signal(str, str)                 # job_id, message
+    status_update = Signal(str, str)           # job_id, status_text (phase label for status bar)
     error = Signal(str, str, str)              # job_id, clip_name, error_message
     queue_empty = Signal()                     # all jobs done
     reprocess_result = Signal(str, object)     # job_id, result_dict (for preview display)
@@ -126,6 +127,7 @@ class GPUJobWorker(QThread):
             self.warning.emit(job_id, f"Cancelled: {job.clip_name}")
 
         except CorridorKeyError as e:
+            logger.error(f"Job failed [{job_id}]: {job.clip_name} — {e}")
             self._queue.fail_job(job, str(e))
             self.error.emit(job_id, job.clip_name, str(e))
 
@@ -204,11 +206,15 @@ class GPUJobWorker(QThread):
         def on_warning(message: str) -> None:
             self.warning.emit(job.id, message)
 
+        def on_status(message: str) -> None:
+            self.status_update.emit(job.id, message)
+
         self._service.run_videomama(
             clip=clip,
             job=job,
             on_progress=on_progress,
             on_warning=on_warning,
+            on_status=on_status,
             chunk_size=chunk_size,
         )
 
@@ -259,8 +265,8 @@ class GPUJobWorker(QThread):
             cv2.imwrite(preview_path, img)
 
             self.preview_ready.emit(job_id, clip.name, frame_index, preview_path)
-        except Exception:
-            pass  # Preview is best-effort, never block inference
+        except Exception as e:
+            logger.debug(f"Preview save skipped: {e}")
 
 
 def create_job_snapshot(

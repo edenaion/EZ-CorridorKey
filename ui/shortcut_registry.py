@@ -40,6 +40,7 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("welcome_screen",     "Return to Home",               "Global",     "Home",         "_return_to_welcome"),
     ShortcutDef("delete_clips",       "Remove Selected Clips",        "Global",     "Del",          "_on_delete_selected_clips"),
     ShortcutDef("toggle_queue",       "Toggle Queue",                 "Global",     "Q",            "_toggle_queue_panel"),
+    ShortcutDef("debug_console",     "Debug Console",                "Global",     "F12",          "_toggle_debug_console"),
     # Timeline
     ShortcutDef("set_in",             "Set In-Point",                 "Timeline",   "I",            "_set_in_point"),
     ShortcutDef("set_out",            "Set Out-Point",                "Timeline",   "O",            "_set_out_point"),

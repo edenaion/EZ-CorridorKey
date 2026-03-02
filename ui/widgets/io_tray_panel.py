@@ -199,9 +199,6 @@ class ThumbnailCanvas(QWidget):
         clip = self._card_at(event.position().x())
         name = clip.name if clip else None
         if name != self._hovered_name:
-            if name is not None:
-                from ui.sounds.audio_manager import UIAudio
-                UIAudio.hover(key=f"clip:{name}")
             self._hovered_name = name
             self.update()
 
@@ -384,6 +381,7 @@ class IOTrayPanel(QWidget):
 
         self._export_canvas = ThumbnailCanvas(show_manifest_tooltip=True)
         self._export_canvas.card_clicked.connect(self.clip_clicked.emit)
+        self._export_canvas.context_menu_requested.connect(self._on_export_context_menu)
         self._export_scroll.setWidget(self._export_canvas)
 
         export_section.addWidget(self._export_scroll, 1)
@@ -563,6 +561,22 @@ class IOTrayPanel(QWidget):
         remove_action = QAction(label_remove, self)
         remove_action.triggered.connect(lambda: self._remove_dialog(selected))
         menu.addAction(remove_action)
+
+        from PySide6.QtGui import QCursor
+        menu.exec(QCursor.pos())
+
+    def _on_export_context_menu(self, clip: ClipEntry) -> None:
+        """Show right-click context menu for an export card."""
+        menu = QMenu(self)
+
+        # Open containing folder (Output directory)
+        output_dir = os.path.join(clip.root_path, "Output")
+        if not os.path.isdir(output_dir):
+            output_dir = clip.root_path
+
+        open_action = QAction("Open Containing Folder", self)
+        open_action.triggered.connect(lambda: os.startfile(output_dir))
+        menu.addAction(open_action)
 
         from PySide6.QtGui import QCursor
         menu.exec(QCursor.pos())

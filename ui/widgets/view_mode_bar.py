@@ -9,7 +9,7 @@ Codex finding: dropped ALPHA mode (identical to MATTE source).
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QButtonGroup
-from PySide6.QtCore import Signal, QEvent
+from PySide6.QtCore import Signal
 
 from ui.preview.frame_index import ViewMode
 
@@ -80,17 +80,6 @@ class ViewModeBar(QWidget):
         self._button_group.idClicked.connect(self._on_mode_clicked)
         layout.addStretch()
 
-        # Hover sound on mode buttons (only when enabled + not already active)
-        for btn in self._buttons.values():
-            btn.installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        from ui.sounds.audio_manager import UIAudio
-        if event.type() == QEvent.Enter and obj.isEnabled() and not obj.isChecked():
-            UIAudio.hover(key=f"viewmode:{obj.text()}")
-        elif event.type() == QEvent.MouseButtonPress and obj.isEnabled() and not obj.isChecked():
-            UIAudio.click()
-        return super().eventFilter(obj, event)
 
     def set_available_modes(self, modes: list[ViewMode]) -> None:
         """Enable buttons for modes that have frames."""

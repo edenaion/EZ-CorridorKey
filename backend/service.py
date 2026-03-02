@@ -204,24 +204,65 @@ class CorridorKeyService:
             logger.debug(f"VRAM query failed: {e}")
             return {}
 
+    @staticmethod
+    def _vram_allocated_mb() -> float:
+        """Return current VRAM allocated in MB, or 0 if unavailable."""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return torch.cuda.memory_allocated(0) / (1024 ** 2)
+        except Exception:
+            pass
+        return 0.0
+
+    @staticmethod
+    def _safe_offload(obj: object) -> None:
+        """Move a model's GPU tensors to CPU before dropping the reference.
+
+        Handles diffusers pipelines (.to('cpu')), plain nn.Modules (.cpu()),
+        and objects with an explicit unload() method.
+        """
+        if obj is None:
+            return
+        logger.debug(f"Offloading model: {type(obj).__name__}")
+        try:
+            if hasattr(obj, 'unload'):
+                obj.unload()
+            elif hasattr(obj, 'to'):
+                obj.to('cpu')
+            elif hasattr(obj, 'cpu'):
+                obj.cpu()
+        except Exception as e:
+            logger.debug(f"Model offload warning: {e}")
+
     def _ensure_model(self, needed: _ActiveModel) -> None:
         """Model residency manager — unload current model if switching types.
 
         Only ONE heavy model stays in VRAM at a time. Before loading a
-        different model, the previous is deleted and cache cleared.
+        different model, the previous is moved to CPU and dereferenced.
         """
         if self._active_model == needed:
             return
 
         # Unload whatever is currently loaded
         if self._active_model != _ActiveModel.NONE:
-            logger.info(f"Unloading {self._active_model.value} model for {needed.value}")
+            # Snapshot VRAM before unload for leak diagnosis
+            vram_before_mb = self._vram_allocated_mb()
+            logger.info(f"Unloading {self._active_model.value} model for {needed.value}"
+                        f" (VRAM before: {vram_before_mb:.0f}MB)")
+
             if self._active_model == _ActiveModel.INFERENCE:
+                self._safe_offload(self._engine)
                 self._engine = None
             elif self._active_model == _ActiveModel.GVM:
+                self._safe_offload(self._gvm_processor)
                 self._gvm_processor = None
             elif self._active_model == _ActiveModel.VIDEOMAMA:
+                self._safe_offload(self._videomama_pipeline)
                 self._videomama_pipeline = None
+
+            import gc
+            gc.collect()
 
             try:
                 import torch
@@ -229,6 +270,10 @@ class CorridorKeyService:
                     torch.cuda.empty_cache()
             except ImportError:
                 logger.debug("torch not available for cache clear during model switch")
+
+            vram_after_mb = self._vram_allocated_mb()
+            freed = vram_before_mb - vram_after_mb
+            logger.info(f"VRAM after unload: {vram_after_mb:.0f}MB (freed {freed:.0f}MB)")
 
         self._active_model = needed
 
@@ -271,7 +316,10 @@ class CorridorKeyService:
             return self._gvm_processor
 
         from gvm_core import GVMProcessor
+        logger.info("Loading GVM processor...")
+        t0 = time.monotonic()
         self._gvm_processor = GVMProcessor(device=self._device)
+        logger.info(f"GVM loaded in {time.monotonic() - t0:.1f}s")
         return self._gvm_processor
 
     def _get_videomama_pipeline(self):
@@ -283,11 +331,17 @@ class CorridorKeyService:
 
         sys.path.insert(0, os.path.join(BASE_DIR, "VideoMaMaInferenceModule"))
         from VideoMaMaInferenceModule.inference import load_videomama_model
+        logger.info("Loading VideoMaMa pipeline...")
+        t0 = time.monotonic()
         self._videomama_pipeline = load_videomama_model(device=self._device)
+        logger.info(f"VideoMaMa loaded in {time.monotonic() - t0:.1f}s")
         return self._videomama_pipeline
 
     def unload_engines(self) -> None:
         """Free GPU memory by unloading all engines."""
+        self._safe_offload(self._engine)
+        self._safe_offload(self._gvm_processor)
+        self._safe_offload(self._videomama_pipeline)
         self._engine = None
         self._gvm_processor = None
         self._videomama_pipeline = None
@@ -813,6 +867,7 @@ class CorridorKeyService:
         job: Optional[GPUJob] = None,
         on_progress: Optional[Callable[[str, int, int], None]] = None,
         on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
         chunk_size: int = 50,
     ) -> None:
         """Run VideoMaMa guided alpha generation for a clip.
@@ -824,6 +879,7 @@ class CorridorKeyService:
             job: Optional GPUJob for cancel checking.
             on_progress: Progress callback with per-chunk updates.
             on_warning: Warning callback.
+            on_status: Phase status callback (e.g. "Loading model...").
             chunk_size: Frames per chunk (lower = less RAM, default 50).
         """
         if clip.input_asset is None:
@@ -831,28 +887,44 @@ class CorridorKeyService:
         if clip.mask_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing mask asset for VideoMaMa")
 
+        def _status(msg: str) -> None:
+            logger.info(f"VideoMaMa [{clip.name}]: {msg}")
+            if on_status:
+                on_status(msg)
+
+        def _check_cancel(phase: str = "") -> None:
+            if job and job.is_cancelled:
+                raise JobCancelledError(clip.name, 0)
+
         t_start = time.monotonic()
 
+        # ── Phase 1: Load model ──
+        _status("Loading model...")
         with self._gpu_lock:
             pipeline = self._get_videomama_pipeline()
+        _check_cancel("model load")
 
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         os.makedirs(alpha_dir, exist_ok=True)
 
-        # Report initial progress immediately so UI leaves "Starting" state
-        est_total = clip.input_asset.frame_count or 1
-        if on_progress:
-            on_progress(clip.name, 0, est_total)
+        # Don't report progress yet — phase status is showing in the status bar.
+        # Sending on_progress(0, N) would switch the status bar to frame-counter
+        # mode and overwrite the phase text on every tick.
 
-        # Read input frames (can be slow for large sequences)
-        input_frames = self._load_frames_for_videomama(clip.input_asset, clip.name)
+        # ── Phase 2: Load input frames ──
+        _status("Loading frames...")
+        input_frames = self._load_frames_for_videomama(
+            clip.input_asset, clip.name, job=job, on_status=on_status,
+        )
+        _check_cancel("frame load")
 
-        # Build stem-matched mask frames: masks may only cover a sub-range
-        # (user exported annotations for in/out range). For input frames without
-        # a corresponding mask, use all-black (= "everything is background").
+        # ── Phase 3: Load + stem-match masks ──
+        _status("Loading masks...")
         mask_stems: dict[str, np.ndarray] = {}
         if clip.mask_asset.asset_type == 'sequence':
-            for fname in clip.mask_asset.get_frame_files():
+            mask_files = clip.mask_asset.get_frame_files()
+            for i, fname in enumerate(mask_files):
+                _check_cancel("mask load")
                 fpath = os.path.join(clip.mask_asset.path, fname)
                 m = cv2.imread(fpath, cv2.IMREAD_GRAYSCALE)
                 if m is not None:
@@ -860,12 +932,11 @@ class CorridorKeyService:
                     stem = os.path.splitext(fname)[0]
                     mask_stems[stem] = binary
         else:
-            # Video mask — load all frames positionally
             raw_masks = self._load_mask_frames_for_videomama(clip.mask_asset, clip.name)
             for i, m in enumerate(raw_masks):
                 mask_stems[f"frame_{i:06d}"] = m
 
-        # Build output filenames from input stems for cross-directory consistency
+        # Build output filenames from input stems
         if clip.input_asset and clip.input_asset.asset_type == 'sequence':
             input_names = clip.input_asset.get_frame_files()
         else:
@@ -879,29 +950,19 @@ class CorridorKeyService:
             if stem in mask_stems:
                 mask_frames.append(mask_stems[stem])
             else:
-                # No mask for this frame — all-black (background)
                 h_m, w_m = input_frames[0].shape[:2] if input_frames else (4, 4)
                 mask_frames.append(np.zeros((h_m, w_m), dtype=np.uint8))
 
-        # Re-report with exact frame count after loading
-        if on_progress:
-            on_progress(clip.name, 0, num_frames)
-
-        # Resume: count existing alpha frames and skip fully-completed chunks.
-        # Roll back one chunk for safety — the last chunk may be incomplete
-        # or have corrupt frames from a mid-write interruption.
+        # ── Resume logic ──
         existing_alpha = []
         if os.path.isdir(alpha_dir):
             existing_alpha = [f for f in os.listdir(alpha_dir)
                               if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
         n_existing = len(existing_alpha)
-        # Only skip chunks we're confident are fully complete (roll back last one)
         completed_chunks = n_existing // chunk_size
         start_chunk = max(0, completed_chunks - 1)
         start_frame = start_chunk * chunk_size
-        # Remove frames from the rollback point onward so they get cleanly rewritten
         if start_frame > 0:
-            # Build set of stems to keep (first start_frame input names as .png)
             keep = set()
             for i in range(start_frame):
                 if i < len(input_names):
@@ -913,32 +974,34 @@ class CorridorKeyService:
             logger.info(f"VideoMaMa resuming for '{clip.name}': {n_existing} alpha frames existed, "
                         f"rolling back to chunk {start_chunk} (frame {start_frame})")
 
+        # ── Phase 4: Inference (per-chunk) ──
         sys.path.insert(0, os.path.join(BASE_DIR, "VideoMaMaInferenceModule"))
         from VideoMaMaInferenceModule.inference import run_inference
 
+        total_chunks = (num_frames + chunk_size - 1) // chunk_size
+        _status(f"Running inference (chunk 1/{total_chunks})...")
         frames_written = start_frame
         for chunk_idx, chunk_output in enumerate(
             run_inference(pipeline, input_frames, mask_frames, chunk_size=chunk_size)
         ):
-            # Check cancel between chunks
-            if job and job.is_cancelled:
-                raise JobCancelledError(clip.name, frames_written)
+            _check_cancel("inference")
 
-            # Skip already-completed chunks
+            # Skip already-completed chunks (resume)
             if chunk_idx < start_chunk:
                 frames_written += len(chunk_output)
                 if on_progress:
                     on_progress(clip.name, frames_written, num_frames)
                 continue
 
-            # Write chunk frames using input stems for consistent naming
+            _status(f"Processing chunk {chunk_idx + 1}/{total_chunks}...")
+
+            # Write chunk frames
             t_chunk = time.monotonic()
             for frame in chunk_output:
                 out_bgr = cv2.cvtColor(
                     (np.clip(frame, 0.0, 1.0) * 255.0).astype(np.uint8),
                     cv2.COLOR_RGB2BGR,
                 )
-                # Use input stem with .png extension for cross-directory consistency
                 if frames_written < len(input_names):
                     stem = os.path.splitext(input_names[frames_written])[0]
                     out_name = f"{stem}.png"
@@ -965,21 +1028,31 @@ class CorridorKeyService:
         logger.info(f"VideoMaMa complete for '{clip.name}': {frames_written} alpha frames in {time.monotonic() - t_start:.1f}s")
 
     def _load_frames_for_videomama(
-        self, asset: ClipAsset, clip_name: str
+        self, asset: ClipAsset, clip_name: str,
+        job: Optional[GPUJob] = None,
+        on_status: Optional[Callable[[str], None]] = None,
     ) -> list[np.ndarray]:
         """Load input frames for VideoMaMa as uint8 RGB [0, 255].
 
         The VideoMaMa inference code expects uint8 arrays for PIL conversion.
+        Reports loading progress via on_status and checks cancel via job.
         """
         if asset.asset_type == 'video':
             raw = read_video_frames(asset.path)
             return [(np.clip(f, 0.0, 1.0) * 255.0).astype(np.uint8) for f in raw]
         frames = []
-        for fname in asset.get_frame_files():
+        files = asset.get_frame_files()
+        total = len(files)
+        for i, fname in enumerate(files):
+            if job and job.is_cancelled:
+                from .errors import JobCancelledError
+                raise JobCancelledError(clip_name, i)
             fpath = os.path.join(asset.path, fname)
             img = read_image_frame(fpath, gamma_correct_exr=True)
             if img is not None:
                 frames.append((np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8))
+            if on_status and i % 20 == 0 and i > 0:
+                on_status(f"Loading frames ({i}/{total})...")
         return frames
 
     def _load_mask_frames_for_videomama(

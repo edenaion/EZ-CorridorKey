@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox,
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QEvent
+from PySide6.QtCore import Qt, Signal, QTimer
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -138,18 +138,6 @@ class StatusBar(QWidget):
         self._tick_timer.setInterval(1000)
         self._tick_timer.timeout.connect(self._on_tick)
 
-        # Hover sound on enabled action buttons
-        self._hover_btns = {self._run_btn, self._resume_btn}
-        for btn in self._hover_btns:
-            btn.installEventFilter(self)
-
-    def eventFilter(self, obj, event):
-        from ui.sounds.audio_manager import UIAudio
-        if event.type() == QEvent.Enter and obj in self._hover_btns and obj.isEnabled():
-            UIAudio.hover(key=f"btn:{obj.objectName()}")
-        elif event.type() == QEvent.MouseButtonPress and obj in self._hover_btns and obj.isEnabled():
-            UIAudio.click()
-        return super().eventFilter(obj, event)
 
     def set_running(self, running: bool) -> None:
         """Toggle between run/resume and stop state."""
@@ -217,6 +205,7 @@ class StatusBar(QWidget):
         self._last_current = 0
         self._last_total = 0
         self._job_label = label
+        self._phase = ""  # phase text shown during loading (e.g. "Loading frames...")
 
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
@@ -232,6 +221,9 @@ class StatusBar(QWidget):
         """Update progress bar, frame counter, and ETA."""
         self._last_current = current
         self._last_total = total
+        # Clear phase text once real frame progress flows
+        if total > 0 and current > 0:
+            self._phase = ""
 
         elapsed = time.monotonic() - self._job_start if self._job_start > 0 else 0
 
@@ -260,6 +252,7 @@ class StatusBar(QWidget):
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
         self._frame_label.setText("")
+        self._phase = ""
         self._warning_count = 0
         self._warnings.clear()
         self._warn_btn.setText("")
@@ -285,15 +278,30 @@ class StatusBar(QWidget):
         """Show a status message in the frame label area."""
         self._frame_label.setText(text)
 
+    def set_phase(self, phase: str) -> None:
+        """Set loading-phase text shown during timer-only mode.
+
+        The phase text (e.g. "Loading frames...") appears between the job
+        label and the elapsed timer, and is automatically cleared once real
+        frame progress data arrives via update_progress().
+        """
+        self._phase = phase
+
     def _on_tick(self) -> None:
         """Called every second to update the elapsed display."""
-        if self._last_total > 0:
+        elapsed = time.monotonic() - self._job_start if self._job_start > 0 else 0
+        elapsed_str = _fmt_duration(elapsed)
+        label = f"{self._job_label}  " if self._job_label else ""
+        phase = getattr(self, '_phase', '')
+
+        if self._last_total > 0 and self._last_current > 0:
+            # Real frame progress — show frame counter + ETA
             self.update_progress(self._last_current, self._last_total)
+        elif phase:
+            # Loading phase — show phase text + elapsed timer
+            self._frame_label.setText(f"{label}{phase}  {elapsed_str}")
         elif self._job_start > 0:
-            # Timer-only mode (no progress data yet) — show elapsed time
-            elapsed = time.monotonic() - self._job_start
-            elapsed_str = _fmt_duration(elapsed)
-            label = f"{self._job_label}  " if self._job_label else ""
+            # Timer-only mode (no progress, no phase)
             self._frame_label.setText(f"{label}{elapsed_str}")
 
     def _show_warnings_dialog(self) -> None:

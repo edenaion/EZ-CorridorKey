@@ -3,6 +3,7 @@ VideoMaMa Inference Module
 Provides functions to load the model and run inference on video inputs.
 """
 
+import logging
 import os
 import sys
 import torch
@@ -11,6 +12,8 @@ import numpy as np
 from PIL import Image
 from typing import List, Union, Optional
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Add current directory to path to ensure relative imports work if run directly
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -40,8 +43,8 @@ def load_videomama_model(base_model_path: Optional[str] = None, unet_checkpoint_
     if unet_checkpoint_path is None:
         unet_checkpoint_path = os.path.join(current_dir, "checkpoints", "VideoMaMa")
 
-    print(f"Loading Base model from {base_model_path}...")
-    print(f"Loading VideoMaMa UNet from {unet_checkpoint_path}...")
+    logger.info(f"Loading Base model from {base_model_path}...")
+    logger.info(f"Loading VideoMaMa UNet from {unet_checkpoint_path}...")
     
     # Check if paths exist
     if not os.path.exists(base_model_path):
@@ -56,7 +59,7 @@ def load_videomama_model(base_model_path: Optional[str] = None, unet_checkpoint_
         device=device
     )
     
-    print("VideoMaMa pipeline loaded successfully!")
+    logger.info("VideoMaMa pipeline loaded successfully")
     return pipeline
 
 def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None) -> tuple[List[np.ndarray], float]:
@@ -103,72 +106,65 @@ def run_inference(
     """
     Run VideoMaMa inference on video frames with mask conditioning.
 
+    PIL conversion and resize are done per-chunk (lazy) to avoid a multi-minute
+    upfront preprocessing stall on large sequences.
+
     Args:
         pipeline (VideoInferencePipeline): Loaded pipeline instance.
         input_frames (List[np.ndarray]): List of RGB frames (H,W,3) uint8.
         mask_frames (List[np.ndarray]): List of mask frames (H,W) uint8 (0-255) grayscale.
         chunk_size (int): Number of frames to process at once to avoid OOM.
 
-    Returns:
-        List[np.ndarray]: List of output RGB frames (H,W,3) uint8.
+    Yields:
+        List[np.ndarray]: Chunk of output RGB frames (H,W,3) uint8.
     """
     if len(input_frames) != len(mask_frames):
-        # Resize mask frames list to match input if needed (e.g. repeat or slice)
-        # For strict correctness, we'll raise an error or warn.
-        # But let's assume the user provides matching lengths or we might need to handle it.
-        # Here we just raise for clarity.
         raise ValueError(f"Input frames ({len(input_frames)}) and mask frames ({len(mask_frames)}) must have same length.")
 
-    # Convert numpy arrays to PIL Images
-    frames_pil = [Image.fromarray(f) for f in input_frames]
-    
-    # Handle mask frames - ensure they are PIL "L" mode
-    mask_frames_pil = []
-    for m in mask_frames:
-        if m.ndim == 3:
-            # If RGB/BGR mask, convert to grayscale
-            m = cv2.cvtColor(m, cv2.COLOR_RGB2GRAY)
-        mask_frames_pil.append(Image.fromarray(m, mode='L'))
-    
-    # Resize to model input size (1024x576 is standard for SVD)
+    if not input_frames:
+        return
+
+    # Get original size from first frame (for resizing output back)
+    original_size = (input_frames[0].shape[1], input_frames[0].shape[0])  # (W, H)
     target_width, target_height = 1024, 576
-    frames_resized = [f.resize((target_width, target_height), Image.Resampling.BILINEAR) 
-                     for f in frames_pil]
-    masks_resized = [m.resize((target_width, target_height), Image.Resampling.BILINEAR) 
-                    for m in mask_frames_pil]
-    
-    print(f"Processing {len(frames_resized)} frames in chunks of {chunk_size}...")
-    
-    # Store original size for resizing back
-    if not frames_pil:
-        return []
-        
-    original_size = frames_pil[0].size
-    
-    for i in range(0, len(frames_resized), chunk_size):
-        chunk_frames = frames_resized[i:i + chunk_size]
-        chunk_masks = masks_resized[i:i + chunk_size]
-        
-        print(f"  Running inference on chunk {i//chunk_size + 1}/{len(frames_resized)//chunk_size + 1} ({len(chunk_frames)} frames)...")
-        
-        # Clear cache before each chunk
+    total_chunks = (len(input_frames) + chunk_size - 1) // chunk_size
+
+    logger.info(f"Processing {len(input_frames)} frames in chunks of {chunk_size} ({total_chunks} chunks)")
+
+    for i in range(0, len(input_frames), chunk_size):
+        chunk_idx = i // chunk_size + 1
+        chunk_input = input_frames[i:i + chunk_size]
+        chunk_masks = mask_frames[i:i + chunk_size]
+
+        # Per-chunk PIL conversion + resize (2-3 sec instead of minutes upfront)
+        chunk_frames_pil = [
+            Image.fromarray(f).resize((target_width, target_height), Image.Resampling.BILINEAR)
+            for f in chunk_input
+        ]
+        chunk_masks_pil = []
+        for m in chunk_masks:
+            if m.ndim == 3:
+                m = cv2.cvtColor(m, cv2.COLOR_RGB2GRAY)
+            chunk_masks_pil.append(
+                Image.fromarray(m, mode='L').resize((target_width, target_height), Image.Resampling.BILINEAR)
+            )
+
+        logger.debug(f"Running inference on chunk {chunk_idx}/{total_chunks} ({len(chunk_frames_pil)} frames)")
+
         torch.cuda.empty_cache()
-        
+
         chunk_output = pipeline.run(
-            cond_frames=chunk_frames,
-            mask_frames=chunk_masks,
-            seed=42, # Fixed seed for reproducibility
+            cond_frames=chunk_frames_pil,
+            mask_frames=chunk_masks_pil,
+            seed=42,
             mask_cond_mode="vae"
         )
-        
-        # Resize back to original resolution immediately
-        chunk_output_resized = [f.resize(original_size, Image.Resampling.BILINEAR) 
+
+        # Resize output back to original resolution
+        chunk_output_resized = [f.resize(original_size, Image.Resampling.BILINEAR)
                                 for f in chunk_output]
-        
-        # Convert back to numpy arrays
-        chunk_output_np = [np.array(f) for f in chunk_output_resized]
-        
-        yield chunk_output_np
+
+        yield [np.array(f) for f in chunk_output_resized]
 
 def save_video(frames: List[np.ndarray], output_path: str, fps: float):
     """
@@ -192,5 +188,5 @@ def save_video(frames: List[np.ndarray], output_path: str, fps: float):
         out.write(frame_bgr)
     
     out.release()
-    print(f"Saved video to {output_path}")
+    logger.info(f"Saved video to {output_path}")
 
