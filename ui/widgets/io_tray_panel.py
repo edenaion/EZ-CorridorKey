@@ -46,6 +46,7 @@ class ThumbnailCanvas(QWidget):
     """
 
     card_clicked = Signal(object)  # ClipEntry (single left-click)
+    card_double_clicked = Signal(object)  # ClipEntry (double-click)
     multi_select_toggled = Signal(object)  # ClipEntry (Ctrl+click toggle)
     shift_select_requested = Signal(object)  # ClipEntry (Shift+click range)
     context_menu_requested = Signal(object)  # ClipEntry (right-click)
@@ -228,6 +229,12 @@ class ThumbnailCanvas(QWidget):
             if clip:
                 self.context_menu_requested.emit(clip)
 
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.LeftButton and self._clips:
+            clip = self._card_at(event.position().x())
+            if clip:
+                self.card_double_clicked.emit(clip)
+
     def sizeHint(self) -> QSize:
         w = max(1, len(self._clips) * (self.CARD_WIDTH + self.CARD_SPACING))
         return QSize(w, 100)
@@ -382,6 +389,7 @@ class IOTrayPanel(QWidget):
 
         self._export_canvas = ThumbnailCanvas(show_manifest_tooltip=True)
         self._export_canvas.card_clicked.connect(self.clip_clicked.emit)
+        self._export_canvas.card_double_clicked.connect(self.clip_clicked.emit)
         self._export_canvas.context_menu_requested.connect(self._on_export_context_menu)
         self._export_scroll.setWidget(self._export_canvas)
 

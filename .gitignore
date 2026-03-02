@@ -47,3 +47,15 @@ VideoMaMaInferenceModule/checkpoints/*
 !VideoMaMaInferenceModule/checkpoints/.gitkeep
 gvm_core/weights/*
 !gvm_core/weights/.gitkeep
+
+# Dev tools (local only, not shipped)
+.agent/
+.claude/
+.playwright-mcp/
+_BACKUPS/
+AGENTS.md
+CLAUDE.md
+*.lnk
+research-tests.md
+scripts/utils/
+Projects/
