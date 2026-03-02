@@ -80,6 +80,8 @@ class InferenceParams:
     despill_strength: float = 1.0  # 0.0 to 1.0
     auto_despeckle: bool = True
     despeckle_size: int = 400
+    despeckle_dilation: int = 25   # clean_matte dilation radius
+    despeckle_blur: int = 5        # clean_matte blur kernel half-size
     refiner_scale: float = 1.0
 
     def to_dict(self) -> dict:
@@ -587,6 +589,8 @@ class CorridorKeyService:
                             despill_strength=params.despill_strength,
                             auto_despeckle=params.auto_despeckle,
                             despeckle_size=params.despeckle_size,
+                            despeckle_dilation=params.despeckle_dilation,
+                            despeckle_blur=params.despeckle_blur,
                             refiner_scale=params.refiner_scale,
                         )
                     logger.debug(f"Clip '{clip.name}' frame {i}: process_frame {time.monotonic() - t_frame:.3f}s")
@@ -715,6 +719,8 @@ class CorridorKeyService:
                 despill_strength=params.despill_strength,
                 auto_despeckle=params.auto_despeckle,
                 despeckle_size=params.despeckle_size,
+                despeckle_dilation=params.despeckle_dilation,
+                despeckle_blur=params.despeckle_blur,
                 refiner_scale=params.refiner_scale,
             )
         logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")

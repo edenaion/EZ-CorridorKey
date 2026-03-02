@@ -82,7 +82,7 @@ class CorridorKeyEngine:
         return model
 
     @torch.no_grad()
-    def process_frame(self, image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400):
+    def process_frame(self, image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400, despeckle_dilation=25, despeckle_blur=5):
         """
         Process a single frame.
         Args:
@@ -171,7 +171,7 @@ class CorridorKeyEngine:
         
         # A. Clean Matte (Auto-Despeckle)
         if auto_despeckle:
-            processed_alpha = cu.clean_matte(res_alpha, area_threshold=despeckle_size, dilation=25, blur_size=5)
+            processed_alpha = cu.clean_matte(res_alpha, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur)
         else:
             processed_alpha = res_alpha
             

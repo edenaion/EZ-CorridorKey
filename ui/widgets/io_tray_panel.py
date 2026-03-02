@@ -218,7 +218,12 @@ def _format_manifest_tooltip(clip: ClipEntry) -> str:
         lines.append(f"<b>Refiner:</b> {rs:.0%}")
         if params.get("auto_despeckle"):
             sz = params.get("despeckle_size", 400)
-            lines.append(f"<b>Despeckle:</b> On (size {sz})")
+            dil = params.get("despeckle_dilation", 25)
+            blur = params.get("despeckle_blur", 5)
+            detail = f"size {sz}"
+            if dil != 25 or blur != 5:
+                detail += f", dilation {dil}, blur {blur}"
+            lines.append(f"<b>Despeckle:</b> On ({detail})")
         else:
             lines.append(f"<b>Despeckle:</b> Off")
 

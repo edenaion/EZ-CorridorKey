@@ -34,6 +34,22 @@ class TestInferenceParams:
         assert params.input_is_linear is False
         assert params.despill_strength == 1.0
         assert params.refiner_scale == 1.0
+        assert params.despeckle_dilation == 25
+        assert params.despeckle_blur == 5
+
+    def test_despeckle_advanced_roundtrip(self):
+        params = InferenceParams(despeckle_dilation=10, despeckle_blur=15)
+        d = params.to_dict()
+        restored = InferenceParams.from_dict(d)
+        assert restored.despeckle_dilation == 10
+        assert restored.despeckle_blur == 15
+
+    def test_old_session_missing_advanced_fields(self):
+        """Old session data without new fields gets defaults."""
+        d = {"input_is_linear": False, "despill_strength": 1.0}
+        params = InferenceParams.from_dict(d)
+        assert params.despeckle_dilation == 25
+        assert params.despeckle_blur == 5
 
 
 class TestOutputConfig:

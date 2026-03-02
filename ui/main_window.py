@@ -282,6 +282,8 @@ class MainWindow(QMainWindow):
     def _build_status_bar(self) -> None:
         self._status_bar = StatusBar()
         self.centralWidget().layout().addWidget(self._status_bar)
+        # Hidden until user opens a project (welcome screen has no use for it)
+        self._status_bar.hide()
 
     def _setup_shortcuts(self) -> None:
         """Keyboard shortcuts."""
@@ -461,6 +463,7 @@ class MainWindow(QMainWindow):
     def _switch_to_workspace(self) -> None:
         """Switch from welcome screen to the 3-panel workspace."""
         self._stack.setCurrentIndex(1)
+        self._status_bar.show()
 
     def _try_auto_open_projects(self) -> None:
         """Auto-open the Projects root if it has project folders."""
@@ -522,6 +525,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self._stack.setCurrentIndex(0)
+        self._status_bar.hide()
         self._welcome.refresh_recents()
         self._clips_dir = None
         self._current_clip = None
