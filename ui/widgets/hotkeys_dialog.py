@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QWidget, QLineEdit, QMessageBox,
 )
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeySequence, QKeyEvent
+from PySide6.QtGui import QKeyCombination, QKeySequence, QKeyEvent
 
 from ui.shortcut_registry import ShortcutRegistry, CATEGORY_ORDER
 
@@ -78,9 +78,9 @@ class KeyBindButton(QPushButton):
             self._cancel_recording()
             return
 
-        # Build QKeySequence
-        modifiers = event.modifiers()
-        seq = QKeySequence(int(modifiers) | key)
+        # Build QKeySequence via QKeyCombination (PySide6-safe)
+        combo = QKeyCombination(event.modifiers(), Qt.Key(key))
+        seq = QKeySequence(combo)
         key_str = seq.toString()
 
         # Check conflicts
