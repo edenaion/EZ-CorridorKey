@@ -34,6 +34,7 @@ from enum import Enum
 from typing import Optional
 
 from .errors import InvalidStateTransitionError, ClipScanError
+from .project import is_image_file as _is_image_file, is_video_file as _is_video_file
 
 logger = logging.getLogger(__name__)
 
@@ -56,14 +57,6 @@ _TRANSITIONS: dict[ClipState, set[ClipState]] = {
     ClipState.COMPLETE: {ClipState.READY},  # reprocess with different params
     ClipState.ERROR: {ClipState.RAW, ClipState.MASKED, ClipState.READY, ClipState.EXTRACTING},
 }
-
-
-def _is_image_file(filename: str) -> bool:
-    return filename.lower().endswith(('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp'))
-
-
-def _is_video_file(filename: str) -> bool:
-    return filename.lower().endswith(('.mp4', '.mov', '.avi', '.mkv'))
 
 
 @dataclass

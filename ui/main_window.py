@@ -34,6 +34,7 @@ from backend import (
     CorridorKeyService, ClipEntry, ClipState, InferenceParams,
     InOutRange, OutputConfig, JobType,
 )
+from backend.project import VIDEO_FILE_FILTER
 
 from ui.models.clip_model import ClipListModel
 from ui.widgets.dual_viewer import DualViewerPanel
@@ -1039,7 +1040,7 @@ class MainWindow(QMainWindow):
         """File → Import Clips → Import Video(s) — context-aware."""
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Select Video Files", "",
-            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)",
+            VIDEO_FILE_FILTER,
         )
         if not paths:
             return

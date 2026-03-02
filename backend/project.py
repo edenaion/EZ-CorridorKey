@@ -30,6 +30,8 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 _VIDEO_EXTS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v"})
+_IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff", ".bmp", ".dpx"})
+VIDEO_FILE_FILTER = "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)"
 
 _app_dir: str | None = None
 
@@ -365,3 +367,8 @@ def load_in_out_range(clip_root: str):
 def is_video_file(filename: str) -> bool:
     """Check if a filename has a video extension."""
     return os.path.splitext(filename)[1].lower() in _VIDEO_EXTS
+
+
+def is_image_file(filename: str) -> bool:
+    """Check if a filename has an image extension."""
+    return os.path.splitext(filename)[1].lower() in _IMAGE_EXTS

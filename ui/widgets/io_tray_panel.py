@@ -22,6 +22,7 @@ from PySide6.QtCore import Qt, Signal, QRect, QSize, QEvent
 from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent, QAction
 
 from backend import ClipEntry, ClipState
+from backend.project import VIDEO_FILE_FILTER
 from ui.models.clip_model import ClipListModel
 
 logger = logging.getLogger(__name__)
@@ -423,7 +424,7 @@ class IOTrayPanel(QWidget):
     def _import_videos(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Select Video Files", "",
-            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)",
+            VIDEO_FILE_FILTER,
         )
         if paths:
             self.files_imported.emit(paths)

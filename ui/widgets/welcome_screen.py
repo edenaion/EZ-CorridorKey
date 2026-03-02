@@ -20,11 +20,7 @@ from PySide6.QtSvg import QSvgRenderer
 
 from ui.recent_sessions import RecentSessionsStore
 from ui.widgets.recent_projects_panel import RecentProjectsPanel
-
-# Video extensions accepted for drag-and-drop
-_VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v"}
-# Image sequence extensions
-_IMAGE_EXTS = {".exr", ".png", ".tif", ".tiff", ".jpg", ".jpeg", ".dpx"}
+from backend.project import is_video_file, is_image_file, VIDEO_FILE_FILTER
 
 
 def _load_brand_logo(size: int) -> QPixmap | None:
@@ -170,7 +166,7 @@ class WelcomeScreen(QWidget):
         """Open file dialog — users can pick video files."""
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Select Video Files", "",
-            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)",
+            VIDEO_FILE_FILTER,
         )
         if paths:
             self.files_selected.emit(paths)
@@ -188,8 +184,7 @@ class WelcomeScreen(QWidget):
                 if os.path.isdir(path):
                     event.acceptProposedAction()
                     return
-                ext = os.path.splitext(path)[1].lower()
-                if ext in _VIDEO_EXTS or ext in _IMAGE_EXTS:
+                if is_video_file(path) or is_image_file(path):
                     event.acceptProposedAction()
                     return
 
@@ -201,8 +196,7 @@ class WelcomeScreen(QWidget):
             if os.path.isdir(path):
                 folders.append(path)
             elif os.path.isfile(path):
-                ext = os.path.splitext(path)[1].lower()
-                if ext in _VIDEO_EXTS or ext in _IMAGE_EXTS:
+                if is_video_file(path) or is_image_file(path):
                     files.append(path)
 
         # Prefer folder if dropped

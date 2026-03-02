@@ -15,13 +15,7 @@ from enum import Enum
 from dataclasses import dataclass, field
 
 from backend.natural_sort import natsorted
-
-# Supported image extensions for scanning
-_IMAGE_EXTS = frozenset(('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp'))
-
-
-def _is_image(f: str) -> bool:
-    return os.path.splitext(f)[1].lower() in _IMAGE_EXTS
+from backend.project import is_image_file as _is_image
 
 
 class ViewMode(str, Enum):

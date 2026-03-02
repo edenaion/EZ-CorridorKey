@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QImage
 
 from backend import ClipEntry
+from backend.project import is_image_file
 from ui.preview.frame_index import FrameIndex, ViewMode
 from ui.widgets.preview_viewport import PreviewViewport
 from ui.widgets.frame_scrubber import FrameScrubber
@@ -183,7 +184,7 @@ class DualViewerPanel(QWidget):
         if os.path.isdir(alpha_dir):
             for fname in os.listdir(alpha_dir):
                 stem, ext = os.path.splitext(fname)
-                if ext.lower() in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp'):
+                if is_image_file(fname):
                     alpha_stems.add(stem)
 
         # Inference coverage: any output mode (FG, Matte, Comp, Processed) has this stem
