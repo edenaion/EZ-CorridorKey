@@ -1,4 +1,5 @@
 """Tests for backend.clip_state module — state machine transitions."""
+import json
 import os
 import tempfile
 
@@ -9,6 +10,7 @@ from backend.clip_state import (
     ClipEntry,
     ClipState,
     scan_clips_dir,
+    scan_project_clips,
 )
 from backend.errors import InvalidStateTransitionError, ClipScanError
 
@@ -307,8 +309,8 @@ class TestScanClipsDir:
             names = {c.name for c in clips}
             assert "stray" not in names
 
-    def test_new_format_project_scans(self):
-        """New-format project with Source/ and Frames/ scans correctly."""
+    def test_v1_format_project_scans(self):
+        """Legacy v1 project with Source/ and Frames/ scans correctly."""
         with tempfile.TemporaryDirectory() as tmpdir:
             proj_dir = os.path.join(tmpdir, "2026-03-01_093000_Woman")
             source_dir = os.path.join(proj_dir, "Source")
@@ -331,3 +333,138 @@ class TestScanClipsDir:
             assert clip.input_asset.asset_type == "sequence"
             assert clip.input_asset.frame_count == 5
             assert clip.state == ClipState.RAW
+
+    def test_v2_project_scans_nested_clips(self):
+        """v2 project with clips/ subdir scans all clip subdirectories."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj_dir = os.path.join(tmpdir, "2026-03-01_093000_Batch")
+            clips_dir = os.path.join(proj_dir, "clips")
+
+            # Create 2 clips inside clips/
+            for name in ["Woman_Jumps", "Man_Walks"]:
+                clip_dir = os.path.join(clips_dir, name)
+                source_dir = os.path.join(clip_dir, "Source")
+                os.makedirs(source_dir)
+                with open(os.path.join(source_dir, f"{name}.mp4"), "wb") as f:
+                    f.write(b"\x00" * 100)
+
+            # project.json at project root
+            with open(os.path.join(proj_dir, "project.json"), "w") as f:
+                json.dump({"version": 2, "clips": ["Woman_Jumps", "Man_Walks"]}, f)
+
+            # Scan from Projects root (parent of proj_dir)
+            clips = scan_clips_dir(tmpdir, allow_standalone_videos=False)
+            assert len(clips) == 2
+            names = {c.name for c in clips}
+            assert "Woman_Jumps" in names
+            assert "Man_Walks" in names
+
+            # root_path should point to clip subfolder, not project dir
+            for clip in clips:
+                assert "clips" in clip.root_path
+                assert clip.state == ClipState.EXTRACTING
+
+    def test_v2_project_clips_with_frames(self):
+        """v2 clips that have extracted frames scan as RAW."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proj_dir = os.path.join(tmpdir, "proj")
+            clip_dir = os.path.join(proj_dir, "clips", "my_clip")
+            frames_dir = os.path.join(clip_dir, "Frames")
+            os.makedirs(frames_dir)
+            for i in range(3):
+                with open(os.path.join(frames_dir, f"frame_{i:06d}.png"), "w") as f:
+                    f.write("dummy")
+
+            clips = scan_clips_dir(tmpdir, allow_standalone_videos=False)
+            assert len(clips) == 1
+            assert clips[0].state == ClipState.RAW
+            assert clips[0].input_asset.frame_count == 3
+
+
+# --- scan_project_clips ---
+
+class TestScanProjectClips:
+    def test_scans_v2_project(self):
+        """scan_project_clips finds clips inside clips/ subdir."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            clips_dir = os.path.join(tmpdir, "clips")
+            for name in ["clip_a", "clip_b"]:
+                input_dir = os.path.join(clips_dir, name, "Input")
+                os.makedirs(input_dir)
+                with open(os.path.join(input_dir, "00000.png"), "w") as f:
+                    f.write("dummy")
+
+            clips = scan_project_clips(tmpdir)
+            assert len(clips) == 2
+            names = {c.name for c in clips}
+            assert names == {"clip_a", "clip_b"}
+
+    def test_v1_fallback(self):
+        """scan_project_clips treats project dir as single clip for v1."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "Input")
+            os.makedirs(input_dir)
+            with open(os.path.join(input_dir, "00000.png"), "w") as f:
+                f.write("dummy")
+
+            clips = scan_project_clips(tmpdir)
+            assert len(clips) == 1
+            assert clips[0].root_path == tmpdir
+
+    def test_v1_fallback_no_assets(self):
+        """v1 project with no valid assets returns empty list."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            clips = scan_project_clips(tmpdir)
+            assert clips == []
+
+    def test_skips_hidden_in_clips(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            clips_dir = os.path.join(tmpdir, "clips")
+            input_dir = os.path.join(clips_dir, "real_clip", "Input")
+            os.makedirs(input_dir)
+            with open(os.path.join(input_dir, "00000.png"), "w") as f:
+                f.write("dummy")
+            os.makedirs(os.path.join(clips_dir, ".hidden"))
+            os.makedirs(os.path.join(clips_dir, "_internal"))
+
+            clips = scan_project_clips(tmpdir)
+            assert len(clips) == 1
+
+    def test_clip_json_display_name(self):
+        """Clips read display_name from clip.json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            clips_dir = os.path.join(tmpdir, "clips")
+            clip_dir = os.path.join(clips_dir, "Woman_Jumps")
+            input_dir = os.path.join(clip_dir, "Input")
+            os.makedirs(input_dir)
+            with open(os.path.join(input_dir, "00000.png"), "w") as f:
+                f.write("dummy")
+
+            # Write clip.json with custom display name
+            with open(os.path.join(clip_dir, "clip.json"), "w") as f:
+                json.dump({"display_name": "My Custom Clip"}, f)
+
+            clips = scan_project_clips(tmpdir)
+            assert len(clips) == 1
+            assert clips[0].name == "My Custom Clip"
+
+    def test_in_out_range_from_clip_json(self):
+        """in_out_range is loaded from clip.json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            clips_dir = os.path.join(tmpdir, "clips")
+            clip_dir = os.path.join(clips_dir, "test_clip")
+            input_dir = os.path.join(clip_dir, "Input")
+            os.makedirs(input_dir)
+            with open(os.path.join(input_dir, "00000.png"), "w") as f:
+                f.write("dummy")
+
+            with open(os.path.join(clip_dir, "clip.json"), "w") as f:
+                json.dump({
+                    "in_out_range": {"in_point": 5, "out_point": 20},
+                }, f)
+
+            clips = scan_project_clips(tmpdir)
+            assert len(clips) == 1
+            assert clips[0].in_out_range is not None
+            assert clips[0].in_out_range.in_point == 5
+            assert clips[0].in_out_range.out_point == 20

@@ -246,9 +246,9 @@ class ClipEntry:
             return None
 
     def _resolve_original_path(self) -> Optional[str]:
-        """Resolve the original video path from project.json (non-copy mode)."""
-        from .project import read_project_json
-        data = read_project_json(self.root_path)
+        """Resolve the original video path from clip.json or project.json."""
+        from .project import _read_clip_or_project_json
+        data = _read_clip_or_project_json(self.root_path)
         if not data:
             return None
         source = data.get("source", {})
@@ -372,15 +372,59 @@ class ClipEntry:
             self.state = ClipState.RAW
 
 
+def scan_project_clips(project_dir: str) -> list[ClipEntry]:
+    """Scan a single project directory for its clips.
+
+    v2 projects (with ``clips/`` subdir): each subdirectory inside clips/ is a clip.
+    v1 projects (no ``clips/`` subdir): the project dir itself is a single clip.
+
+    Args:
+        project_dir: Absolute path to a project folder.
+
+    Returns:
+        List of ClipEntry objects with root_path pointing to clip subdirectories.
+    """
+    from .project import is_v2_project
+
+    if is_v2_project(project_dir):
+        clips_dir = os.path.join(project_dir, "clips")
+        entries: list[ClipEntry] = []
+        for item in sorted(os.listdir(clips_dir)):
+            item_path = os.path.join(clips_dir, item)
+            if item.startswith('.') or item.startswith('_'):
+                continue
+            if not os.path.isdir(item_path):
+                continue
+            clip = ClipEntry(name=item, root_path=item_path)
+            try:
+                clip.find_assets()
+                entries.append(clip)
+            except ClipScanError as e:
+                logger.debug(str(e))
+        logger.info(f"Scanned v2 project {project_dir}: {len(entries)} clip(s)")
+        return entries
+
+    # v1 fallback: project_dir is itself a single clip
+    clip = ClipEntry(name=os.path.basename(project_dir), root_path=project_dir)
+    try:
+        clip.find_assets()
+        return [clip]
+    except ClipScanError as e:
+        logger.debug(str(e))
+        return []
+
+
 def scan_clips_dir(
     clips_dir: str,
     allow_standalone_videos: bool = True,
 ) -> list[ClipEntry]:
     """Scan a directory for clip folders and optionally standalone video files.
 
-    Folder clips: subdirectories containing Frames/, Source/, Input/, or Input.* video.
-    Standalone videos: .mp4/.mov/.avi/.mkv files at the top level are
-    treated as single-video clips (disabled for Projects root via parameter).
+    For the Projects root: iterates project subdirectories and delegates to
+    scan_project_clips() for each, flattening results.
+
+    For non-Projects directories: scans subdirectories directly as clips
+    (legacy behavior for drag-and-dropped folders).
 
     Folders without valid input assets are skipped (not added as broken clips).
 
@@ -404,14 +448,24 @@ def scan_clips_dir(
             continue
 
         if os.path.isdir(item_path):
-            clip = ClipEntry(name=item, root_path=item_path)
-            try:
-                clip.find_assets()
-                entries.append(clip)
-                seen_names.add(clip.name)
-            except ClipScanError as e:
-                # Skip folders without valid input assets
-                logger.debug(str(e))
+            # Check if this is a v2 project container (has clips/ subdir)
+            from .project import is_v2_project
+            if is_v2_project(item_path):
+                # v2 project: scan its clips/ subdirectory
+                for clip in scan_project_clips(item_path):
+                    if clip.name not in seen_names:
+                        entries.append(clip)
+                        seen_names.add(clip.name)
+            else:
+                # Flat clip dir or v1 project
+                clip = ClipEntry(name=item, root_path=item_path)
+                try:
+                    clip.find_assets()
+                    entries.append(clip)
+                    seen_names.add(clip.name)
+                except ClipScanError as e:
+                    # Skip folders without valid input assets
+                    logger.debug(str(e))
 
         elif (allow_standalone_videos
               and os.path.isfile(item_path)
