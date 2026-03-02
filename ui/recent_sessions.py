@@ -154,6 +154,4 @@ class RecentSessionsStore:
             logger.info(f"Pruned {pruned} missing workspace(s) from recent sessions")
         return pruned
 
-    def has_session_file(self, workspace_path: str) -> bool:
-        """Check if a workspace has a .corridorkey_session.json sidecar."""
-        return os.path.isfile(os.path.join(workspace_path, ".corridorkey_session.json"))
+

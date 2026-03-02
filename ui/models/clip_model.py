@@ -85,14 +85,6 @@ class ClipListModel(QAbstractListModel):
         self.endResetModel()
         self.clip_count_changed.emit(len(self._clips))
 
-    def add_clip(self, clip: ClipEntry) -> None:
-        """Append a single clip."""
-        row = len(self._clips)
-        self.beginInsertRows(QModelIndex(), row, row)
-        self._clips.append(clip)
-        self.endInsertRows()
-        self.clip_count_changed.emit(len(self._clips))
-
     def remove_clip(self, row: int) -> None:
         """Remove clip at row index."""
         if 0 <= row < len(self._clips):

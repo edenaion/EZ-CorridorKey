@@ -88,11 +88,6 @@ class DualViewerPanel(QWidget):
         return self._output_viewer.current_stem_index
 
     @property
-    def output_viewer(self) -> PreviewViewport:
-        """Access the output (right) viewer for reprocess preview."""
-        return self._output_viewer
-
-    @property
     def input_viewer(self) -> PreviewViewport:
         """Access the input (left) viewer."""
         return self._input_viewer
@@ -145,10 +140,6 @@ class DualViewerPanel(QWidget):
     def show_reprocess_preview(self, qimage: QImage) -> None:
         """Show a live reprocess result on the output viewer."""
         self._output_viewer.show_reprocess_preview(qimage)
-
-    def set_split_mode(self, enabled: bool) -> None:
-        """Toggle split view on individual viewports (not typically used in dual mode)."""
-        self._output_viewer.set_split_mode(enabled)
 
     def reset_zoom(self) -> None:
         """Reset zoom on both viewers."""

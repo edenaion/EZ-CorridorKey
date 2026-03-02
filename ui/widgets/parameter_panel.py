@@ -366,10 +366,6 @@ class ParameterPanel(QWidget):
         """Enable/disable VideoMaMa button based on clip state."""
         self._videomama_btn.setEnabled(enabled)
 
-    def set_export_masks_enabled(self, enabled: bool) -> None:
-        """Enable/disable Export Masks button."""
-        self._export_masks_btn.setEnabled(enabled)
-
     def set_annotation_info(self, annotated: int, total: int) -> None:
         """Update annotation frame counter."""
         if annotated > 0 and total > 0:

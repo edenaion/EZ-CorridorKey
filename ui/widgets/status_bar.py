@@ -191,10 +191,6 @@ class StatusBar(QWidget):
         self._resume_btn.setVisible(show_resume)
         self._btn_divider.setVisible(show_resume)
 
-    def set_run_enabled(self, enabled: bool) -> None:
-        """Enable or disable the run button (legacy — prefer update_button_state)."""
-        self._run_btn.setEnabled(enabled)
-
     def start_job_timer(self, label: str = "") -> None:
         """Start the elapsed timer for a new job.
 

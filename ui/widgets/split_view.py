@@ -131,10 +131,6 @@ class SplitViewWidget(QWidget):
         self.zoom_changed.emit(self._zoom)
         self.update()
 
-    @property
-    def zoom_level(self) -> float:
-        return self._zoom
-
     # ── Annotation API ──
 
     def set_annotation_mode(self, mode: str | None) -> None:
@@ -156,10 +152,6 @@ class SplitViewWidget(QWidget):
     @property
     def annotation_mode(self) -> str | None:
         return self._annotation_mode
-
-    @property
-    def brush_radius(self) -> float:
-        return self._brush_radius
 
     # ── Paint ──
 

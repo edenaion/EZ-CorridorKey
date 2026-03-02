@@ -409,10 +409,6 @@ class IOTrayPanel(QWidget):
         menu.addAction("Import Video(s)...", self._import_videos)
         menu.exec(self._add_btn.mapToGlobal(self._add_btn.rect().bottomLeft()))
 
-    def show_add_menu(self) -> None:
-        """Public entry point — used by File → Open Clips Folder."""
-        self._on_add_clicked()
-
     def _import_folder(self) -> None:
         dir_path = QFileDialog.getExistingDirectory(
             self, "Select Clips Directory", "",
