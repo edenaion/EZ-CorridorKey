@@ -101,7 +101,7 @@ class ClipAsset:
         """
         if self.asset_type != 'sequence' or not os.path.isdir(self.path):
             return []
-        from ui.preview.natural_sort import natsorted
+        from .natural_sort import natsorted
         return natsorted([f for f in os.listdir(self.path) if _is_image_file(f)])
 
 

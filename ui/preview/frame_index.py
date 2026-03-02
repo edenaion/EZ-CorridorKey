@@ -14,7 +14,7 @@ import os
 from enum import Enum
 from dataclasses import dataclass, field
 
-from .natural_sort import natsorted
+from backend.natural_sort import natsorted
 
 # Supported image extensions for scanning
 _IMAGE_EXTS = frozenset(('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp'))

@@ -8,6 +8,7 @@ from .project import (
     write_project_json, read_project_json,
     get_display_name, set_display_name, is_video_file,
 )
+from .natural_sort import natural_sort_key, natsorted
 from .service import CorridorKeyService, InferenceParams, OutputConfig
 
 __all__ = [

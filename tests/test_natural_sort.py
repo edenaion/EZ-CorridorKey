@@ -1,6 +1,6 @@
 """Tests for natural sort key — handles mixed stems, non-zero-padded numbers."""
 import pytest
-from ui.preview.natural_sort import natural_sort_key, natsorted
+from backend.natural_sort import natural_sort_key, natsorted
 
 
 class TestNaturalSortKey:

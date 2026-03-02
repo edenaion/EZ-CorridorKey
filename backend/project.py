@@ -18,11 +18,20 @@ import logging
 import os
 import re
 import shutil
+import sys
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 _VIDEO_EXTS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v"})
+
+_app_dir: str | None = None
+
+
+def set_app_dir(path: str) -> None:
+    """Set the application directory. Called once at startup by main.py."""
+    global _app_dir
+    _app_dir = path
 
 
 def projects_root() -> str:
@@ -31,8 +40,13 @@ def projects_root() -> str:
     In dev mode: {repo_root}/Projects/
     In frozen mode: {exe_dir}/Projects/
     """
-    from main import get_app_dir
-    root = os.path.join(get_app_dir(), "Projects")
+    if _app_dir:
+        root = os.path.join(_app_dir, "Projects")
+    elif getattr(sys, 'frozen', False):
+        root = os.path.join(os.path.dirname(sys.executable), "Projects")
+    else:
+        # Fallback: two levels up from this file (backend/ -> repo root)
+        root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Projects")
     os.makedirs(root, exist_ok=True)
     return root
 

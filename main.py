@@ -160,6 +160,10 @@ def main() -> int:
     args = parser.parse_args()
     setup_logging(args.log_level)
 
+    # Configure backend with the application directory
+    from backend.project import set_app_dir
+    set_app_dir(get_app_dir())
+
     if args.cli:
         return run_cli()
     return run_gui()
