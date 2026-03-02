@@ -245,7 +245,7 @@ class GPUJobWorker(QThread):
                 return
 
             # Find the most recently written comp frame (natural sort)
-            from ui.preview.natural_sort import natsorted
+            from backend.natural_sort import natsorted
             comp_files = natsorted(os.listdir(comp_dir))
             if not comp_files:
                 return

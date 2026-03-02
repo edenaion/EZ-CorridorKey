@@ -118,7 +118,7 @@ class _ThumbTask(QRunnable):
             # Image sequence — get first file
             if not os.path.isdir(self._input_path):
                 return None
-            from ui.preview.natural_sort import natsorted
+            from backend.natural_sort import natsorted
             files = natsorted([f for f in os.listdir(self._input_path)
                              if f.lower().endswith(('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp'))])
             if not files:
