@@ -14,6 +14,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
     QComboBox, QCheckBox, QSpinBox, QPushButton, QGroupBox,
+    QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal, QEvent
 
@@ -26,6 +27,7 @@ class ParameterPanel(QWidget):
     params_changed = Signal()  # emitted when any parameter changes
     gvm_requested = Signal()      # GVM AUTO button clicked
     videomama_requested = Signal() # VIDEOMAMA button clicked
+    export_masks_requested = Signal()  # Export annotation masks clicked
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -35,7 +37,22 @@ class ParameterPanel(QWidget):
         # Signal suppression flag (Codex: block signals during session restore)
         self._suppress_signals = False
 
-        layout = QVBoxLayout(self)
+        # Wrap all controls in a scroll area so they never squish below
+        # their natural size — panel scrolls instead of compressing.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setObjectName("paramPanelScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        inner = QWidget()
+        inner.setObjectName("paramPanelInner")
+        layout = QVBoxLayout(inner)
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(4)
 
@@ -97,66 +114,6 @@ class ParameterPanel(QWidget):
         self._despeckle_size.valueChanged.connect(self._emit_changed)
         despeckle_row.addWidget(self._despeckle_size, 1)
         inf_layout.addLayout(despeckle_row)
-
-        # ── Advanced Despeckle (collapsible, hidden by default) ──
-        self._adv_toggle = QCheckBox("Advanced")
-        self._adv_toggle.setChecked(False)
-        self._adv_toggle.setToolTip(
-            "Experimental — these controls modify internal\n"
-            "despeckle behavior. Results may vary."
-        )
-        self._adv_toggle.setStyleSheet(
-            "QCheckBox { color: #808070; font-size: 11px; }"
-            "QCheckBox::indicator { width: 12px; height: 12px; }"
-        )
-        self._adv_toggle.stateChanged.connect(self._on_adv_toggle)
-        inf_layout.addWidget(self._adv_toggle)
-
-        self._adv_container = QWidget()
-        self._adv_container.setVisible(False)
-        adv_layout = QVBoxLayout(self._adv_container)
-        adv_layout.setContentsMargins(16, 0, 0, 0)
-        adv_layout.setSpacing(4)
-
-        dil_row = QHBoxLayout()
-        dil_label = QLabel("Dilation")
-        dil_label.setFixedWidth(64)
-        dil_label.setStyleSheet("color: #999980; font-size: 11px;")
-        dil_row.addWidget(dil_label)
-        self._despeckle_dilation = QSpinBox()
-        self._despeckle_dilation.setRange(1, 50)
-        self._despeckle_dilation.setValue(25)
-        self._despeckle_dilation.setSuffix("px")
-        self._despeckle_dilation.setToolTip(
-            "Dilation radius applied to the cleaned matte mask.\n"
-            "Higher values expand the kept region, preventing edge clipping.\n"
-            "Lower values preserve tighter edges but may clip thin features.\n"
-            "Default: 25"
-        )
-        self._despeckle_dilation.valueChanged.connect(self._emit_changed)
-        dil_row.addWidget(self._despeckle_dilation, 1)
-        adv_layout.addLayout(dil_row)
-
-        blur_row = QHBoxLayout()
-        blur_label = QLabel("Blur")
-        blur_label.setFixedWidth(64)
-        blur_label.setStyleSheet("color: #999980; font-size: 11px;")
-        blur_row.addWidget(blur_label)
-        self._despeckle_blur = QSpinBox()
-        self._despeckle_blur.setRange(1, 50)
-        self._despeckle_blur.setValue(5)
-        self._despeckle_blur.setSuffix("px")
-        self._despeckle_blur.setToolTip(
-            "Gaussian blur kernel half-size for matte edge softening.\n"
-            "Smooths the transition between kept and removed regions.\n"
-            "Higher = softer edges, lower = sharper but may show dilation steps.\n"
-            "Default: 5"
-        )
-        self._despeckle_blur.valueChanged.connect(self._emit_changed)
-        blur_row.addWidget(self._despeckle_blur, 1)
-        adv_layout.addLayout(blur_row)
-
-        inf_layout.addWidget(self._adv_container)
 
         # Refiner Scale (slider 0-30 → 0.0-3.0)
         self._refiner_label = QLabel("Refiner: 1.0")
@@ -272,17 +229,41 @@ class ParameterPanel(QWidget):
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
         alpha_layout.addWidget(self._videomama_btn)
 
+        # Annotation export
+        alpha_layout.addSpacing(8)
+        self._annotation_label = QLabel(
+            "Annotate: press 1 (green) / 2 (red)\n"
+            "Shift+drag to resize brush"
+        )
+        self._annotation_label.setStyleSheet("color: #808070; font-size: 10px;")
+        self._annotation_label.setWordWrap(True)
+        alpha_layout.addWidget(self._annotation_label)
+
+        self._export_masks_btn = QPushButton("EXPORT MASKS")
+        self._export_masks_btn.setEnabled(False)
+        self._export_masks_btn.setToolTip(
+            "Export painted annotations as VideoMamaMaskHint.\n"
+            "Then click VIDEOMAMA to generate alpha from your masks."
+        )
+        self._export_masks_btn.clicked.connect(self.export_masks_requested.emit)
+        alpha_layout.addWidget(self._export_masks_btn)
+
+        self._annotation_info = QLabel("")
+        self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
+        alpha_layout.addWidget(self._annotation_info)
+
         layout.addWidget(alpha_group)
 
         layout.addStretch(1)
+
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
         # Middle-click reset: map widget → (setter_callable, default_value)
         self._middle_click_defaults: dict[QWidget, tuple] = {
             self._despill_slider: (self._despill_slider.setValue, 10),      # 1.0
             self._refiner_slider: (self._refiner_slider.setValue, 10),      # 1.0
             self._despeckle_size: (self._despeckle_size.setValue, 400),      # 400px
-            self._despeckle_dilation: (self._despeckle_dilation.setValue, 25),  # 25px
-            self._despeckle_blur: (self._despeckle_blur.setValue, 5),          # 5px
         }
         for widget in self._middle_click_defaults:
             widget.installEventFilter(self)
@@ -302,16 +283,7 @@ class ParameterPanel(QWidget):
             self.params_changed.emit()
 
     def _on_despeckle_toggled(self, state: int) -> None:
-        """Enable/disable advanced section based on despeckle checkbox."""
-        enabled = state == Qt.Checked.value
-        self._adv_toggle.setEnabled(enabled)
-        if not enabled:
-            self._adv_toggle.setChecked(False)
         self._emit_changed()
-
-    def _on_adv_toggle(self, state: int) -> None:
-        """Show/hide advanced despeckle controls."""
-        self._adv_container.setVisible(state == Qt.Checked.value)
 
     def _on_despill_changed(self, value: int) -> None:
         display = value / 10.0
@@ -334,8 +306,8 @@ class ParameterPanel(QWidget):
             despill_strength=self._despill_slider.value() / 10.0,
             auto_despeckle=self._despeckle_check.isChecked(),
             despeckle_size=self._despeckle_size.value(),
-            despeckle_dilation=self._despeckle_dilation.value(),
-            despeckle_blur=self._despeckle_blur.value(),
+            despeckle_dilation=25,  # fixed default
+            despeckle_blur=5,       # fixed default
             refiner_scale=self._refiner_slider.value() / 10.0,
         )
 
@@ -363,8 +335,7 @@ class ParameterPanel(QWidget):
             self._despill_slider.setValue(int(params.despill_strength * 10))
             self._despeckle_check.setChecked(params.auto_despeckle)
             self._despeckle_size.setValue(params.despeckle_size)
-            self._despeckle_dilation.setValue(params.despeckle_dilation)
-            self._despeckle_blur.setValue(params.despeckle_blur)
+            # despeckle_dilation / despeckle_blur: no longer exposed in UI (fixed defaults)
             self._refiner_slider.setValue(int(params.refiner_scale * 10))
         finally:
             self._suppress_signals = False
@@ -391,3 +362,16 @@ class ParameterPanel(QWidget):
     def set_videomama_enabled(self, enabled: bool) -> None:
         """Enable/disable VideoMaMa button based on clip state."""
         self._videomama_btn.setEnabled(enabled)
+
+    def set_export_masks_enabled(self, enabled: bool) -> None:
+        """Enable/disable Export Masks button."""
+        self._export_masks_btn.setEnabled(enabled)
+
+    def set_annotation_info(self, annotated: int, total: int) -> None:
+        """Update annotation frame counter."""
+        if annotated > 0 and total > 0:
+            self._annotation_info.setText(f"Annotated: {annotated} / {total} frames")
+            self._export_masks_btn.setEnabled(True)
+        else:
+            self._annotation_info.setText("")
+            self._export_masks_btn.setEnabled(False)

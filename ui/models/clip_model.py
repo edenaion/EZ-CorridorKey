@@ -81,6 +81,7 @@ class ClipListModel(QAbstractListModel):
         """Replace all clips. Called after scan_clips()."""
         self.beginResetModel()
         self._clips = list(clips)
+        self._thumbnails.clear()  # Prevent stale thumbnails from previous project
         self.endResetModel()
         self.clip_count_changed.emit(len(self._clips))
 

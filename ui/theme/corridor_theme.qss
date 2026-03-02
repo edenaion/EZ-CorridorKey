@@ -45,6 +45,12 @@ QWidget#paramPanel {
     border: none;
 }
 
+QScrollArea#paramPanelScroll,
+QWidget#paramPanelInner {
+    background-color: #1E1D13;
+    border: none;
+}
+
 /* === Splitter Handles === */
 QSplitter::handle {
     background-color: #2A2910;
@@ -192,7 +198,7 @@ QWidget#statusBar QPushButton#stopButton:hover {
     background-color: #B50000;
 }
 
-QPushButton#stopButton:pressed {
+QWidget#statusBar QPushButton#stopButton:pressed {
     background-color: #900000;
 }
 
@@ -335,12 +341,7 @@ QToolTip {
     padding: 4px;
 }
 
-/* === Status Bar === */
-QStatusBar {
-    background-color: #0E0D00;
-    color: #999980;
-    border-top: 1px solid #2A2910;
-}
+/* (QStatusBar class not used — app uses QWidget#statusBar; see line 153) */
 
 /* === Tab Widget (if needed later) === */
 QTabBar::tab {
@@ -569,6 +570,26 @@ QLabel#trayHeader {
     color: #999980;
     letter-spacing: 1px;
     padding: 4px 8px;
+}
+
+QPushButton#trayAddBtn {
+    background: transparent;
+    border: 1px solid #333320;
+    color: #999980;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 2px 10px;
+}
+
+QPushButton#trayAddBtn:hover {
+    color: #FFF203;
+    border-color: #FFF203;
+    background: rgba(255, 242, 3, 0.08);
+}
+
+QPushButton#trayAddBtn:pressed {
+    background: rgba(255, 242, 3, 0.15);
 }
 
 QScrollArea#trayScroll {

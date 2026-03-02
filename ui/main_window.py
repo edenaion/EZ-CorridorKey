@@ -19,26 +19,21 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 
-import cv2
 import numpy as np
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QVBoxLayout, QWidget,
     QLabel, QHBoxLayout, QMessageBox, QStackedWidget,
-    QProgressBar, QFileDialog, QInputDialog,
+    QProgressBar, QFileDialog, QInputDialog, QGraphicsOpacityEffect,
 )
-from PySide6.QtCore import Qt, Slot, QTimer
-from PySide6.QtGui import (
-    QShortcut, QKeySequence, QAction, QImage,
-    QPainter, QLinearGradient, QColor,
-)
+from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QShortcut, QKeySequence, QAction, QImage, QPainter
 
 from backend import (
     CorridorKeyService, ClipEntry, ClipState, InferenceParams,
-    InOutRange, OutputConfig, JobType, JobStatus,
+    InOutRange, OutputConfig, JobType,
 )
-from backend.errors import CorridorKeyError
-from backend.job_queue import GPUJob
 
 from ui.models.clip_model import ClipListModel
 from ui.widgets.dual_viewer import DualViewerPanel
@@ -59,6 +54,43 @@ logger = logging.getLogger(__name__)
 # Session file stored in clips dir (Codex: JSON sidecar)
 _SESSION_FILENAME = ".corridorkey_session.json"
 _SESSION_VERSION = 1
+
+
+class _Toast(QLabel):
+    """Non-blocking notification that auto-fades after a duration. Click to dismiss."""
+
+    def __init__(self, parent: QWidget, text: str, duration_ms: int = 4000):
+        super().__init__(text, parent)
+        self.setWordWrap(True)
+        self.setAlignment(Qt.AlignCenter)
+        self.setStyleSheet(
+            "background: #1A1900; color: #E0E0D0; border: 1px solid #454430;"
+            "border-radius: 6px; padding: 12px 20px; font-size: 13px;"
+        )
+        self.setFixedWidth(380)
+        self.adjustSize()
+        # Position bottom-center, above the status bar
+        self.move(
+            (parent.width() - self.width()) // 2,
+            parent.height() - self.height() - 60,
+        )
+        # Fade-out animation
+        self._opacity = QGraphicsOpacityEffect(self)
+        self._opacity.setOpacity(1.0)
+        self.setGraphicsEffect(self._opacity)
+        self._fade = QPropertyAnimation(self._opacity, b"opacity")
+        self._fade.setDuration(800)
+        self._fade.setStartValue(1.0)
+        self._fade.setEndValue(0.0)
+        self._fade.setEasingCurve(QEasingCurve.InQuad)
+        self._fade.finished.connect(self.deleteLater)
+        # Start fade after hold duration
+        QTimer.singleShot(duration_ms, self._fade.start)
+        self.show()
+        self.raise_()
+
+    def mousePressEvent(self, event):
+        self.deleteLater()
 
 
 class MainWindow(QMainWindow):
@@ -303,6 +335,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence(Qt.Key_2), self, self._toggle_annotation_bg)
         # Ctrl+Z — undo annotation stroke
         QShortcut(QKeySequence("Ctrl+Z"), self, self._undo_annotation)
+        # Ctrl+C — clear all annotations (with confirmation)
+        QShortcut(QKeySequence("Ctrl+C"), self, self._confirm_clear_annotations)
 
     def _toggle_playback(self) -> None:
         """Forward Space key to the scrubber's play/pause toggle."""
@@ -359,6 +393,8 @@ class MainWindow(QMainWindow):
 
         # Get input dimensions from the first frame
         from backend.frame_io import read_image_frame
+        if not fi.availability:
+            return
         sample_path = fi.get_path(
             next(iter(fi.availability.keys())), 0
         )
@@ -369,14 +405,21 @@ class MainWindow(QMainWindow):
             return
         h, w = sample.shape[:2]
 
-        # Export masks
-        mask_dir = model.export_masks(clip.root_path, fi.stems, w, h)
-        logger.info(f"Exported annotation masks to {mask_dir}")
+        # Export masks — respect in/out range if set
+        start_idx = 0
+        stems = fi.stems
+        if clip.in_out_range:
+            lo = clip.in_out_range.in_point
+            hi = clip.in_out_range.out_point
+            stems = fi.stems[lo:hi + 1]
+            start_idx = lo
+        mask_dir = model.export_masks(clip.root_path, stems, w, h,
+                                      start_index=start_idx)
+        logger.info(f"Exported {len(stems)} annotation masks to {mask_dir}")
 
         # If AlphaHint already exists, it must be removed so the clip drops
         # to MASKED state (otherwise READY takes priority and VideoMaMa
         # button stays disabled). Ask the user first since this is destructive.
-        import shutil
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
             reply = QMessageBox.question(
@@ -391,19 +434,35 @@ class MainWindow(QMainWindow):
             shutil.rmtree(alpha_dir)
             logger.info(f"Removed existing AlphaHint/ to allow re-generation")
 
+        # Reset stale asset references before re-scan (find_assets only sets
+        # assets if directories exist — doesn't clear removed ones)
+        clip.alpha_asset = None
+        clip.mask_asset = None
+
         # Re-scan clip assets to detect the new VideoMamaMaskHint directory
         clip.find_assets()
+
+        logger.info(f"After re-scan: state={clip.state.value}, "
+                     f"mask_asset={clip.mask_asset is not None}, "
+                     f"alpha_asset={clip.alpha_asset is not None}")
 
         # Update button states — VideoMaMa should now be enabled
         self._param_panel.set_videomama_enabled(
             clip.state == ClipState.MASKED
+            or clip.mask_asset is not None
         )
         self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
 
-        # Update annotation info on param panel
-        self._param_panel.set_annotation_info(
-            model.annotated_frame_count(), fi.frame_count
+        # Also refresh the run button and status bar state
+        can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
+        self._status_bar.update_button_state(
+            can_run=can_run,
+            has_partial=clip.completed_frame_count() > 0,
+            has_in_out=clip.in_out_range is not None,
         )
+
+        # Update annotation info on param panel + scrubber markers
+        self._update_annotation_info()
 
         QMessageBox.information(
             self, "Masks Exported",
@@ -412,14 +471,45 @@ class MainWindow(QMainWindow):
             f"Click VIDEOMAMA to generate the alpha hint.",
         )
 
+    def _confirm_clear_annotations(self) -> None:
+        """Ctrl+C: choose to clear annotations on this frame, entire clip, or cancel."""
+        iv = self._dual_viewer.input_viewer
+        model = iv.annotation_model
+        if not model or not model.has_annotations():
+            return
+
+        stem_idx = iv._split_view._annotation_stem_idx
+        has_frame = model.has_annotations(stem_idx)
+
+        box = QMessageBox(self)
+        box.setWindowTitle("Clear Annotations")
+        box.setText("What would you like to clear?")
+        frame_btn = box.addButton("This Frame", QMessageBox.AcceptRole)
+        clip_btn = box.addButton("Entire Clip", QMessageBox.DestructiveRole)
+        box.addButton(QMessageBox.Cancel)
+
+        # Disable "This Frame" if current frame has no annotations
+        if not has_frame:
+            frame_btn.setEnabled(False)
+
+        box.exec()
+        clicked = box.clickedButton()
+
+        if clicked == frame_btn:
+            model.clear(stem_idx)
+            iv._split_view.update()
+            self._update_annotation_info()
+        elif clicked == clip_btn:
+            self._on_clear_annotations()
+
     def _on_clear_annotations(self) -> None:
         """Clear all annotations on the current clip."""
         iv = self._dual_viewer.input_viewer
         iv.clear_annotations()
-        self._param_panel.set_annotation_info(0, 0)
+        self._update_annotation_info()
 
     def _update_annotation_info(self) -> None:
-        """Update parameter panel with current annotation count."""
+        """Update parameter panel with current annotation count and scrubber markers."""
         iv = self._dual_viewer.input_viewer
         model = iv.annotation_model
         fi = iv._frame_index
@@ -427,6 +517,12 @@ class MainWindow(QMainWindow):
         self._param_panel.set_annotation_info(
             model.annotated_frame_count(), total
         )
+        # Push annotation coverage to the scrubber timeline
+        if fi and total > 0:
+            annotated = [model.has_annotations(i) for i in range(total)]
+            self._dual_viewer._scrubber.set_annotation_markers(annotated)
+        else:
+            self._dual_viewer._scrubber.set_annotation_markers([])
 
     def _connect_signals(self) -> None:
         # I/O tray — clip selection, import, drag-and-drop
@@ -633,7 +729,11 @@ class MainWindow(QMainWindow):
                             project_path, proj_name, clip_count,
                         )
             else:
-                display_name = os.path.basename(dir_path)
+                from backend.project import is_v2_project as _is_v2
+                if _is_v2(dir_path):
+                    display_name = get_display_name(dir_path)
+                else:
+                    display_name = os.path.basename(dir_path)
                 self._recent_store.add_or_update(dir_path, display_name, len(clips))
 
             # Auto-load session if exists (Codex: block signals during restore)
@@ -651,24 +751,6 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(1)
         self._status_bar.show()
 
-    def _try_auto_open_projects(self) -> None:
-        """Auto-open the Projects root if it has project folders."""
-        from backend.project import projects_root as _projects_root
-        try:
-            root = _projects_root()
-        except Exception:
-            return
-        if not os.path.isdir(root):
-            return
-        # Check for at least one subdirectory (project folder)
-        has_projects = any(
-            os.path.isdir(os.path.join(root, d))
-            for d in os.listdir(root)
-            if not d.startswith('.') and not d.startswith('_')
-        )
-        if has_projects:
-            self._on_clips_dir_changed(root)
-
     @Slot(str)
     def _on_welcome_folder(self, dir_path: str) -> None:
         """Handle folder selected from welcome screen."""
@@ -679,8 +761,8 @@ class MainWindow(QMainWindow):
     def _on_recent_project_opened(self, workspace_path: str) -> None:
         """Open a workspace from the recent projects list.
 
-        If the path is an individual project folder inside Projects/,
-        scan the Projects root so all clips appear in the browser.
+        Opens the specific project folder directly — NOT the Projects root —
+        so only that project's clips appear in the browser (project isolation).
         """
         if not os.path.isdir(workspace_path):
             QMessageBox.warning(self, "Missing", f"Workspace no longer exists:\n{workspace_path}")
@@ -688,19 +770,6 @@ class MainWindow(QMainWindow):
             self._welcome.refresh_recents()
             return
         self._switch_to_workspace()
-
-        # If this is a project subfolder inside Projects/, scan the root
-        from backend.project import projects_root as _projects_root
-        try:
-            root = _projects_root()
-            parent = os.path.normcase(os.path.abspath(os.path.dirname(workspace_path)))
-            root_norm = os.path.normcase(os.path.abspath(root))
-            if parent == root_norm:
-                # Individual project inside Projects/ — scan the root
-                self._on_clips_dir_changed(root)
-                return
-        except Exception:
-            pass
         self._on_clips_dir_changed(workspace_path)
 
     def _return_to_welcome(self) -> None:
@@ -726,10 +795,8 @@ class MainWindow(QMainWindow):
         if not file_paths:
             return
 
-        from backend.project import projects_root, create_project, is_video_file
-        from ui.widgets.preferences_dialog import KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE, get_setting_bool
+        from backend.project import create_project, is_video_file
 
-        root = projects_root()
         copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
 
         video_paths = [f for f in file_paths if is_video_file(f)]
@@ -1100,7 +1167,11 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_run_videomama(self) -> None:
         """Run VideoMaMa alpha generation on the selected clip."""
-        if self._current_clip is None or self._current_clip.state != ClipState.MASKED:
+        if self._current_clip is None:
+            return
+        # Accept MASKED state or any clip that has mask_asset (covers READY/COMPLETE
+        # clips that had AlphaHint removed and masks re-exported)
+        if self._current_clip.state != ClipState.MASKED and self._current_clip.mask_asset is None:
             return
 
         job = create_job_snapshot(self._current_clip, job_type=JobType.VIDEOMAMA_ALPHA)
@@ -1108,7 +1179,7 @@ class MainWindow(QMainWindow):
             return
 
         self._current_clip.set_processing(True)
-        self._start_worker_if_needed(job.id, job_label="VideoMaMa", indeterminate=True)
+        self._start_worker_if_needed(job.id, job_label="VideoMaMa", indeterminate=False)
 
     def _start_worker_if_needed(
         self,
@@ -1149,11 +1220,22 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.Yes:
             return
 
+        # Check if current job is VideoMaMa (long GPU chunks)
+        is_videomama = (queue.current_job
+                        and queue.current_job.job_type == JobType.VIDEOMAMA_ALPHA)
+
         queue.cancel_all()
         self._batch_clips.clear()
+        # Freeze progress display immediately — GPU may still be finishing
+        # the current chunk, but the user shouldn't see the timer climbing
+        self._status_bar.stop_job_timer()
         self._status_bar.set_message("Cancelling...")
         self._queue_panel.refresh()
         logger.info("Inference cancelled by user")
+
+        if is_videomama:
+            _Toast(self, "GPU is finishing the current chunk.\n"
+                         "VideoMaMa will stop after it completes.")
 
     @Slot(str)
     def _on_cancel_job(self, job_id: str) -> None:
@@ -1318,8 +1400,6 @@ class MainWindow(QMainWindow):
         place — extraction writes to Frames/. Legacy standalone videos
         (root_path == clips_dir) are restructured into a clip subdirectory.
         """
-        import shutil
-
         extracting = [c for c in clips if c.state == ClipState.EXTRACTING]
         if not extracting:
             return
@@ -1511,9 +1591,21 @@ class MainWindow(QMainWindow):
     # ── Session Save/Load (Codex: JSON sidecar, atomic write, version) ──
 
     def _session_path(self) -> str | None:
-        """Return session file path, or None if no clips dir."""
+        """Return session file path, or None if no clips dir or Projects root.
+
+        The Projects root should never have a session file — sessions are
+        scoped to individual project folders to prevent cross-contamination.
+        """
         if not self._clips_dir:
             return None
+        from backend.project import projects_root as _projects_root
+        try:
+            if os.path.normcase(os.path.abspath(self._clips_dir)) == os.path.normcase(
+                os.path.abspath(_projects_root())
+            ):
+                return None
+        except Exception:
+            pass
         return os.path.join(self._clips_dir, _SESSION_FILENAME)
 
     def _build_session_data(self) -> dict:
@@ -1697,7 +1789,7 @@ class MainWindow(QMainWindow):
     # ── Layout & Dialogs ──
 
     def _reset_layout(self) -> None:
-        self._splitter.setSizes([220, 700, 280])
+        self._splitter.setSizes([920, 280])
         self._vsplitter.setSizes([600, 140])
 
     def _toggle_queue_panel(self) -> None:
@@ -1721,14 +1813,25 @@ class MainWindow(QMainWindow):
         # is unnecessary — the setting takes full effect on next app launch.
 
     def _show_about(self) -> None:
-        QMessageBox.about(
-            self,
-            "About CorridorKey",
-            "CorridorKey — AI Green Screen Keyer\n\n"
-            "Based on GreenFormer by Corridor Crew\n"
-            "CC BY-NC-SA 4.0 License\n\n"
-            "PySide6 Desktop Application",
+        box = QMessageBox(self)
+        box.setWindowTitle("About CorridorKey")
+        box.setTextFormat(Qt.RichText)
+        box.setText(
+            "<h2>CorridorKey</h2>"
+            "<p>AI Green Screen Keyer<br>"
+            '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
+            "CC BY-NC-SA 4.0 License</a></p>"
+            "<p><b>Special Thanks</b></p>"
+            "<p>"
+            '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
+            '<a href="https://www.edzisk.com">Ed Zisk</a> — GUI, workflow enhancements<br>'
+            '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo'
+            "</p>"
         )
+        # QMessageBox uses an internal QLabel — find it and enable clickable links
+        for label in box.findChildren(QLabel):
+            label.setOpenExternalLinks(True)
+        box.exec()
 
     def paintEvent(self, event) -> None:
         """Paint dithered diagonal gradient background.
@@ -1742,8 +1845,7 @@ class MainWindow(QMainWindow):
             return
 
         # Cache the gradient image, regenerate only on resize
-        if (not hasattr(self, '_bg_cache')
-                or self._bg_cache is None
+        if (self._bg_cache is None
                 or self._bg_cache.width() != w
                 or self._bg_cache.height() != h):
             self._bg_cache = self._render_dithered_gradient(w, h)

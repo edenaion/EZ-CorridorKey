@@ -90,9 +90,14 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     # Apply brand stylesheet
     app.setStyleSheet(load_stylesheet())
 
-    # Set app icon (window title bar + taskbar)
-    icon_path = os.path.join(base, "theme", "corridorkey.png") if not getattr(sys, 'frozen', False) else os.path.join(base, "ui", "theme", "corridorkey.png")
-    if os.path.isfile(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
+    # Set app icon (window title bar + taskbar) — ICO preferred for window chrome
+    # (corridorkey.svg is the brand logo used on the welcome screen, not the app icon)
+    theme_dir = os.path.join(base, "ui", "theme") if getattr(sys, 'frozen', False) else os.path.join(base, "theme")
+    ico_icon = os.path.join(theme_dir, "corridorkey.ico")
+    png_icon = os.path.join(theme_dir, "corridorkey.png")
+    if os.path.isfile(ico_icon):
+        app.setWindowIcon(QIcon(ico_icon))
+    elif os.path.isfile(png_icon):
+        app.setWindowIcon(QIcon(png_icon))
 
     return app

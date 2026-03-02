@@ -1,21 +1,25 @@
 """Bottom I/O tray panel — Topaz-style Input/Exports thumbnail strips.
 
 Shows two horizontal-scrolling rows:
-- INPUT (N): All loaded clips with thumbnails
+- INPUT (N): All loaded clips with thumbnails, + ADD button
 - EXPORTS (N): Only COMPLETE clips with output thumbnails
 
 Clicking a card selects the clip and loads it in the preview viewport.
+Ctrl+click to multi-select clips for batch operations.
+Right-click on INPUT cards shows project context menu.
+Supports drag-and-drop of video files and folders.
 """
 from __future__ import annotations
 
 import logging
-
+import os
+import shutil
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QFrame, QSplitter,
-    QToolTip,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QSplitter,
+    QToolTip, QPushButton, QMenu, QFileDialog, QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal, QRect, QSize, QEvent
-from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent
+from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent, QAction
 
 from backend import ClipEntry, ClipState
 from ui.models.clip_model import ClipListModel
@@ -40,7 +44,10 @@ class ThumbnailCanvas(QWidget):
     and frame count. Mouse clicks emit card_clicked with the ClipEntry.
     """
 
-    card_clicked = Signal(object)  # ClipEntry
+    card_clicked = Signal(object)  # ClipEntry (single left-click)
+    multi_select_toggled = Signal(object)  # ClipEntry (Ctrl+click toggle)
+    shift_select_requested = Signal(object)  # ClipEntry (Shift+click range)
+    context_menu_requested = Signal(object)  # ClipEntry (right-click)
 
     CARD_WIDTH = 130
     CARD_SPACING = 4
@@ -53,6 +60,8 @@ class ThumbnailCanvas(QWidget):
         self._clips: list[ClipEntry] = []
         self._model: ClipListModel | None = None
         self._show_manifest_tooltip = show_manifest_tooltip
+        self._selected_names: set[str] = set()
+        self._hovered_name: str | None = None
         self.setMouseTracking(True)
         self.setMinimumHeight(100)
 
@@ -63,6 +72,19 @@ class ThumbnailCanvas(QWidget):
         total_w = max(1, len(clips) * (self.CARD_WIDTH + self.CARD_SPACING))
         self.setFixedWidth(total_w)
         self.update()
+
+    def set_selected(self, name: str | None) -> None:
+        """Set single-selected clip (clears multi-select, draws highlight border)."""
+        new_set = {name} if name else set()
+        if self._selected_names != new_set:
+            self._selected_names = new_set
+            self.update()
+
+    def set_multi_selected(self, names: set[str]) -> None:
+        """Set the multi-selected clip names."""
+        if self._selected_names != names:
+            self._selected_names = set(names)
+            self.update()
 
     def paintEvent(self, event) -> None:
         if not self._clips:
@@ -85,13 +107,29 @@ class ThumbnailCanvas(QWidget):
 
     def _paint_card(self, p: QPainter, rect: QRect, clip: ClipEntry) -> None:
         pad = self.CARD_PADDING
+        is_selected = clip.name in self._selected_names
+        is_hovered = clip.name == self._hovered_name and not is_selected
 
         # Card background
-        p.fillRect(rect, QColor("#1A1900"))
+        if is_selected:
+            bg = QColor("#252413")
+        elif is_hovered:
+            bg = QColor("#1E1D0A")
+        else:
+            bg = QColor("#1A1900")
+        p.fillRect(rect, bg)
 
-        # Border
-        p.setPen(QColor("#2A2910"))
-        p.drawRect(rect.adjusted(0, 0, -1, -1))
+        # Border — yellow for selected, subtle yellow for hover, default otherwise
+        if is_selected:
+            p.setPen(QColor("#FFF203"))
+            p.drawRect(rect.adjusted(0, 0, -1, -1))
+            p.drawRect(rect.adjusted(1, 1, -2, -2))  # 2px border
+        elif is_hovered:
+            p.setPen(QColor(255, 242, 3, 100))  # subtle yellow glow
+            p.drawRect(rect.adjusted(0, 0, -1, -1))
+        else:
+            p.setPen(QColor("#2A2910"))
+            p.drawRect(rect.adjusted(0, 0, -1, -1))
 
         # Thumbnail
         thumb_rect = QRect(
@@ -157,12 +195,35 @@ class ThumbnailCanvas(QWidget):
             p.setPen(QColor("#808070"))
             p.drawText(info_rect, Qt.AlignLeft | Qt.AlignVCenter, info_text)
 
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        clip = self._card_at(event.position().x())
+        name = clip.name if clip else None
+        if name != self._hovered_name:
+            self._hovered_name = name
+            self.update()
+
+    def leaveEvent(self, event) -> None:
+        if self._hovered_name is not None:
+            self._hovered_name = None
+            self.update()
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton and self._clips:
-            x = event.position().x()
-            idx = int(x // (self.CARD_WIDTH + self.CARD_SPACING))
-            if 0 <= idx < len(self._clips):
-                self.card_clicked.emit(self._clips[idx])
+            clip = self._card_at(event.position().x())
+            if clip:
+                if event.modifiers() & Qt.ShiftModifier:
+                    # Shift+click: range select from anchor to this clip
+                    self.shift_select_requested.emit(clip)
+                elif event.modifiers() & Qt.ControlModifier:
+                    # Ctrl+click: toggle in/out of multi-selection
+                    self.multi_select_toggled.emit(clip)
+                else:
+                    # Plain click: single-select
+                    self.card_clicked.emit(clip)
+        elif event.button() == Qt.RightButton and self._clips:
+            clip = self._card_at(event.position().x())
+            if clip:
+                self.context_menu_requested.emit(clip)
 
     def sizeHint(self) -> QSize:
         w = max(1, len(self._clips) * (self.CARD_WIDTH + self.CARD_SPACING))
@@ -218,12 +279,7 @@ def _format_manifest_tooltip(clip: ClipEntry) -> str:
         lines.append(f"<b>Refiner:</b> {rs:.0%}")
         if params.get("auto_despeckle"):
             sz = params.get("despeckle_size", 400)
-            dil = params.get("despeckle_dilation", 25)
-            blur = params.get("despeckle_blur", 5)
-            detail = f"size {sz}"
-            if dil != 25 or blur != 5:
-                detail += f", dilation {dil}, blur {blur}"
-            lines.append(f"<b>Despeckle:</b> On ({detail})")
+            lines.append(f"<b>Despeckle:</b> On (size {sz})")
         else:
             lines.append(f"<b>Despeckle:</b> Off")
 
@@ -233,18 +289,25 @@ def _format_manifest_tooltip(clip: ClipEntry) -> str:
 class IOTrayPanel(QWidget):
     """Bottom panel with Input and Exports thumbnail strips.
 
-    Input section shows all loaded clips. Exports section shows only
-    COMPLETE clips. Clicking a card emits clip_clicked.
+    Input section shows all loaded clips with + ADD button.
+    Exports section shows only COMPLETE clips.
+    Clicking a card emits clip_clicked. Right-click shows context menu.
+    Supports drag-and-drop of video files and folders.
     """
 
-    clip_clicked = Signal(object)  # ClipEntry
+    clip_clicked = Signal(object)   # ClipEntry
+    selection_changed = Signal(list)  # list[ClipEntry] — multi-select changed
+    clips_dir_changed = Signal(str)  # folder path (import folder)
+    files_imported = Signal(list)    # list of video file paths
 
     def __init__(self, model: ClipListModel, parent=None):
         super().__init__(parent)
         self.setObjectName("ioTrayPanel")
         self._model = model
+        self._select_anchor: str | None = None  # last single-clicked clip name for Shift+click range
         self.setMinimumHeight(80)
-        self.setMaximumHeight(250)
+        self.setMaximumHeight(600)
+        self.setAcceptDrops(True)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -263,9 +326,23 @@ class IOTrayPanel(QWidget):
         input_section.setContentsMargins(0, 0, 0, 0)
         input_section.setSpacing(0)
 
+        # Header row: INPUT (N) label + stretch + ADD button
+        input_header_row = QHBoxLayout()
+        input_header_row.setContentsMargins(0, 0, 4, 0)
+        input_header_row.setSpacing(0)
+
         self._input_header = QLabel("INPUT (0)")
         self._input_header.setObjectName("trayHeader")
-        input_section.addWidget(self._input_header)
+        input_header_row.addWidget(self._input_header)
+        input_header_row.addStretch()
+
+        self._add_btn = QPushButton("+ ADD")
+        self._add_btn.setObjectName("trayAddBtn")
+        self._add_btn.setToolTip("Import clips — choose a folder or video file(s)")
+        self._add_btn.clicked.connect(self._on_add_clicked)
+        input_header_row.addWidget(self._add_btn)
+
+        input_section.addLayout(input_header_row)
 
         self._input_scroll = QScrollArea()
         self._input_scroll.setObjectName("trayScroll")
@@ -274,7 +351,10 @@ class IOTrayPanel(QWidget):
         self._input_scroll.setWidgetResizable(False)
 
         self._input_canvas = ThumbnailCanvas()
-        self._input_canvas.card_clicked.connect(self.clip_clicked.emit)
+        self._input_canvas.card_clicked.connect(self._on_single_click)
+        self._input_canvas.multi_select_toggled.connect(self._on_multi_select_toggle)
+        self._input_canvas.shift_select_requested.connect(self._on_shift_select)
+        self._input_canvas.context_menu_requested.connect(self._on_context_menu)
         self._input_scroll.setWidget(self._input_canvas)
 
         input_section.addWidget(self._input_scroll, 1)
@@ -315,6 +395,261 @@ class IOTrayPanel(QWidget):
         self._model.dataChanged.connect(self._on_data_changed)
         self._model.clip_count_changed.connect(lambda _: self._rebuild())
 
+    # ── + ADD button ──
+
+    def _on_add_clicked(self) -> None:
+        """Show import menu below the +ADD button."""
+        menu = QMenu(self)
+        menu.addAction("Import Folder...", self._import_folder)
+        menu.addAction("Import Video(s)...", self._import_videos)
+        menu.exec(self._add_btn.mapToGlobal(self._add_btn.rect().bottomLeft()))
+
+    def show_add_menu(self) -> None:
+        """Public entry point — used by File → Open Clips Folder."""
+        self._on_add_clicked()
+
+    def _import_folder(self) -> None:
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "Select Clips Directory", "",
+            QFileDialog.ShowDirsOnly,
+        )
+        if dir_path:
+            self.clips_dir_changed.emit(dir_path)
+
+    def _import_videos(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Select Video Files", "",
+            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)",
+        )
+        if paths:
+            self.files_imported.emit(paths)
+
+    # ── Drag-and-drop ──
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:
+        from backend.project import is_video_file
+        folders = []
+        files = []
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if os.path.isdir(path):
+                folders.append(path)
+            elif os.path.isfile(path) and is_video_file(path):
+                files.append(path)
+        if folders:
+            self.clips_dir_changed.emit(folders[0])
+        elif files:
+            self.files_imported.emit(files)
+
+    # ── Single / Multi-select management ──
+
+    def _on_single_click(self, clip: ClipEntry) -> None:
+        """Plain left-click — single-select, clear multi-select."""
+        self._select_anchor = clip.name
+        self._input_canvas.set_selected(clip.name)
+        self.clip_clicked.emit(clip)
+
+    def _on_multi_select_toggle(self, clip: ClipEntry) -> None:
+        """Ctrl+click — toggle clip in/out of multi-selection set."""
+        self._select_anchor = clip.name
+        names = set(self._input_canvas._selected_names)
+        if clip.name in names:
+            names.discard(clip.name)
+        else:
+            names.add(clip.name)
+        self._input_canvas.set_multi_selected(names)
+        # Emit the full list of selected ClipEntry objects
+        self.selection_changed.emit(self.get_selected_clips())
+        # Also load the clicked clip in the viewer
+        self.clip_clicked.emit(clip)
+
+    def _on_shift_select(self, clip: ClipEntry) -> None:
+        """Shift+click — select range from anchor to clicked clip."""
+        all_clips = self._model.clips
+        if not all_clips:
+            return
+
+        # Find anchor index (fall back to first clip if no anchor)
+        anchor_idx = 0
+        if self._select_anchor:
+            for i, c in enumerate(all_clips):
+                if c.name == self._select_anchor:
+                    anchor_idx = i
+                    break
+
+        # Find clicked clip index
+        click_idx = 0
+        for i, c in enumerate(all_clips):
+            if c.name == clip.name:
+                click_idx = i
+                break
+
+        # Select everything between anchor and click (inclusive)
+        lo = min(anchor_idx, click_idx)
+        hi = max(anchor_idx, click_idx)
+        names = {all_clips[i].name for i in range(lo, hi + 1)}
+        self._input_canvas.set_multi_selected(names)
+        self.selection_changed.emit(self.get_selected_clips())
+        self.clip_clicked.emit(clip)
+
+    def get_selected_clips(self) -> list[ClipEntry]:
+        """Return all clips whose names are in the selection set."""
+        names = self._input_canvas._selected_names
+        return [c for c in self._model.clips if c.name in names]
+
+    # ── Context menu (INPUT cards) ──
+
+    def _on_context_menu(self, clip: ClipEntry) -> None:
+        """Show right-click context menu for a clip card.
+
+        If the right-clicked clip is not in the current selection,
+        single-select it first (standard behaviour).
+        """
+        if clip.name not in self._input_canvas._selected_names:
+            self._input_canvas.set_selected(clip.name)
+            self.clip_clicked.emit(clip)
+            self.selection_changed.emit([clip])
+
+        selected = self.get_selected_clips()
+        n = len(selected)
+        multi = n > 1
+
+        menu = QMenu(self)
+
+        # Open in Explorer — single only
+        explorer_action = QAction("Open in Explorer", self)
+        explorer_action.setEnabled(not multi)
+        explorer_action.triggered.connect(lambda: self._open_in_explorer(clip))
+        menu.addAction(explorer_action)
+
+        menu.addSeparator()
+
+        # Clear Outputs
+        label_clear = f"Clear Outputs ({n} clips)" if multi else "Clear Outputs"
+        any_outputs = any(c.has_outputs for c in selected)
+        clear_action = QAction(label_clear, self)
+        clear_action.setEnabled(any_outputs)
+        clear_action.triggered.connect(lambda: self._clear_outputs_batch(selected))
+        menu.addAction(clear_action)
+
+        # Remove...
+        label_remove = f"Remove ({n} clips)..." if multi else "Remove..."
+        remove_action = QAction(label_remove, self)
+        remove_action.triggered.connect(lambda: self._remove_dialog(selected))
+        menu.addAction(remove_action)
+
+        from PySide6.QtGui import QCursor
+        menu.exec(QCursor.pos())
+
+    def _open_in_explorer(self, clip: ClipEntry) -> None:
+        if os.path.isdir(clip.root_path):
+            os.startfile(clip.root_path)
+
+    def _clear_outputs_batch(self, clips: list[ClipEntry]) -> None:
+        """Clear output files for one or more clips."""
+        names = ", ".join(c.name for c in clips[:3])
+        if len(clips) > 3:
+            names += f" (+{len(clips) - 3} more)"
+        confirm = QMessageBox.question(
+            self, "Clear Outputs",
+            f"Remove all output files for {len(clips)} clip(s)?\n{names}\n\n"
+            "This will delete FG, Matte, Comp, and Processed frames.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        total_cleared = 0
+        for clip in clips:
+            output_dir = clip.output_dir
+            cleared = 0
+            for subdir in ("FG", "Matte", "Comp", "Processed"):
+                d = os.path.join(output_dir, subdir)
+                if os.path.isdir(d):
+                    for f in os.listdir(d):
+                        fpath = os.path.join(d, f)
+                        if os.path.isfile(fpath):
+                            os.remove(fpath)
+                            cleared += 1
+            manifest = os.path.join(output_dir, ".corridorkey_manifest.json")
+            if os.path.isfile(manifest):
+                os.remove(manifest)
+
+            if clip.state == ClipState.COMPLETE:
+                clip.state = ClipState.READY
+                self._model.update_clip_state(clip.name, ClipState.READY)
+            total_cleared += cleared
+
+        self._model.layoutChanged.emit()
+        logger.info(f"Cleared {total_cleared} output files across {len(clips)} clip(s)")
+
+    def _remove_dialog(self, clips: list[ClipEntry]) -> None:
+        """Show remove confirmation dialog with Remove from List / Delete from Disk options."""
+        n = len(clips)
+        title = f"Remove {n} clip{'s' if n > 1 else ''}?"
+
+        paths_text = "\n".join(c.root_path for c in clips[:5])
+        if n > 5:
+            paths_text += f"\n... and {n - 5} more"
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setIcon(QMessageBox.Warning)
+        msg.setText(
+            f"How would you like to remove {n} clip{'s' if n > 1 else ''}?"
+        )
+        msg.setInformativeText(paths_text)
+
+        btn_list = msg.addButton("Remove from List", QMessageBox.AcceptRole)
+        btn_disk = msg.addButton("Delete from Disk", QMessageBox.DestructiveRole)
+        msg.addButton(QMessageBox.Cancel)
+
+        msg.exec()
+        clicked = msg.clickedButton()
+
+        if clicked == btn_list:
+            self._remove_clips_from_list(clips)
+        elif clicked == btn_disk:
+            self._delete_clips_from_disk(clips)
+
+    def _remove_clips_from_list(self, clips: list[ClipEntry]) -> None:
+        """Remove clips from the list (files stay on disk)."""
+        names = {c.name for c in clips}
+        # Remove in reverse index order to avoid index shifting
+        indices = [i for i, c in enumerate(self._model.clips) if c.name in names]
+        for i in sorted(indices, reverse=True):
+            self._model.remove_clip(i)
+        logger.info(f"Removed {len(clips)} clip(s) from list")
+
+    def _delete_clips_from_disk(self, clips: list[ClipEntry]) -> None:
+        """Delete clip project folders from disk."""
+        for clip in clips:
+            if os.path.isdir(clip.root_path):
+                shutil.rmtree(clip.root_path, ignore_errors=True)
+                logger.info(f"Deleted from disk: {clip.root_path}")
+        # Then remove from model
+        self._remove_clips_from_list(clips)
+
+    # ── Selection highlight ──
+
+    def set_selected(self, name: str | None) -> None:
+        """Set single-selected clip (clears multi-select, highlights in INPUT strip)."""
+        self._input_canvas.set_selected(name)
+
+    def set_multi_selected(self, names: set[str]) -> None:
+        """Set multi-selected clips (for external callers)."""
+        self._input_canvas.set_multi_selected(names)
+
+    def selected_count(self) -> int:
+        """Return count of selected clips."""
+        return len(self._input_canvas._selected_names)
+
+    # ── Rebuild ──
+
     def _rebuild(self) -> None:
         """Rebuild both strips from current model data."""
         all_clips = self._model.clips
@@ -335,10 +670,7 @@ class IOTrayPanel(QWidget):
         self._rebuild()
 
     def sync_divider(self, left_px: int) -> None:
-        """Set the IO tray divider position in pixels from the left edge.
-
-        Called by main window to align with the dual viewer's splitter.
-        """
+        """Set the IO tray divider position in pixels from the left edge."""
         total = self._tray_splitter.width()
         right = max(1, total - left_px)
         self._tray_splitter.setSizes([left_px, right])
