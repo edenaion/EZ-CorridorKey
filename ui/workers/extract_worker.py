@@ -53,6 +53,7 @@ class ExtractWorker(QThread):
         self._wake = threading.Event()
         self._stop_flag = False
         self._busy = False  # True while actively processing a job
+        self._current_job: _ExtractJob | None = None  # actively running job
 
     @property
     def is_busy(self) -> bool:
@@ -78,16 +79,24 @@ class ExtractWorker(QThread):
     def cancel(self, clip_name: str) -> None:
         """Cancel extraction for a specific clip."""
         with self._lock:
+            # Check currently-running job
+            if self._current_job and self._current_job.clip_name == clip_name:
+                self._current_job.cancel_event.set()
+                return
+            # Check pending queue
             for job in self._jobs:
                 if job.clip_name == clip_name:
                     job.cancel_event.set()
                     return
 
     def stop(self) -> None:
-        """Stop the worker thread."""
+        """Stop the worker thread — cancels current + all pending jobs."""
         self._stop_flag = True
-        # Cancel all pending
         with self._lock:
+            # Cancel the actively-running job
+            if self._current_job is not None:
+                self._current_job.cancel_event.set()
+            # Cancel all pending
             for job in self._jobs:
                 job.cancel_event.set()
         self._wake.set()
@@ -109,9 +118,13 @@ class ExtractWorker(QThread):
                 continue
 
             self._busy = True
+            with self._lock:
+                self._current_job = job
             try:
                 self._process_job(job)
             finally:
+                with self._lock:
+                    self._current_job = None
                 self._busy = False
 
     def _process_job(self, job: _ExtractJob) -> None:

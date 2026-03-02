@@ -170,6 +170,7 @@ class MainWindow(QMainWindow):
         self._gpu_worker = GPUJobWorker(self._service, parent=self)
         self._gpu_monitor = GPUMonitor(interval_ms=2000, parent=self)
         self._extract_worker = ExtractWorker(parent=self)
+        self._extract_progress: dict[str, tuple[int, int]] = {}  # clip_name -> (current, total)
 
         # Connect signals
         self._connect_signals()
@@ -190,6 +191,7 @@ class MainWindow(QMainWindow):
         # Always start on welcome screen — user picks a project from recents or imports
         # Deferred sync of IO tray divider with viewer splitter
         QTimer.singleShot(0, self._sync_io_divider)
+        QTimer.singleShot(0, self._position_queue_panel)
 
         # Apply persisted preferences (e.g. tooltip visibility, sound mute)
         self._apply_tooltip_setting()
@@ -338,11 +340,6 @@ class MainWindow(QMainWindow):
 
         ws_layout.addWidget(self._vsplitter, 1)
 
-        # Queue panel (collapsible, above status bar)
-        self._queue_panel = QueuePanel(self._service.job_queue)
-        self._queue_panel.hide()
-        ws_layout.addWidget(self._queue_panel)
-
         self._stack.addWidget(workspace)
 
         main_layout.addWidget(self._stack, 1)
@@ -352,6 +349,11 @@ class MainWindow(QMainWindow):
         self.centralWidget().layout().addWidget(self._status_bar)
         # Hidden until user opens a project (welcome screen has no use for it)
         self._status_bar.hide()
+
+        # Queue panel — overlay parented to central widget, sits above status bar
+        self._queue_panel = QueuePanel(self._service.job_queue, parent=self.centralWidget())
+        self._queue_panel._collapsed = False
+        self._queue_panel.toggle_collapsed()  # start collapsed (header-only)
 
     def _setup_shortcuts(self) -> None:
         """Keyboard shortcuts."""
@@ -376,6 +378,12 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+C"), self, self._confirm_clear_annotations)
         # Ctrl+M — toggle UI sounds mute
         QShortcut(QKeySequence("Ctrl+M"), self, self._toggle_mute)
+        # Home — return to welcome screen
+        QShortcut(QKeySequence(Qt.Key_Home), self, self._return_to_welcome)
+        # Delete — remove selected clips
+        QShortcut(QKeySequence(Qt.Key_Delete), self, self._on_delete_selected_clips)
+        # Q — toggle queue panel
+        QShortcut(QKeySequence(Qt.Key_Q), self, self._toggle_queue_panel)
 
     def _toggle_mute(self) -> None:
         """Toggle UI sounds on/off and show a brief overlay indicator."""
@@ -438,15 +446,39 @@ class MainWindow(QMainWindow):
 
     def _cancel_extraction(self) -> None:
         """Stop frame extraction and reset the worker."""
-        self._extract_worker.stop()
-        self._extract_worker.wait(3000)
+        old = self._extract_worker
+        # Disconnect old signals to prevent stale deliveries
+        try:
+            old.progress.disconnect(self._on_extract_progress)
+            old.finished.disconnect(self._on_extract_finished)
+            old.error.disconnect(self._on_extract_error)
+        except RuntimeError:
+            pass  # already disconnected
+        old.stop()
+        if not old.wait(5000):
+            logger.warning("Extract worker did not stop in 5s — terminating")
+            old.terminate()
+            old.wait(2000)
         # Restart the worker thread (stop kills the thread loop)
         self._extract_worker = ExtractWorker(parent=self)
         self._extract_worker.progress.connect(self._on_extract_progress)
         self._extract_worker.finished.connect(self._on_extract_finished)
         self._extract_worker.error.connect(self._on_extract_error)
+        self._extract_progress.clear()
         self._status_bar.reset_progress()
-        self._status_bar.set_message("Extraction cancelled")
+        # Reset any EXTRACTING clips back to their original state
+        for clip in self._clip_model.clips:
+            if clip.state == ClipState.EXTRACTING:
+                clip.extraction_progress = 0.0
+                clip.extraction_total = 0
+                # Check if frames already exist → RAW, else back to VIDEO
+                frames_dir = os.path.join(clip.root_path, "Frames")
+                input_dir = os.path.join(clip.root_path, "Input")
+                has_frames = (os.path.isdir(frames_dir) and os.listdir(frames_dir)) or \
+                             (os.path.isdir(input_dir) and os.listdir(input_dir))
+                new_state = ClipState.RAW if has_frames else ClipState.ERROR
+                self._clip_model.update_clip_state(clip.name, new_state)
+        self._io_tray.refresh()
         logger.info("Frame extraction cancelled by user")
 
     def _cancel_inference(self) -> None:
@@ -868,6 +900,7 @@ class MainWindow(QMainWindow):
         """Switch from welcome screen to the 3-panel workspace."""
         self._stack.setCurrentIndex(1)
         self._status_bar.show()
+        QTimer.singleShot(0, self._position_queue_panel)
 
     @Slot(str)
     def _on_welcome_folder(self, dir_path: str) -> None:
@@ -889,6 +922,15 @@ class MainWindow(QMainWindow):
             return
         self._switch_to_workspace()
         self._on_clips_dir_changed(workspace_path)
+
+    def _on_delete_selected_clips(self) -> None:
+        """Delete key — open remove dialog for selected clips."""
+        if not self._clips_dir:
+            return
+        selected = self._io_tray.get_selected_clips()
+        if not selected:
+            return
+        self._io_tray._remove_dialog(selected)
 
     def _return_to_welcome(self) -> None:
         """Save session and return to the welcome screen."""
@@ -1182,7 +1224,7 @@ class MainWindow(QMainWindow):
                     if self._service.job_queue.submit(gvm_job):
                         clip.set_processing(True)
                         self._start_worker_if_needed(
-                            gvm_job.id, job_label="GVM Auto", indeterminate=False,
+                            gvm_job.id, job_label="GVM Auto",
                         )
                     return
                 elif clicked != btn_process:
@@ -1358,7 +1400,7 @@ class MainWindow(QMainWindow):
             return
 
         self._current_clip.set_processing(True)
-        self._start_worker_if_needed(job.id, job_label="GVM Auto", indeterminate=False)
+        self._start_worker_if_needed(job.id, job_label="GVM Auto")
 
     @Slot()
     def _on_run_videomama(self) -> None:
@@ -1375,13 +1417,12 @@ class MainWindow(QMainWindow):
             return
 
         self._current_clip.set_processing(True)
-        self._start_worker_if_needed(job.id, job_label="VideoMaMa", indeterminate=False)
+        self._start_worker_if_needed(job.id, job_label="VideoMaMa")
 
     def _start_worker_if_needed(
         self,
         first_job_id: str | None = None,
         job_label: str = "Inference",
-        indeterminate: bool = False,
     ) -> None:
         """Ensure GPU worker is running and show queue panel."""
         if first_job_id and self._active_job_id is None:
@@ -1394,9 +1435,10 @@ class MainWindow(QMainWindow):
 
         self._status_bar.set_running(True)
         self._status_bar.reset_progress()
-        self._status_bar.start_job_timer(label=job_label, indeterminate=indeterminate)
+        self._status_bar.start_job_timer(label=job_label)
         self._queue_panel.refresh()
-        self._queue_panel.show()
+        if self._queue_panel._collapsed:
+            self._queue_panel.toggle_collapsed()  # auto-expand when job starts
 
     @Slot()
     def _on_stop_inference(self) -> None:
@@ -1619,6 +1661,7 @@ class MainWindow(QMainWindow):
             self._extract_worker.submit(
                 clip.name, clip.input_asset.path, clip.root_path,
             )
+        self._status_bar.start_job_timer(label="Extracting")
         logger.info(f"Auto-extraction queued: {len(extracting)} clip(s)")
 
     @Slot(list)
@@ -1636,14 +1679,17 @@ class MainWindow(QMainWindow):
                 )
                 count += 1
         if count:
-            self._status_bar.start_job_timer(label="Extracting", indeterminate=True)
+            self._status_bar.start_job_timer(label="Extracting")
             logger.info(f"Manual extraction queued: {count} clip(s)")
 
     @Slot(str, int, int)
     def _on_extract_progress(self, clip_name: str, current: int, total: int) -> None:
         """Update status bar, clip card, and input viewer progress."""
-        pct = int(current / total * 100) if total > 0 else 0
-        self._status_bar.set_message(f"Extracting {clip_name}: {pct}%")
+        # Track per-clip progress for aggregate status bar
+        self._extract_progress[clip_name] = (current, total)
+        agg_current = sum(c for c, _ in self._extract_progress.values())
+        agg_total = sum(t for _, t in self._extract_progress.values())
+        self._status_bar.update_progress(agg_current, agg_total)
         progress = current / total if total > 0 else 0.0
         # Update clip for per-card progress bar
         for i, clip in enumerate(self._clip_model.clips):
@@ -1699,7 +1745,10 @@ class MainWindow(QMainWindow):
                 break
 
         self._io_tray.refresh()
-        self._status_bar.set_message("")
+        # Remove from aggregate tracker; reset status bar when all done
+        self._extract_progress.pop(clip_name, None)
+        if not self._extract_worker.is_busy:
+            self._status_bar.reset_progress()
         from ui.sounds.audio_manager import UIAudio
         UIAudio.frame_extract_done()
 
@@ -1713,7 +1762,9 @@ class MainWindow(QMainWindow):
                 clip.extraction_total = 0
                 clip.error_message = error_msg
                 break
-        self._status_bar.set_message("")
+        self._extract_progress.pop(clip_name, None)
+        if not self._extract_worker.is_busy:
+            self._status_bar.reset_progress()
         from ui.sounds.audio_manager import UIAudio
         UIAudio.error()
         logger.error(f"Extraction failed for {clip_name}: {error_msg}")
@@ -2005,7 +2056,22 @@ class MainWindow(QMainWindow):
         self._vsplitter.setSizes([600, 140])
 
     def _toggle_queue_panel(self) -> None:
-        self._queue_panel.setVisible(not self._queue_panel.isVisible())
+        self._queue_panel.toggle_collapsed()
+        self._queue_panel.reposition()
+
+    def _position_queue_panel(self) -> None:
+        """Pin queue header bar to bottom of central widget, above status bar."""
+        central = self.centralWidget()
+        if central is None:
+            return
+        cw, ch = central.width(), central.height()
+        sb_h = self._status_bar.height() if self._status_bar.isVisible() else 0
+        h = self._queue_panel.height()
+        self._queue_panel.setFixedWidth(cw)
+        self._queue_panel.move(0, ch - sb_h - h)
+        self._queue_panel.raise_()
+        # Also reposition the body popup if expanded
+        self._queue_panel.reposition()
 
     def _show_preferences(self) -> None:
         """Open the Preferences dialog and apply changes."""
@@ -2103,6 +2169,10 @@ class MainWindow(QMainWindow):
         bytes_per_line = w * 3
         qimg = QImage(img_u8.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         return qimg.copy()  # deep copy so numpy buffer can be freed
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._position_queue_panel()
 
     def closeEvent(self, event) -> None:
         """Clean shutdown — auto-save session, stop workers, unload engines."""

@@ -12,7 +12,6 @@ GPU/VRAM info is displayed in the top brand bar (see main_window.py).
 """
 from __future__ import annotations
 
-import math
 import time
 
 from PySide6.QtWidgets import (
@@ -128,7 +127,6 @@ class StatusBar(QWidget):
 
         # Timer state
         self._job_start: float = 0.0
-        self._is_indeterminate = False
         self._last_current = 0
         self._last_total = 0
         self._job_label: str = ""
@@ -137,12 +135,6 @@ class StatusBar(QWidget):
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(1000)
         self._tick_timer.timeout.connect(self._on_tick)
-
-        # Smooth indeterminate animation (replaces Qt's fast strobe)
-        self._pulse_timer = QTimer(self)
-        self._pulse_timer.setInterval(50)  # 20fps for smooth animation
-        self._pulse_timer.timeout.connect(self._on_pulse_tick)
-        self._pulse_phase: float = 0.0
 
         # Hover sound on enabled action buttons
         self._hover_btns = {self._run_btn, self._resume_btn}
@@ -198,44 +190,31 @@ class StatusBar(QWidget):
         """Enable or disable the run button (legacy — prefer update_button_state)."""
         self._run_btn.setEnabled(enabled)
 
-    def start_job_timer(self, label: str = "", indeterminate: bool = False) -> None:
+    def start_job_timer(self, label: str = "") -> None:
         """Start the elapsed timer for a new job.
 
         Args:
-            label: Job description (e.g. "GVM Auto", "Inference").
-            indeterminate: If True, show pulsing progress (no percentage).
+            label: Job description (e.g. "GVM Auto", "Inference", "Extracting").
         """
         self._job_start = time.monotonic()
-        self._is_indeterminate = indeterminate
         self._last_current = 0
         self._last_total = 0
         self._job_label = label
 
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
-
-        if indeterminate:
-            self._pulse_phase = 0.0
-            self._pulse_timer.start()
-            self._frame_label.setText(f"{label}  0:00")
-        else:
-            self._pulse_timer.stop()
+        self._frame_label.setText(f"{label}  0:00" if label else "0:00")
 
         self._tick_timer.start()
 
     def stop_job_timer(self) -> None:
         """Stop the elapsed timer."""
         self._tick_timer.stop()
-        self._pulse_timer.stop()
-        self._is_indeterminate = False
 
     def update_progress(self, current: int, total: int) -> None:
         """Update progress bar, frame counter, and ETA."""
         self._last_current = current
         self._last_total = total
-
-        if self._is_indeterminate:
-            return
 
         elapsed = time.monotonic() - self._job_start if self._job_start > 0 else 0
 
@@ -291,22 +270,14 @@ class StatusBar(QWidget):
 
     def _on_tick(self) -> None:
         """Called every second to update the elapsed display."""
-        elapsed = time.monotonic() - self._job_start if self._job_start > 0 else 0
-        elapsed_str = _fmt_duration(elapsed)
-
-        if self._is_indeterminate:
+        if self._last_total > 0:
+            self.update_progress(self._last_current, self._last_total)
+        elif self._job_start > 0:
+            # Timer-only mode (no progress data yet) — show elapsed time
+            elapsed = time.monotonic() - self._job_start
+            elapsed_str = _fmt_duration(elapsed)
             label = f"{self._job_label}  " if self._job_label else ""
             self._frame_label.setText(f"{label}{elapsed_str}")
-        elif self._last_total > 0:
-            self.update_progress(self._last_current, self._last_total)
-
-    def _on_pulse_tick(self) -> None:
-        """Smooth indeterminate animation — gentle sine wave sweep over ~3 seconds."""
-        interval_s = self._pulse_timer.interval() / 1000.0
-        self._pulse_phase += interval_s / 3.0 * 2 * math.pi  # full cycle in ~3s
-        # Sine wave: 0→100→0 smoothly
-        value = int((math.sin(self._pulse_phase) + 1.0) / 2.0 * 100)
-        self._progress.setValue(value)
 
     def _show_warnings_dialog(self) -> None:
         """Show a modal dialog with all collected warnings."""

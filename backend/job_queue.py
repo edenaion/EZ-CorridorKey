@@ -279,6 +279,11 @@ class GPUJobQueue:
         with self._lock:
             self._history.clear()
 
+    def remove_job(self, job_id: str) -> None:
+        """Remove a single finished job from history."""
+        with self._lock:
+            self._history = [j for j in self._history if j.id != job_id]
+
     @property
     def has_pending(self) -> bool:
         with self._lock:
