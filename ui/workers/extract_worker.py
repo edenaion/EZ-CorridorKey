@@ -52,6 +52,13 @@ class ExtractWorker(QThread):
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._stop_flag = False
+        self._busy = False  # True while actively processing a job
+
+    @property
+    def is_busy(self) -> bool:
+        """True if actively extracting or has pending jobs."""
+        with self._lock:
+            return self._busy or bool(self._jobs)
 
     def submit(self, clip_name: str, video_path: str, clip_root: str) -> None:
         """Queue a video extraction job."""
@@ -101,7 +108,11 @@ class ExtractWorker(QThread):
             if job.cancel_event.is_set():
                 continue
 
-            self._process_job(job)
+            self._busy = True
+            try:
+                self._process_job(job)
+            finally:
+                self._busy = False
 
     def _process_job(self, job: _ExtractJob) -> None:
         """Extract a single video to image sequence."""

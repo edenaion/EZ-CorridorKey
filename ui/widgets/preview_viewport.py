@@ -26,6 +26,7 @@ from ui.preview.async_decoder import AsyncDecoder
 from ui.widgets.split_view import SplitViewWidget
 from ui.widgets.frame_scrubber import FrameScrubber
 from ui.widgets.view_mode_bar import ViewModeBar
+from ui.widgets.annotation_overlay import AnnotationModel
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +82,13 @@ class PreviewViewport(QWidget):
 
         layout.addWidget(self._top_bar)
 
+        # Annotation model (shared across frames, persists during scrubbing)
+        self._annotation_model = AnnotationModel()
+
         # Split view widget (center, fills space)
         self._split_view = SplitViewWidget()
         self._split_view.zoom_changed.connect(self._on_zoom_changed)
+        self._split_view.set_annotation_model(self._annotation_model)
         layout.addWidget(self._split_view, 1)
 
         # Bottom bar: scrubber + zoom indicator (optional)
@@ -125,6 +130,25 @@ class PreviewViewport(QWidget):
         self._current_mode = mode
         self._mode_bar.hide()
 
+    # ── Annotation API ──
+
+    def set_annotation_mode(self, mode: str | None) -> None:
+        """Set annotation mode: 'fg', 'bg', or None to disable."""
+        self._split_view.set_annotation_mode(mode)
+
+    @property
+    def annotation_mode(self) -> str | None:
+        return self._split_view.annotation_mode
+
+    @property
+    def annotation_model(self) -> AnnotationModel:
+        return self._annotation_model
+
+    def clear_annotations(self) -> None:
+        """Clear all annotations for the current clip."""
+        self._annotation_model.clear()
+        self._split_view.update()
+
     def set_clip(self, clip: ClipEntry) -> None:
         """Load a clip and build its frame index.
 
@@ -137,6 +161,7 @@ class PreviewViewport(QWidget):
         self._clip = clip
         self._clip_name = clip.name
         clear_cache()
+        self._annotation_model.clear()
 
         # EXTRACTING clips: show placeholder, no frame index
         if clip.state == ClipState.EXTRACTING:
@@ -273,6 +298,7 @@ class PreviewViewport(QWidget):
             return
         stem_index = min(stem_index, self._frame_index.frame_count - 1)
         self._current_stem_idx = stem_index
+        self._split_view.set_annotation_stem_index(stem_index)
         if self._scrubber:
             self._scrubber.set_frame(stem_index)
         self.frame_changed.emit(stem_index)

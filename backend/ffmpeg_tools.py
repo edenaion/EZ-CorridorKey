@@ -220,23 +220,43 @@ def extract_frames(
     last_frame = start_frame
     frame_re = re.compile(r"frame=\s*(\d+)")
 
+    # Read stderr in a background thread so cancel checks aren't blocked
+    import queue as _queue
+    line_q: _queue.Queue[str | None] = _queue.Queue()
+
+    def _reader():
+        for ln in proc.stderr:
+            line_q.put(ln)
+        line_q.put(None)  # sentinel
+
+    reader_thread = threading.Thread(target=_reader, daemon=True)
+    reader_thread.start()
+
     try:
-        # Read stderr line by line for progress
-        for line in proc.stderr:
+        while True:
+            # Check cancellation every 0.2s even if no output
             if cancel_event and cancel_event.is_set():
-                # Send 'q' to stdin to gracefully stop FFmpeg
+                proc.kill()
                 try:
-                    proc.stdin.write("q\n")
-                    proc.stdin.flush()
-                except Exception:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
                     pass
-                proc.wait(timeout=5)
-                logger.info("Extraction cancelled")
+                logger.info("Extraction cancelled — FFmpeg killed")
                 return last_frame
+
+            try:
+                line = line_q.get(timeout=0.2)
+            except _queue.Empty:
+                # No output yet — check if process is still alive
+                if proc.poll() is not None:
+                    break
+                continue
+
+            if line is None:
+                break  # stderr closed — process ending
 
             match = frame_re.search(line)
             if match:
-                # FFmpeg reports relative frame count; add offset for resume
                 last_frame = start_frame + int(match.group(1))
                 if on_progress and total_frames > 0:
                     on_progress(last_frame, total_frames)

@@ -4,6 +4,7 @@
 
 ## Done
 
+- Interactive annotation overlay — green/red brush strokes (hotkeys 1/2) for foreground/background marking, Shift+drag brush resize, Ctrl+Z undo, mask export to VideoMamaMaskHint, VideoMaMa pipeline integration, annotation markers on timeline scrubber (green lane)
 - In/Out trim points per clip — I/O/Alt+I hotkeys, visual brackets, project.json persistence, frame range-aware inference
 - Tooltips on all interactive controls — parameter panel, status bar, scrubber, clip browser, queue, view modes, GPU info
 - Cancel/stop inference — signal chain + confirmation dialog

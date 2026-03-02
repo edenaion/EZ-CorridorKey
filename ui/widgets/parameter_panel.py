@@ -268,8 +268,27 @@ class ParameterPanel(QWidget):
         for widget in self._middle_click_defaults:
             widget.installEventFilter(self)
 
+        # Hover sound on action buttons (only when enabled)
+        self._hover_btns = {self._gvm_btn, self._videomama_btn, self._export_masks_btn}
+        for btn in self._hover_btns:
+            btn.installEventFilter(self)
+
+        # Hover sound on output checkboxes (only when unchecked — i.e. clickable to enable)
+        self._hover_checks = {self._fg_check, self._matte_check, self._comp_check, self._proc_check}
+        for chk in self._hover_checks:
+            chk.installEventFilter(self)
+
     def eventFilter(self, obj, event) -> bool:
-        """Middle-click resets a control to its default value."""
+        """Middle-click resets a control; hover/click sound on action buttons and output checkboxes."""
+        from ui.sounds.audio_manager import UIAudio
+        if event.type() == QEvent.Enter:
+            if obj in self._hover_btns and obj.isEnabled():
+                UIAudio.hover(key=f"btn:{obj.objectName() or obj.text()}")
+            elif obj in self._hover_checks and not obj.isChecked():
+                UIAudio.hover(key=f"chk:{obj.text()}")
+        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            if (obj in self._hover_btns and obj.isEnabled()) or obj in self._hover_checks:
+                UIAudio.click()
         if event.type() == QEvent.MouseButtonPress and event.button() == Qt.MiddleButton:
             if obj in self._middle_click_defaults:
                 setter, default = self._middle_click_defaults[obj]

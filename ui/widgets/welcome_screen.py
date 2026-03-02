@@ -14,8 +14,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFileDialog, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtGui import QPixmap, QImage, QPainter
+from PySide6.QtSvg import QSvgRenderer
 
 from ui.recent_sessions import RecentSessionsStore
 from ui.widgets.recent_projects_panel import RecentProjectsPanel
@@ -27,14 +28,29 @@ _IMAGE_EXTS = {".exr", ".png", ".tif", ".tiff", ".jpg", ".jpeg", ".dpx"}
 
 
 def _load_brand_logo(size: int) -> QPixmap | None:
-    """Load corridorkey.png from theme dir, scaled to size x size."""
+    """Load brand logo from SVG (crisp at any size) with PNG fallback."""
     if getattr(sys, 'frozen', False):
         base = os.path.join(sys._MEIPASS, "ui", "theme")
     else:
         base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "theme")
-    logo_path = os.path.join(base, "corridorkey.png")
-    if os.path.isfile(logo_path):
-        px = QPixmap(logo_path)
+
+    # Prefer SVG — renders at native resolution, no scaling artifacts
+    svg_path = os.path.join(base, "corridorkey.svg")
+    if os.path.isfile(svg_path):
+        renderer = QSvgRenderer(svg_path)
+        if renderer.isValid():
+            img = QImage(size, size, QImage.Format_ARGB32_Premultiplied)
+            img.fill(Qt.transparent)
+            painter = QPainter(img)
+            painter.setRenderHint(QPainter.Antialiasing)
+            renderer.render(painter)
+            painter.end()
+            return QPixmap.fromImage(img)
+
+    # Fallback to PNG
+    png_path = os.path.join(base, "corridorkey.png")
+    if os.path.isfile(png_path):
+        px = QPixmap(png_path)
         if not px.isNull():
             return px.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     return None
@@ -83,7 +99,16 @@ class _DropZone(QWidget):
         browse_btn.setFixedWidth(200)
         browse_btn.setCursor(Qt.PointingHandCursor)
         browse_btn.clicked.connect(self.browse_requested.emit)
+        browse_btn.installEventFilter(self)
         layout.addWidget(browse_btn, alignment=Qt.AlignCenter)
+
+    def eventFilter(self, obj, event):
+        from ui.sounds.audio_manager import UIAudio
+        if event.type() == QEvent.Enter and obj.objectName() == "welcomeBrowse":
+            UIAudio.hover(key="btn:welcomeBrowse")
+        elif event.type() == QEvent.MouseButtonPress and obj.objectName() == "welcomeBrowse":
+            UIAudio.click()
+        return super().eventFilter(obj, event)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:

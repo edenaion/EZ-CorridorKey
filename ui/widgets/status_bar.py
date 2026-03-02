@@ -12,13 +12,14 @@ GPU/VRAM info is displayed in the top brand bar (see main_window.py).
 """
 from __future__ import annotations
 
+import math
 import time
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox,
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QEvent
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -137,6 +138,25 @@ class StatusBar(QWidget):
         self._tick_timer.setInterval(1000)
         self._tick_timer.timeout.connect(self._on_tick)
 
+        # Smooth indeterminate animation (replaces Qt's fast strobe)
+        self._pulse_timer = QTimer(self)
+        self._pulse_timer.setInterval(50)  # 20fps for smooth animation
+        self._pulse_timer.timeout.connect(self._on_pulse_tick)
+        self._pulse_phase: float = 0.0
+
+        # Hover sound on enabled action buttons
+        self._hover_btns = {self._run_btn, self._resume_btn}
+        for btn in self._hover_btns:
+            btn.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        from ui.sounds.audio_manager import UIAudio
+        if event.type() == QEvent.Enter and obj in self._hover_btns and obj.isEnabled():
+            UIAudio.hover(key=f"btn:{obj.objectName()}")
+        elif event.type() == QEvent.MouseButtonPress and obj in self._hover_btns and obj.isEnabled():
+            UIAudio.click()
+        return super().eventFilter(obj, event)
+
     def set_running(self, running: bool) -> None:
         """Toggle between run/resume and stop state."""
         self._run_btn.setVisible(not running)
@@ -147,22 +167,30 @@ class StatusBar(QWidget):
             self._resume_btn.hide()
         self._stop_btn.setVisible(running)
 
-    def update_button_state(self, can_run: bool, has_partial: bool, has_in_out: bool) -> None:
+    def update_button_state(
+        self, can_run: bool, has_partial: bool, has_in_out: bool,
+        batch_count: int = 0,
+    ) -> None:
         """Update run/resume button visibility and text based on clip state.
 
         Args:
             can_run: Whether the clip is in a runnable state (READY/COMPLETE).
             has_partial: Whether partial inference outputs exist on disk.
             has_in_out: Whether in/out markers are set on the scrubber.
+            batch_count: Number of clips selected (>1 = batch mode).
         """
-        if has_in_out:
+        if batch_count > 1:
+            self._run_btn.setText(f"RUN {batch_count} CLIPS")
+            self._run_btn.setEnabled(True)
+        elif has_in_out:
             self._run_btn.setText("RUN SELECTED")
+            self._run_btn.setEnabled(can_run)
         else:
             self._run_btn.setText("RUN INFERENCE")
-        self._run_btn.setEnabled(can_run)
+            self._run_btn.setEnabled(can_run)
 
-        # Show resume only when partial outputs exist and clip can run
-        show_resume = can_run and has_partial
+        # Show resume only when partial outputs exist, single clip, and can run
+        show_resume = can_run and has_partial and batch_count <= 1
         self._resume_btn.setVisible(show_resume)
         self._btn_divider.setVisible(show_resume)
 
@@ -183,20 +211,22 @@ class StatusBar(QWidget):
         self._last_total = 0
         self._job_label = label
 
+        self._progress.setRange(0, 100)
+        self._progress.setValue(0)
+
         if indeterminate:
-            self._progress.setRange(0, 0)  # Pulsing/indeterminate mode
+            self._pulse_phase = 0.0
+            self._pulse_timer.start()
             self._frame_label.setText(f"{label}  0:00")
         else:
-            self._progress.setRange(0, 100)
-            self._progress.setValue(0)
+            self._pulse_timer.stop()
 
         self._tick_timer.start()
 
     def stop_job_timer(self) -> None:
         """Stop the elapsed timer."""
         self._tick_timer.stop()
-        if self._is_indeterminate:
-            self._progress.setRange(0, 100)  # Back to determinate
+        self._pulse_timer.stop()
         self._is_indeterminate = False
 
     def update_progress(self, current: int, total: int) -> None:
@@ -269,6 +299,14 @@ class StatusBar(QWidget):
             self._frame_label.setText(f"{label}{elapsed_str}")
         elif self._last_total > 0:
             self.update_progress(self._last_current, self._last_total)
+
+    def _on_pulse_tick(self) -> None:
+        """Smooth indeterminate animation — gentle sine wave sweep over ~3 seconds."""
+        interval_s = self._pulse_timer.interval() / 1000.0
+        self._pulse_phase += interval_s / 3.0 * 2 * math.pi  # full cycle in ~3s
+        # Sine wave: 0→100→0 smoothly
+        value = int((math.sin(self._pulse_phase) + 1.0) / 2.0 * 100)
+        self._progress.setValue(value)
 
     def _show_warnings_dialog(self) -> None:
         """Show a modal dialog with all collected warnings."""

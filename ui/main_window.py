@@ -42,7 +42,10 @@ from ui.widgets.status_bar import StatusBar
 from ui.widgets.queue_panel import QueuePanel
 from ui.widgets.io_tray_panel import IOTrayPanel
 from ui.widgets.welcome_screen import WelcomeScreen
-from ui.widgets.preferences_dialog import PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS, get_setting_bool
+from ui.widgets.preferences_dialog import (
+    PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
+    KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE, get_setting_bool,
+)
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
 from ui.workers.thumbnail_worker import ThumbnailGenerator
@@ -91,6 +94,37 @@ class _Toast(QLabel):
 
     def mousePressEvent(self, event):
         self.deleteLater()
+
+
+class _MuteOverlay(QLabel):
+    """Brief overlay inside the brand bar strip, fades after 1.5s."""
+
+    _FIXED_W = 160
+    _FIXED_H = 22
+
+    def __init__(self, parent: QWidget, text: str):
+        super().__init__(text, parent)
+        self.setAlignment(Qt.AlignCenter)
+        self.setFixedSize(self._FIXED_W, self._FIXED_H)
+        self.setStyleSheet(
+            "background: rgba(26, 25, 0, 220); color: #E0E0D0;"
+            "border: 1px solid #454430; border-radius: 4px;"
+            "font-family: 'Open Sans'; font-size: 11px; font-weight: 600;"
+        )
+        # Position inside the brand bar (top strip, ~24px tall)
+        menu_h = parent.menuBar().height() if hasattr(parent, 'menuBar') else 22
+        self.move((parent.width() - self._FIXED_W) // 2, menu_h + 2)
+        self._opacity = QGraphicsOpacityEffect(self)
+        self._opacity.setOpacity(1.0)
+        self.setGraphicsEffect(self._opacity)
+        self._fade = QPropertyAnimation(self._opacity, b"opacity")
+        self._fade.setDuration(600)
+        self._fade.setStartValue(1.0)
+        self._fade.setEndValue(0.0)
+        self._fade.setEasingCurve(QEasingCurve.InQuad)
+        self._fade.finished.connect(self.deleteLater)
+        QTimer.singleShot(1500, self._fade.start)
+        self.raise_()
 
 
 class MainWindow(QMainWindow):
@@ -157,15 +191,18 @@ class MainWindow(QMainWindow):
         # Deferred sync of IO tray divider with viewer splitter
         QTimer.singleShot(0, self._sync_io_divider)
 
-        # Apply persisted preferences (e.g. tooltip visibility)
+        # Apply persisted preferences (e.g. tooltip visibility, sound mute)
         self._apply_tooltip_setting()
+        self._apply_sound_setting()
 
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
 
         # File menu
         file_menu = menu_bar.addMenu("File")
-        file_menu.addAction("Open Clips Folder...", self._on_open_folder)
+        import_menu = file_menu.addMenu("Import Clips")
+        import_menu.addAction("Import Folder...", self._on_import_folder)
+        import_menu.addAction("Import Video(s)...", self._on_import_videos)
         file_menu.addSeparator()
 
         # Session save/load
@@ -337,18 +374,96 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+Z"), self, self._undo_annotation)
         # Ctrl+C — clear all annotations (with confirmation)
         QShortcut(QKeySequence("Ctrl+C"), self, self._confirm_clear_annotations)
+        # Ctrl+M — toggle UI sounds mute
+        QShortcut(QKeySequence("Ctrl+M"), self, self._toggle_mute)
+
+    def _toggle_mute(self) -> None:
+        """Toggle UI sounds on/off and show a brief overlay indicator."""
+        from ui.sounds.audio_manager import UIAudio
+        from ui.widgets.preferences_dialog import KEY_UI_SOUNDS
+        from PySide6.QtCore import QSettings
+        muted = not UIAudio.is_muted()
+        UIAudio.set_muted(muted)
+        QSettings().setValue(KEY_UI_SOUNDS, not muted)
+        # Show overlay top-right
+        icon = "\U0001F507" if muted else "\U0001F50A"  # muted vs speaker
+        text = f"{icon}  Sound {'OFF' if muted else 'ON'}"
+        overlay = _MuteOverlay(self, text)
+        overlay.show()
 
     def _toggle_playback(self) -> None:
         """Forward Space key to the scrubber's play/pause toggle."""
         self._dual_viewer.toggle_playback()
 
     def _on_escape(self) -> None:
-        """Escape: exit annotation mode first, then fall through to stop."""
+        """Escape: cancel the current action — auto-detects what's running."""
+        # 1. Exit annotation mode (no confirmation needed)
         iv = self._dual_viewer.input_viewer
         if iv.annotation_mode:
             iv.set_annotation_mode(None)
             return
-        self._on_stop_inference()
+
+        # 2. Detect active process and ask to cancel
+        process_name = self._detect_active_process()
+        if not process_name:
+            return
+
+        reply = QMessageBox.question(
+            self, "Cancel",
+            f"Cancel {process_name}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.user_cancel()
+
+        if process_name == "frame extraction":
+            self._cancel_extraction()
+        else:
+            self._cancel_inference()
+
+    def _detect_active_process(self) -> str | None:
+        """Return a human-readable name for the currently active process, or None."""
+        # Check extraction — is_busy means actively extracting or has pending jobs
+        if self._extract_worker.is_busy:
+            return "frame extraction"
+        # Check inference / GPU jobs
+        queue = self._service.job_queue
+        if queue.current_job or queue.has_pending:
+            return "processing"
+        return None
+
+    def _cancel_extraction(self) -> None:
+        """Stop frame extraction and reset the worker."""
+        self._extract_worker.stop()
+        self._extract_worker.wait(3000)
+        # Restart the worker thread (stop kills the thread loop)
+        self._extract_worker = ExtractWorker(parent=self)
+        self._extract_worker.progress.connect(self._on_extract_progress)
+        self._extract_worker.finished.connect(self._on_extract_finished)
+        self._extract_worker.error.connect(self._on_extract_error)
+        self._status_bar.reset_progress()
+        self._status_bar.set_message("Extraction cancelled")
+        logger.info("Frame extraction cancelled by user")
+
+    def _cancel_inference(self) -> None:
+        """Cancel all inference/GPU jobs."""
+        queue = self._service.job_queue
+        is_videomama = (queue.current_job
+                        and queue.current_job.job_type == JobType.VIDEOMAMA_ALPHA)
+        queue.cancel_all()
+        self._batch_clips.clear()
+        self._status_bar.stop_job_timer()
+        self._status_bar.set_message("Cancelling...")
+        self._status_bar.set_running(False)
+        self._queue_panel.refresh()
+        logger.info("Processing cancelled by user")
+        if is_videomama:
+            _Toast(self, "GPU is finishing the current chunk.\n"
+                         "VideoMaMa will stop after it completes.")
 
     def _toggle_annotation_fg(self) -> None:
         """Hotkey 1: toggle green (foreground) annotation brush."""
@@ -530,6 +645,7 @@ class MainWindow(QMainWindow):
         self._io_tray.selection_changed.connect(self._on_selection_changed)
         self._io_tray.clips_dir_changed.connect(self._on_clips_dir_changed)
         self._io_tray.files_imported.connect(self._on_welcome_files)
+        self._io_tray.extract_requested.connect(self._on_extract_requested)
 
         # Status bar buttons
         self._status_bar.run_clicked.connect(self._on_run_inference)
@@ -744,6 +860,8 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             logger.error(f"Failed to scan clips: {e}")
+            from ui.sounds.audio_manager import UIAudio
+            UIAudio.error()
             QMessageBox.critical(self, "Scan Error", f"Failed to scan clips directory:\n{e}")
 
     def _switch_to_workspace(self) -> None:
@@ -829,8 +947,86 @@ class MainWindow(QMainWindow):
             project_dir, skip_session_restore=True, select_clip=None,
         )
 
-    def _on_open_folder(self) -> None:
-        self._io_tray.show_add_menu()
+    def _on_import_folder(self) -> None:
+        """File → Import Clips → Import Folder — context-aware."""
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "Select Clips Directory", "",
+            QFileDialog.ShowDirsOnly,
+        )
+        if not dir_path:
+            return
+        if self._clips_dir:
+            # Already in a project — add folder contents as clips
+            self._add_folder_to_project(dir_path)
+        else:
+            # Welcome screen — create a project named after the folder
+            self._create_project_from_folder(dir_path)
+
+    def _on_import_videos(self) -> None:
+        """File → Import Clips → Import Video(s) — context-aware."""
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Select Video Files", "",
+            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)",
+        )
+        if not paths:
+            return
+        if self._clips_dir:
+            # Already in a project — add videos to current project
+            self._add_videos_to_project(paths)
+        else:
+            # Welcome screen — create a new project
+            self._on_welcome_files(paths)
+
+    def _add_folder_to_project(self, dir_path: str) -> None:
+        """Import all videos from a folder into the current project."""
+        from backend.project import is_video_file, add_clips_to_project
+        videos = [
+            os.path.join(dir_path, f) for f in os.listdir(dir_path)
+            if is_video_file(os.path.join(dir_path, f))
+        ]
+        if not videos:
+            QMessageBox.information(self, "No Videos", "No video files found in that folder.")
+            return
+        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
+        add_clips_to_project(self._clips_dir, videos, copy_source=copy_source)
+        logger.info(f"Added {len(videos)} clip(s) from folder to project")
+        self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
+
+    def _add_videos_to_project(self, file_paths: list) -> None:
+        """Import selected video files into the current project."""
+        from backend.project import is_video_file, add_clips_to_project
+        videos = [f for f in file_paths if is_video_file(f)]
+        if not videos:
+            return
+        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
+        add_clips_to_project(self._clips_dir, videos, copy_source=copy_source)
+        logger.info(f"Added {len(videos)} clip(s) to project")
+        self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
+
+    def _create_project_from_folder(self, dir_path: str) -> None:
+        """Create a new project from a folder of videos (welcome screen path).
+
+        Scans the folder for video files, creates a project named after the
+        folder, and opens it.
+        """
+        from backend.project import is_video_file, create_project
+        videos = sorted(
+            os.path.join(dir_path, f) for f in os.listdir(dir_path)
+            if is_video_file(os.path.join(dir_path, f))
+        )
+        if not videos:
+            QMessageBox.information(self, "No Videos", "No video files found in that folder.")
+            return
+        folder_name = os.path.basename(dir_path.rstrip("/\\"))
+        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
+        project_dir = create_project(
+            videos, copy_source=copy_source, display_name=folder_name,
+        )
+        logger.info(
+            f"Created project '{folder_name}' with {len(videos)} clip(s) from folder"
+        )
+        self._switch_to_workspace()
+        self._on_clips_dir_changed(project_dir, skip_session_restore=True)
 
     # ── View Controls ──
 
@@ -1204,7 +1400,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_stop_inference(self) -> None:
-        # Guard: only cancel if a job is actually running
+        """STOP button handler — confirms and cancels inference."""
         if not self._status_bar._stop_btn.isVisible():
             return
         queue = self._service.job_queue
@@ -1212,30 +1408,17 @@ class MainWindow(QMainWindow):
             return
 
         reply = QMessageBox.question(
-            self, "Cancel Processing",
-            "Are you sure you want to cancel?",
+            self, "Cancel",
+            "Cancel processing?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
             return
 
-        # Check if current job is VideoMaMa (long GPU chunks)
-        is_videomama = (queue.current_job
-                        and queue.current_job.job_type == JobType.VIDEOMAMA_ALPHA)
-
-        queue.cancel_all()
-        self._batch_clips.clear()
-        # Freeze progress display immediately — GPU may still be finishing
-        # the current chunk, but the user shouldn't see the timer climbing
-        self._status_bar.stop_job_timer()
-        self._status_bar.set_message("Cancelling...")
-        self._queue_panel.refresh()
-        logger.info("Inference cancelled by user")
-
-        if is_videomama:
-            _Toast(self, "GPU is finishing the current chunk.\n"
-                         "VideoMaMa will stop after it completes.")
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.user_cancel()
+        self._cancel_inference()
 
     @Slot(str)
     def _on_cancel_job(self, job_id: str) -> None:
@@ -1312,7 +1495,9 @@ class MainWindow(QMainWindow):
             self._status_bar.reset_progress()
             self._status_bar.start_job_timer(label="Batch")
 
+        from ui.sounds.audio_manager import UIAudio
         if target_state == ClipState.READY:
+            UIAudio.mask_done()
             type_label = "GVM Auto" if job_type == JobType.GVM_ALPHA.value else "VideoMaMa"
             # Show alpha coverage count
             alpha_info = ""
@@ -1324,6 +1509,7 @@ class MainWindow(QMainWindow):
                 f"{type_label} complete for {clip_name}{alpha_info} -- Ready to Run Inference"
             )
         elif target_state == ClipState.COMPLETE:
+            UIAudio.inference_done()
             self._status_bar.set_message(f"Inference complete: {clip_name}")
 
         # Refresh views
@@ -1380,6 +1566,8 @@ class MainWindow(QMainWindow):
                 break
         self._queue_panel.refresh()
         logger.error(f"Worker error for {clip_name}: {error_msg}")
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.error()
         QMessageBox.critical(self, "Processing Error", f"Clip: {clip_name}\n\n{error_msg}")
 
     @Slot()
@@ -1432,6 +1620,24 @@ class MainWindow(QMainWindow):
                 clip.name, clip.input_asset.path, clip.root_path,
             )
         logger.info(f"Auto-extraction queued: {len(extracting)} clip(s)")
+
+    @Slot(list)
+    def _on_extract_requested(self, clips: list) -> None:
+        """Handle right-click → Run Extraction on selected clips."""
+        if not clips:
+            return
+        if not self._extract_worker.isRunning():
+            self._extract_worker.start()
+        count = 0
+        for clip in clips:
+            if clip.input_asset and clip.input_asset.asset_type == "video":
+                self._extract_worker.submit(
+                    clip.name, clip.input_asset.path, clip.root_path,
+                )
+                count += 1
+        if count:
+            self._status_bar.start_job_timer(label="Extracting", indeterminate=True)
+            logger.info(f"Manual extraction queued: {count} clip(s)")
 
     @Slot(str, int, int)
     def _on_extract_progress(self, clip_name: str, current: int, total: int) -> None:
@@ -1494,6 +1700,8 @@ class MainWindow(QMainWindow):
 
         self._io_tray.refresh()
         self._status_bar.set_message("")
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.frame_extract_done()
 
     @Slot(str, str)
     def _on_extract_error(self, clip_name: str, error_msg: str) -> None:
@@ -1506,6 +1714,8 @@ class MainWindow(QMainWindow):
                 clip.error_message = error_msg
                 break
         self._status_bar.set_message("")
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.error()
         logger.error(f"Extraction failed for {clip_name}: {error_msg}")
 
     # ── Export Video ──
@@ -1583,6 +1793,8 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             self._status_bar.set_message("")
+            from ui.sounds.audio_manager import UIAudio
+            UIAudio.error()
             QMessageBox.critical(
                 self, "Export Failed",
                 f"Failed to export video:\n{e}",
@@ -1800,6 +2012,7 @@ class MainWindow(QMainWindow):
         dlg = PreferencesDialog(self)
         if dlg.exec() == PreferencesDialog.Accepted:
             self._apply_tooltip_setting()
+            self._apply_sound_setting()
 
     def _apply_tooltip_setting(self) -> None:
         """Enable or disable tooltips globally based on saved preference."""
@@ -1811,6 +2024,12 @@ class MainWindow(QMainWindow):
         # If enabled, tooltips stay as set during widget construction.
         # A full re-enable would require rebuilding tooltip strings, which
         # is unnecessary — the setting takes full effect on next app launch.
+
+    def _apply_sound_setting(self) -> None:
+        """Apply UI sounds on/off from saved preference."""
+        from ui.widgets.preferences_dialog import KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.set_muted(not get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS))
 
     def _show_about(self) -> None:
         box = QMessageBox(self)

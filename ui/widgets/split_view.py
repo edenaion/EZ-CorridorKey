@@ -7,7 +7,10 @@ Uses QImage as internal currency (Codex finding: QPixmap can use
 platform-native GPU backing, QImage is guaranteed CPU-only).
 
 Zoom/pan: Ctrl+wheel zooms, middle-click pans, double-click resets.
-Hit-test precedence: divider drag > pan > zoom (Codex finding).
+Hit-test precedence: divider drag > pan > annotation > zoom (Codex finding).
+
+Annotation mode: hotkey 1/2 activates green/red brush. Left-click draws
+strokes in image-pixel coordinates. Shift+drag resizes brush.
 """
 from __future__ import annotations
 
@@ -18,11 +21,17 @@ from PySide6.QtGui import (
     QCursor,
 )
 
+from ui.widgets.annotation_overlay import (
+    AnnotationModel, paint_annotations, paint_brush_cursor,
+    paint_resize_indicator,
+)
+
 
 class SplitViewWidget(QWidget):
     """Image display with optional split view, zoom, and pan."""
 
     zoom_changed = Signal(float)  # current zoom level
+    stroke_finished = Signal()    # emitted when an annotation stroke completes
 
     # Divider hit zone (pixels from divider line)
     _DIVIDER_HIT_ZONE = 8
@@ -62,6 +71,19 @@ class SplitViewWidget(QWidget):
         # Extraction progress overlay
         self._extraction_progress = 0.0  # 0.0 to 1.0
         self._extraction_total = 0
+
+        # Annotation state
+        self._annotation_mode: str | None = None  # "fg", "bg", or None
+        self._annotation_model: AnnotationModel | None = None
+        self._annotation_stem_idx: int = -1
+        self._brush_radius: float = 15.0  # image pixels
+        self._drawing: bool = False
+        self._resizing_brush: bool = False
+        self._resize_start_y: float = 0.0
+        self._resize_start_radius: float = 0.0
+        self._mouse_pos: QPointF = QPointF()  # last known mouse position (display)
+        self._straight_line: bool = False    # Alt+click straight-line mode
+        self._line_anchor: tuple[float, float] | None = None  # anchor in image-pixel coords
 
     # ── Public API ──
 
@@ -113,6 +135,32 @@ class SplitViewWidget(QWidget):
     def zoom_level(self) -> float:
         return self._zoom
 
+    # ── Annotation API ──
+
+    def set_annotation_mode(self, mode: str | None) -> None:
+        """Set annotation mode: 'fg', 'bg', or None to disable."""
+        self._annotation_mode = mode
+        if mode:
+            self.setCursor(Qt.CrossCursor)
+        else:
+            self.unsetCursor()
+        self.update()
+
+    def set_annotation_model(self, model: AnnotationModel | None) -> None:
+        self._annotation_model = model
+
+    def set_annotation_stem_index(self, idx: int) -> None:
+        self._annotation_stem_idx = idx
+        self.update()
+
+    @property
+    def annotation_mode(self) -> str | None:
+        return self._annotation_mode
+
+    @property
+    def brush_radius(self) -> float:
+        return self._brush_radius
+
     # ── Paint ──
 
     def paintEvent(self, event) -> None:
@@ -128,6 +176,10 @@ class SplitViewWidget(QWidget):
             self._paint_single(painter)
         elif self._extraction_total <= 0:
             self._paint_placeholder(painter)
+
+        # Annotation overlay (after image, before extraction)
+        if self._annotation_model is not None and self._annotation_mode:
+            self._paint_annotations(painter)
 
         # Extraction progress overlay (replaces placeholder during extraction)
         if self._extraction_total > 0:
@@ -245,6 +297,49 @@ class SplitViewWidget(QWidget):
             f"{pct}%  ({current}/{self._extraction_total} frames)",
         )
 
+    def _paint_annotations(self, painter: QPainter) -> None:
+        """Draw annotation strokes and brush cursor on the viewport."""
+        img = self._single_image or self._left_image
+        if img is None or self._annotation_model is None:
+            return
+
+        dest = self._image_rect(img)
+        iw, ih = img.width(), img.height()
+
+        # Draw existing strokes + in-progress stroke
+        strokes = self._annotation_model.get_strokes(self._annotation_stem_idx)
+        current = self._annotation_model.current_stroke
+        paint_annotations(painter, strokes, current, dest, iw, ih)
+
+        # Brush cursor at mouse position
+        if self._annotation_mode and self.underMouse():
+            radius_display = self._brush_radius * dest.width() / iw
+            if self._resizing_brush:
+                paint_resize_indicator(
+                    painter, self._mouse_pos, radius_display,
+                    self._brush_radius, self._annotation_mode,
+                )
+            else:
+                paint_brush_cursor(
+                    painter, self._mouse_pos, radius_display,
+                    self._annotation_mode,
+                )
+
+    def _display_to_image(self, display_pos: QPointF) -> tuple[float, float] | None:
+        """Convert display coordinates to image-pixel coordinates.
+
+        Returns None if the position is outside the image bounds.
+        """
+        img = self._single_image or self._left_image
+        if img is None:
+            return None
+        dest = self._image_rect(img)
+        iw, ih = img.width(), img.height()
+        img_x = (display_pos.x() - dest.x()) * iw / dest.width()
+        img_y = (display_pos.y() - dest.y()) * ih / dest.height()
+        # Allow drawing slightly outside bounds (clamp at export)
+        return (img_x, img_y)
+
     def _image_rect(self, img: QImage) -> QRectF:
         """Calculate the destination rect for an image with zoom/pan."""
         iw, ih = img.width(), img.height()
@@ -271,6 +366,52 @@ class SplitViewWidget(QWidget):
                 self._dragging_divider = True
                 return
 
+        # Annotation: Shift+left-click = brush resize
+        if (event.button() == Qt.LeftButton
+                and self._annotation_mode
+                and event.modifiers() & Qt.ShiftModifier):
+            self._resizing_brush = True
+            self._resize_start_y = event.position().y()
+            self._resize_start_radius = self._brush_radius
+            self.update()
+            return
+
+        # Annotation: Alt+left-click = straight line
+        if (event.button() == Qt.LeftButton
+                and self._annotation_mode
+                and self._annotation_model is not None
+                and event.modifiers() & Qt.AltModifier):
+            pos = self._display_to_image(event.position())
+            if pos is not None:
+                self._drawing = True
+                self._straight_line = True
+                self._line_anchor = pos
+                self._annotation_model.start_stroke(
+                    self._annotation_stem_idx,
+                    pos[0], pos[1],
+                    self._annotation_mode,
+                    self._brush_radius,
+                )
+                self.update()
+                return
+
+        # Annotation: left-click = start freehand drawing
+        if (event.button() == Qt.LeftButton
+                and self._annotation_mode
+                and self._annotation_model is not None):
+            pos = self._display_to_image(event.position())
+            if pos is not None:
+                self._drawing = True
+                self._straight_line = False
+                self._annotation_model.start_stroke(
+                    self._annotation_stem_idx,
+                    pos[0], pos[1],
+                    self._annotation_mode,
+                    self._brush_radius,
+                )
+                self.update()
+                return
+
         if event.button() == Qt.MiddleButton:
             self._panning = True
             self._pan_start = event.position()
@@ -281,10 +422,40 @@ class SplitViewWidget(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        self._mouse_pos = event.position()
+
         if self._dragging_divider:
             self._divider_pos = max(0.05, min(0.95,
                 event.position().x() / self.width()))
             self.update()
+            return
+
+        # Annotation: brush resize (Shift+drag)
+        if self._resizing_brush:
+            delta_y = self._resize_start_y - event.position().y()
+            # 2 image-pixels per display-pixel of drag
+            new_radius = self._resize_start_radius + delta_y * 2.0
+            self._brush_radius = max(2.0, min(200.0, new_radius))
+            self.update()
+            return
+
+        # Annotation: straight-line preview (Alt+drag)
+        if self._drawing and self._straight_line and self._annotation_model is not None:
+            pos = self._display_to_image(event.position())
+            if pos is not None and self._line_anchor is not None:
+                # Replace stroke points with anchor + current endpoint for live preview
+                stroke = self._annotation_model.current_stroke
+                if stroke is not None:
+                    stroke.points = [self._line_anchor, pos]
+                self.update()
+            return
+
+        # Annotation: freehand drawing stroke
+        if self._drawing and self._annotation_model is not None:
+            pos = self._display_to_image(event.position())
+            if pos is not None:
+                self._annotation_model.add_point(pos[0], pos[1])
+                self.update()
             return
 
         if self._panning:
@@ -301,14 +472,39 @@ class SplitViewWidget(QWidget):
             divider_x = self.width() * self._divider_pos
             if abs(event.position().x() - divider_x) < self._DIVIDER_HIT_ZONE:
                 self.setCursor(Qt.SplitHCursor)
-            else:
+            elif not self._annotation_mode:
                 self.unsetCursor()
+
+        # Update brush cursor position when annotation mode active
+        if self._annotation_mode:
+            self.update()
 
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if self._dragging_divider:
             self._dragging_divider = False
+            return
+
+        if self._resizing_brush:
+            self._resizing_brush = False
+            self.update()
+            return
+
+        if self._drawing and self._annotation_model is not None:
+            # Straight-line: finalize with anchor + release point
+            if self._straight_line and self._line_anchor is not None:
+                pos = self._display_to_image(event.position())
+                if pos is not None:
+                    stroke = self._annotation_model.current_stroke
+                    if stroke is not None:
+                        stroke.points = [self._line_anchor, pos]
+                self._straight_line = False
+                self._line_anchor = None
+            self._annotation_model.finish_stroke()
+            self._drawing = False
+            self.stroke_finished.emit()
+            self.update()
             return
 
         if self._panning:
@@ -319,8 +515,8 @@ class SplitViewWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        """Double-click to reset zoom/pan."""
-        if event.button() == Qt.LeftButton:
+        """Double-click to reset zoom/pan (disabled during annotation)."""
+        if event.button() == Qt.LeftButton and not self._annotation_mode:
             self.reset_zoom()
 
     def wheelEvent(self, event: QWheelEvent) -> None:

@@ -3,7 +3,8 @@
 Horizontal slider + frame counter + step buttons. Emits frame_changed only
 after a debounce period (50ms) to coalesce rapid scrubbing events.
 
-CoverageBar sits above the slider (same column) showing two lanes:
+CoverageBar sits above the slider (same column) showing up to three lanes:
+  - Annotation lane (green): which frames have brush annotations (only shown when present)
   - Alpha lane (white): which frames have AlphaHint
   - Inference lane (brand yellow): which frames have output
 
@@ -13,53 +14,76 @@ positioned exactly over the coverage bar + slider column.
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider, QPushButton, QToolTip
-from PySide6.QtCore import Qt, Signal, QTimer, QPointF, QEvent
+from PySide6.QtCore import Qt, Signal, QTimer, QPointF, QEvent, QSettings
 from PySide6.QtGui import QPainter, QColor, QPolygonF
 
 
 class CoverageBar(QWidget):
-    """Thin dual-lane bar showing alpha and inference frame coverage.
+    """Thin multi-lane bar showing alpha, inference, and annotation frame coverage.
 
-    Top lane: alpha hint coverage (white segments).
+    Top lane: annotation markers (green dots for annotated frames).
+    Middle lane: alpha hint coverage (white segments).
     Bottom lane: inference output coverage (brand yellow segments).
     """
 
     _ALPHA_COLOR = QColor(200, 200, 200)       # Soft white for alpha
     _INFERENCE_COLOR = QColor(255, 242, 3)      # Brand yellow #FFF203
+    _ANNOTATION_COLOR = QColor(44, 195, 80)     # Green #2CC350 for annotations
     _TRACK_COLOR = QColor(26, 25, 0)            # Dark track
     _LANE_HEIGHT = 3
     _GAP = 1
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(self._LANE_HEIGHT * 2 + self._GAP)
         self._alpha: list[bool] = []
         self._inference: list[bool] = []
+        self._annotated: list[bool] = []
+        self._update_height()
+
+    def _update_height(self) -> None:
+        """Recalculate height based on whether annotation lane is visible."""
+        lanes = 2  # alpha + inference always present
+        if self._annotated:
+            lanes = 3
+        self.setFixedHeight(self._LANE_HEIGHT * lanes + self._GAP * (lanes - 1))
 
     def set_coverage(self, alpha: list[bool], inference: list[bool]) -> None:
         self._alpha = alpha
         self._inference = inference
         self.update()
 
+    def set_annotation_markers(self, annotated: list[bool]) -> None:
+        self._annotated = annotated
+        self._update_height()
+        self.update()
+
     def clear(self) -> None:
         self._alpha = []
         self._inference = []
+        self._annotated = []
+        self._update_height()
         self.update()
 
     def paintEvent(self, event) -> None:
-        if not self._alpha and not self._inference:
+        if not self._alpha and not self._inference and not self._annotated:
             return
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, False)
         w = self.width()
+        y = 0
 
-        # Draw alpha lane (top)
-        self._paint_lane(painter, self._alpha, 0, w, self._ALPHA_COLOR)
+        # Draw annotation lane (top, only if annotations exist)
+        if self._annotated:
+            self._paint_lane(painter, self._annotated, y, w, self._ANNOTATION_COLOR)
+            y += self._LANE_HEIGHT + self._GAP
 
-        # Draw inference lane (bottom)
-        y_offset = self._LANE_HEIGHT + self._GAP
-        self._paint_lane(painter, self._inference, y_offset, w, self._INFERENCE_COLOR)
+        # Draw alpha lane
+        self._paint_lane(painter, self._alpha, y, w, self._ALPHA_COLOR)
+        y += self._LANE_HEIGHT + self._GAP
+
+        # Draw inference lane
+        self._paint_lane(painter, self._inference, y, w, self._INFERENCE_COLOR)
 
         painter.end()
 
@@ -358,8 +382,9 @@ class FrameScrubber(QWidget):
         self._coverage_bar = CoverageBar()
         self._coverage_bar.setToolTip(
             "Coverage bar — shows which frames have been processed.\n"
-            "Top lane (white): alpha hint coverage.\n"
-            "Bottom lane (yellow): inference output coverage."
+            "Green lane: annotated frames (brush strokes).\n"
+            "White lane: alpha hint coverage.\n"
+            "Yellow lane: inference output coverage."
         )
         center_layout.addWidget(self._coverage_bar)
 
@@ -476,6 +501,10 @@ class FrameScrubber(QWidget):
         """Update the coverage overlay lanes."""
         self._coverage_bar.set_coverage(alpha, inference)
 
+    def set_annotation_markers(self, annotated: list[bool]) -> None:
+        """Update the annotation marker lane on the coverage bar."""
+        self._coverage_bar.set_annotation_markers(annotated)
+
     def current_frame(self) -> int:
         return self._slider.value()
 
@@ -590,7 +619,6 @@ class FrameScrubber(QWidget):
 
     def _playback_tick(self) -> None:
         """Advance one frame during playback. Loops within in/out range if set."""
-        from PySide6.QtCore import QSettings
         loop_enabled = QSettings().value("playback/loop", True, type=bool)
 
         current = self._slider.value()
@@ -614,10 +642,6 @@ class FrameScrubber(QWidget):
         self._slider.setValue(next_frame)
         self._suppress_signal = False
         self.frame_changed.emit(next_frame)
-
-    def set_fps(self, fps: float) -> None:
-        """Set playback frame rate (ignored — fixed at 1fps for PNG stepping)."""
-        pass  # Fixed at 1fps; PNG decode too slow for realtime
 
     def keyPressEvent(self, event) -> None:
         """Space for play/pause, Left/Right for stepping, I/O for markers."""

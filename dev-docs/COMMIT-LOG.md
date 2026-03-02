@@ -4,6 +4,58 @@ Running log of all commits for development history.
 
 ---
 
+### (uncommitted) - 2026-03-02
+**Interactive annotation overlay, VideoMaMa pipeline fixes, and code hygiene cleanup**
+
+- Interactive annotation overlay: green/red brush strokes (hotkeys 1/2), Shift+drag resize, Ctrl+Z undo, mask export to VideoMamaMaskHint
+- VideoMaMa pipeline: fixed button enable after mask export (stale asset refs), relaxed guard condition to accept mask_asset
+- Annotation markers on timeline scrubber (green lane in CoverageBar, auto-hides when empty)
+- Downloaded SVD base model (stable-video-diffusion-img2vid-xt) and renamed VideoMaMa UNet checkpoint
+- Added einops to requirements.txt
+- Code hygiene: fixed _reset_layout splitter sizes, added empty availability guard, removed dead code and unused imports, hoisted shutil import
+
+---
+
+### 55a9c1e - 2026-03-01 19:31
+**Add advanced despeckle controls (dilation/blur) and hide status bar on welcome screen**
+
+---
+
+### 56b451f - 2026-03-01 19:10
+**Add play/pause transport button with Space hotkey, loop playback within in/out range**
+
+---
+
+### 81e603a - 2026-03-01 18:54
+**Add copy-source preference toggle and deletion safety guard for Projects root**
+
+---
+
+### 73fb3e2 - 2026-03-01 18:50
+**Add Preferences dialog (Edit > Preferences) with tooltips toggle via QSettings**
+
+---
+
+### 2270270 - 2026-03-01 18:47
+**Enable live output mode switching during inference via FrameIndex rebuild on preview**
+
+---
+
+### 2422772 - 2026-03-01 18:45
+**Add alpha coverage feedback: frame counts in status bar, 3-option partial alpha dialog**
+
+---
+
+### 2b2a3ef - 2026-03-01 18:41
+**Add export settings tooltip on Exports cards in IO tray from manifest data**
+
+---
+
+### c21b0e9 - 2026-03-01 18:38
+**Add dual import: ADD button supports folders or video files, drag-drop accepts videos**
+
+---
+
 ### 7aa22ee - 2026-03-01 18:29
 **Add split RUN/RESUME buttons, draggable markers, middle-click reset, and EXR write fix**
 

@@ -199,6 +199,9 @@ class ThumbnailCanvas(QWidget):
         clip = self._card_at(event.position().x())
         name = clip.name if clip else None
         if name != self._hovered_name:
+            if name is not None:
+                from ui.sounds.audio_manager import UIAudio
+                UIAudio.hover(key=f"clip:{name}")
             self._hovered_name = name
             self.update()
 
@@ -211,6 +214,8 @@ class ThumbnailCanvas(QWidget):
         if event.button() == Qt.LeftButton and self._clips:
             clip = self._card_at(event.position().x())
             if clip:
+                from ui.sounds.audio_manager import UIAudio
+                UIAudio.click()
                 if event.modifiers() & Qt.ShiftModifier:
                     # Shift+click: range select from anchor to this clip
                     self.shift_select_requested.emit(clip)
@@ -299,6 +304,7 @@ class IOTrayPanel(QWidget):
     selection_changed = Signal(list)  # list[ClipEntry] — multi-select changed
     clips_dir_changed = Signal(str)  # folder path (import folder)
     files_imported = Signal(list)    # list of video file paths
+    extract_requested = Signal(list) # list[ClipEntry] — re-run extraction
 
     def __init__(self, model: ClipListModel, parent=None):
         super().__init__(parent)
@@ -519,6 +525,22 @@ class IOTrayPanel(QWidget):
         multi = n > 1
 
         menu = QMenu(self)
+
+        # Run Extraction — for clips that have a video source and need frames
+        from backend.clip_state import ClipState
+        needs_extract = [
+            c for c in selected
+            if c.state == ClipState.EXTRACTING
+            or (c.input_asset and c.input_asset.asset_type == "video")
+        ]
+        if needs_extract:
+            label_ext = (f"Run Extraction ({len(needs_extract)} clips)"
+                         if len(needs_extract) > 1 else "Run Extraction")
+            extract_action = QAction(label_ext, self)
+            extract_action.triggered.connect(
+                lambda: self.extract_requested.emit(needs_extract))
+            menu.addAction(extract_action)
+            menu.addSeparator()
 
         # Open in Explorer — single only
         explorer_action = QAction("Open in Explorer", self)

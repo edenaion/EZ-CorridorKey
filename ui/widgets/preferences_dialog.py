@@ -13,11 +13,13 @@ from PySide6.QtCore import QSettings, Qt
 
 # QSettings keys
 KEY_SHOW_TOOLTIPS = "ui/show_tooltips"
+KEY_UI_SOUNDS = "ui/sounds_enabled"
 KEY_COPY_SOURCE = "project/copy_source_videos"
 KEY_LOOP_PLAYBACK = "playback/loop"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
+DEFAULT_UI_SOUNDS = True
 DEFAULT_COPY_SOURCE = True
 DEFAULT_LOOP_PLAYBACK = True
 
@@ -53,6 +55,12 @@ class PreferencesDialog(QDialog):
             get_setting_bool(KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS)
         )
         ui_layout.addWidget(self._tooltips_cb)
+
+        self._sounds_cb = QCheckBox("UI sounds")
+        self._sounds_cb.setChecked(
+            get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS)
+        )
+        ui_layout.addWidget(self._sounds_cb)
 
         layout.addWidget(ui_group)
 
@@ -109,8 +117,12 @@ class PreferencesDialog(QDialog):
         """Persist settings and close."""
         s = QSettings()
         s.setValue(KEY_SHOW_TOOLTIPS, self._tooltips_cb.isChecked())
+        s.setValue(KEY_UI_SOUNDS, self._sounds_cb.isChecked())
         s.setValue(KEY_COPY_SOURCE, self._copy_source_cb.isChecked())
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
+        # Apply sound mute immediately
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.set_muted(not self._sounds_cb.isChecked())
         self.accept()
 
     @property

@@ -83,8 +83,15 @@ class RecentProjectCard(QFrame):
 
         layout.addLayout(text_layout, 1)
 
+    def enterEvent(self, event):
+        from ui.sounds.audio_manager import UIAudio
+        UIAudio.hover(key=f"project:{self._workspace_path}")
+        super().enterEvent(event)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+            from ui.sounds.audio_manager import UIAudio
+            UIAudio.click()
             self.clicked.emit(self._workspace_path)
         super().mousePressEvent(event)
 
@@ -205,7 +212,7 @@ class RecentProjectsPanel(QWidget):
             new_name = new_name.strip()
             set_display_name(workspace_path, new_name)
             # Update the recent sessions store entry
-            self._store.add_or_update(workspace_path, new_name, 1)
+            self._store.add_or_update(workspace_path, new_name, 1, force=True)
             self.refresh()
 
     def _on_delete_requested(self, workspace_path: str) -> None:

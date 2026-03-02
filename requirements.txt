@@ -6,6 +6,7 @@ timm==1.0.24
 av
 diffusers
 easydict
+einops
 imageio
 peft
 Pillow

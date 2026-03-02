@@ -60,6 +60,8 @@ class RecentSessionsStore:
         os.makedirs(self._dir, exist_ok=True)
         self._path = os.path.join(self._dir, _FILENAME)
         self._sessions: list[RecentSession] = self._load()
+        # Paths the user removed this session — suppressed from auto-scan re-adds
+        self._removed: set[str] = set()
 
     def _norm(self, path: str) -> str:
         """Normalize path for comparison (case-insensitive on Windows)."""
@@ -102,9 +104,19 @@ class RecentSessionsStore:
                 except OSError:
                     pass
 
-    def add_or_update(self, workspace_path: str, display_name: str, clip_count: int) -> None:
-        """Add or update a workspace in the recents list."""
+    def add_or_update(
+        self, workspace_path: str, display_name: str, clip_count: int,
+        *, force: bool = False,
+    ) -> None:
+        """Add or update a workspace in the recents list.
+
+        If the path was previously removed by the user this session,
+        the call is silently ignored unless *force* is True (used when
+        the user explicitly creates or opens a project).
+        """
         norm = self._norm(workspace_path)
+        if not force and norm in self._removed:
+            return
         # Remove existing entry for this path
         self._sessions = [s for s in self._sessions if self._norm(s.workspace_path) != norm]
         # Add at front
@@ -119,8 +131,12 @@ class RecentSessionsStore:
         self._save()
 
     def remove(self, workspace_path: str) -> None:
-        """Remove a workspace from the recents list."""
+        """Remove a workspace from the recents list.
+
+        The path is remembered so auto-scan won't re-add it this session.
+        """
         norm = self._norm(workspace_path)
+        self._removed.add(norm)
         self._sessions = [s for s in self._sessions if self._norm(s.workspace_path) != norm]
         self._save()
 

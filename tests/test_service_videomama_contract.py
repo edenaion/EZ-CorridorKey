@@ -1,10 +1,9 @@
 """Tests for VideoMaMa dtype/range contracts and failure behavior.
 
-Codex critical finding: _load_frames_for_videomama() returns float32 [0,1]
-but VideoMaMa run_inference may expect uint8. The output write path at
-service.py:842 does clip(frame, 0.0, 1.0)*255 which would binarize uint8.
-
-These tests document and lock in the current contract.
+Contract: _load_frames_for_videomama() returns uint8 RGB [0,255] and
+_load_mask_frames_for_videomama() returns uint8 grayscale [0,255] with
+binary threshold at 10. The inference module expects uint8 for PIL conversion.
+The output from run_inference is float32 [0,1], converted to uint8 during write.
 """
 import os
 import tempfile
@@ -21,10 +20,10 @@ from backend.job_queue import GPUJob, JobType
 
 
 class TestVideoMaMaLoadFrames:
-    """Contract: _load_frames_for_videomama returns float32 [0,1]."""
+    """Contract: _load_frames_for_videomama returns uint8 RGB [0,255]."""
 
     def test_png_frames_dtype_and_range(self):
-        """PNG frames should be float32 in [0, 1]."""
+        """PNG frames should be uint8 RGB."""
         svc = CorridorKeyService()
         with tempfile.TemporaryDirectory() as tmpdir:
             # Write 2 tiny PNGs
@@ -37,9 +36,7 @@ class TestVideoMaMaLoadFrames:
 
             assert len(frames) == 2
             for f in frames:
-                assert f.dtype == np.float32, f"Expected float32, got {f.dtype}"
-                assert f.min() >= 0.0, f"Values below 0: {f.min()}"
-                assert f.max() <= 1.0, f"Values above 1: {f.max()}"
+                assert f.dtype == np.uint8, f"Expected uint8, got {f.dtype}"
                 assert f.ndim == 3
                 assert f.shape[2] == 3  # RGB
 
@@ -62,7 +59,7 @@ class TestVideoMaMaLoadFrames:
 
 
 class TestVideoMaMaMaskFrames:
-    """Contract: _load_mask_frames_for_videomama returns float32 [0,1] binary."""
+    """Contract: _load_mask_frames_for_videomama returns uint8 grayscale binary."""
 
     def test_mask_dtype_and_range(self):
         svc = CorridorKeyService()
@@ -77,12 +74,11 @@ class TestVideoMaMaMaskFrames:
 
             assert len(masks) == 1
             m = masks[0]
-            assert m.dtype == np.float32
-            assert m.min() >= 0.0
-            assert m.max() <= 1.0
+            assert m.dtype == np.uint8
+            assert m.ndim == 2  # grayscale
 
     def test_binary_threshold_at_10(self):
-        """Values <= 10 should be 0.0, values > 10 should be 1.0."""
+        """Values <= 10 should be 0, values > 10 should be 255."""
         svc = CorridorKeyService()
         with tempfile.TemporaryDirectory() as tmpdir:
             mask = np.array([[0, 10, 11, 255]], dtype=np.uint8)
@@ -93,12 +89,12 @@ class TestVideoMaMaMaskFrames:
             masks = svc._load_mask_frames_for_videomama(asset, "test")
 
             m = masks[0]
-            # Pixels with value 0 and 10 should be 0.0 (below threshold)
-            assert m[0, 0] == 0.0
-            assert m[0, 1] == 0.0
-            # Pixels with value 11 and 255 should be 1.0 (above threshold)
-            assert m[0, 2] == 1.0
-            assert m[0, 3] == 1.0
+            # Pixels with value 0 and 10 should be 0 (below threshold)
+            assert m[0, 0] == 0
+            assert m[0, 1] == 0
+            # Pixels with value 11 and 255 should be 255 (above threshold)
+            assert m[0, 2] == 255
+            assert m[0, 3] == 255
 
 
 class TestVideoMaMaOutputWrite:
@@ -120,20 +116,13 @@ class TestVideoMaMaOutputWrite:
         # Value should be ~128 (0.5 * 255)
         assert 120 <= out_bgr.mean() <= 135
 
-    def test_uint8_output_binarizes(self):
-        """Codex critical: if VideoMaMa returns uint8, clip(x, 0, 1)*255 binarizes.
-
-        This documents the BUG: uint8 values > 1 get clipped to 1.0, then *255 = 255.
-        All non-zero values become 255 (white). This is a known contract issue.
-        """
-        frame = np.array([[[128, 64, 200]]], dtype=np.uint8)
-        # Simulating: np.clip(frame, 0.0, 1.0) * 255.0
-        clipped = np.clip(frame.astype(np.float32), 0.0, 1.0)
-        # uint8 128 → float32 128.0 → clipped to 1.0
-        assert clipped[0, 0, 0] == 1.0
-        result = (clipped * 255.0).astype(np.uint8)
-        # All become 255 — BINARIZED. This is the Codex-identified bug.
-        assert result[0, 0, 0] == 255
+    def test_float_output_range_clamp(self):
+        """Output values outside [0,1] are clamped before scaling to uint8."""
+        frame = np.array([[[1.5, -0.1, 0.5]]], dtype=np.float32)
+        out = (np.clip(frame, 0.0, 1.0) * 255.0).astype(np.uint8)
+        assert out[0, 0, 0] == 255  # 1.5 clamped to 1.0
+        assert out[0, 0, 1] == 0    # -0.1 clamped to 0.0
+        assert 125 <= out[0, 0, 2] <= 130  # 0.5 → ~128
 
 
 class TestVideoMaMaMissingAssets:

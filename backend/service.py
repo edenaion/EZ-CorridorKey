@@ -839,18 +839,53 @@ class CorridorKeyService:
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         os.makedirs(alpha_dir, exist_ok=True)
 
-        # Read input frames
-        input_frames = self._load_frames_for_videomama(clip.input_asset, clip.name)
-        mask_frames = self._load_mask_frames_for_videomama(clip.mask_asset, clip.name)
+        # Report initial progress immediately so UI leaves "Starting" state
+        est_total = clip.input_asset.frame_count or 1
+        if on_progress:
+            on_progress(clip.name, 0, est_total)
 
-        num_frames = len(input_frames)
-        total_chunks = (num_frames + chunk_size - 1) // chunk_size
+        # Read input frames (can be slow for large sequences)
+        input_frames = self._load_frames_for_videomama(clip.input_asset, clip.name)
+
+        # Build stem-matched mask frames: masks may only cover a sub-range
+        # (user exported annotations for in/out range). For input frames without
+        # a corresponding mask, use all-black (= "everything is background").
+        mask_stems: dict[str, np.ndarray] = {}
+        if clip.mask_asset.asset_type == 'sequence':
+            for fname in clip.mask_asset.get_frame_files():
+                fpath = os.path.join(clip.mask_asset.path, fname)
+                m = cv2.imread(fpath, cv2.IMREAD_GRAYSCALE)
+                if m is not None:
+                    _, binary = cv2.threshold(m, 10, 255, cv2.THRESH_BINARY)
+                    stem = os.path.splitext(fname)[0]
+                    mask_stems[stem] = binary
+        else:
+            # Video mask — load all frames positionally
+            raw_masks = self._load_mask_frames_for_videomama(clip.mask_asset, clip.name)
+            for i, m in enumerate(raw_masks):
+                mask_stems[f"frame_{i:06d}"] = m
 
         # Build output filenames from input stems for cross-directory consistency
         if clip.input_asset and clip.input_asset.asset_type == 'sequence':
             input_names = clip.input_asset.get_frame_files()
         else:
-            input_names = [f"frame_{i:06d}.png" for i in range(num_frames)]
+            input_names = [f"frame_{i:06d}.png" for i in range(len(input_frames))]
+
+        # Align masks to input frames by stem, defaulting to all-black
+        num_frames = len(input_frames)
+        mask_frames = []
+        for fname in input_names:
+            stem = os.path.splitext(fname)[0]
+            if stem in mask_stems:
+                mask_frames.append(mask_stems[stem])
+            else:
+                # No mask for this frame — all-black (background)
+                h_m, w_m = input_frames[0].shape[:2] if input_frames else (4, 4)
+                mask_frames.append(np.zeros((h_m, w_m), dtype=np.uint8))
+
+        # Re-report with exact frame count after loading
+        if on_progress:
+            on_progress(clip.name, 0, num_frames)
 
         # Resume: count existing alpha frames and skip fully-completed chunks.
         # Roll back one chunk for safety — the last chunk may be incomplete
@@ -862,10 +897,10 @@ class CorridorKeyService:
         n_existing = len(existing_alpha)
         # Only skip chunks we're confident are fully complete (roll back last one)
         completed_chunks = n_existing // chunk_size
-        start_chunk = max(0, completed_chunks - 1) if completed_chunks > 0 else 0
+        start_chunk = max(0, completed_chunks - 1)
         start_frame = start_chunk * chunk_size
         # Remove frames from the rollback point onward so they get cleanly rewritten
-        if start_frame > 0 and start_frame < n_existing:
+        if start_frame > 0:
             # Build set of stems to keep (first start_frame input names as .png)
             keep = set()
             for i in range(start_frame):
@@ -891,8 +926,9 @@ class CorridorKeyService:
 
             # Skip already-completed chunks
             if chunk_idx < start_chunk:
+                frames_written += len(chunk_output)
                 if on_progress:
-                    on_progress(clip.name, chunk_idx + 1, total_chunks)
+                    on_progress(clip.name, frames_written, num_frames)
                 continue
 
             # Write chunk frames using input stems for consistent naming
@@ -914,7 +950,7 @@ class CorridorKeyService:
             logger.debug(f"Clip '{clip.name}' chunk {chunk_idx}: {len(chunk_output)} frames in {time.monotonic() - t_chunk:.3f}s")
 
             if on_progress:
-                on_progress(clip.name, chunk_idx + 1, total_chunks)
+                on_progress(clip.name, frames_written, num_frames)
 
         # Refresh alpha asset
         clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
@@ -931,25 +967,33 @@ class CorridorKeyService:
     def _load_frames_for_videomama(
         self, asset: ClipAsset, clip_name: str
     ) -> list[np.ndarray]:
-        """Load input frames for VideoMaMa, applying gamma correction for EXR."""
+        """Load input frames for VideoMaMa as uint8 RGB [0, 255].
+
+        The VideoMaMa inference code expects uint8 arrays for PIL conversion.
+        """
         if asset.asset_type == 'video':
-            return read_video_frames(asset.path)
+            raw = read_video_frames(asset.path)
+            return [(np.clip(f, 0.0, 1.0) * 255.0).astype(np.uint8) for f in raw]
         frames = []
         for fname in asset.get_frame_files():
             fpath = os.path.join(asset.path, fname)
             img = read_image_frame(fpath, gamma_correct_exr=True)
             if img is not None:
-                frames.append(img)
+                frames.append((np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8))
         return frames
 
     def _load_mask_frames_for_videomama(
         self, asset: ClipAsset, clip_name: str
     ) -> list[np.ndarray]:
-        """Load mask frames for VideoMaMa with binary thresholding."""
+        """Load mask frames for VideoMaMa as uint8 grayscale [0, 255].
+
+        The VideoMaMa inference code expects uint8 arrays for PIL conversion.
+        Binary threshold at 10: anything above → 255 (foreground), else → 0.
+        """
         def _threshold_mask(bgr_frame: np.ndarray) -> np.ndarray:
             gray = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2GRAY)
             _, binary = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
-            return binary.astype(np.float32) / 255.0
+            return binary  # uint8
 
         if asset.asset_type == 'video':
             return read_video_frames(asset.path, processor=_threshold_mask)
@@ -960,5 +1004,5 @@ class CorridorKeyService:
             if mask is None:
                 continue
             _, binary = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
-            masks.append(binary.astype(np.float32) / 255.0)
+            masks.append(binary)  # uint8
         return masks
