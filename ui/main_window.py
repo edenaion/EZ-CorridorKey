@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QProgressBar, QFileDialog, QInputDialog, QGraphicsOpacityEffect,
 )
 from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QShortcut, QKeySequence, QAction, QImage, QPainter
+from PySide6.QtGui import QKeySequence, QAction, QImage, QPainter
 
 from backend import (
     CorridorKeyService, ClipEntry, ClipState, InferenceParams,
@@ -51,6 +51,7 @@ from ui.workers.gpu_monitor import GPUMonitor
 from ui.workers.thumbnail_worker import ThumbnailGenerator
 from ui.workers.extract_worker import ExtractWorker
 from ui.recent_sessions import RecentSessionsStore
+from ui.shortcut_registry import ShortcutRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,9 @@ class MainWindow(QMainWindow):
         self._reprocess_timer.setInterval(200)
         self._reprocess_timer.timeout.connect(self._do_reprocess)
 
+        # Shortcut registry — single source of truth for key bindings
+        self._shortcut_registry = ShortcutRegistry()
+
         # Build UI
         self._build_menu_bar()
         self._build_central()
@@ -207,11 +211,9 @@ class MainWindow(QMainWindow):
         import_menu.addAction("Import Video(s)...", self._on_import_videos)
         file_menu.addSeparator()
 
-        # Session save/load
-        save_action = file_menu.addAction("Save Session", self._on_save_session)
-        save_action.setShortcut(QKeySequence("Ctrl+S"))
-        load_action = file_menu.addAction("Open Project...", self._on_open_project)
-        load_action.setShortcut(QKeySequence("Ctrl+O"))
+        # Session save/load (shortcuts managed by registry)
+        self._save_action = file_menu.addAction("Save Session", self._on_save_session)
+        self._open_action = file_menu.addAction("Open Project...", self._on_open_project)
 
         file_menu.addSeparator()
         file_menu.addAction("Export Video...", self._on_export_video)
@@ -222,6 +224,7 @@ class MainWindow(QMainWindow):
         # Edit menu
         edit_menu = menu_bar.addMenu("Edit")
         edit_menu.addAction("Preferences...", self._show_preferences)
+        edit_menu.addAction("Hotkeys...", self._show_hotkeys)
         edit_menu.addSeparator()
         edit_menu.addAction("Export Annotation Masks", self._on_export_masks)
         edit_menu.addAction("Clear Annotations", self._on_clear_annotations)
@@ -230,13 +233,6 @@ class MainWindow(QMainWindow):
         view_menu = menu_bar.addMenu("View")
         view_menu.addAction("Reset Layout", self._reset_layout)
         view_menu.addAction("Toggle Queue Panel", self._toggle_queue_panel)
-
-        # Split view toggle (checkable)
-        self._split_action = QAction("Split View", self)
-        self._split_action.setCheckable(True)
-        self._split_action.setShortcut(QKeySequence("Ctrl+D"))
-        self._split_action.triggered.connect(self._on_toggle_split)
-        view_menu.addAction(self._split_action)
 
         view_menu.addAction("Reset Zoom", self._on_reset_zoom)
 
@@ -351,39 +347,19 @@ class MainWindow(QMainWindow):
         self._status_bar.hide()
 
         # Queue panel — overlay parented to central widget, sits above status bar
+        # Hidden on welcome screen, shown when workspace opens
         self._queue_panel = QueuePanel(self._service.job_queue, parent=self.centralWidget())
         self._queue_panel._collapsed = False
         self._queue_panel.toggle_collapsed()  # start collapsed (header-only)
+        self._queue_panel.hide()
 
     def _setup_shortcuts(self) -> None:
-        """Keyboard shortcuts."""
-        # Escape — stop/cancel + exit annotation mode
-        QShortcut(QKeySequence(Qt.Key_Escape), self, self._on_escape)
-        # Ctrl+R — run inference on selected clip
-        QShortcut(QKeySequence("Ctrl+R"), self, self._on_run_inference)
-        # Ctrl+Shift+R — run all ready clips
-        QShortcut(QKeySequence("Ctrl+Shift+R"), self, self._on_run_all_ready)
-        # I/O markers — set in/out points on timeline
-        QShortcut(QKeySequence(Qt.Key_I), self, self._set_in_point)
-        QShortcut(QKeySequence(Qt.Key_O), self, self._set_out_point)
-        QShortcut(QKeySequence("Alt+I"), self, self._clear_in_out)
-        # Space — play/pause
-        QShortcut(QKeySequence(Qt.Key_Space), self, self._toggle_playback)
-        # Annotation: 1 = green (foreground), 2 = red (background)
-        QShortcut(QKeySequence(Qt.Key_1), self, self._toggle_annotation_fg)
-        QShortcut(QKeySequence(Qt.Key_2), self, self._toggle_annotation_bg)
-        # Ctrl+Z — undo annotation stroke
-        QShortcut(QKeySequence("Ctrl+Z"), self, self._undo_annotation)
-        # Ctrl+C — clear all annotations (with confirmation)
-        QShortcut(QKeySequence("Ctrl+C"), self, self._confirm_clear_annotations)
-        # Ctrl+M — toggle UI sounds mute
-        QShortcut(QKeySequence("Ctrl+M"), self, self._toggle_mute)
-        # Home — return to welcome screen
-        QShortcut(QKeySequence(Qt.Key_Home), self, self._return_to_welcome)
-        # Delete — remove selected clips
-        QShortcut(QKeySequence(Qt.Key_Delete), self, self._on_delete_selected_clips)
-        # Q — toggle queue panel
-        QShortcut(QKeySequence(Qt.Key_Q), self, self._toggle_queue_panel)
+        """Wire keyboard shortcuts from the centralized registry."""
+        self._shortcut_registry.create_shortcuts(self)
+        # Sync menu-bar QAction shortcuts (display text + activation)
+        reg = self._shortcut_registry
+        self._save_action.setShortcut(QKeySequence(reg.get_key("save_session")))
+        self._open_action.setShortcut(QKeySequence(reg.get_key("open_project")))
 
     def _toggle_mute(self) -> None:
         """Toggle UI sounds on/off and show a brief overlay indicator."""
@@ -900,6 +876,7 @@ class MainWindow(QMainWindow):
         """Switch from welcome screen to the 3-panel workspace."""
         self._stack.setCurrentIndex(1)
         self._status_bar.show()
+        self._queue_panel.show()
         QTimer.singleShot(0, self._position_queue_panel)
 
     @Slot(str)
@@ -941,6 +918,8 @@ class MainWindow(QMainWindow):
                 pass
         self._stack.setCurrentIndex(0)
         self._status_bar.hide()
+        self._queue_panel.hide()
+        self._queue_panel._body.hide()
         self._welcome.refresh_recents()
         self._clips_dir = None
         self._current_clip = None
@@ -1071,10 +1050,6 @@ class MainWindow(QMainWindow):
         self._on_clips_dir_changed(project_dir, skip_session_restore=True)
 
     # ── View Controls ──
-
-    def _on_toggle_split(self, checked: bool) -> None:
-        """Toggle split view in preview."""
-        self._dual_viewer.set_split_mode(checked)
 
     def _on_reset_zoom(self) -> None:
         """Reset preview zoom to fit."""
@@ -1878,7 +1853,6 @@ class MainWindow(QMainWindow):
             "params": self._param_panel.get_params().to_dict(),
             "output_config": self._param_panel.get_output_config().to_dict(),
             "live_preview": self._param_panel.live_preview_enabled,
-            "split_view": self._split_action.isChecked(),
         }
 
         # Window geometry
@@ -1927,12 +1901,6 @@ class MainWindow(QMainWindow):
                 self._param_panel.set_output_config(config)
             except Exception as e:
                 logger.warning(f"Failed to restore output config: {e}")
-
-        # Restore split view
-        if "split_view" in data:
-            checked = bool(data["split_view"])
-            self._split_action.setChecked(checked)
-            self._dual_viewer.set_split_mode(checked)
 
         # Restore splitter sizes (validate: must have 2 panels, none at 0)
         if "splitter_sizes" in data:
@@ -2057,7 +2025,6 @@ class MainWindow(QMainWindow):
 
     def _toggle_queue_panel(self) -> None:
         self._queue_panel.toggle_collapsed()
-        self._queue_panel.reposition()
 
     def _position_queue_panel(self) -> None:
         """Pin queue header bar to bottom of central widget, above status bar."""
@@ -2079,6 +2046,13 @@ class MainWindow(QMainWindow):
         if dlg.exec() == PreferencesDialog.Accepted:
             self._apply_tooltip_setting()
             self._apply_sound_setting()
+
+    def _show_hotkeys(self) -> None:
+        """Open the Hotkeys configuration dialog and apply changes."""
+        from ui.widgets.hotkeys_dialog import HotkeysDialog
+        dlg = HotkeysDialog(self._shortcut_registry, self)
+        if dlg.exec() == HotkeysDialog.Accepted:
+            self._setup_shortcuts()
 
     def _apply_tooltip_setting(self) -> None:
         """Enable or disable tooltips globally based on saved preference."""
