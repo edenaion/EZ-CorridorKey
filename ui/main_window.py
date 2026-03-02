@@ -379,11 +379,6 @@ class MainWindow(QMainWindow):
         reg = self._shortcut_registry
         self._save_action.setShortcut(QKeySequence(reg.get_key("save_session")))
         self._open_action.setShortcut(QKeySequence(reg.get_key("open_project")))
-        # Debug console shortcut needs ApplicationShortcut context so F12
-        # works even when the console window itself has focus
-        sc = reg._shortcuts.get("debug_console")
-        if sc is not None:
-            sc.setContext(Qt.ApplicationShortcut)
 
     def _toggle_mute(self) -> None:
         """Toggle UI sounds on/off and show a brief overlay indicator."""
@@ -660,7 +655,6 @@ class MainWindow(QMainWindow):
         # Remove exported mask directory so VideoMaMa button disables
         clip = self._current_clip
         if clip is not None:
-            import shutil
             mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
             if os.path.isdir(mask_dir):
                 shutil.rmtree(mask_dir, ignore_errors=True)
@@ -1410,14 +1404,25 @@ class MainWindow(QMainWindow):
             if existing:
                 total = (self._current_clip.input_asset.frame_count
                          if self._current_clip.input_asset else 0)
-                reply = QMessageBox.question(
-                    self, "Partial Alpha Found",
-                    f"Found {len(existing)}/{total} alpha frames from a previous run.\n\n"
-                    "GVM will regenerate all frames from scratch.\nContinue?",
-                    QMessageBox.Yes | QMessageBox.No,
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Partial Alpha Found")
+                msg.setText(
+                    f"Found {len(existing)}/{total} alpha frames from a previous run."
                 )
-                if reply != QMessageBox.Yes:
-                    return
+                msg.setInformativeText(
+                    "Resume will skip completed frames.\n"
+                    "Regenerate will redo all frames from scratch."
+                )
+                resume_btn = msg.addButton("Resume", QMessageBox.AcceptRole)
+                regen_btn = msg.addButton("Regenerate", QMessageBox.DestructiveRole)
+                msg.addButton(QMessageBox.Cancel)
+                msg.setDefaultButton(resume_btn)
+                msg.exec()
+                clicked = msg.clickedButton()
+                if clicked == regen_btn:
+                    shutil.rmtree(alpha_dir, ignore_errors=True)
+                elif clicked != resume_btn:
+                    return  # cancelled
 
         job = create_job_snapshot(self._current_clip, job_type=JobType.GVM_ALPHA)
         if not self._service.job_queue.submit(job):
@@ -1974,6 +1979,10 @@ class MainWindow(QMainWindow):
                 self._param_panel.set_output_config(config)
             except Exception as e:
                 logger.warning(f"Failed to restore output config: {e}")
+
+        # Restore live preview toggle
+        if "live_preview" in data:
+            self._param_panel._live_preview.setChecked(bool(data["live_preview"]))
 
         # Restore splitter sizes (validate: must have 2 panels, none at 0)
         if "splitter_sizes" in data:

@@ -177,7 +177,12 @@ class ParameterPanel(QWidget):
 
         # Live Preview toggle
         self._live_preview = QCheckBox("Live Preview")
-        self._live_preview.setToolTip("Reprocess current frame on parameter change (requires loaded engine)")
+        self._live_preview.setChecked(True)
+        self._live_preview.setToolTip(
+            "Instantly reprocess the current frame when you adjust\n"
+            "Despill, Refiner, or Despeckle — see changes in real time.\n"
+            "Requires a completed inference run (engine must be loaded)."
+        )
         inf_layout.addWidget(self._live_preview)
 
         layout.addWidget(inf_group)

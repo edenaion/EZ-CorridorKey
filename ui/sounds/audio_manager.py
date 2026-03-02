@@ -42,6 +42,7 @@ class UIAudio:
 
     _hover_sfx: QSoundEffect | None = None
     _click_sfx: QSoundEffect | None = None
+    _toggle_sfx: QSoundEffect | None = None
     _cancel_sfx: list[QSoundEffect] = []
     _error_sfx: QSoundEffect | None = None
     _extract_done_sfx: QSoundEffect | None = None
@@ -57,6 +58,7 @@ class UIAudio:
         cls._loaded = True
         cls._hover_sfx = _load_sfx("CorridorKey_UI_Hover_v1.wav")
         cls._click_sfx = _load_sfx("CorridorKey_UI_Click_v1.wav")
+        cls._toggle_sfx = _load_sfx("CorridorKey_UI_Click_v2.wav")
         cls._error_sfx = _load_sfx("CorridorKey_UI_Error_v1.wav")
         cls._extract_done_sfx = _load_sfx("CorridorKey_UI_Frame Extract Done_v1.wav")
         cls._mask_done_sfx = _load_sfx("CorridorKey_UI_Mask Done_v2.wav")
@@ -93,6 +95,13 @@ class UIAudio:
         cls._ensure_loaded()
         if cls._click_sfx:
             cls._play(cls._click_sfx, variance=0.10, db_offset=-2.0)
+
+    @classmethod
+    def toggle(cls) -> None:
+        """Play toggle sound — for checkbox state changes (Click_v2)."""
+        cls._ensure_loaded()
+        if cls._toggle_sfx:
+            cls._play(cls._toggle_sfx, variance=0.10, db_offset=-2.0)
 
     @classmethod
     def hover(cls) -> None:
@@ -138,17 +147,19 @@ class UIAudio:
 
 
 class ButtonClickFilter(QObject):
-    """App-level event filter — plays click sound on any QPushButton press.
+    """App-level event filter — plays sounds on QPushButton press and QCheckBox toggle.
 
-    Install once on QApplication and every button gets the sound automatically.
+    Install once on QApplication and every button/checkbox gets sound automatically.
     No per-widget wiring needed.
     """
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.MouseButtonPress:
-            from PySide6.QtWidgets import QPushButton
+            from PySide6.QtWidgets import QCheckBox, QPushButton
             if isinstance(obj, QPushButton) and obj.isEnabled():
                 UIAudio.click()
+            elif isinstance(obj, QCheckBox) and obj.isEnabled():
+                UIAudio.toggle()
         return False
 
 

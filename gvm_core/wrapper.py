@@ -219,10 +219,17 @@ class GVMProcessor:
         upper_bound = 240./255.
         lower_bound = 25./ 255.
 
+        # Determine output directory for checkpoint detection
+        _checkpoint_dir = direct_output_dir or osp.join(output_dir, file_name, "alpha_seq")
+        _out_ext = writer_alpha_seq.extension
+        skipped = 0
+
         total_batches = len(dataloader)
         for batch_id, batch in tqdm(enumerate(dataloader), total=total_batches, desc=f"Inferencing {file_name}"):
             if progress_callback is not None:
                 progress_callback(batch_id, total_batches)
+
+            # Build expected output filenames for this batch
             filenames = []
             if is_video:
                 b, _, h, w = batch.shape
@@ -232,6 +239,18 @@ class GVMProcessor:
             else:
                 filenames = batch['rgb_names']
                 batch = batch['rgb_values']
+
+            # Checkpoint: skip batch if ALL output frames already exist.
+            # Always reprocess last 3 batches as safety margin against
+            # partially-written files from an interrupted run.
+            out_names = [fn.split('.')[0] + '.' + _out_ext for fn in filenames]
+            is_tail = batch_id >= total_batches - 3
+            if (not is_tail
+                    and all(osp.exists(osp.join(_checkpoint_dir, n)) for n in out_names)):
+                # Advance writer counter to stay in sync
+                writer_alpha_seq.counter += len(out_names)
+                skipped += 1
+                continue
 
             # Pad (Reflective)
             batch, pad_info = impad_multi(batch)
@@ -256,22 +275,25 @@ class GVMProcessor:
             # Crop padding
             out_h, out_w = image.shape[2:]
             pad_t, pad_l, pad_b, pad_r = pad_info
-            
+
             end_h = out_h - pad_b
             end_w = out_w - pad_r
-            
+
             image = image[:, :, pad_t:end_h, pad_l:end_w]
             alpha = alpha[:, :, pad_t:end_h, pad_l:end_w]
 
             # Resize to ensure exact match if there's any discrepancy
             alpha = F.interpolate(alpha, current_upscaled_shape, mode='bilinear')
-            
+
             # Threshold
             alpha[alpha>=upper_bound] = 1.0
             alpha[alpha<=lower_bound] = 0.0
 
             if writer_alpha: writer_alpha.write(alpha)
             writer_alpha_seq.write(alpha, filenames=filenames)
+
+        if skipped:
+            logger.info(f"Checkpoint: skipped {skipped}/{total_batches} batches (frames already on disk)")
         
         if writer_alpha: writer_alpha.close()
         writer_alpha_seq.close()

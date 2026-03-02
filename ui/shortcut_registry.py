@@ -6,9 +6,9 @@ creates QShortcut objects, and detects conflicts.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtWidgets import QWidget
 
@@ -26,6 +26,7 @@ class ShortcutDef:
     default_key: str        # Default key sequence string, e.g. "Ctrl+R"
     callback_name: str      # Name of the method on MainWindow to call
     menu_action: bool = False  # True for shortcuts managed by QAction (menu bar)
+    app_shortcut: bool = False  # True to use ApplicationShortcut context (fires globally)
 
 
 # Authoritative list — order here = display order in dialog
@@ -40,7 +41,7 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("welcome_screen",     "Return to Home",               "Global",     "Home",         "_return_to_welcome"),
     ShortcutDef("delete_clips",       "Remove Selected Clips",        "Global",     "Del",          "_on_delete_selected_clips"),
     ShortcutDef("toggle_queue",       "Toggle Queue",                 "Global",     "Q",            "_toggle_queue_panel"),
-    ShortcutDef("debug_console",     "Debug Console",                "Global",     "F12",          "_toggle_debug_console"),
+    ShortcutDef("debug_console",     "Debug Console",                "Global",     "F12",          "_toggle_debug_console", app_shortcut=True),
     # Timeline
     ShortcutDef("set_in",             "Set In-Point",                 "Timeline",   "I",            "_set_in_point"),
     ShortcutDef("set_out",            "Set Out-Point",                "Timeline",   "O",            "_set_out_point"),
@@ -156,6 +157,8 @@ class ShortcutRegistry:
                 logger.warning(f"Shortcut callback not found: {defn.callback_name}")
                 continue
             sc = QShortcut(QKeySequence(key_str), owner)
+            if defn.app_shortcut:
+                sc.setContext(Qt.ApplicationShortcut)
             sc.activated.connect(callback)
             self._shortcuts[defn.action_id] = sc
 
