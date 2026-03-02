@@ -217,7 +217,7 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction("Export Video...", self._on_export_video)
         file_menu.addSeparator()
-        file_menu.addAction("Return to Welcome", self._return_to_welcome)
+        file_menu.addAction("Return to Home", self._return_to_welcome)
         file_menu.addAction("Exit", self.close)
 
         # Edit menu
@@ -302,14 +302,10 @@ class MainWindow(QMainWindow):
         # Vertical splitter: top = viewer+params, bottom = I/O tray
         self._vsplitter = QSplitter(Qt.Vertical)
 
-        # Horizontal splitter: queue sidebar | dual viewer | param panel
+        # Horizontal splitter: dual viewer | param panel
         self._splitter = QSplitter(Qt.Horizontal)
 
-        # Left — Queue Sidebar (collapsible)
-        self._queue_panel = QueuePanel(self._service.job_queue)
-        self._splitter.addWidget(self._queue_panel)
-
-        # Center — Dual Viewer (input + output side by side)
+        # Left — Dual Viewer (input + output side by side)
         self._dual_viewer = DualViewerPanel()
         self._splitter.addWidget(self._dual_viewer)
 
@@ -317,14 +313,12 @@ class MainWindow(QMainWindow):
         self._param_panel = ParameterPanel()
         self._splitter.addWidget(self._param_panel)
 
-        # Queue collapsed, viewer fills, param panel fixed width
-        self._splitter.setSizes([24, 920, 280])
-        self._splitter.setStretchFactor(0, 0)
-        self._splitter.setStretchFactor(1, 1)
-        self._splitter.setStretchFactor(2, 0)
+        # Viewer fills, param panel fixed width
+        self._splitter.setSizes([920, 280])
+        self._splitter.setStretchFactor(0, 1)
+        self._splitter.setStretchFactor(1, 0)
         self._splitter.setCollapsible(0, False)
         self._splitter.setCollapsible(1, False)
-        self._splitter.setCollapsible(2, False)
 
         self._vsplitter.addWidget(self._splitter)
 
@@ -341,7 +335,14 @@ class MainWindow(QMainWindow):
 
         ws_layout.addWidget(self._vsplitter, 1)
 
+        # Queue panel — floating overlay on the left edge of the workspace
+        self._queue_panel = QueuePanel(self._service.job_queue, parent=workspace)
+        self._queue_panel.raise_()
+
         self._stack.addWidget(workspace)
+
+        # Keep the queue panel sized to the workspace height
+        self._workspace = workspace
 
         main_layout.addWidget(self._stack, 1)
 
@@ -691,6 +692,9 @@ class MainWindow(QMainWindow):
         # Sync IO tray divider with dual viewer splitter
         self._dual_viewer._viewer_splitter.splitterMoved.connect(self._sync_io_divider)
 
+        # Reposition queue overlay when vertical splitter is dragged
+        self._vsplitter.splitterMoved.connect(self._position_queue_panel)
+
         # Extract worker signals
         self._extract_worker.progress.connect(self._on_extract_progress)
         self._extract_worker.finished.connect(self._on_extract_finished)
@@ -877,6 +881,9 @@ class MainWindow(QMainWindow):
         """Switch from welcome screen to the 3-panel workspace."""
         self._stack.setCurrentIndex(1)
         self._status_bar.show()
+        # Sync IO tray divider and position queue overlay after layout settles
+        QTimer.singleShot(0, self._sync_io_divider)
+        QTimer.singleShot(0, self._position_queue_panel)
 
     @Slot(str)
     def _on_welcome_folder(self, dir_path: str) -> None:
@@ -1054,11 +1061,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _sync_io_divider(self, *_args) -> None:
-        """Keep the IO tray divider aligned with the dual viewer splitter.
-
-        Sets the IO tray divider to match the viewer's internal split
-        position (between INPUT and OUTPUT viewports).
-        """
+        """Keep the IO tray divider aligned with the dual viewer splitter."""
         viewer_sizes = self._dual_viewer._viewer_splitter.sizes()
         if len(viewer_sizes) < 2:
             return
@@ -2134,6 +2137,20 @@ class MainWindow(QMainWindow):
         qimg = QImage(img_u8.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         return qimg.copy()  # deep copy so numpy buffer can be freed
 
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._position_queue_panel()
+
+    def _position_queue_panel(self) -> None:
+        """Keep the floating queue panel sized to the viewer area height."""
+        if hasattr(self, '_workspace') and hasattr(self, '_queue_panel'):
+            # Use the top section height (viewer+params) not the full workspace
+            sizes = self._vsplitter.sizes()
+            h = sizes[0] if sizes else self._workspace.height()
+            self._queue_panel.setFixedHeight(h)
+            self._queue_panel.move(0, 0)
+            self._queue_panel.raise_()
 
     def closeEvent(self, event) -> None:
         """Clean shutdown — auto-save session, stop workers, unload engines."""

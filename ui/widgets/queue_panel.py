@@ -1,7 +1,9 @@
 """Collapsible queue sidebar — left panel in the main horizontal splitter.
 
-Collapsed: narrow 24px tab with vertical "Q" label.
-Expanded: ~240px panel with header, scrollable job list, and Clear All.
+Collapsed: narrow 24px tab with vertical "QUEUE" label (always visible).
+Expanded: 24px tab + ~216px content panel with header, scrollable job list.
+
+The tab is always present — click it to expand or collapse.
 
 Progress bars update in-place (no widget rebuild per frame) so the bar
 moves smoothly instead of stuttering on every progress tick.
@@ -12,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QScrollArea, QFrame, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal, QEvent, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, Signal, QEvent
 
 from backend.job_queue import GPUJobQueue, GPUJob, JobStatus, JobType
 
@@ -41,9 +43,10 @@ _JOB_TYPE_LABELS = {
     JobType.PREVIEW_REPROCESS: "Preview",
 }
 
-_COLLAPSED_W = 24
-_EXPANDED_W = 240
-_ROW_H = 60  # taller rows for vertical stacked layout
+_TAB_W = 24
+_CONTENT_W = 216
+_EXPANDED_W = _TAB_W + _CONTENT_W  # 240
+_ROW_H = 60
 
 
 class _JobRowCache:
@@ -63,7 +66,11 @@ class _JobRowCache:
 
 
 class QueuePanel(QWidget):
-    """Collapsible left sidebar showing GPU job queue."""
+    """Collapsible left sidebar showing GPU job queue.
+
+    The 24px tab with vertical "QUEUE" is always visible.
+    Clicking it toggles the content panel on/off.
+    """
 
     cancel_job_requested = Signal(str)  # job_id
 
@@ -73,35 +80,34 @@ class QueuePanel(QWidget):
         self._collapsed = True
 
         self.setStyleSheet("background-color: #0E0D00;")
-        self.setMinimumWidth(_COLLAPSED_W)
+        self.setMinimumWidth(_TAB_W)
         self.setMaximumWidth(_EXPANDED_W)
-        self.setFixedWidth(_COLLAPSED_W)
+        self.setFixedWidth(_TAB_W)
 
-        # Main layout holds either the collapsed tab or the expanded panel
-        self._main_layout = QVBoxLayout(self)
+        # Horizontal layout: [tab | content panel]
+        self._main_layout = QHBoxLayout(self)
         self._main_layout.setContentsMargins(0, 0, 0, 0)
         self._main_layout.setSpacing(0)
 
-        # ── Collapsed tab: vertical "Q ▶" button ──
-        self._tab = QPushButton("Q")
+        # ── Always-visible tab: vertical "QUEUE" ──
+        self._tab = QPushButton("Q\nU\nE\nU\nE")
         self._tab.setCursor(Qt.PointingHandCursor)
         self._tab.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self._tab.setFixedWidth(_COLLAPSED_W)
-        self._tab.setStyleSheet(
-            "QPushButton { color: #CCCCAA; background: #0E0D00; "
-            "border: none; border-right: 1px solid #2A2910; "
-            "font-size: 12px; font-weight: 700; padding: 0; }"
-            "QPushButton:hover { color: #FFF203; background: #1A1900; }"
-        )
-        self._tab.setToolTip("Expand queue (Q)")
+        self._tab.setFixedWidth(_TAB_W)
+        self._tab.setToolTip("Toggle queue panel (Q)")
         self._tab.clicked.connect(self.toggle_collapsed)
         self._main_layout.addWidget(self._tab)
+        self._apply_tab_style()
 
-        # ── Expanded panel ──
+        # Sound on tab click
+        self._tab.installEventFilter(self)
+
+        # ── Content panel (shown when expanded) ──
         self._panel = QWidget()
         self._panel.setStyleSheet(
             "background-color: #0E0D00; border-right: 1px solid #2A2910;"
         )
+        self._panel.setFixedWidth(_CONTENT_W)
         panel_layout = QVBoxLayout(self._panel)
         panel_layout.setContentsMargins(0, 0, 0, 0)
         panel_layout.setSpacing(0)
@@ -142,18 +148,6 @@ class QueuePanel(QWidget):
         self._clear_btn.clicked.connect(self._on_clear)
         header_layout.addWidget(self._clear_btn)
 
-        collapse_btn = QPushButton("\u25C0")  # ◀
-        collapse_btn.setFixedSize(20, 20)
-        collapse_btn.setCursor(Qt.PointingHandCursor)
-        collapse_btn.setStyleSheet(
-            "QPushButton { color: #808070; background: transparent; "
-            "border: none; font-size: 10px; padding: 0; }"
-            "QPushButton:hover { color: #FFF203; }"
-        )
-        collapse_btn.setToolTip("Collapse queue (Q)")
-        collapse_btn.clicked.connect(self.toggle_collapsed)
-        header_layout.addWidget(collapse_btn)
-
         panel_layout.addWidget(header)
 
         # Scrollable job list
@@ -182,9 +176,6 @@ class QueuePanel(QWidget):
         self._row_cache: dict[str, _JobRowCache] = {}
         self._displayed_ids: list[str] = []
 
-        # Sound on collapse tab click
-        self._tab.installEventFilter(self)
-
     def eventFilter(self, obj, event):
         if obj is self._tab:
             from ui.sounds.audio_manager import UIAudio
@@ -192,17 +183,28 @@ class QueuePanel(QWidget):
                 UIAudio.click()
         return super().eventFilter(obj, event)
 
+    def _apply_tab_style(self) -> None:
+        """Update tab color based on collapsed/expanded state."""
+        color = "#808070" if self._collapsed else "#CCCCAA"
+        self._tab.setStyleSheet(
+            f"QPushButton {{ color: {color}; background: #0E0D00; "
+            "border: none; border-right: 1px solid #2A2910; "
+            "font-size: 11px; font-weight: 700; padding: 0; "
+            "line-height: 14px; }"
+            "QPushButton:hover { color: #FFF203; background: #1A1900; }"
+        )
+
     def toggle_collapsed(self) -> None:
-        """Toggle between collapsed tab and expanded sidebar."""
+        """Toggle between collapsed (tab only) and expanded (tab + content)."""
         self._collapsed = not self._collapsed
         if self._collapsed:
             self._panel.hide()
-            self._tab.show()
-            self.setFixedWidth(_COLLAPSED_W)
+            self.setFixedWidth(_TAB_W)
         else:
-            self._tab.hide()
             self._panel.show()
             self.setFixedWidth(_EXPANDED_W)
+            self.raise_()
+        self._apply_tab_style()
 
     def refresh(self) -> None:
         """Update the job list — rebuild only when structure changes,
@@ -230,7 +232,6 @@ class QueuePanel(QWidget):
 
     def _full_rebuild(self, jobs: list[GPUJob]) -> None:
         """Destroy all rows and recreate from scratch."""
-        # Clear layout (keep the stretch at the end)
         while self._job_layout.count() > 0:
             item = self._job_layout.takeAt(0)
             if item.widget():
@@ -256,7 +257,7 @@ class QueuePanel(QWidget):
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(2)
 
-        # Top line: job type + clip name
+        # Top line: job type + dismiss button
         top = QHBoxLayout()
         top.setSpacing(6)
 
@@ -294,7 +295,7 @@ class QueuePanel(QWidget):
         name_label.setStyleSheet(
             "color: #CCCCAA; font-size: 10px; border: none; background: transparent;"
         )
-        name_label.setMaximumWidth(_EXPANDED_W - 20)
+        name_label.setMaximumWidth(_CONTENT_W - 20)
         layout.addWidget(name_label)
 
         # Bottom line: progress bar + frame count / status text
