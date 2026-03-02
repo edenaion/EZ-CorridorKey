@@ -4,6 +4,48 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [0.1.0] - 2026-03-02 — Release Prep
+
+### Release Packaging
+- Added `pyproject.toml` for uv/pip editable install support
+- Added 9 UI sound effect WAV files (click, hover, error, done, cancel)
+- Added `dev-docs/USER-GUIDE.md` with comprehensive feature documentation
+- Updated `.gitignore` for dev-only artifacts
+- Removed obsolete dev-docs (branding prompts, clip pipeline, LLM handover)
+- Removed all `_BACKUPS/` directories
+
+### UI Sound System (`15611e8`, `7c815af`, `9060279`, `840f4b3`)
+- Audio feedback for UI interactions: click, hover, error, inference done, mask done, cancel
+- `audio_manager.py` with debounced playback (200ms) to prevent double-fire
+- Context-aware import: ADD button distinguishes folders vs video files
+- Escape key cancels active extraction or inference job
+
+### Queue Panel Overhaul (`a9df37a`, `70c51f6`)
+- Moved queue to collapsible left sidebar with vertical "QUEUE" tab
+- Floating overlay style with semi-transparent background
+- Per-job progress bars with status color coding
+- Splitter alignment with clip browser
+
+### Hotkeys Dialog & Keyboard System (`9afd225`, `b699071`, `b089492`)
+- New hotkeys dialog (Help > Keyboard Shortcuts) showing all bindings
+- Removed split view (Ctrl+D) — dual viewer is now always-on
+- Fixed `QKeyCombination` import for PySide6 compatibility
+- Fixed queue panel progress bar stutter during active jobs
+
+### Code Quality (`9a46c59`, `d7df7de`, `e420603`, `8448532`, `9381c09`)
+- Deleted 3 dead files (clip_browser.py, clip_card.py, preview/natural_sort.py)
+- Removed 9 dead functions from UI layer
+- Removed unused imports across 12 files
+- Unified image/video extension constants in `backend/project.py`
+- Synced `backend/__init__.py` exports with actual module contents
+
+### Interactive Annotation Overlay
+- Green/red brush strokes (hotkeys 1/2) for VideoMaMa mask painting
+- Shift+drag to resize brush, Ctrl+Z undo, mask export to VideoMamaMaskHint
+- Annotation markers on timeline scrubber (green lane, auto-hides when empty)
+
+---
+
 ## Findings & Future Work
 
 ### VRAM Efficiency Audit (2026-03-02)
