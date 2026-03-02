@@ -409,9 +409,9 @@ class FrameScrubber(QWidget):
         self._debounce.setInterval(50)
         self._debounce.timeout.connect(self._emit_frame)
 
-        # Playback timer (24fps default)
+        # Playback timer — slow stepping (PNG decode is too heavy for realtime)
         self._playback_timer = QTimer(self)
-        self._playback_timer.setInterval(42)  # ~24fps
+        self._playback_timer.setInterval(333)  # ~3 frames per second
         self._playback_timer.timeout.connect(self._playback_tick)
         self._playing = False
 
@@ -609,12 +609,15 @@ class FrameScrubber(QWidget):
                 self._stop_playback()
                 return
 
+        # Suppress debounce during playback — emit frame_changed directly
+        self._suppress_signal = True
         self._slider.setValue(next_frame)
+        self._suppress_signal = False
+        self.frame_changed.emit(next_frame)
 
     def set_fps(self, fps: float) -> None:
-        """Set playback frame rate."""
-        if fps > 0:
-            self._playback_timer.setInterval(int(1000.0 / fps))
+        """Set playback frame rate (ignored — fixed at 1fps for PNG stepping)."""
+        pass  # Fixed at 1fps; PNG decode too slow for realtime
 
     def keyPressEvent(self, event) -> None:
         """Space for play/pause, Left/Right for stepping, I/O for markers."""

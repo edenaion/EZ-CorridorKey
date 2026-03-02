@@ -70,7 +70,7 @@ class AsyncDecoder(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._pool = QThreadPool.globalInstance()
-        self._pool.setMaxThreadCount(2)  # limit decode concurrency
+        self._pool.setMaxThreadCount(4)  # enough for both viewers to decode in parallel
         self._current_request_id = 0
         # Hold references to in-flight signal objects so they aren't GC'd
         # before the callback fires. Keyed by request_id.
