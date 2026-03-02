@@ -11,8 +11,8 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QScrollArea, QWidget, QLineEdit, QMessageBox,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QKeyCombination, QKeySequence, QKeyEvent
+from PySide6.QtCore import QKeyCombination, Qt
+from PySide6.QtGui import QKeySequence, QKeyEvent
 
 from ui.shortcut_registry import ShortcutRegistry, CATEGORY_ORDER
 
