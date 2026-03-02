@@ -13,7 +13,7 @@ from transformers import CLIPImageProcessor, CLIPVisionModelWithProjection
 from diffusers.image_processor import PipelineImageInput
 from diffusers.models import AutoencoderKLTemporalDecoder, UNetSpatioTemporalConditionModel
 from diffusers.schedulers import EulerDiscreteScheduler
-from diffusers.utils import BaseOutput, logging, replace_example_docstring
+from diffusers.utils import BaseOutput, logging
 from diffusers.utils.torch_utils import randn_tensor
 from diffusers.video_processor import VideoProcessor
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline

@@ -17,7 +17,6 @@ from diffusers.loaders.lora_pipeline import (
 from peft import LoraConfig, LoraModel, set_peft_model_state_dict
 import os
 
-import matplotlib
 from typing import Union, Dict
 logger = logging.get_logger(__name__)
 
