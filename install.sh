@@ -170,11 +170,17 @@ fi
 echo ""
 echo "[6/6] Optional models (can be downloaded later)"
 echo ""
+
 read -rp "  Download GVM alpha generator? (~6GB) [y/N]: " INSTALL_GVM
 if [[ "${INSTALL_GVM,,}" == "y" ]]; then
     .venv/bin/python scripts/setup_models.py --gvm
 fi
 
+if [ "$OS_TYPE" = "macos" ]; then
+    echo ""
+    echo "  [NOTE] VideoMaMa runs on CPU on macOS (no MPS support yet)."
+    echo "  It works but will be slow. 37GB download — skip if unsure."
+fi
 read -rp "  Download VideoMaMa alpha generator? (~37GB) [y/N]: " INSTALL_VM
 if [[ "${INSTALL_VM,,}" == "y" ]]; then
     .venv/bin/python scripts/setup_models.py --videomama
