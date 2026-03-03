@@ -511,6 +511,13 @@ class MainWindow(QMainWindow):
         else:
             iv.set_annotation_mode("bg")
 
+    def _cycle_fg_color(self) -> None:
+        """Hotkey C: cycle foreground annotation color (green/blue)."""
+        from ui.widgets.annotation_overlay import cycle_fg_color
+        name = cycle_fg_color()
+        self._dual_viewer.input_viewer.update()
+        self._show_toast(f"Foreground color: {name}")
+
     def _auto_save_annotations(self) -> None:
         """Auto-save annotation strokes to disk after changes."""
         if self._current_clip is not None:

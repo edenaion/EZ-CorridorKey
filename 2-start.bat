@@ -9,4 +9,4 @@ if not exist ".venv\Scripts\activate.bat" (
 )
 
 call .venv\Scripts\activate.bat
-python main.py %*
+start "" pythonw main.py %*

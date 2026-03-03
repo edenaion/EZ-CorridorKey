@@ -231,9 +231,29 @@ class AnnotationModel:
 
 # ── Colors ──────────────────────────────────────────────────────────────────
 
-_FG_COLOR = QColor(44, 195, 80, 128)     # #2CC350 at 50% opacity
+# Foreground color palette — cycle with C key
+FG_PALETTE = [
+    {"name": "Green", "fill": QColor(44, 195, 80, 128), "cursor": QColor(44, 195, 80, 200)},
+    {"name": "Blue",  "fill": QColor(50, 140, 255, 128), "cursor": QColor(50, 140, 255, 200)},
+]
+_fg_palette_idx = 0
+
+def get_fg_color() -> QColor:
+    return FG_PALETTE[_fg_palette_idx]["fill"]
+
+def get_fg_cursor() -> QColor:
+    return FG_PALETTE[_fg_palette_idx]["cursor"]
+
+def get_fg_name() -> str:
+    return FG_PALETTE[_fg_palette_idx]["name"]
+
+def cycle_fg_color() -> str:
+    """Advance to next foreground color. Returns the new color name."""
+    global _fg_palette_idx
+    _fg_palette_idx = (_fg_palette_idx + 1) % len(FG_PALETTE)
+    return FG_PALETTE[_fg_palette_idx]["name"]
+
 _BG_COLOR = QColor(209, 0, 0, 128)       # #D10000 at 50% opacity
-_FG_CURSOR = QColor(44, 195, 80, 200)    # brighter for cursor outline
 _BG_CURSOR = QColor(209, 0, 0, 200)
 _RESIZE_TEXT = QColor(255, 242, 3, 220)   # brand yellow for size text
 
@@ -258,7 +278,7 @@ def paint_annotations(painter: QPainter, strokes: list[AnnotationStroke],
     painter.setRenderHint(QPainter.Antialiasing)
 
     for stroke in all_strokes:
-        color = _FG_COLOR if stroke.brush_type == "fg" else _BG_COLOR
+        color = get_fg_color() if stroke.brush_type == "fg" else _BG_COLOR
         painter.setPen(Qt.NoPen)
         painter.setBrush(color)
 
@@ -290,7 +310,7 @@ def paint_brush_cursor(painter: QPainter, pos: QPointF,
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing)
 
-    color = _FG_CURSOR if brush_type == "fg" else _BG_CURSOR
+    color = get_fg_cursor() if brush_type == "fg" else _BG_CURSOR
     pen = QPen(color, 1.5)
     pen.setStyle(Qt.SolidLine)
     painter.setPen(pen)

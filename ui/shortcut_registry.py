@@ -49,8 +49,9 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     # Playback
     ShortcutDef("play_pause",         "Play / Pause",                 "Playback",   "Space",        "_toggle_playback"),
     # Annotation
-    ShortcutDef("annotation_fg",      "Green Annotation (Foreground)","Annotation", "1",            "_toggle_annotation_fg"),
-    ShortcutDef("annotation_bg",      "Red Annotation (Background)",  "Annotation", "2",            "_toggle_annotation_bg"),
+    ShortcutDef("annotation_fg",      "Foreground Annotation",        "Annotation", "1",            "_toggle_annotation_fg"),
+    ShortcutDef("annotation_bg",      "Background Annotation (Red)",  "Annotation", "2",            "_toggle_annotation_bg"),
+    ShortcutDef("cycle_fg_color",     "Cycle Foreground Color",       "Annotation", "C",            "_cycle_fg_color"),
     ShortcutDef("undo_annotation",    "Undo Annotation",              "Annotation", "Ctrl+Z",       "_undo_annotation"),
     ShortcutDef("clear_annotations",  "Clear Annotations",            "Annotation", "Ctrl+C",       "_confirm_clear_annotations"),
 ]
