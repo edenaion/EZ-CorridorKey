@@ -147,24 +147,28 @@ def _transform_matte(data: np.ndarray) -> QImage:
 
 
 def _transform_linear_rgb(bgr: np.ndarray, mode: ViewMode) -> QImage:
-    """Linear float BGR → sRGB 8-bit RGB.
+    """Float BGR → sRGB 8-bit RGB.
 
-    For Input mode: check if data looks sRGB already (common for PNG-sourced EXRs).
-    For FG mode: always apply linear→sRGB.
+    INPUT mode: Data from FFmpeg EXR extraction is already sRGB-range float
+    (FFmpeg writes video values as-is, no linearisation). Skip gamma.
+    FG mode: Inference output is linear float — apply linear→sRGB gamma.
     """
-    # Clamp negatives and extreme HDR values
+    # Clamp negatives
     clamped = np.clip(bgr.astype(np.float32), 0.0, None)
 
-    # Simple Reinhard-style tone mapping for values > 1.0
-    max_val = clamped.max()
-    if max_val > 1.0:
-        clamped = clamped / (1.0 + clamped)  # Reinhard tone map
-
-    # Linear → sRGB gamma
-    srgb = _linear_to_srgb(clamped)
+    if mode == ViewMode.INPUT:
+        # Extracted frames are sRGB-range float (FFmpeg writes video values
+        # as-is into EXR). Just clamp to [0,1] — no gamma, no tone mapping.
+        display = np.clip(clamped, 0.0, 1.0)
+    else:
+        # Inference output is linear float — tone map HDR then apply gamma
+        max_val = clamped.max()
+        if max_val > 1.0:
+            clamped = clamped / (1.0 + clamped)  # Reinhard tone map
+        display = _linear_to_srgb(clamped)
 
     # BGR → RGB
-    rgb = cv2.cvtColor((srgb * 255.0).astype(np.uint8), cv2.COLOR_BGR2RGB)
+    rgb = cv2.cvtColor((display * 255.0).astype(np.uint8), cv2.COLOR_BGR2RGB)
     return _numpy_to_qimage(rgb)
 
 

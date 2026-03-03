@@ -2,6 +2,7 @@
 
 Pure Python, no Qt deps. Provides:
 - find_ffmpeg() / find_ffprobe() — locate binaries
+- detect_hwaccel() — auto-detect best hardware decoder per platform
 - probe_video() — get fps, resolution, frame count, codec
 - extract_frames() — video -> EXR DWAB half-float image sequence
 - stitch_video() — image sequence -> video (H.264)
@@ -15,7 +16,9 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -52,6 +55,74 @@ def find_ffprobe() -> str | None:
         if os.path.isfile(candidate):
             return candidate
     return None
+
+
+# ---------------------------------------------------------------------------
+# Hardware-accelerated decode — cross-platform auto-detection
+# ---------------------------------------------------------------------------
+
+# Priority order per platform. First available wins.
+# Each entry: (hwaccel_name, pre-input flags for FFmpeg)
+_HWACCEL_PRIORITY: dict[str, list[tuple[str, list[str]]]] = {
+    "win32": [
+        ("cuda",    ["-hwaccel", "cuda"]),
+        ("d3d11va", ["-hwaccel", "d3d11va"]),
+        ("dxva2",   ["-hwaccel", "dxva2"]),
+    ],
+    "linux": [
+        ("cuda",  ["-hwaccel", "cuda"]),
+        ("vaapi", ["-hwaccel", "vaapi"]),
+    ],
+    "darwin": [
+        ("videotoolbox", ["-hwaccel", "videotoolbox"]),
+    ],
+}
+
+_cached_hwaccel: list[str] | None = None  # cached result of detect_hwaccel()
+
+
+def detect_hwaccel(ffmpeg: str | None = None) -> list[str]:
+    """Detect the best FFmpeg hardware accelerator for this platform.
+
+    Probes ``ffmpeg -hwaccels`` once, caches the result, and returns
+    the pre-input flags to inject before ``-i``.  Returns an empty list
+    (software fallback) if no hardware decoder is available.
+    """
+    global _cached_hwaccel
+    if _cached_hwaccel is not None:
+        return list(_cached_hwaccel)
+
+    if ffmpeg is None:
+        ffmpeg = find_ffmpeg()
+    if ffmpeg is None:
+        _cached_hwaccel = []
+        return []
+
+    # Query available methods
+    try:
+        result = subprocess.run(
+            [ffmpeg, "-hwaccels"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+        available = set(result.stdout.lower().split())
+    except Exception:
+        _cached_hwaccel = []
+        return []
+
+    # Match platform to best available
+    platform_key = sys.platform  # win32, linux, darwin
+    candidates = _HWACCEL_PRIORITY.get(platform_key, [])
+
+    for name, flags in candidates:
+        if name in available:
+            logger.info(f"FFmpeg hardware decode: using {name}")
+            _cached_hwaccel = flags
+            return list(flags)
+
+    logger.info("FFmpeg hardware decode: none available, using software decode")
+    _cached_hwaccel = []
+    return []
 
 
 def probe_video(path: str) -> dict:
@@ -126,6 +197,20 @@ def probe_video(path: str) -> dict:
     }
 
 
+def _recompress_one(args: tuple[str, str]) -> bool:
+    """Recompress a single EXR frame to DWAB. Used by thread pool."""
+    from .frame_io import recompress_exr_to_dwab
+
+    src, tmp = args
+    if recompress_exr_to_dwab(src, tmp):
+        os.replace(tmp, src)  # atomic rename
+        return True
+    else:
+        if os.path.isfile(tmp):
+            os.remove(tmp)
+        return False
+
+
 def _recompress_to_dwab(
     out_dir: str,
     on_progress: Optional[Callable[[int, int], None]] = None,
@@ -133,13 +218,10 @@ def _recompress_to_dwab(
 ) -> None:
     """Recompress FFmpeg ZIP16 EXR files to DWAB in-place.
 
-    Reads each EXR, writes to a temp file with DWAB compression,
-    then atomically renames over the original.
+    Uses a thread pool to parallelize across available CPU cores.
+    Each frame is read via OpenCV, written to a temp file with DWAB
+    compression via OpenEXR, then atomically renamed over the original.
     """
-    from .frame_io import recompress_exr_to_dwab
-
-    # Find EXR files that haven't been recompressed yet
-    # A marker file signals completion so interrupted runs can resume
     marker = os.path.join(out_dir, ".dwab_done")
     if os.path.isfile(marker):
         return
@@ -150,23 +232,30 @@ def _recompress_to_dwab(
     if total == 0:
         return
 
-    logger.info(f"Recompressing {total} EXR frames to DWAB...")
-    for i, fname in enumerate(exr_files):
-        if cancel_event and cancel_event.is_set():
-            logger.info("DWAB recompression cancelled")
-            return
+    # Use half the CPU cores (I/O + decode bound, diminishing returns beyond)
+    max_workers = max(1, min((os.cpu_count() or 4) // 2, 16))
+    logger.info(f"Recompressing {total} EXR frames to DWAB "
+                f"({max_workers} parallel workers)...")
 
-        src = os.path.join(out_dir, fname)
-        tmp = src + ".tmp"
-        if recompress_exr_to_dwab(src, tmp):
-            os.replace(tmp, src)  # atomic rename
-        else:
-            # Clean up failed tmp
-            if os.path.isfile(tmp):
-                os.remove(tmp)
+    # Build work items: (src_path, tmp_path)
+    work = [(os.path.join(out_dir, f), os.path.join(out_dir, f + ".tmp"))
+            for f in exr_files]
 
-        if on_progress and total > 0:
-            on_progress(i + 1, total)
+    completed = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_recompress_one, item): item for item in work}
+        for future in as_completed(futures):
+            if cancel_event and cancel_event.is_set():
+                # Cancel remaining futures
+                for f in futures:
+                    f.cancel()
+                logger.info("DWAB recompression cancelled")
+                return
+
+            future.result()  # propagate exceptions
+            completed += 1
+            if on_progress and total > 0:
+                on_progress(completed, total)
 
     # Mark completion so resume doesn't redo
     with open(marker, 'w') as f:
@@ -249,6 +338,10 @@ def extract_frames(
     # EXR-specific FFmpeg args: ZIP16 compression, half-float, float pixel format
     exr_args = ["-compression", "3", "-format", "1", "-pix_fmt", "gbrpf32le"]
 
+    # Hardware-accelerated decode (NVDEC / VideoToolbox / VAAPI / D3D11VA)
+    # Falls back to software decode if none available
+    hwaccel_flags = detect_hwaccel(ffmpeg)
+
     if start_frame > 0 and total_frames > 0:
         # Seek to the resume point
         if video_info is None:
@@ -257,6 +350,7 @@ def extract_frames(
         seek_sec = start_frame / fps
         cmd = [
             ffmpeg,
+            *hwaccel_flags,
             "-ss", f"{seek_sec:.4f}",
             "-i", video_path,
             "-start_number", str(start_frame),
@@ -268,6 +362,7 @@ def extract_frames(
     else:
         cmd = [
             ffmpeg,
+            *hwaccel_flags,
             "-i", video_path,
             "-start_number", "0",
             "-vsync", "passthrough",
@@ -276,8 +371,9 @@ def extract_frames(
             "-y",
         ]
 
-    logger.info(f"Extracting frames (EXR half-float): {video_path} -> {out_dir} "
-                f"(start_frame={start_frame})")
+    hwaccel_label = hwaccel_flags[1] if hwaccel_flags else "software"
+    logger.info(f"Extracting frames (EXR half-float, decode={hwaccel_label}): "
+                f"{video_path} -> {out_dir} (start_frame={start_frame})")
 
     proc = subprocess.Popen(
         cmd,

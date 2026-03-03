@@ -29,13 +29,26 @@ QMenuBar::item:selected {
 }
 
 QMenu {
-    background-color: #1A1900;
+    background: #1A1900;
+    color: #E0E0E0;
     border: 1px solid #2A2910;
+    padding: 4px 0px;
+}
+
+QMenu::item {
+    background: #1A1900;
+    padding: 6px 24px;
 }
 
 QMenu::item:selected {
-    background-color: #FFF203;
+    background: #FFF203;
     color: #000000;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: #2A2910;
+    margin: 4px 8px;
 }
 
 /* === Side Panels === */
