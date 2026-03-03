@@ -147,6 +147,8 @@ class PreviewViewport(QWidget):
     def clear_annotations(self) -> None:
         """Clear all annotations for the current clip."""
         self._annotation_model.clear()
+        if self._clip is not None:
+            self._annotation_model.save(self._clip.root_path)
         self._split_view.update()
 
     def set_clip(self, clip: ClipEntry) -> None:
@@ -158,10 +160,13 @@ class PreviewViewport(QWidget):
         """
         from backend import ClipState
 
+        # Save annotations for previous clip before switching
+        if self._clip is not None:
+            self._annotation_model.save(self._clip.root_path)
         self._clip = clip
         self._clip_name = clip.name
         clear_cache()
-        self._annotation_model.clear()
+        self._annotation_model.load(clip.root_path)
 
         # EXTRACTING clips: show placeholder, no frame index
         if clip.state == ClipState.EXTRACTING:

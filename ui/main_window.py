@@ -510,12 +510,19 @@ class MainWindow(QMainWindow):
         else:
             iv.set_annotation_mode("bg")
 
+    def _auto_save_annotations(self) -> None:
+        """Auto-save annotation strokes to disk after changes."""
+        if self._current_clip is not None:
+            iv = self._dual_viewer.input_viewer
+            iv.annotation_model.save(self._current_clip.root_path)
+
     def _undo_annotation(self) -> None:
         """Ctrl+Z: undo last annotation stroke on current frame."""
         iv = self._dual_viewer.input_viewer
         if iv.annotation_mode and iv.current_stem_index >= 0:
             if iv.annotation_model.undo(iv.current_stem_index):
                 iv._split_view.update()
+                self._auto_save_annotations()
 
     def _on_export_masks(self) -> None:
         """Export annotation strokes as VideoMamaMaskHint PNGs and refresh clip."""
@@ -689,6 +696,7 @@ class MainWindow(QMainWindow):
         self._io_tray.clips_dir_changed.connect(self._on_clips_dir_changed)
         self._io_tray.files_imported.connect(self._on_welcome_files)
         self._io_tray.extract_requested.connect(self._on_extract_requested)
+        self._io_tray.export_video_requested.connect(self._on_export_video)
 
         # Status bar buttons
         self._status_bar.run_clicked.connect(self._on_run_inference)
@@ -718,9 +726,12 @@ class MainWindow(QMainWindow):
         self._param_panel.videomama_requested.connect(self._on_run_videomama)
         self._param_panel.export_masks_requested.connect(self._on_export_masks)
 
-        # Annotation stroke finished → update annotation counter
+        # Annotation stroke finished → update annotation counter + auto-save
         self._dual_viewer.input_viewer._split_view.stroke_finished.connect(
             self._update_annotation_info
+        )
+        self._dual_viewer.input_viewer._split_view.stroke_finished.connect(
+            self._auto_save_annotations
         )
 
         # Parameter panel — live reprocess (debounced, Codex: coalesce stale)
@@ -1824,13 +1835,18 @@ class MainWindow(QMainWindow):
 
     # ── Export Video ──
 
-    def _on_export_video(self) -> None:
-        """Export output image sequence as video file."""
-        if self._current_clip is None:
-            QMessageBox.information(self, "No Clip", "Select a clip first.")
-            return
+    def _on_export_video(self, clip: ClipEntry | None = None) -> None:
+        """Export output image sequence as video file.
 
-        clip = self._current_clip
+        Args:
+            clip: Specific clip to export. If None, uses current selection.
+        """
+        if clip is None:
+            if self._current_clip is None:
+                QMessageBox.information(self, "No Clip", "Select a clip first.")
+                return
+            clip = self._current_clip
+
         if clip.state != ClipState.COMPLETE:
             QMessageBox.warning(
                 self, "Not Complete",
@@ -2239,6 +2255,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         """Clean shutdown — auto-save session, stop workers, unload engines."""
+        # Save annotation strokes before closing
+        self._auto_save_annotations()
         # Auto-save session on close
         if self._clips_dir:
             try:

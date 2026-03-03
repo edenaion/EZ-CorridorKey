@@ -6,12 +6,16 @@ SplitViewWidget. Users paint foreground (green, hotkey 1) and background
 in image-pixel coordinates and exported as binary mask PNGs for the
 VideoMaMa pipeline.
 
+Strokes are persisted to {clip_root}/annotations.json so they survive
+app restarts.
+
 Brush size: Shift+left-drag up/down.
 Straight line: Alt+left-drag draws a straight line at current brush size.
 Undo: Ctrl+Z pops last stroke on the current frame.
 """
 from __future__ import annotations
 
+import json
 import os
 import logging
 from dataclasses import dataclass, field
@@ -102,6 +106,60 @@ class AnnotationModel:
 
     def annotated_frame_count(self) -> int:
         return len(self._strokes)
+
+    # ── Persistence ────────────────────────────────────────────────────────
+
+    _FILENAME = "annotations.json"
+
+    def save(self, clip_root: str) -> None:
+        """Persist all strokes to {clip_root}/annotations.json."""
+        if not clip_root:
+            return
+        data: dict[str, list[dict]] = {}
+        for idx, strokes in self._strokes.items():
+            data[str(idx)] = [
+                {
+                    "points": s.points,
+                    "brush_type": s.brush_type,
+                    "radius": s.radius,
+                }
+                for s in strokes
+            ]
+        path = os.path.join(clip_root, self._FILENAME)
+        try:
+            if data:
+                with open(path, "w") as f:
+                    json.dump(data, f)
+            elif os.path.isfile(path):
+                os.remove(path)
+        except OSError as e:
+            logger.warning(f"Failed to save annotations: {e}")
+
+    def load(self, clip_root: str) -> None:
+        """Load strokes from {clip_root}/annotations.json if it exists."""
+        self._strokes.clear()
+        self._current_stroke = None
+        if not clip_root:
+            return
+        path = os.path.join(clip_root, self._FILENAME)
+        if not os.path.isfile(path):
+            return
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            for idx_str, stroke_list in data.items():
+                idx = int(idx_str)
+                self._strokes[idx] = [
+                    AnnotationStroke(
+                        points=[tuple(p) for p in s["points"]],
+                        brush_type=s.get("brush_type", "fg"),
+                        radius=s.get("radius", 15.0),
+                    )
+                    for s in stroke_list
+                ]
+            logger.info(f"Loaded annotations for {len(self._strokes)} frames from {path}")
+        except (json.JSONDecodeError, OSError, KeyError, TypeError) as e:
+            logger.warning(f"Failed to load annotations: {e}")
 
     def export_masks(self, clip_root: str, frame_stems: list[str],
                      width: int, height: int,
