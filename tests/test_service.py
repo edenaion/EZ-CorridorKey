@@ -498,7 +498,7 @@ class TestRunInference:
         calls = []
         results = svc.run_inference(
             sample_clip, params,
-            on_progress=lambda name, cur, total: calls.append((cur, total)),
+            on_progress=lambda name, cur, total, **kwargs: calls.append((cur, total)),
             output_config=OutputConfig(fg_format="png", matte_format="png",
                                        comp_format="png", processed_format="png"),
         )

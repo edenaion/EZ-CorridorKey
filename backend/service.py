@@ -49,7 +49,7 @@ from .validators import (
     ensure_output_dirs,
 )
 from .frame_io import (
-    EXR_WRITE_FLAGS,
+    write_exr_dwab,
     read_image_frame,
     read_mask_frame,
     read_video_frame_at,
@@ -478,7 +478,7 @@ class CorridorKeyService:
                 img = img.astype(np.float32) / 255.0
             elif img.dtype != np.float32:
                 img = img.astype(np.float32)
-            validate_write(cv2.imwrite(path, img, EXR_WRITE_FLAGS), clip_name, frame_index, path)
+            validate_write(write_exr_dwab(path, img), clip_name, frame_index, path)
         else:
             # PNG 8-bit
             if img.dtype != np.uint8:
@@ -710,7 +710,8 @@ class CorridorKeyService:
                     dt = time.monotonic() - t_frame
                     frame_times.append(dt)
                     processed_count += 1
-                    avg_fps = len(frame_times) / sum(frame_times) if frame_times else 0.0
+                    total_t = sum(frame_times)
+                    avg_fps = len(frame_times) / total_t if total_t > 0 else 0.0
                     logger.debug(
                         f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)"
                     )
@@ -736,8 +737,9 @@ class CorridorKeyService:
             if on_progress:
                 final_elapsed = time.monotonic() - t_start
                 final_kwargs: dict[str, float] = {"elapsed": final_elapsed, "eta_seconds": 0.0}
-                if frame_times:
-                    final_kwargs["fps"] = len(frame_times) / sum(frame_times)
+                total_t = sum(frame_times)
+                if total_t > 0:
+                    final_kwargs["fps"] = len(frame_times) / total_t
                 on_progress(clip.name, range_count, range_count, **final_kwargs)
 
         finally:

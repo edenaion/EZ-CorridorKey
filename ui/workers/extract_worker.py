@@ -153,15 +153,24 @@ class ExtractWorker(QThread):
                 target_dir = os.path.join(job.clip_root, "Input")
             os.makedirs(target_dir, exist_ok=True)
 
-            # Progress callback → signal
+            # Progress callbacks → signal
+            # Extraction phase uses frames directly; recompress phase
+            # maps to the same total so the bar stays near 100%
             def on_progress(current: int, total: int) -> None:
                 self.progress.emit(job.clip_name, current, total)
 
-            # Run extraction
+            def on_recompress(current: int, total: int) -> None:
+                # Report as total_frames + progress to show "compressing"
+                # without resetting the counter
+                self.progress.emit(job.clip_name, total_frames + current,
+                                   total_frames + total)
+
+            # Run extraction (two-pass: FFmpeg EXR ZIP16 → DWAB recompress)
             extracted = extract_frames(
                 video_path=job.video_path,
                 out_dir=target_dir,
                 on_progress=on_progress,
+                on_recompress_progress=on_recompress,
                 cancel_event=job.cancel_event,
                 total_frames=total_frames,
             )

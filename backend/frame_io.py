@@ -10,6 +10,7 @@ _load_frames_for_videomama, _load_mask_frames_for_videomama).
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Callable, Optional
 
@@ -18,11 +19,106 @@ import numpy as np
 
 from .validators import normalize_mask_channels, normalize_mask_dtype
 
-# EXR write flags — PXR24 half-float (smallest working compression)
+# Enable OpenEXR support in OpenCV
+os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+
+logger = logging.getLogger(__name__)
+
+# EXR write flags for cv2.imwrite — PXR24 half-float (fallback only;
+# prefer write_exr_dwab() for DWAB output since OpenCV's DWAB writer is broken)
 EXR_WRITE_FLAGS = [
     cv2.IMWRITE_EXR_TYPE, cv2.IMWRITE_EXR_TYPE_HALF,
     cv2.IMWRITE_EXR_COMPRESSION, cv2.IMWRITE_EXR_COMPRESSION_PXR24,
 ]
+
+
+def write_exr_dwab(path: str, img: np.ndarray) -> bool:
+    """Write an image as EXR DWAB half-float using the OpenEXR library.
+
+    OpenCV's DWAB writer is broken (produces corrupt files). This function
+    uses the OpenEXR library which handles DWAB correctly.
+
+    Args:
+        path: Output file path.
+        img: Image array. Accepts:
+            - BGR float32 [H, W, 3] (from cv2.imread, service.py output)
+            - BGRA float32 [H, W, 4] (premultiplied RGBA from inference)
+            - Grayscale float32 [H, W] (single-channel matte)
+
+    Returns:
+        True on success, False on failure.
+    """
+    import OpenEXR
+    import Imath
+
+    try:
+        HALF = Imath.Channel(Imath.PixelType(Imath.PixelType.HALF))
+
+        if img.ndim == 2:
+            # Grayscale — single Y channel
+            h, w = img.shape
+            header = OpenEXR.Header(w, h)
+            header['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+            header['channels'] = {'Y': HALF}
+            y = img.astype(np.float16)
+            out = OpenEXR.OutputFile(path, header)
+            out.writePixels({'Y': y.tobytes()})
+            out.close()
+        elif img.ndim == 3 and img.shape[2] == 3:
+            # BGR → R, G, B channels
+            h, w = img.shape[:2]
+            header = OpenEXR.Header(w, h)
+            header['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+            header['channels'] = {'R': HALF, 'G': HALF, 'B': HALF}
+            b = img[:, :, 0].astype(np.float16)
+            g = img[:, :, 1].astype(np.float16)
+            r = img[:, :, 2].astype(np.float16)
+            out = OpenEXR.OutputFile(path, header)
+            out.writePixels({'R': r.tobytes(), 'G': g.tobytes(), 'B': b.tobytes()})
+            out.close()
+        elif img.ndim == 3 and img.shape[2] == 4:
+            # BGRA → R, G, B, A channels
+            h, w = img.shape[:2]
+            header = OpenEXR.Header(w, h)
+            header['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+            header['channels'] = {'R': HALF, 'G': HALF, 'B': HALF, 'A': HALF}
+            b = img[:, :, 0].astype(np.float16)
+            g = img[:, :, 1].astype(np.float16)
+            r = img[:, :, 2].astype(np.float16)
+            a = img[:, :, 3].astype(np.float16)
+            out = OpenEXR.OutputFile(path, header)
+            out.writePixels({
+                'R': r.tobytes(), 'G': g.tobytes(),
+                'B': b.tobytes(), 'A': a.tobytes(),
+            })
+            out.close()
+        else:
+            logger.warning(f"Unsupported image shape for EXR write: {img.shape}")
+            return False
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to write EXR DWAB {path}: {e}")
+        return False
+
+
+def recompress_exr_to_dwab(src_path: str, dst_path: str) -> bool:
+    """Recompress an EXR file to DWAB half-float.
+
+    Reads the source EXR (any compression) via OpenCV and writes to
+    dst_path with DWAB compression via OpenEXR library.
+
+    Args:
+        src_path: Path to source EXR file.
+        dst_path: Path to write DWAB-compressed EXR.
+
+    Returns:
+        True on success, False on failure.
+    """
+    img = cv2.imread(src_path, cv2.IMREAD_UNCHANGED)
+    if img is None:
+        logger.warning(f"Failed to read EXR for recompression: {src_path}")
+        return False
+    return write_exr_dwab(dst_path, img)
 
 
 def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np.ndarray]:

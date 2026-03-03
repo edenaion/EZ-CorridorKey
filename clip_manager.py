@@ -671,27 +671,21 @@ def run_inference(clips):
             pred_fg = res['fg'] # sRGB
             pred_alpha = res['alpha'] # Linear
             
-            # 4. Save (EXR DWAB Half-Float)
-            
-            # Compression Params
-            exr_flags = [
-                cv2.IMWRITE_EXR_TYPE, cv2.IMWRITE_EXR_TYPE_HALF,
-                # DWAB fails. PXR24 verified as smallest working format (46KB vs ZIP 56KB vs B44A 688KB)
-                cv2.IMWRITE_EXR_COMPRESSION, cv2.IMWRITE_EXR_COMPRESSION_PXR24,
-            ]
-            
+            # 4. Save (EXR DWAB Half-Float via OpenEXR library)
+            from backend.frame_io import write_exr_dwab
+
             # Save FG
-            # pred_fg is RGB 0-1 float. Convert to BGR for OpenCV
+            # pred_fg is RGB 0-1 float. Convert to BGR for write_exr_dwab
             fg_bgr = cv2.cvtColor(pred_fg, cv2.COLOR_RGB2BGR)
             fg_path = os.path.join(fg_dir, f"{input_stem}.exr")
-            if not cv2.imwrite(fg_path, fg_bgr, exr_flags):
+            if not write_exr_dwab(fg_path, fg_bgr):
                 logger.error(f"Clip '{clip.name}': failed to write FG frame {i} ({fg_path})")
 
             # Save Matte
             if pred_alpha.ndim == 3: pred_alpha = pred_alpha[:, :, 0]
             # Matte is single channel linear float
             matte_path = os.path.join(matte_dir, f"{input_stem}.exr")
-            if not cv2.imwrite(matte_path, pred_alpha, exr_flags):
+            if not write_exr_dwab(matte_path, pred_alpha):
                 logger.error(f"Clip '{clip.name}': failed to write Matte frame {i} ({matte_path})")
 
             # 5. Generate Reference Comp
@@ -706,10 +700,10 @@ def run_inference(clips):
             if 'processed' in res:
                 # Result is RGBA
                 proc_rgba = res['processed']
-                # Convert to BGRA for OpenCV
+                # Convert to BGRA for write_exr_dwab
                 proc_bgra = cv2.cvtColor(proc_rgba, cv2.COLOR_RGBA2BGRA)
                 proc_path = os.path.join(proc_dir, f"{input_stem}.exr")
-                if not cv2.imwrite(proc_path, proc_bgra, exr_flags):
+                if not write_exr_dwab(proc_path, proc_bgra):
                     logger.error(f"Clip '{clip.name}': failed to write Processed frame {i} ({proc_path})")
 
         print("")

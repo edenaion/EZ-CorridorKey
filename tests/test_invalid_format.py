@@ -37,23 +37,18 @@ def _make_service() -> CorridorKeyService:
 class TestWriteImageFormats:
     """Unit tests for _write_image format-routing logic."""
 
-    def test_exr_format_passes_exr_flags(self, tmp_path):
-        """'exr' must forward the EXR flags list to cv2.imwrite."""
-        from backend.frame_io import EXR_WRITE_FLAGS
-
+    def test_exr_format_calls_write_exr_dwab(self, tmp_path):
+        """'exr' must call write_exr_dwab (OpenEXR library) instead of cv2.imwrite."""
         service = _make_service()
         img = _float32_frame()
         out_path = str(tmp_path / "frame.exr")
 
-        with patch("backend.service.cv2.imwrite", return_value=True) as mock_write:
+        with patch("backend.service.write_exr_dwab", return_value=True) as mock_dwab:
             service._write_image(img, out_path, "exr", "clip", 0)
 
-        assert mock_write.call_count == 1
-        _, args, _ = mock_write.mock_calls[0]
-        # Third positional arg must be the EXR flags list
+        assert mock_dwab.call_count == 1
+        _, args, _ = mock_dwab.mock_calls[0]
         assert args[0] == out_path
-        assert args[1] is img
-        assert args[2] == EXR_WRITE_FLAGS
 
     def test_png_format_converts_float_to_uint8(self, tmp_path):
         """'png' must clip to [0,1] and cast to uint8 before writing."""

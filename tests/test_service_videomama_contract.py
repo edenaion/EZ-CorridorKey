@@ -180,7 +180,7 @@ class TestVideoMaMaCancellation:
             # via: from VideoMaMaInferenceModule.inference import run_inference
             chunk_output = [np.ones((4, 4, 3), dtype=np.float32)]
 
-            def mock_run_inference(pipeline, frames, masks, chunk_size=50):
+            def mock_run_inference(pipeline, frames, masks, chunk_size=50, on_status=None):
                 yield chunk_output
                 # Job will be cancelled before next chunk is processed
                 job.request_cancel()

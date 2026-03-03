@@ -10,6 +10,7 @@ dependencies = [
     "torchvision",
     "numpy",
     "opencv-python-headless",
+    "OpenEXR>=3.4",
     "timm==1.0.24",
     "av",
     "diffusers",

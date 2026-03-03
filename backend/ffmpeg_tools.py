@@ -3,7 +3,7 @@
 Pure Python, no Qt deps. Provides:
 - find_ffmpeg() / find_ffprobe() — locate binaries
 - probe_video() — get fps, resolution, frame count, codec
-- extract_frames() — video -> image sequence (PNG)
+- extract_frames() — video -> EXR DWAB half-float image sequence
 - stitch_video() — image sequence -> video (H.264)
 - write/read_video_metadata() — sidecar JSON for roundtrip fidelity
 """
@@ -126,21 +126,75 @@ def probe_video(path: str) -> dict:
     }
 
 
+def _recompress_to_dwab(
+    out_dir: str,
+    on_progress: Optional[Callable[[int, int], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
+) -> None:
+    """Recompress FFmpeg ZIP16 EXR files to DWAB in-place.
+
+    Reads each EXR, writes to a temp file with DWAB compression,
+    then atomically renames over the original.
+    """
+    from .frame_io import recompress_exr_to_dwab
+
+    # Find EXR files that haven't been recompressed yet
+    # A marker file signals completion so interrupted runs can resume
+    marker = os.path.join(out_dir, ".dwab_done")
+    if os.path.isfile(marker):
+        return
+
+    exr_files = sorted([f for f in os.listdir(out_dir)
+                        if f.lower().endswith('.exr')])
+    total = len(exr_files)
+    if total == 0:
+        return
+
+    logger.info(f"Recompressing {total} EXR frames to DWAB...")
+    for i, fname in enumerate(exr_files):
+        if cancel_event and cancel_event.is_set():
+            logger.info("DWAB recompression cancelled")
+            return
+
+        src = os.path.join(out_dir, fname)
+        tmp = src + ".tmp"
+        if recompress_exr_to_dwab(src, tmp):
+            os.replace(tmp, src)  # atomic rename
+        else:
+            # Clean up failed tmp
+            if os.path.isfile(tmp):
+                os.remove(tmp)
+
+        if on_progress and total > 0:
+            on_progress(i + 1, total)
+
+    # Mark completion so resume doesn't redo
+    with open(marker, 'w') as f:
+        f.write("done")
+    logger.info(f"DWAB recompression complete: {total} frames")
+
+
 def extract_frames(
     video_path: str,
     out_dir: str,
-    pattern: str = "frame_%06d.png",
+    pattern: str = "frame_%06d.exr",
     on_progress: Optional[Callable[[int, int], None]] = None,
+    on_recompress_progress: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
     total_frames: int = 0,
 ) -> int:
-    """Extract video frames to PNG image sequence.
+    """Extract video frames to EXR DWAB half-float image sequence.
+
+    Two-pass extraction:
+    1. FFmpeg extracts to EXR ZIP16 half-float (genuine float precision)
+    2. OpenCV recompresses each frame to DWAB (VFX-standard compression)
 
     Args:
         video_path: Path to input video file.
         out_dir: Directory to write frames into (created if needed).
         pattern: Frame filename pattern (FFmpeg style).
-        on_progress: Callback(current_frame, total_frames).
+        on_progress: Callback(current_frame, total_frames) for extraction.
+        on_recompress_progress: Callback(current, total) for DWAB pass.
         cancel_event: Set to cancel extraction.
         total_frames: Expected total (for progress). Probed if 0.
 
@@ -170,7 +224,18 @@ def extract_frames(
     # output buffering) and re-extract from that point.
     _RESUME_ROLLBACK = 3  # frames to re-extract for safety
     start_frame = 0
-    existing = sorted([f for f in os.listdir(out_dir) if f.lower().endswith('.png')])
+
+    # Check for completed DWAB recompression marker — if present, extraction
+    # is fully done, just count frames.
+    dwab_marker = os.path.join(out_dir, ".dwab_done")
+    if os.path.isfile(dwab_marker):
+        extracted = len([f for f in os.listdir(out_dir)
+                         if f.lower().endswith('.exr')])
+        logger.info(f"Extraction already complete: {extracted} DWAB frames")
+        return extracted
+
+    existing = sorted([f for f in os.listdir(out_dir)
+                       if f.lower().endswith('.exr')])
     if existing:
         # Remove the last N frames — they may be corrupt or incomplete
         remove_count = min(_RESUME_ROLLBACK, len(existing))
@@ -180,6 +245,9 @@ def extract_frames(
         if start_frame > 0:
             logger.info(f"Resuming extraction from frame {start_frame} "
                         f"({len(existing)} existed, rolled back {remove_count})")
+
+    # EXR-specific FFmpeg args: ZIP16 compression, half-float, float pixel format
+    exr_args = ["-compression", "3", "-format", "1", "-pix_fmt", "gbrpf32le"]
 
     if start_frame > 0 and total_frames > 0:
         # Seek to the resume point
@@ -193,6 +261,7 @@ def extract_frames(
             "-i", video_path,
             "-start_number", str(start_frame),
             "-vsync", "passthrough",
+            *exr_args,
             out_dir + "/" + pattern,
             "-y",
         ]
@@ -202,11 +271,13 @@ def extract_frames(
             "-i", video_path,
             "-start_number", "0",
             "-vsync", "passthrough",
+            *exr_args,
             out_dir + "/" + pattern,
             "-y",
         ]
 
-    logger.info(f"Extracting frames: {video_path} -> {out_dir} (start_frame={start_frame})")
+    logger.info(f"Extracting frames (EXR half-float): {video_path} -> {out_dir} "
+                f"(start_frame={start_frame})")
 
     proc = subprocess.Popen(
         cmd,
@@ -269,10 +340,15 @@ def extract_frames(
     if proc.returncode != 0 and not (cancel_event and cancel_event.is_set()):
         raise RuntimeError(f"FFmpeg extraction failed with code {proc.returncode}")
 
-    # Count actual extracted frames
+    # Count extracted frames
     extracted = len([f for f in os.listdir(out_dir)
-                     if f.lower().endswith('.png')])
-    logger.info(f"Extracted {extracted} frames to {out_dir}")
+                     if f.lower().endswith('.exr')])
+    logger.info(f"Extracted {extracted} EXR frames (ZIP16)")
+
+    # Pass 2: Recompress ZIP16 → DWAB
+    if extracted > 0 and not (cancel_event and cancel_event.is_set()):
+        _recompress_to_dwab(out_dir, on_recompress_progress, cancel_event)
+
     return extracted
 
 
