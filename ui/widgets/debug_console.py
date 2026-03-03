@@ -93,10 +93,11 @@ class DebugConsoleWidget(QWidget):
         self._resize_edge = None
         self._log_buffer: list[tuple[str, int]] = []  # (html, levelno)
 
-        # Handler (installed on root logger when shown)
+        # Handler — install immediately so no early logs are lost
         self._handler = _QtLogHandler()
         self._handler.log_received.connect(self._on_log)
-        self._handler_installed = False
+        logging.getLogger().addHandler(self._handler)
+        self._handler_installed = True
 
         self._build_ui()
         self._restore_geometry()
@@ -156,8 +157,8 @@ class DebugConsoleWidget(QWidget):
 
         # Level filter
         self._level_combo = QComboBox()
-        self._level_combo.addItems(["DEBUG", "INFO", "WARNING", "ERROR"])
-        self._level_combo.setCurrentText("DEBUG")
+        self._level_combo.addItems(["ALL", "INFO", "WARNING", "ERROR"])
+        self._level_combo.setCurrentText("ALL")
         self._level_combo.setFixedWidth(100)
         self._level_combo.setStyleSheet(
             "QComboBox { background: #1A1900; color: #E0E0E0; border: 1px solid #2A2910;"
@@ -226,9 +227,6 @@ class DebugConsoleWidget(QWidget):
     # --- Log Handler Management -----------------------------------------
 
     def show(self) -> None:
-        if not self._handler_installed:
-            logging.getLogger().addHandler(self._handler)
-            self._handler_installed = True
         super().show()
         self.raise_()
         self.activateWindow()
@@ -261,7 +259,7 @@ class DebugConsoleWidget(QWidget):
             self._output.append(html)
 
     def _on_level_changed(self, text: str) -> None:
-        self._min_level = getattr(logging, text, logging.DEBUG)
+        self._min_level = logging.DEBUG if text == "ALL" else getattr(logging, text, logging.DEBUG)
         self._refilter()
 
     def _refilter(self) -> None:

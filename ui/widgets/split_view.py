@@ -516,14 +516,34 @@ class SplitViewWidget(QWidget):
             self.reset_zoom()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        """Ctrl+Wheel to zoom."""
-        if event.modifiers() & Qt.ControlModifier:
+        """Ctrl+Wheel to zoom toward cursor position."""
+        mods = event.modifiers()
+        if mods & Qt.ControlModifier:
             delta = event.angleDelta().y()
             factor = 1.1 if delta > 0 else 1.0 / 1.1
             new_zoom = self._zoom * factor
             new_zoom = max(self._zoom_min, min(self._zoom_max, new_zoom))
+
+            # Adjust pan so the point under the cursor stays fixed
+            cursor = event.position()
+            vw, vh = self.width(), self.height()
+            # Point relative to viewport center + current pan
+            cx = cursor.x() - vw / 2 - self._pan.x()
+            cy = cursor.y() - vh / 2 - self._pan.y()
+            # Scale the offset by the zoom ratio
+            ratio = new_zoom / self._zoom
+            self._pan = QPointF(
+                self._pan.x() - cx * (ratio - 1),
+                self._pan.y() - cy * (ratio - 1),
+            )
+
             self._zoom = new_zoom
             self.zoom_changed.emit(self._zoom)
+            self.update()
+        elif mods & Qt.ShiftModifier:
+            # Shift+Wheel: horizontal pan (left/right)
+            delta = event.angleDelta().y()
+            self._pan = QPointF(self._pan.x() + delta * 0.5, self._pan.y())
             self.update()
         else:
             super().wheelEvent(event)

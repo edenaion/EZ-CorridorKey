@@ -310,6 +310,7 @@ class IOTrayPanel(QWidget):
     clips_dir_changed = Signal(str)  # folder path (import folder)
     files_imported = Signal(list)    # list of video file paths
     extract_requested = Signal(list) # list[ClipEntry] — re-run extraction
+    export_video_requested = Signal(object)  # ClipEntry — export as video
 
     def __init__(self, model: ClipListModel, parent=None):
         super().__init__(parent)
@@ -573,6 +574,13 @@ class IOTrayPanel(QWidget):
     def _on_export_context_menu(self, clip: ClipEntry) -> None:
         """Show right-click context menu for an export card."""
         menu = QMenu(self)
+
+        # Export Video (only for COMPLETE clips)
+        if clip.state == ClipState.COMPLETE:
+            export_action = QAction("Export Video...", self)
+            export_action.triggered.connect(lambda: self.export_video_requested.emit(clip))
+            menu.addAction(export_action)
+            menu.addSeparator()
 
         # Open containing folder (Output directory)
         output_dir = os.path.join(clip.root_path, "Output")

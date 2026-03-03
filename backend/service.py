@@ -907,7 +907,7 @@ class CorridorKeyService:
             on_progress: Progress callback with per-chunk updates.
             on_warning: Warning callback.
             on_status: Phase status callback (e.g. "Loading model...").
-            chunk_size: Frames per chunk (lower = less RAM, default 50).
+            chunk_size: Frames per chunk (lower = less VRAM, default 50).
         """
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for VideoMaMa")
