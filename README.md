@@ -317,7 +317,7 @@ This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopuering
 GUI/SFX/Workflow enhancements by [Ed Zisk](https://www.edzisk.com).
 Logo by [Sara Ann Stewart](https://www.clade.design/).
 
-If you use or build on this project, please credit back.
+If you use or build on this project, please star this repo and credit the contributors <3
 
 Optional modules:
 - **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
