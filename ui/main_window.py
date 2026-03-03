@@ -1913,10 +1913,10 @@ class MainWindow(QMainWindow):
                         clip.input_asset.path, clip.input_asset.asset_type,
                     )
 
-                # If this is the selected clip, reload preview
+                # If this is the selected clip, fully re-select to update
+                # viewer, param panel buttons (GVM/VideoMaMa), and status bar
                 if self._current_clip and self._current_clip.name == clip_name:
-                    self._dual_viewer.set_clip(clip)
-                    self._refresh_button_state()
+                    self._on_clip_selected(clip)
 
                 logger.info(f"Extraction complete: {clip_name} ({frame_count} frames)")
                 break

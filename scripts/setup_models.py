@@ -146,11 +146,12 @@ def download_repo(name: str) -> bool:
             local_dir=str(local_dir),
         )
         # SammyLim/VideoMaMa repo has unet/ but code expects VideoMaMa/
-        unet_dir = local_dir / "unet"
-        videomama_dir = local_dir / "VideoMaMa"
-        if unet_dir.is_dir() and not videomama_dir.is_dir():
-            unet_dir.rename(videomama_dir)
-            print(f"  Renamed unet/ -> VideoMaMa/")
+        if name == "videomama":
+            unet_dir = local_dir / "unet"
+            videomama_dir = local_dir / "VideoMaMa"
+            if unet_dir.is_dir() and not videomama_dir.is_dir():
+                unet_dir.rename(videomama_dir)
+                print(f"  Renamed unet/ -> VideoMaMa/")
         print(f"  Saved to: {local_dir}")
         return True
     except Exception as e:
