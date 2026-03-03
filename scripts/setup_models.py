@@ -47,6 +47,11 @@ MODELS = {
         "size_human": "~37 GB",
         "size_bytes": 40_000_000_000,
         "required": False,
+        "base_model": {
+            "repo_id": "stabilityai/stable-video-diffusion-img2vid-xt",
+            "subfolder": "stable-video-diffusion-img2vid-xt",
+            "check_file": "stable-video-diffusion-img2vid-xt/model_index.json",
+        },
     },
 }
 
@@ -56,10 +61,19 @@ def is_installed(name: str) -> bool:
     cfg = MODELS[name]
     local_dir = cfg["local_dir"]
     if "check_glob" in cfg:
-        return len(glob.glob(str(local_dir / cfg["check_glob"]))) > 0
+        if len(glob.glob(str(local_dir / cfg["check_glob"]))) == 0:
+            return False
     if "check_file" in cfg:
-        return (local_dir / cfg["check_file"]).is_file()
-    return False
+        if not (local_dir / cfg["check_file"]).is_file():
+            return False
+    # Also check base_model dependency if defined
+    if "base_model" in cfg:
+        base_check = cfg["base_model"].get("check_file")
+        if base_check and not (local_dir / base_check).is_file():
+            return False
+    if "check_glob" not in cfg and "check_file" not in cfg:
+        return False
+    return True
 
 
 def check_disk_space(needed_bytes: int, path: Path) -> bool:
@@ -102,6 +116,27 @@ def download_repo(name: str) -> bool:
     cfg = MODELS[name]
     local_dir = cfg["local_dir"]
     local_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download base model dependency first (e.g. SVD for VideoMaMa)
+    if "base_model" in cfg:
+        base = cfg["base_model"]
+        base_dir = local_dir / base["subfolder"]
+        base_check = base.get("check_file")
+        if base_check and (local_dir / base_check).is_file():
+            print(f"  [OK] Base model already downloaded")
+        else:
+            print(f"  Downloading base model ({base['repo_id']})...")
+            print("  This may take a while. Downloads resume if interrupted.")
+            try:
+                snapshot_download(
+                    repo_id=base["repo_id"],
+                    local_dir=str(base_dir),
+                )
+                print(f"  [OK] Base model saved to: {base_dir}")
+            except Exception as e:
+                print(f"  [ERROR] Base model download failed: {e}")
+                print(f"  Manual download: https://huggingface.co/{base['repo_id']}")
+                return False
 
     print(f"  Downloading {name} weights ({cfg['size_human']})...")
     print("  This may take a while. Downloads resume if interrupted.")
