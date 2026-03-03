@@ -64,11 +64,18 @@ class ThumbnailCanvas(QWidget):
         self._show_manifest_tooltip = show_manifest_tooltip
         self._selected_names: set[str] = set()
         self._hovered_name: str | None = None
+        self._thumb_cache: dict[str, QImage] = {}  # name → scaled thumbnail
         self.setMouseTracking(True)
         self.setMinimumHeight(100)
 
     def set_clips(self, clips: list[ClipEntry], model: ClipListModel) -> None:
         """Update the displayed clips and trigger repaint."""
+        # Invalidate thumbnail cache when clip list changes
+        new_names = {c.name for c in clips}
+        old_names = {c.name for c in self._clips}
+        if new_names != old_names:
+            self._thumb_cache = {k: v for k, v in self._thumb_cache.items()
+                                 if k in new_names}
         self._clips = list(clips)
         self._model = model
         total_w = max(1, len(clips) * (self.CARD_WIDTH + self.CARD_SPACING))
@@ -140,12 +147,18 @@ class ThumbnailCanvas(QWidget):
             self.THUMB_W,
             self.THUMB_H,
         )
-        thumb = self._model.get_thumbnail(clip.name) if self._model else None
-        if isinstance(thumb, QImage) and not thumb.isNull():
-            scaled = thumb.scaled(
-                self.THUMB_W, self.THUMB_H,
-                Qt.KeepAspectRatio, Qt.SmoothTransformation,
-            )
+        # Use cached scaled thumbnail to avoid expensive SmoothTransformation
+        # on every repaint.
+        scaled = self._thumb_cache.get(clip.name)
+        if scaled is None and self._model:
+            thumb = self._model.get_thumbnail(clip.name)
+            if isinstance(thumb, QImage) and not thumb.isNull():
+                scaled = thumb.scaled(
+                    self.THUMB_W, self.THUMB_H,
+                    Qt.KeepAspectRatio, Qt.SmoothTransformation,
+                )
+                self._thumb_cache[clip.name] = scaled
+        if scaled is not None:
             dx = thumb_rect.x() + (self.THUMB_W - scaled.width()) // 2
             dy = thumb_rect.y() + (self.THUMB_H - scaled.height()) // 2
             p.drawImage(dx, dy, scaled)
@@ -711,8 +724,18 @@ class IOTrayPanel(QWidget):
         self._export_header.setText(f"EXPORTS ({len(complete_clips)})")
 
     def _on_data_changed(self, top_left, bottom_right, roles) -> None:
-        """Handle model data changes — rebuild to catch state transitions."""
-        self._rebuild()
+        """Handle model data changes — lightweight repaint for progress,
+        full rebuild only when clip set or states change."""
+        current_clips = self._model.clips if self._model else []
+        current_key = {(c.name, c.state) for c in current_clips}
+        cached_key = {(c.name, c.state) for c in self._input_canvas._clips}
+        # Full rebuild when clip set or any clip state changes
+        if current_key != cached_key:
+            self._rebuild()
+        else:
+            # Lightweight: just repaint the canvases (no thumbnail rescale)
+            self._input_canvas.update()
+            self._export_canvas.update()
 
     def refresh(self) -> None:
         """Force rebuild (called after worker completes a clip)."""

@@ -76,10 +76,18 @@ class VideoWriter:
         self.container.close()
 
 
+_IMAGE_EXTS = frozenset({
+    '.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif', '.exr', '.webp',
+})
+
+
 class ImageSequenceReader(Dataset):
     def __init__(self, path, transform=None):
         self.path = path
-        self.files = sorted(os.listdir(path))
+        self.files = sorted(
+            f for f in os.listdir(path)
+            if os.path.splitext(f)[1].lower() in _IMAGE_EXTS
+        )
         self.transform = transform
 
     @property

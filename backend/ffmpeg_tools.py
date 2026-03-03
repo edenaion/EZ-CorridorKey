@@ -18,7 +18,6 @@ import shutil
 import subprocess
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -197,20 +196,6 @@ def probe_video(path: str) -> dict:
     }
 
 
-def _recompress_one(args: tuple[str, str]) -> bool:
-    """Recompress a single EXR frame to DWAB. Used by thread pool."""
-    from .frame_io import recompress_exr_to_dwab
-
-    src, tmp = args
-    if recompress_exr_to_dwab(src, tmp):
-        os.replace(tmp, src)  # atomic rename
-        return True
-    else:
-        if os.path.isfile(tmp):
-            os.remove(tmp)
-        return False
-
-
 def _recompress_to_dwab(
     out_dir: str,
     on_progress: Optional[Callable[[int, int], None]] = None,
@@ -218,9 +203,10 @@ def _recompress_to_dwab(
 ) -> None:
     """Recompress FFmpeg ZIP16 EXR files to DWAB in-place.
 
-    Uses a thread pool to parallelize across available CPU cores.
-    Each frame is read via OpenCV, written to a temp file with DWAB
-    compression via OpenEXR, then atomically renamed over the original.
+    Launches a standalone subprocess to do the heavy lifting so the
+    parent process (and its GIL / Qt event loop) stay completely free.
+    The subprocess uses multiprocessing internally and prints progress
+    lines to stdout which we parse for the callback.
     """
     marker = os.path.join(out_dir, ".dwab_done")
     if os.path.isfile(marker):
@@ -232,30 +218,158 @@ def _recompress_to_dwab(
     if total == 0:
         return
 
-    # Use half the CPU cores (I/O + decode bound, diminishing returns beyond)
-    max_workers = max(1, min((os.cpu_count() or 4) // 2, 16))
-    logger.info(f"Recompressing {total} EXR frames to DWAB "
-                f"({max_workers} parallel workers)...")
+    # Locate the Python interpreter from the same venv
+    python = sys.executable
 
-    # Build work items: (src_path, tmp_path)
+    # Write a temp script file.  ProcessPoolExecutor on Windows uses the
+    # "spawn" start method which re-imports __main__ — this only works
+    # from a real .py file, not from ``python -c``.
+    import tempfile
+    script_content = r'''
+import os, sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
+
+def recompress_one(args):
+    src, tmp = args
+    try:
+        os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+        import cv2, numpy as np, OpenEXR, Imath
+        img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
+        if img is None:
+            return False
+        HALF = Imath.Channel(Imath.PixelType(Imath.PixelType.HALF))
+        h, w = img.shape[:2]
+        hdr = OpenEXR.Header(w, h)
+        hdr['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+        if img.ndim == 2:
+            hdr['channels'] = {'Y': HALF}
+            out = OpenEXR.OutputFile(tmp, hdr)
+            out.writePixels({'Y': img.astype(np.float16).tobytes()})
+            out.close()
+        elif img.ndim == 3 and img.shape[2] == 3:
+            hdr['channels'] = {'R': HALF, 'G': HALF, 'B': HALF}
+            out = OpenEXR.OutputFile(tmp, hdr)
+            out.writePixels({
+                'R': img[:,:,2].astype(np.float16).tobytes(),
+                'G': img[:,:,1].astype(np.float16).tobytes(),
+                'B': img[:,:,0].astype(np.float16).tobytes(),
+            })
+            out.close()
+        elif img.ndim == 3 and img.shape[2] == 4:
+            hdr['channels'] = {'R': HALF, 'G': HALF, 'B': HALF, 'A': HALF}
+            out = OpenEXR.OutputFile(tmp, hdr)
+            out.writePixels({
+                'R': img[:,:,2].astype(np.float16).tobytes(),
+                'G': img[:,:,1].astype(np.float16).tobytes(),
+                'B': img[:,:,0].astype(np.float16).tobytes(),
+                'A': img[:,:,3].astype(np.float16).tobytes(),
+            })
+            out.close()
+        else:
+            return False
+        os.replace(tmp, src)
+        return True
+    except Exception:
+        if os.path.isfile(tmp):
+            os.remove(tmp)
+        return False
+
+if __name__ == "__main__":
+    out_dir = sys.argv[1]
+    files = sorted(f for f in os.listdir(out_dir) if f.lower().endswith('.exr'))
+    total = len(files)
+    if total == 0:
+        sys.exit(0)
+    workers = max(1, min((os.cpu_count() or 4) // 2, 16))
     work = [(os.path.join(out_dir, f), os.path.join(out_dir, f + ".tmp"))
-            for f in exr_files]
+            for f in files]
+    done = 0
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futs = {pool.submit(recompress_one, item): item for item in work}
+        for fut in as_completed(futs):
+            fut.result()
+            done += 1
+            print(f"PROGRESS {done} {total}", flush=True)
+    print("DONE", flush=True)
+'''
 
-    completed = 0
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_recompress_one, item): item for item in work}
-        for future in as_completed(futures):
+    # Write to a temp .py file next to the output dir (same drive avoids
+    # cross-device issues).  Cleaned up after completion.
+    script_path = os.path.join(out_dir, "_dwab_recompress.py")
+    with open(script_path, 'w') as f:
+        f.write(script_content)
+
+    logger.info(f"Recompressing {total} EXR frames to DWAB (subprocess)...")
+
+    proc = subprocess.Popen(
+        [python, script_path, out_dir],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
+
+    # Read stdout in a background thread so cancel checks aren't blocked
+    import queue as _queue
+    line_q: _queue.Queue[str | None] = _queue.Queue()
+
+    def _reader():
+        for ln in proc.stdout:
+            line_q.put(ln.strip())
+        line_q.put(None)
+
+    reader_thread = threading.Thread(target=_reader, daemon=True)
+    reader_thread.start()
+
+    try:
+        while True:
             if cancel_event and cancel_event.is_set():
-                # Cancel remaining futures
-                for f in futures:
-                    f.cancel()
+                proc.kill()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
                 logger.info("DWAB recompression cancelled")
                 return
 
-            future.result()  # propagate exceptions
-            completed += 1
-            if on_progress and total > 0:
-                on_progress(completed, total)
+            try:
+                line = line_q.get(timeout=0.2)
+            except _queue.Empty:
+                if proc.poll() is not None:
+                    break
+                continue
+
+            if line is None:
+                break
+
+            if line.startswith("PROGRESS "):
+                parts = line.split()
+                if len(parts) == 3:
+                    done_n, total_n = int(parts[1]), int(parts[2])
+                    if on_progress:
+                        on_progress(done_n, total_n)
+            elif line == "DONE":
+                break
+
+        proc.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        logger.error("DWAB recompression subprocess timed out")
+        return
+    finally:
+        # Always clean up temp script
+        try:
+            os.remove(script_path)
+        except OSError:
+            pass
+
+    if proc.returncode != 0:
+        stderr_out = proc.stderr.read() if proc.stderr else ""
+        logger.error(f"DWAB recompression failed (code {proc.returncode}): "
+                     f"{stderr_out[:500]}")
+        return
 
     # Mark completion so resume doesn't redo
     with open(marker, 'w') as f:

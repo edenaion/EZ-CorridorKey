@@ -153,17 +153,28 @@ class ExtractWorker(QThread):
                 target_dir = os.path.join(job.clip_root, "Input")
             os.makedirs(target_dir, exist_ok=True)
 
-            # Progress callbacks → signal
-            # Extraction phase uses frames directly; recompress phase
-            # maps to the same total so the bar stays near 100%
+            # Progress callbacks → signal (throttled to avoid flooding the
+            # main thread with expensive UI updates).  Emit at most every
+            # 100 ms, plus always emit the final frame so the bar hits 100%.
+            import time as _time
+            _MIN_INTERVAL = 0.10  # seconds between progress emissions
+            _last_emit = [0.0]  # mutable closure — [timestamp]
+
+            def _throttled_emit(clip: str, cur: int, tot: int) -> None:
+                now = _time.monotonic()
+                if cur >= tot or (now - _last_emit[0]) >= _MIN_INTERVAL:
+                    self.progress.emit(clip, cur, tot)
+                    _last_emit[0] = now
+
             def on_progress(current: int, total: int) -> None:
-                self.progress.emit(job.clip_name, current, total)
+                _throttled_emit(job.clip_name, current, total)
 
             def on_recompress(current: int, total: int) -> None:
                 # Report as total_frames + progress to show "compressing"
                 # without resetting the counter
-                self.progress.emit(job.clip_name, total_frames + current,
-                                   total_frames + total)
+                _throttled_emit(job.clip_name,
+                                total_frames + current,
+                                total_frames + total)
 
             # Run extraction (two-pass: FFmpeg EXR ZIP16 → DWAB recompress)
             extracted = extract_frames(
