@@ -30,6 +30,68 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.0.0] - 2026-03-03 — Batch Pipeline, Annotation Persistence, Installer
+
+### Batch Pipeline (`fd35073`)
+- **RUN PIPELINE** button appears when multiple clips are selected in the I/O tray
+- Automatic per-clip route classification via `PipelineRoute` enum:
+  - **RAW + no annotations** → GVM Auto → Inference
+  - **RAW + annotations** → Export masks → VideoMaMa → Inference
+  - **MASKED** → VideoMaMa → Inference
+  - **READY / COMPLETE** → Inference only
+  - **EXTRACTING / ERROR** → Skip
+- Phase 0 (CPU): Headless mask export for annotated clips (`export_masks_headless()`)
+- Phase 1–3 (GPU): Jobs queued in dependency order — alpha generation first, then auto-chain inference on completion
+- Fully cancellable (Esc) and checkpointable — interrupted runs resume where each clip left off
+- Extraction done sound plays only after the last batch clip finishes
+
+### Annotation Persistence (`a81ee1f`)
+- Annotation strokes now saved to `annotations.json` per clip and persist across app restarts
+- Strokes restored on clip load — no need to re-annotate after closing the app
+
+### Video Import & Extraction
+- Dual import: ADD button supports folders (image sequences) or video files; drag-drop accepts videos
+- Video extraction pipeline with FFmpeg: progress tracking, cancel support, resume detection
+- Metadata sidecar (`video_metadata.json`) for stitching back later
+
+### Viewer & Playback
+- Cursor-centered zoom (Ctrl+scroll), shift+scroll horizontal pan (`25019f9`)
+- Play/pause transport (Space hotkey) with loop playback within in/out range (`56b451f`)
+- Live output mode switching during inference — `FrameIndex` rebuilds on the fly (`2270270`)
+- Draggable in/out markers, split RUN/RESUME buttons, middle-click slider reset (`7aa22ee`)
+- Alpha coverage feedback: frame counts in status bar, 3-option partial alpha dialog (`2422772`)
+
+### Annotation Brush
+- Cycle foreground color with **C** key (green / blue) (`c712a53`)
+
+### Preferences
+- Preferences dialog (Edit > Preferences) with tooltips toggle (`73fb3e2`)
+- Copy-source preference: copy imported videos into project folder or reference in-place (`81e603a`)
+- Deletion safety guard prevents removing the Projects root itself
+
+### Installer & Packaging
+- One-click installers (`1-install.bat` / `1-install.sh`) with auto GPU detection (`f5b2892`)
+- Update scripts (`3-update.bat` / `3-update.sh`) for easy bug fix delivery (`97023be`)
+- Desktop shortcut creation during install (no console window) (`98f7b63`)
+- Skip GVM/VideoMaMa download on macOS (CUDA-only models) (`c2707ed`)
+- Download SVD base model alongside VideoMaMa weights (`b4aa6a4`)
+- Fix VideoMaMa unet folder rename after download (`7fc3dd1`)
+
+### Debug & Logging
+- Debug console captures all logs from session start (`32001ae`)
+- VideoMaMa VAE decode logging with per-chunk timing (`06bbbbf`)
+- System local time for log timestamps instead of hardcoded Eastern timezone (`77c6acb`)
+
+### Fixes
+- GVM unet rename bug, enable GVM button after extraction (`534b4d9`)
+- Progress bar, queue panel, extraction cancel fixes (`8ac9530`)
+- Subtler volume slider — thin groove, white handle (`477f81b`)
+- Hide redundant clip info label on right viewport (`ebafdc8`)
+- Cancel sound debounce, skip previews during annotation mode (`202b76d`)
+- Crisp app icon from official logo SVG rendered at 1024px (`57977da`)
+
+---
+
 ## [0.1.0] - 2026-03-02 — Release Prep
 
 ### Release Packaging
