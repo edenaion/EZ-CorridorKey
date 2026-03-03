@@ -99,12 +99,13 @@ class UIAudio:
 
     @classmethod
     def _play(
-        cls, sfx: QSoundEffect, variance: float = _VARIANCE, db_offset: float = 0.0
+        cls, sfx: QSoundEffect, variance: float = _VARIANCE, db_offset: float = 0.0,
+        skip_debounce: bool = False,
     ) -> None:
         if cls._muted or cls._volume <= 0.0:
             return
         now = time.monotonic()
-        if now - cls._last_play_time < cls._DEBOUNCE_MS:
+        if not skip_debounce and now - cls._last_play_time < cls._DEBOUNCE_MS:
             return
         cls._last_play_time = now
         vol = _BASE_VOLUME + random.uniform(-variance, variance)
@@ -140,7 +141,7 @@ class UIAudio:
         """Play cancel sound — random pick from 2 variants, ±8% volume."""
         cls._ensure_loaded()
         if cls._cancel_sfx:
-            cls._play(random.choice(cls._cancel_sfx))
+            cls._play(random.choice(cls._cancel_sfx), skip_debounce=True)
 
     @classmethod
     def error(cls) -> None:

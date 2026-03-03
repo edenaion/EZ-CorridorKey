@@ -219,6 +219,10 @@ class PreviewViewport(QWidget):
         if clip_name != self._clip_name:
             return
 
+        # Don't interrupt annotation mode with heavy I/O (frame index rebuild + decode)
+        if self._split_view.is_annotating:
+            return
+
         # Rebuild frame index so newly written outputs are discoverable
         if self._clip:
             asset_type = self._clip.input_asset.asset_type if self._clip.input_asset else "sequence"

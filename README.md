@@ -4,6 +4,8 @@ A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopue
 
 This GUI replaces the CLI drag-and-drop workflow with a complete desktop application while preserving 100% backward compatibility (`python main.py --cli` still runs the original wizard).
 
+![EZ-CorridorKey](dev-docs/guides/screenshots/EZ-CorridorKey_Inference_Done.jpg)
+
 | Capability | CLI (Upstream) | GUI (This Project) |
 |------------|---------------|-------------------|
 | Import clips | Drag onto .bat file | Drag-drop into app, or File > Import |

@@ -87,6 +87,11 @@ class SplitViewWidget(QWidget):
 
     # ── Public API ──
 
+    @property
+    def is_annotating(self) -> bool:
+        """True when annotation mode is active (brush tool enabled)."""
+        return self._annotation_mode is not None
+
     def set_image(self, image: QImage | None) -> None:
         """Set the single (non-split) image."""
         self._single_image = image
