@@ -53,8 +53,8 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | File | Edit | View | Help                             Volume ---->-|
 | CORRIDORKEY                                        RTX 5090  ## 4GB|
 +------+------------------------+----------------------+-------------+
-|      | 241 frames - RAW      | 241 frames - RAW     |  ALPHA GEN   |
-|  Q   | [INPUT] FG MATTE COMP | INPUT FG MATTE [COMP]|  GVM AUTO    |
+|      |      241 frames - RAW | INPUT FG MATTE [COMP]| ALPHA GEN    |
+|  Q   |                       |                      |  GVM AUTO    |
 |  U   +-----------------------+----------------------+  VIDEOMAMA   |
 |  E   |                       |                      |  EXPORT MASK |
 |  U   |                       |                      |--------------+
@@ -70,13 +70,13 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 |      |                       |                      |  Matte       |
 |      |                       |                      |  Comp        |
 |      |                    SCRUBBER                  |  Processed   |
-|      +<<--------------------------------------- < >>|--------------|
-|      | INPUT (8)       + ADD | EXPORTS (0)                         |
-|      | +-----+ +-----+ +-----+ +-----+ +-----+                     |
-|      | |thumb| |thumb| |thumb| |thumb| |thumb| ..                  |
-|      | +-----+ +-----+ +-----+ +-----+ +-----+                     |
-+------+-----------------------------------------------+-------------+
-|  Status Bar                                            [RUN INF]   |
+|      +<<-<-------In=====================Out----->->>|--------------|
+|      | INPUT (2)       + ADD | EXPORTS (2)                         |
+|      | +-----+ +-----+       | +-----+ +-----+                     |
+|      | |thumb| |thumb|       | |thumb| |thumb| ..                  |
+|      | +-----+ +-----+       | +-----+ +-----+                     |
++--------------------------------------------------------------------+
+|  Status Bar                                         [RUN INFERENCE]|
 +--------------------------------------------------------------------+
 ```
 
