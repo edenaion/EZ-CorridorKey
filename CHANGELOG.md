@@ -46,32 +46,7 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
-## Findings & Future Work
-
-### VRAM Efficiency Audit (2026-03-02)
-
-Community member SeanBRVFX published a [ComfyUI-CorridorKey node](https://github.com/SeanBRVFX/ComfyUI-CorridorKey) claiming ~15GB VRAM usage via "ComfyUI offloading." Investigation found:
-
-**Actual peak VRAM per model (single-model residency, one at a time):**
-
-| Model | Weights (FP16) | Peak w/ activations | Notes |
-|-------|----------------|---------------------|-------|
-| CorridorKey | ~383MB | ~1.3-1.5 GB | Currently loads FP32 weights — see fix below |
-| GVM | ~3.0 GB | ~4.0-4.5 GB | Already loads FP16 correctly |
-| VideoMaMa | ~5.7 GB | ~6-8 GB | Already loads FP16 correctly |
-
-**Key findings:**
-- The 15GB claim is accurate but misleading — their node only loads CorridorKey (~1.5GB peak), not GVM/VideoMaMa. The rest is ComfyUI framework + other loaded models.
-- ComfyUI has a framework-level VRAM manager (model offloading to CPU RAM, partial loading, priority eviction) but the CorridorKey node doesn't use it — no `comfy.model_management` hooks.
-- Our single-model residency approach is already correct. No need for ComfyUI-style multi-model juggling.
-
-**Actionable fix:** `CorridorKeyModule/inference_engine.py` loads weights in FP32 and relies on `torch.autocast` for compute only. Adding `model.half()` after `load_state_dict()` would halve weight VRAM (~766MB → ~383MB). GVM and VideoMaMa already do this correctly.
-
-**User-facing takeaway:** Minimum 8GB VRAM, recommended 12GB, comfortable at 16GB.
-
----
-
-## [Step 3: Refactor] - 2026-02-28 — Frame I/O Consolidation & Dead Code Removal
+## 2026-02-28 — Frame I/O Consolidation & Dead Code Removal
 
 ### New Module: `backend/frame_io.py`
 - Unified frame reading functions: `read_image_frame()`, `read_video_frame_at()`, `read_video_frames()`, `read_mask_frame()`, `read_video_mask_at()`
@@ -98,7 +73,7 @@ Community member SeanBRVFX published a [ComfyUI-CorridorKey node](https://github
 
 ---
 
-## [Step 2: Debug Logging] - 2026-02-28 — Comprehensive Logging Infrastructure
+## 2026-02-28 — Comprehensive Logging Infrastructure
 
 ### File-Based Session Logging
 - Dual-handler logging: console (respects `--log-level`) + file (always DEBUG)
@@ -139,7 +114,7 @@ Community member SeanBRVFX published a [ComfyUI-CorridorKey node](https://github
 
 ---
 
-## [Step 1: Test Coverage] - 2026-02-28 — Comprehensive Backend Test Suite
+## 2026-02-28 — Comprehensive Backend Test Suite
 
 ### New Test Files (7 created/updated)
 - `tests/conftest.py` — shared fixtures: `sample_frame`, `sample_mask`, `tmp_clip_dir` (real tiny PNGs), `sample_clip`
