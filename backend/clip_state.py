@@ -59,6 +59,33 @@ _TRANSITIONS: dict[ClipState, set[ClipState]] = {
 }
 
 
+class PipelineRoute(Enum):
+    """Pipeline route for a clip in batch processing."""
+    INFERENCE_ONLY = "inference_only"       # READY/COMPLETE → inference
+    GVM_PIPELINE = "gvm_pipeline"           # RAW, no annotations → GVM → inference
+    VIDEOMAMA_PIPELINE = "videomama_pipeline"  # RAW with annotations → export masks → VideoMaMa → inference
+    VIDEOMAMA_INFERENCE = "videomama_inference" # MASKED → VideoMaMa → inference
+    SKIP = "skip"                           # EXTRACTING or ERROR — cannot process
+
+
+def classify_pipeline_route(clip: "ClipEntry") -> PipelineRoute:
+    """Determine the full-pipeline route for a clip.
+
+    For RAW clips, checks for annotations.json on disk to decide
+    between GVM (automatic) and VideoMaMa (annotation-based) paths.
+    """
+    if clip.state in (ClipState.READY, ClipState.COMPLETE):
+        return PipelineRoute.INFERENCE_ONLY
+    if clip.state == ClipState.MASKED:
+        return PipelineRoute.VIDEOMAMA_INFERENCE
+    if clip.state == ClipState.RAW:
+        ann_path = os.path.join(clip.root_path, "annotations.json")
+        if os.path.isfile(ann_path) and os.path.getsize(ann_path) > 2:
+            return PipelineRoute.VIDEOMAMA_PIPELINE
+        return PipelineRoute.GVM_PIPELINE
+    return PipelineRoute.SKIP
+
+
 @dataclass
 class ClipAsset:
     """Represents an input source — either an image sequence directory or a video file."""

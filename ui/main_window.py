@@ -33,6 +33,7 @@ from PySide6.QtGui import QKeySequence, QAction, QImage, QPainter
 from backend import (
     CorridorKeyService, ClipEntry, ClipState, InferenceParams,
     InOutRange, OutputConfig, JobType,
+    PipelineRoute, classify_pipeline_route,
 )
 from backend.project import VIDEO_FILE_FILTER
 
@@ -709,8 +710,8 @@ class MainWindow(QMainWindow):
         # I/O tray — clip selection, import, drag-and-drop
         self._io_tray.clip_clicked.connect(self._on_tray_clip_clicked)
         self._io_tray.selection_changed.connect(self._on_selection_changed)
-        self._io_tray.clips_dir_changed.connect(self._on_clips_dir_changed)
-        self._io_tray.files_imported.connect(self._on_welcome_files)
+        self._io_tray.clips_dir_changed.connect(self._on_tray_folder_imported)
+        self._io_tray.files_imported.connect(self._on_tray_files_imported)
         self._io_tray.extract_requested.connect(self._on_extract_requested)
         self._io_tray.export_video_requested.connect(self._on_export_video)
 
@@ -801,12 +802,18 @@ class MainWindow(QMainWindow):
         """Handle multi-select change in I/O tray — update button state."""
         batch_count = len(clips)
         if batch_count > 1:
-            # Multi-select: enable batch run if at least one clip is processable
+            # Check if any clip needs alpha generation (pipeline mode)
+            needs_pipeline = any(
+                classify_pipeline_route(c) not in (
+                    PipelineRoute.INFERENCE_ONLY, PipelineRoute.SKIP)
+                for c in clips
+            )
             self._status_bar.update_button_state(
                 can_run=True,
                 has_partial=False,
                 has_in_out=False,
                 batch_count=batch_count,
+                needs_pipeline=needs_pipeline,
             )
         elif batch_count == 1:
             # Single clip: use normal button state
@@ -830,6 +837,9 @@ class MainWindow(QMainWindow):
 
         # Load clip into dual viewer (both input + output viewports)
         self._dual_viewer.set_clip(clip)
+
+        # Refresh annotation coverage bar (annotations loaded from disk above)
+        self._update_annotation_info()
 
         # Ensure run/stop buttons are in correct visibility state
         # (guards against stale running state from crashed jobs)
@@ -999,8 +1009,22 @@ class MainWindow(QMainWindow):
         self._current_clip = None
 
     @Slot(list)
+    def _on_tray_folder_imported(self, dir_path: str) -> None:
+        """Handle folder from I/O tray +ADD button — context-aware."""
+        if self._clips_dir:
+            self._add_folder_to_project(dir_path)
+        else:
+            self._on_clips_dir_changed(dir_path)
+
+    def _on_tray_files_imported(self, file_paths: list) -> None:
+        """Handle files from I/O tray +ADD button — context-aware."""
+        if self._clips_dir:
+            self._add_videos_to_project(file_paths)
+        else:
+            self._on_welcome_files(file_paths)
+
     def _on_welcome_files(self, file_paths: list) -> None:
-        """Handle files selected from welcome screen or +ADD import.
+        """Handle files selected from welcome screen — creates a new project.
 
         Creates ONE project folder for all selected videos, with each
         video as a separate clip nested inside clips/.
@@ -1226,9 +1250,9 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_run_inference(self) -> None:
-        # If multiple clips are selected, dispatch to batch pipeline
+        # If multiple clips are selected, dispatch to pipeline
         if self._io_tray.selected_count() > 1:
-            self._on_run_batch()
+            self._on_run_pipeline()
             return
 
         if self._current_clip is None:
@@ -1365,11 +1389,15 @@ class MainWindow(QMainWindow):
             self._start_worker_if_needed(first_job.id if first_job else None)
             logger.info(f"Batch queued: {queued} clips")
 
-    def _on_run_batch(self) -> None:
-        """Batch pipeline: queue GVM for RAW clips, then inference for READY/COMPLETE.
+    def _on_run_pipeline(self) -> None:
+        """Full pipeline: classify each selected clip and queue appropriate jobs.
 
-        For RAW clips, GVM runs first; on completion, inference is auto-chained
-        via _batch_clips tracking in _on_worker_clip_finished.
+        Routes per clip (see PipelineRoute):
+        - INFERENCE_ONLY: queue inference directly
+        - GVM_PIPELINE: queue GVM, auto-chain inference on completion
+        - VIDEOMAMA_PIPELINE: export masks (CPU), queue VideoMaMa, auto-chain inference
+        - VIDEOMAMA_INFERENCE: queue VideoMaMa, auto-chain inference
+        - SKIP: skip clips in EXTRACTING/ERROR state
         """
         selected = self._io_tray.get_selected_clips()
         if not selected:
@@ -1378,19 +1406,58 @@ class MainWindow(QMainWindow):
         params = self._param_panel.get_params()
         output_config = self._param_panel.get_output_config()
 
-        # Separate clips by state
-        raw_clips = [c for c in selected if c.state == ClipState.RAW]
-        ready_clips = [c for c in selected
-                       if c.state in (ClipState.READY, ClipState.COMPLETE)]
+        # Classify all clips
+        routes: dict[str, PipelineRoute] = {}
+        for clip in selected:
+            route = classify_pipeline_route(clip)
+            if route != PipelineRoute.SKIP:
+                routes[clip.name] = route
 
-        # Track RAW clips for GVM→inference auto-chain
-        self._batch_clips = {c.name for c in raw_clips}
+        if not routes:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, "Nothing to Process",
+                "No selected clips are in a processable state.",
+            )
+            return
+
+        # Phase 0 (CPU): export masks for annotated RAW clips
+        from backend.service import export_masks_headless
+        for clip in selected:
+            if routes.get(clip.name) != PipelineRoute.VIDEOMAMA_PIPELINE:
+                continue
+            mask_dir = export_masks_headless(clip)
+            if mask_dir:
+                # Remove existing AlphaHint so clip drops to MASKED
+                alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+                if os.path.isdir(alpha_dir):
+                    shutil.rmtree(alpha_dir)
+                clip.alpha_asset = None
+                clip.mask_asset = None
+                clip.find_assets()
+                if clip.state != ClipState.MASKED:
+                    clip.state = ClipState.MASKED
+                    self._clip_model.update_clip_state(clip.name, ClipState.MASKED)
+                logger.info(f"Pipeline: exported masks for '{clip.name}'")
+            else:
+                logger.warning(f"Pipeline: mask export failed for '{clip.name}', falling back to GVM")
+                routes[clip.name] = PipelineRoute.GVM_PIPELINE
+
+        # Track alpha-needing clips for auto-chain (alpha → inference)
+        self._batch_clips = {
+            name for name, route in routes.items()
+            if route in (PipelineRoute.GVM_PIPELINE,
+                         PipelineRoute.VIDEOMAMA_PIPELINE,
+                         PipelineRoute.VIDEOMAMA_INFERENCE)
+        }
 
         queued = 0
         first_job_id = None
 
-        # Phase 1: queue all GVM jobs first
-        for clip in raw_clips:
+        # Phase 1: queue GVM jobs
+        for clip in selected:
+            if routes.get(clip.name) != PipelineRoute.GVM_PIPELINE:
+                continue
             job = create_job_snapshot(clip, job_type=JobType.GVM_ALPHA)
             if self._service.job_queue.submit(job):
                 clip.set_processing(True)
@@ -1398,8 +1465,23 @@ class MainWindow(QMainWindow):
                     first_job_id = job.id
                 queued += 1
 
-        # Phase 2: queue inference jobs for already-READY clips
-        for clip in ready_clips:
+        # Phase 2: queue VideoMaMa jobs
+        for clip in selected:
+            route = routes.get(clip.name)
+            if route not in (PipelineRoute.VIDEOMAMA_PIPELINE,
+                             PipelineRoute.VIDEOMAMA_INFERENCE):
+                continue
+            job = create_job_snapshot(clip, job_type=JobType.VIDEOMAMA_ALPHA)
+            if self._service.job_queue.submit(job):
+                clip.set_processing(True)
+                if first_job_id is None:
+                    first_job_id = job.id
+                queued += 1
+
+        # Phase 3: queue inference for already-READY/COMPLETE clips
+        for clip in selected:
+            if routes.get(clip.name) != PipelineRoute.INFERENCE_ONLY:
+                continue
             if clip.state == ClipState.COMPLETE:
                 clip.transition_to(ClipState.READY)
             job = create_job_snapshot(clip, params)
@@ -1410,11 +1492,16 @@ class MainWindow(QMainWindow):
                 queued += 1
 
         if queued > 0:
-            label = "Batch" if raw_clips else "Inference"
-            self._start_worker_if_needed(first_job_id, job_label=label)
+            self._start_worker_if_needed(first_job_id, job_label="Pipeline")
+            gvm_n = sum(1 for r in routes.values() if r == PipelineRoute.GVM_PIPELINE)
+            vm_n = sum(1 for r in routes.values()
+                       if r in (PipelineRoute.VIDEOMAMA_PIPELINE,
+                                PipelineRoute.VIDEOMAMA_INFERENCE))
+            inf_n = sum(1 for r in routes.values() if r == PipelineRoute.INFERENCE_ONLY)
             logger.info(
-                f"Batch pipeline queued: {len(raw_clips)} GVM + "
-                f"{len(ready_clips)} inference = {queued} jobs"
+                f"Pipeline queued: {gvm_n} GVM + {vm_n} VideoMaMa + "
+                f"{inf_n} inference = {queued} initial jobs "
+                f"(+{len(self._batch_clips)} auto-chain pending)"
             )
 
     @Slot()
@@ -1588,7 +1675,7 @@ class MainWindow(QMainWindow):
                     self._clip_model.update_clip_state(clip_name, target_state)
                 break
 
-        # Batch auto-chain: GVM completed on a batch clip → queue inference
+        # Pipeline auto-chain: alpha completed on a batch clip → queue inference
         if target_state == ClipState.READY and clip_name in self._batch_clips:
             self._batch_clips.discard(clip_name)
             for clip in self._clip_model.clips:
@@ -1597,7 +1684,7 @@ class MainWindow(QMainWindow):
                     job = create_job_snapshot(clip, params)
                     job.params["_output_config"] = self._param_panel.get_output_config()
                     if self._service.job_queue.submit(job):
-                        logger.info(f"Batch auto-chain: queued inference for {clip_name}")
+                        logger.info(f"Pipeline auto-chain: queued inference for {clip_name}")
                     break
 
         # Stop timer; only exit running state if no more jobs are pending
@@ -1606,9 +1693,19 @@ class MainWindow(QMainWindow):
         if not has_more:
             self._status_bar.set_running(False)
         else:
-            # Reset progress for next job in the queue
+            # Reset progress for next job — show descriptive label
             self._status_bar.reset_progress()
-            self._status_bar.start_job_timer(label="Batch")
+            next_job = self._service.job_queue.next_job()
+            if next_job:
+                _label_map = {
+                    JobType.GVM_ALPHA: "GVM Auto",
+                    JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
+                    JobType.INFERENCE: "Inference",
+                }
+                next_label = _label_map.get(next_job.job_type, "Pipeline")
+            else:
+                next_label = "Pipeline"
+            self._status_bar.start_job_timer(label=next_label)
 
         from ui.sounds.audio_manager import UIAudio
         if target_state == ClipState.READY:

@@ -159,6 +159,7 @@ class StatusBar(QWidget):
     def update_button_state(
         self, can_run: bool, has_partial: bool, has_in_out: bool,
         batch_count: int = 0, needs_extraction: bool = False,
+        needs_pipeline: bool = False,
     ) -> None:
         """Update run/resume button visibility and text based on clip state.
 
@@ -168,11 +169,16 @@ class StatusBar(QWidget):
             has_in_out: Whether in/out markers are set on the scrubber.
             batch_count: Number of clips selected (>1 = batch mode).
             needs_extraction: Whether the clip needs frame extraction first.
+            needs_pipeline: At least one selected clip needs alpha generation.
         """
         if needs_extraction:
             self._run_btn.setText("RUN EXTRACTION")
             self._run_btn.setEnabled(True)
             self._run_mode = "extraction"
+        elif batch_count > 1 and needs_pipeline:
+            self._run_btn.setText("RUN PIPELINE")
+            self._run_btn.setEnabled(True)
+            self._run_mode = "inference"
         elif batch_count > 1:
             self._run_btn.setText(f"RUN {batch_count} CLIPS")
             self._run_btn.setEnabled(True)
