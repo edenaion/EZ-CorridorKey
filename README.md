@@ -10,7 +10,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Configure inference | Terminal prompts | Sliders, dropdowns, checkboxes |
 | Monitor progress | Terminal text output | Progress bars, frame counter, ETA |
 | Preview results | Open output folder manually | Real-time dual viewer (input vs output) |
-| Job management | One clip at a time | Queue with batch processing |
+| Job management | One clip at a time | Queue with batch processing + full pipeline mode |
 | GPU monitoring | None | Live VRAM meter in brand bar |
 | Keyboard shortcuts | None | 20+ hotkeys |
 | Sound feedback | None | 7 context-aware sound effects |
@@ -111,6 +111,17 @@ For difficult shots, use the annotation brush:
 ### 3. Run Inference
 
 Your clip is now **READY** (yellow badge). Adjust parameters as needed, then click **RUN INFERENCE** (or **Ctrl+R**).
+
+### Batch Pipeline (Unattended)
+
+Select multiple clips in the I/O tray (Ctrl+click or Shift+click), then click **RUN PIPELINE** in the status bar. The system automatically:
+
+1. Detects each clip's state and annotations
+2. Exports masks and runs **VideoMaMa** for annotated clips
+3. Runs **GVM Auto** for unannotated RAW clips
+4. Chains **inference** after each alpha generation completes
+
+The entire pipeline is cancellable (Esc) and checkpointable — if interrupted, restarting picks up where each clip left off.
 
 ### 4. Review
 
