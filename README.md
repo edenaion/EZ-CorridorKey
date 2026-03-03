@@ -187,7 +187,7 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 |----------|--------|
 | **1** | Foreground annotation brush (green) |
 | **2** | Background annotation brush (red) |
-| **C** | Cycle foreground color (green / blue) |
+| **C** | Cycle foreground brush color (green / blue) |
 | **Shift + drag up/down** | Resize brush |
 | **Alt + left-drag** | Draw straight line |
 | **Ctrl+Z** | Undo last stroke on current frame |
