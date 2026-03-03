@@ -53,6 +53,7 @@ class DualViewerPanel(QWidget):
 
         # Right viewer — user-switchable modes (COMP default)
         self._output_viewer = PreviewViewport(show_scrubber=False)
+        self._output_viewer.hide_clip_info()  # redundant with left panel
         self._viewer_splitter.addWidget(self._output_viewer)
 
         # Equal split

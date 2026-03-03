@@ -259,6 +259,10 @@ class PreviewViewport(QWidget):
         self._frame_index = None
         self._current_stem_idx = -1
 
+    def hide_clip_info(self) -> None:
+        """Hide the clip info label (used on right panel to avoid duplication)."""
+        self._clip_info.hide()
+
     def navigate_to_frame(self, stem_index: int) -> None:
         """Public method for external scrubber to drive navigation."""
         self._navigate_to(stem_index)
