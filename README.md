@@ -1,6 +1,4 @@
-# EZ-CorridorKey
-
-**[v1.1.1](CHANGELOG.md)** · CC-BY-NC-SA-4.0
+# EZ-CorridorKey **[v1.1.1](CHANGELOG.md)**
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
