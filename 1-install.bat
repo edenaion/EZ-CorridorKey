@@ -196,13 +196,44 @@ if /i "!INSTALL_VM!"=="y" (
     .venv\Scripts\python.exe scripts\setup_models.py --videomama
 )
 
+REM ── Create desktop shortcut ──
+echo.
+set /p CREATE_SHORTCUT="  Create desktop shortcut? [Y/n]: "
+if /i "!CREATE_SHORTCUT!"=="n" goto :skip_shortcut
+
+set "SHORTCUT_PATH=%USERPROFILE%\Desktop\CorridorKey.lnk"
+set "TARGET_PATH=%CD%\.venv\Scripts\pythonw.exe"
+set "ICON_PATH=%CD%\ui\theme\corridorkey.ico"
+set "WORK_DIR=%CD%"
+
+echo $ws = New-Object -ComObject WScript.Shell > "%TEMP%\mk_shortcut.ps1"
+echo $s = $ws.CreateShortcut("!SHORTCUT_PATH!") >> "%TEMP%\mk_shortcut.ps1"
+echo $s.TargetPath = "!TARGET_PATH!" >> "%TEMP%\mk_shortcut.ps1"
+echo $s.Arguments = "main.py" >> "%TEMP%\mk_shortcut.ps1"
+echo $s.WorkingDirectory = "!WORK_DIR!" >> "%TEMP%\mk_shortcut.ps1"
+echo $s.IconLocation = "!ICON_PATH!" >> "%TEMP%\mk_shortcut.ps1"
+echo $s.WindowStyle = 7 >> "%TEMP%\mk_shortcut.ps1"
+echo $s.Description = "CorridorKey - AI Green Screen" >> "%TEMP%\mk_shortcut.ps1"
+echo $s.Save() >> "%TEMP%\mk_shortcut.ps1"
+powershell -ExecutionPolicy ByPass -File "%TEMP%\mk_shortcut.ps1" >nul 2>&1
+del "%TEMP%\mk_shortcut.ps1" >nul 2>&1
+
+if exist "!SHORTCUT_PATH!" (
+    echo   [OK] Desktop shortcut created (no console window)
+    echo   Tip: right-click it to pin to taskbar
+) else (
+    echo   [WARN] Shortcut creation failed — you can pin 2-start.bat manually
+)
+
+:skip_shortcut
+
 REM ── Done ──
 echo.
 echo  ========================================
 echo   Installation complete!
 echo  ========================================
 echo.
-echo   To launch: double-click 2-start.bat
+echo   To launch: double-click 2-start.bat (or the desktop shortcut)
 echo   Or run:    2-start.bat
 echo.
 echo   To download optional models later:

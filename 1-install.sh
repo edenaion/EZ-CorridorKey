@@ -186,13 +186,78 @@ if [[ "${INSTALL_VM,,}" == "y" ]]; then
     .venv/bin/python scripts/setup_models.py --videomama
 fi
 
+# ── Create desktop shortcut ──
+echo ""
+read -rp "  Create desktop shortcut? [Y/n]: " CREATE_SHORTCUT
+if [[ "${CREATE_SHORTCUT,,}" != "n" ]]; then
+    ICON_PATH="$SCRIPT_DIR/ui/theme/corridorkey.png"
+    if [ "$OS_TYPE" = "macos" ]; then
+        # macOS: create a minimal .app bundle on Desktop (no Terminal window)
+        APP_DIR="$HOME/Desktop/CorridorKey.app/Contents/MacOS"
+        mkdir -p "$APP_DIR"
+        mkdir -p "$HOME/Desktop/CorridorKey.app/Contents/Resources"
+        # Copy icon if available
+        if [ -f "$ICON_PATH" ]; then
+            cp "$ICON_PATH" "$HOME/Desktop/CorridorKey.app/Contents/Resources/corridorkey.png"
+        fi
+        cat > "$HOME/Desktop/CorridorKey.app/Contents/Info.plist" <<PLISTEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>CorridorKey</string>
+    <key>CFBundleExecutable</key><string>launch</string>
+    <key>CFBundleIconFile</key><string>corridorkey</string>
+    <key>LSUIElement</key><false/>
+</dict>
+</plist>
+PLISTEOF
+        cat > "$APP_DIR/launch" <<LAUNCHEOF
+#!/usr/bin/env bash
+cd "$SCRIPT_DIR"
+.venv/bin/python main.py
+LAUNCHEOF
+        chmod +x "$APP_DIR/launch"
+        if [ -d "$HOME/Desktop/CorridorKey.app" ]; then
+            echo "  [OK] Desktop app created (CorridorKey.app — no Terminal window)"
+            echo "  Tip: drag it to the Dock for quick access"
+        else
+            echo "  [WARN] App creation failed"
+        fi
+    else
+        # Linux: create a .desktop file
+        DESKTOP_FILE="$HOME/.local/share/applications/corridorkey.desktop"
+        mkdir -p "$HOME/.local/share/applications"
+        cat > "$DESKTOP_FILE" <<DSKEOF
+[Desktop Entry]
+Name=CorridorKey
+Comment=AI Green Screen Keyer
+Exec=$SCRIPT_DIR/2-start.sh
+Icon=$ICON_PATH
+Terminal=false
+Type=Application
+Categories=Graphics;Video;
+DSKEOF
+        # Also copy to Desktop if it exists
+        if [ -d "$HOME/Desktop" ]; then
+            cp "$DESKTOP_FILE" "$HOME/Desktop/CorridorKey.desktop"
+            chmod +x "$HOME/Desktop/CorridorKey.desktop"
+        fi
+        if [ -f "$DESKTOP_FILE" ]; then
+            echo "  [OK] Desktop shortcut created — also added to app menu"
+        else
+            echo "  [WARN] Shortcut creation failed"
+        fi
+    fi
+fi
+
 # ── Done ──
 echo ""
 echo " ========================================"
 echo "  Installation complete!"
 echo " ========================================"
 echo ""
-echo "  To launch: ./2-start.sh"
+echo "  To launch: ./2-start.sh (or the desktop shortcut)"
 echo ""
 echo "  To download optional models later:"
 echo "    .venv/bin/python scripts/setup_models.py --gvm"
