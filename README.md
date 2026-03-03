@@ -314,7 +314,7 @@ Only one model is loaded at a time. A 12 GB GPU handles all three models comfort
 
 This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey), licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
-GUI/SFX/Workflow enhancements by [Ed Zisk](https://github.com/edenaion).
+GUI/SFX/Workflow enhancements by [Ed Zisk](https://www.edzisk.com).
 Logo by [Sara Ann Stewart](https://www.clade.design/).
 
 If you use or build on this project, please credit back.
