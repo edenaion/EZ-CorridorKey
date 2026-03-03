@@ -324,6 +324,7 @@ class IOTrayPanel(QWidget):
     files_imported = Signal(list)    # list of video file paths
     extract_requested = Signal(list) # list[ClipEntry] — re-run extraction
     export_video_requested = Signal(object)  # ClipEntry — export as video
+    reset_in_out_requested = Signal()  # clear all in/out markers
 
     def __init__(self, model: ClipListModel, parent=None):
         super().__init__(parent)
@@ -360,6 +361,12 @@ class IOTrayPanel(QWidget):
         self._input_header.setObjectName("trayHeader")
         input_header_row.addWidget(self._input_header)
         input_header_row.addStretch()
+
+        self._reset_io_btn = QPushButton("RESET I/O")
+        self._reset_io_btn.setObjectName("trayAddBtn")
+        self._reset_io_btn.setToolTip("Clear in/out markers on all clips")
+        self._reset_io_btn.clicked.connect(self._on_reset_in_out)
+        input_header_row.addWidget(self._reset_io_btn)
 
         self._add_btn = QPushButton("+ ADD")
         self._add_btn.setObjectName("trayAddBtn")
@@ -430,6 +437,42 @@ class IOTrayPanel(QWidget):
         menu.addAction("Import Folder...", self._import_folder)
         menu.addAction("Import Video(s)...", self._import_videos)
         menu.exec(self._add_btn.mapToGlobal(self._add_btn.rect().bottomLeft()))
+
+    def _on_reset_in_out(self) -> None:
+        """Reset all in/out markers with double confirmation."""
+        # Count clips that actually have in/out markers
+        clips_with_range = [c for c in self._model.clips if c.in_out_range is not None]
+        if not clips_with_range:
+            QMessageBox.information(
+                self, "No Markers",
+                "No clips have in/out markers set.",
+            )
+            return
+
+        n = len(clips_with_range)
+        # First confirmation
+        result = QMessageBox.question(
+            self, "Reset In/Out Markers",
+            f"This will clear in/out markers on {n} clip{'s' if n > 1 else ''}.\n\n"
+            "All clips will revert to full-clip processing.\n"
+            "Continue?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if result != QMessageBox.Yes:
+            return
+
+        # Second confirmation
+        result2 = QMessageBox.warning(
+            self, "Confirm Reset",
+            f"Are you sure? This cannot be undone.\n\n"
+            f"Clearing in/out markers on {n} clip{'s' if n > 1 else ''}.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if result2 != QMessageBox.Yes:
+            return
+
+        self.reset_in_out_requested.emit()
+        logger.info(f"Reset in/out markers requested for {n} clips")
 
     def _import_folder(self) -> None:
         dir_path = QFileDialog.getExistingDirectory(

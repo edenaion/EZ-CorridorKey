@@ -714,6 +714,7 @@ class MainWindow(QMainWindow):
         self._io_tray.files_imported.connect(self._on_tray_files_imported)
         self._io_tray.extract_requested.connect(self._on_extract_requested)
         self._io_tray.export_video_requested.connect(self._on_export_video)
+        self._io_tray.reset_in_out_requested.connect(self._on_reset_all_in_out)
 
         # Status bar buttons
         self._status_bar.run_clicked.connect(self._on_run_inference)
@@ -1209,6 +1210,21 @@ class MainWindow(QMainWindow):
             save_in_out_range(self._current_clip.root_path, rng)
         self._refresh_button_state()
 
+    def _on_reset_all_in_out(self) -> None:
+        """Clear in/out markers on all clips (called from IO tray button)."""
+        from backend.project import save_in_out_range
+        count = 0
+        for clip in self._clip_model.clips:
+            if clip.in_out_range is not None:
+                clip.in_out_range = None
+                save_in_out_range(clip.root_path, None)
+                count += 1
+        # Clear the scrubber if current clip was affected
+        if self._current_clip:
+            self._dual_viewer._scrubber.clear_in_out()
+        self._refresh_button_state()
+        logger.info(f"Reset in/out markers on {count} clips")
+
     # ── Live Reprocess (Codex: through GPU queue, not parallel) ──
 
     @Slot()
@@ -1381,6 +1397,11 @@ class MainWindow(QMainWindow):
         for clip in ready_clips:
             job = create_job_snapshot(clip, params)
             job.params["_output_config"] = output_config
+            if clip.in_out_range:
+                job.params["_frame_range"] = (
+                    clip.in_out_range.in_point,
+                    clip.in_out_range.out_point,
+                )
             if self._service.job_queue.submit(job):
                 queued += 1
 
@@ -1486,6 +1507,11 @@ class MainWindow(QMainWindow):
                 clip.transition_to(ClipState.READY)
             job = create_job_snapshot(clip, params)
             job.params["_output_config"] = output_config
+            if clip.in_out_range:
+                job.params["_frame_range"] = (
+                    clip.in_out_range.in_point,
+                    clip.in_out_range.out_point,
+                )
             if self._service.job_queue.submit(job):
                 if first_job_id is None:
                     first_job_id = job.id
@@ -1683,6 +1709,11 @@ class MainWindow(QMainWindow):
                     params = self._param_panel.get_params()
                     job = create_job_snapshot(clip, params)
                     job.params["_output_config"] = self._param_panel.get_output_config()
+                    if clip.in_out_range:
+                        job.params["_frame_range"] = (
+                            clip.in_out_range.in_point,
+                            clip.in_out_range.out_point,
+                        )
                     if self._service.job_queue.submit(job):
                         logger.info(f"Pipeline auto-chain: queued inference for {clip_name}")
                     break

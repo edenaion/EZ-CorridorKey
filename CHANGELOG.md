@@ -4,6 +4,21 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.1.1] - 2026-03-03 — Pipeline In/Out Fix, Reset I/O Button
+
+### Pipeline Fix
+- **Batch pipeline now respects per-clip in/out markers** — inference jobs use each clip's in/out range instead of always processing the full clip
+- Fixed in all three batch paths: RUN PIPELINE (Phase 3 direct + auto-chain after alpha), and Ctrl+Shift+R (Run All Ready)
+- Alpha generation (GVM / VideoMaMa) still always processes the full clip — only inference is scoped to in/out range
+
+### Reset I/O Button
+- New **RESET I/O** button in the I/O tray header (next to + ADD)
+- Clears in/out markers on all clips at once — reverts to full-clip processing
+- Double confirmation required: "Continue?" then "Are you sure? Cannot be undone."
+- Shows count of affected clips; disabled message if no markers are set
+
+---
+
 ## [1.1.0] - 2026-03-03 — EXR DWAB Half-Float Extraction
 
 ### Frame Extraction Overhaul
