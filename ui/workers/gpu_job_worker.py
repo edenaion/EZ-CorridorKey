@@ -150,7 +150,7 @@ class GPUJobWorker(QThread):
         if clip is None or params is None:
             raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip or params snapshot")
 
-        def on_progress(clip_name: str, current: int, total: int) -> None:
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
             self.progress.emit(job.id, clip_name, current, total)
 
             # Throttled preview — every N frames, save a comp preview to temp
@@ -179,7 +179,7 @@ class GPUJobWorker(QThread):
         if clip is None:
             raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
 
-        def on_progress(clip_name: str, current: int, total: int) -> None:
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
             self.progress.emit(job.id, clip_name, current, total)
 
         def on_warning(message: str) -> None:
@@ -200,7 +200,7 @@ class GPUJobWorker(QThread):
         if clip is None:
             raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
 
-        def on_progress(clip_name: str, current: int, total: int) -> None:
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
             self.progress.emit(job.id, clip_name, current, total)
 
         def on_warning(message: str) -> None:
