@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from PySide6.QtCore import QObject, QSettings, Qt, Signal, Slot
 from PySide6.QtGui import QCursor, QFont, QKeySequence, QMouseEvent, QShortcut
@@ -21,7 +20,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-_EASTERN = ZoneInfo("America/New_York")
 _MAX_LINES = 5000
 
 # Color map per log level
@@ -55,7 +53,7 @@ class _QtLogHandler(logging.Handler, QObject):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            dt = datetime.fromtimestamp(record.created, tz=_EASTERN)
+            dt = datetime.fromtimestamp(record.created)
             ts = dt.strftime("%H:%M:%S")
             level = record.levelname
             color = _LEVEL_COLORS.get(level, "#E0E0E0")
