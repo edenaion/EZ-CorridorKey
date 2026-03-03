@@ -45,10 +45,10 @@ Because GVM and VideoMaMa have huge model file sizes and extreme hardware requir
 1.  Clone or download this repository.
 2.  Ensure you have [Python 3.10+](https://python.org) installed (check "Add to PATH" on Windows).
 3.  Run the installer for your platform:
-    *   **Windows:** Double-click `install.bat`
-    *   **macOS / Linux:** Open a terminal and run `chmod +x install.sh && ./install.sh`
+    *   **Windows:** Double-click `1-install.bat`
+    *   **macOS / Linux:** Open a terminal and run `chmod +x 1-install.sh && ./1-install.sh`
 4.  The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), and model downloads. It will prompt you about optional models (GVM, VideoMaMa).
-5.  To launch: double-click `start.bat` (Windows) or run `./start.sh` (macOS/Linux).
+5.  To launch: double-click `2-start.bat` (Windows) or run `./2-start.sh` (macOS/Linux).
 
 **What the installer does:**
 *   Installs [uv](https://docs.astral.sh/uv/) (fast Python package manager) — falls back to pip if needed
@@ -78,8 +78,8 @@ python scripts/setup_models.py --videomama      # VideoMaMa alpha generator (~37
 
 **Updating:**
 To get the latest bug fixes and features, run the updater:
-*   **Windows:** Double-click `update.bat`
-*   **macOS / Linux:** `./update.sh`
+*   **Windows:** Double-click `3-update.bat`
+*   **macOS / Linux:** `./3-update.sh`
 
 This pulls the latest code and updates dependencies. Your projects, settings, and model weights are preserved.
 

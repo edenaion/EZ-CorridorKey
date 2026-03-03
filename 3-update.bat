@@ -58,7 +58,7 @@ if !UV_AVAILABLE!==0 (
         pip install -e . 2>&1
         echo   [OK] Dependencies updated via pip
     ) else (
-        echo   [ERROR] No .venv found. Run install.bat first.
+        echo   [ERROR] No .venv found. Run 1-install.bat first.
         goto :fail
     )
 )
@@ -73,7 +73,7 @@ echo  ========================================
 echo   Update complete!
 echo  ========================================
 echo.
-echo   To launch: double-click start.bat
+echo   To launch: double-click 2-start.bat
 echo.
 pause
 exit /b 0

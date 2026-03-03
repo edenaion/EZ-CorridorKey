@@ -51,7 +51,7 @@ if [ "$UV_AVAILABLE" = "0" ]; then
         pip install -e . 2>&1
         echo "  [OK] Dependencies updated via pip"
     else
-        echo "  [ERROR] No .venv found. Run install.sh first."
+        echo "  [ERROR] No .venv found. Run 1-install.sh first."
         exit 1
     fi
 fi
@@ -66,5 +66,5 @@ echo "  ========================================"
 echo "   Update complete!"
 echo "  ========================================"
 echo ""
-echo "  To launch: ./start.sh"
+echo "  To launch: ./2-start.sh"
 echo ""

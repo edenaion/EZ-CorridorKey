@@ -193,8 +193,8 @@ echo  ========================================
 echo   Installation complete!
 echo  ========================================
 echo.
-echo   To launch: double-click start.bat
-echo   Or run:    start.bat
+echo   To launch: double-click 2-start.bat
+echo   Or run:    2-start.bat
 echo.
 echo   To download optional models later:
 echo     .venv\Scripts\python scripts\setup_models.py --gvm
