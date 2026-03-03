@@ -76,6 +76,13 @@ python scripts/setup_models.py --gvm            # GVM alpha generator (~6GB)
 python scripts/setup_models.py --videomama      # VideoMaMa alpha generator (~37GB)
 ```
 
+**Updating:**
+To get the latest bug fixes and features, run the updater:
+*   **Windows:** Double-click `update.bat`
+*   **macOS / Linux:** `./update.sh`
+
+This pulls the latest code and updates dependencies. Your projects, settings, and model weights are preserved.
+
 ### 2. How it Works
 
 CorridorKey requires two inputs to process a frame:
