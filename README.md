@@ -93,7 +93,14 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 ### 1. Import
 
-Drop a video file onto the welcome screen (or File > Import Clips > Import Video). The video is extracted to an image sequence automatically.
+Drop a video file onto the welcome screen (or File > Import Clips > Import Video). The video is automatically extracted to a high-quality image sequence:
+
+1. **FFmpeg extracts** each frame as **EXR half-float** (ZIP16 compression)
+2. **Recompression pass** converts ZIP16 → **DWAB** (VFX-standard lossy compression, ~4× smaller)
+
+This two-pass approach preserves full floating-point precision from the video decoder — no 8-bit quantization, no banding. Even 8-bit source video benefits because FFmpeg's internal YUV→RGB conversion stays in float, avoiding rounding errors that accumulate in integer pipelines. The DWAB-compressed EXR frames are typically comparable in size to PNG while retaining 16-bit half-float dynamic range.
+
+The recompression runs in a separate process so the UI stays fully responsive during extraction.
 
 ### 2. Generate Alpha Hint
 
@@ -258,7 +265,7 @@ Each imported clip creates a project folder:
 Projects/
   260301_093000_Woman_Jumps/
     Source/              # Original video
-    Frames/              # Extracted image sequence
+    Frames/              # Extracted EXR DWAB half-float image sequence
     AlphaHint/           # Generated alpha hints
     Output/
       FG/                # Foreground EXR/PNG
