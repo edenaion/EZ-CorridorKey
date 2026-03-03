@@ -156,8 +156,9 @@ class MainWindow(QMainWindow):
         self._bg_cache: QImage | None = None
         # Batch pipeline: clip names queued for GVM→inference auto-chain
         self._batch_clips: set[str] = set()
-        # Debug console (lazy-created on first toggle)
-        self._debug_console: DebugConsoleWidget | None = None
+        # Debug console — created eagerly so log handler captures from startup
+        from ui.widgets.debug_console import DebugConsoleWidget
+        self._debug_console = DebugConsoleWidget()
 
         # Data model
         self._clip_model = ClipListModel()
@@ -2126,9 +2127,6 @@ class MainWindow(QMainWindow):
 
     def _toggle_debug_console(self) -> None:
         """Toggle the in-app debug console (F12)."""
-        from ui.widgets.debug_console import DebugConsoleWidget
-        if self._debug_console is None:
-            self._debug_console = DebugConsoleWidget()
         if self._debug_console.isVisible():
             self._debug_console.hide()
         else:

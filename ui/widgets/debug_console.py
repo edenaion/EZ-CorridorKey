@@ -6,6 +6,7 @@ Captures all Python logging output via a custom handler attached to the root log
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 
 from PySide6.QtCore import QObject, QSettings, Qt, Signal, Slot
@@ -99,6 +100,7 @@ class DebugConsoleWidget(QWidget):
 
         self._build_ui()
         self._restore_geometry()
+        self._backfill_session_log()
 
         # Local shortcut so Escape closes console when it has focus
         # (F12 toggle is handled globally via ShortcutRegistry with ApplicationShortcut)
@@ -247,25 +249,71 @@ class DebugConsoleWidget(QWidget):
         if self._paused:
             return
 
-        # Always buffer (trim oldest if over limit)
-        self._log_buffer.append((html, levelno))
+        # Always buffer (trim newest-first; drop oldest beyond limit)
+        self._log_buffer.insert(0, (html, levelno))
         if len(self._log_buffer) > _MAX_LINES:
-            self._log_buffer = self._log_buffer[-(_MAX_LINES - 500):]
+            self._log_buffer = self._log_buffer[:_MAX_LINES - 500]
 
-        # Only display if it passes the current filter
+        # Prepend so newest entries appear at the top
         if levelno >= self._min_level:
-            self._output.append(html)
+            cursor = self._output.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            cursor.insertHtml(html + "<br>")
+            self._output.moveCursor(cursor.MoveOperation.Start)
 
     def _on_level_changed(self, text: str) -> None:
         self._min_level = logging.DEBUG if text == "ALL" else getattr(logging, text, logging.DEBUG)
         self._refilter()
 
     def _refilter(self) -> None:
-        """Re-render the log output from the buffer using the current level filter."""
+        """Re-render the log output from the buffer (newest first)."""
         self._output.clear()
+        # Buffer is already newest-first, so just append in order
         for html, levelno in self._log_buffer:
             if levelno >= self._min_level:
                 self._output.append(html)
+
+    # --- Backfill from session log file ----------------------------------
+
+    _LOG_RE = re.compile(
+        r"^[\d-]+\s+([\d:]+)\s+\[(\w+)\s*\]\s+([\w.]+):\s+(.*)$"
+    )
+    _LEVEL_MAP = {n: getattr(logging, n, logging.DEBUG) for n in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")}
+
+    def _backfill_session_log(self) -> None:
+        """Read any lines already written to this session's log file."""
+        # Find the RotatingFileHandler on the root logger
+        for h in logging.getLogger().handlers:
+            if hasattr(h, "baseFilename"):
+                try:
+                    with open(h.baseFilename, "r", encoding="utf-8", errors="replace") as f:
+                        lines = f.readlines()
+                except OSError:
+                    return
+                # Parse and inject into buffer (oldest first, then reverse)
+                entries: list[tuple[str, int]] = []
+                for line in lines:
+                    line = line.rstrip()
+                    m = self._LOG_RE.match(line)
+                    if not m:
+                        continue
+                    ts, level, name, msg = m.group(1), m.group(2), m.group(3), m.group(4)
+                    msg = msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    color = _LEVEL_COLORS.get(level, "#E0E0E0")
+                    html = (
+                        f'<span style="color:#FFF203">{ts}</span> '
+                        f'<span style="color:{color}">[{level:<7s}]</span> '
+                        f'<span style="color:#808070">{name}:</span> '
+                        f'<span style="color:#E0E0E0">{msg}</span>'
+                    )
+                    levelno = self._LEVEL_MAP.get(level, logging.DEBUG)
+                    entries.append((html, levelno))
+                if entries:
+                    # Buffer is newest-first
+                    entries.reverse()
+                    self._log_buffer = entries + self._log_buffer
+                    self._refilter()
+                return  # only use the first file handler found
 
     def _toggle_pause(self) -> None:
         self._paused = not self._paused
