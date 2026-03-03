@@ -1926,8 +1926,8 @@ class MainWindow(QMainWindow):
         self._extract_progress.pop(clip_name, None)
         if not self._extract_worker.is_busy:
             self._status_bar.reset_progress()
-        from ui.sounds.audio_manager import UIAudio
-        UIAudio.frame_extract_done()
+            from ui.sounds.audio_manager import UIAudio
+            UIAudio.frame_extract_done()
 
     @Slot(str, str)
     def _on_extract_error(self, clip_name: str, error_msg: str) -> None:
