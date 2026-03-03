@@ -1,640 +1,154 @@
-# EZ-CorridorKey GUI — User Guide
+# CorridorKey — Upstream Integration Guide
 
-> A complete reference for the PySide6 desktop interface built on top of CorridorKey.
-> Every feature documented here is traced to its source code location.
-
----
-
-## What This GUI Adds
-
-The upstream CorridorKey project is a CLI-only tool — you drag clips onto a `.bat` file, answer terminal prompts, and wait. This GUI replaces that workflow with a full desktop application while preserving 100% backward compatibility (`python main.py --cli` still runs the original wizard).
-
-| Capability | CLI (Upstream) | GUI (This Project) |
-|------------|---------------|-------------------|
-| Import clips | Drag onto .bat file | Drag-drop into app, or File > Import |
-| Configure inference | Terminal prompts | Sliders, dropdowns, checkboxes |
-| Monitor progress | Terminal text output | Progress bars, frame counter, ETA |
-| Preview results | Open output folder manually | Real-time dual viewer (input vs output) |
-| Job management | One clip at a time | Queue with batch processing |
-| GPU monitoring | None | Live VRAM meter in brand bar |
-| Keyboard shortcuts | None | 18 hotkeys |
-| Sound feedback | None | 7 context-aware sound effects |
-| Session persistence | None | Recent projects, auto-save |
-| Annotation / masking | Manual external tool | Built-in brush tool for VideoMaMa masks |
+> This document preserves the original upstream README from Niko Pueringer's
+> CorridorKey project. If you're integrating the EZ-CorridorKey GUI into the
+> upstream repository, this is the reference for the CLI workflow, hardware
+> requirements, and project philosophy that the GUI wraps.
+>
+> **For end-user documentation, see the root [README.md](../README.md).**
 
 ---
 
-## Application Layout
 
-When you launch the GUI, you'll see the **Welcome Screen**. After importing clips, the workspace has five main areas:
+https://github.com/user-attachments/assets/1fb27ea8-bc91-4ebc-818f-5a3b5585af08
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ CORRIDORKEY    File  Edit  View  Help              RTX 5090  ██ 4GB │
-├──────┬───────────────────────┬──────────────────────┬───────────────┤
-│      │ 241 frames · RAW      │ 241 frames · RAW     │ ALPHA GEN    │
-│  Q   │ [INPUT] FG MATTE COMP │ INPUT FG MATTE [COMP]│  GVM AUTO    │
-│  U   ├───────────────────────┼──────────────────────┤  VIDEOMAMA   │
-│  E   │                       │                      │  EXPORT MASK │
-│  U   │                       │                      │──────────────│
-│  E   │   INPUT viewer        │   OUTPUT viewer      │ INFERENCE    │
-│      │   (left image)        │   (right image)      │  Color Space │
-│      │                       │                      │  Despill     │
-│ tab  │                       │                      │  Despeckle   │
-│      │                       │                      │  Refiner     │
-│      │                       │                      │  Live Preview│
-│      │                       │                      │──────────────│
-│      │                       │                      │ OUTPUT       │
-│      │                       │                      │  ☑ FG       │
-│      │                       │                      │  ☑ Matte    │
-│      │                       │                      │  ☑ Comp     │
-│      │                       │                      │  ☑ Processed │
-│      ├──────────────────────────────────────────────┤  ◀ ▶▶  100% │
-│      │ INPUT (8)                + ADD   EXPORTS (0) │              │
-│      │ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐    │              │
-│      │ │MASKD│ │ RAW │ │ RAW │ │ RAW │ │ RAW │ ·· │              │
-│      │ │thumb│ │thumb│ │thumb│ │thumb│ │thumb│    │              │
-│      │ └─────┘ └─────┘ └─────┘ └─────┘ └─────┘    │              │
-├──────┴──────────────────────────────────────────────┴──────────────┤
-│  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  [RUN INF] │
-└───────────────────────────────────────────────────────────────────  ┘
-```
 
-**Layout breakdown:**
-- **Brand bar + menu** — single top row with CORRIDORKEY logo (left), menu bar (center-left), GPU name + VRAM meter (right)
-- **Queue panel** — collapsible narrow sidebar on far left, vertical "QUEUE" tab always visible (24px)
-- **Dual viewer** — center area, split into left (INPUT locked) and right (switchable mode), each with its own view mode buttons above
-- **Parameter panel** — full-height right sidebar (240px), scrollable: Alpha Generation → Inference → Output sections
-- **I/O tray** — horizontal thumbnail strip below the dual viewer, with INPUT/EXPORTS tabs and +ADD button
-- **Status bar** — minimal bottom row with progress bar and RUN INFERENCE button
+When you film something against a green screen, the edges of your subject inevitably blend with the green background. This creates pixels that are a mix of your subject's color and the green screen's color. Traditional keyers struggle to untangle these colors, forcing you to spend hours building complex edge mattes or manually rotoscoping. Even modern "AI Roto" solutions typically output a harsh binary mask, completely destroying the delicate, semi-transparent pixels needed for a realistic composite.
 
-**Source:** Layout constructed in [main_window.py:301-362](ui/main_window.py#L301-L362)
+I built CorridorKey to solve this *unmixing* problem.
 
----
+You input a raw green screen frame, and the neural network completely separates the foreground object from the green screen. For every single pixel, even the highly transparent ones like motion blur or out-of-focus edges, the model predicts the true, un-multiplied straight color of the foreground element, alongside a clean, linear alpha channel. It doesn't just guess what is opaque and what is transparent; it actively reconstructs the color of the foreground object as if the green screen was never there.
 
-## Welcome Screen
+No more fighting with garbage mattes or agonizing over "core" vs "edge" keys. Give CorridorKey a hint of what you want, and it separates the light for you.
 
-**Source:** [welcome_screen.py](ui/widgets/welcome_screen.py)
+## Alert!
 
-The first thing you see when launching the app.
+This is a brand new release, I'm sure you will discover many ways it can be improved! I invite everyone to help. Join us on the "Corridor Creates" Discord to share ideas, work, forks, etc! https://discord.gg/zvwUrdWXJm
 
-**Left panel (320px):** Recent projects — click to reopen a previous workspace. Each card shows the project name, path, and last-opened date. Click the folder icon to open in Explorer, or the × to remove from recents.
+Also, if you are a novice at using python scripts much like I was, consider downloading a smart IDE like Antigravity (from google, it's free), downloading this repository, and then asking Antigravity to help you get up and running. I even made a LLM Handover doc in the docs/ directory.
 
-**Right panel:** Drop zone — drag video files or image sequence folders directly onto it. You can also click the Browse button or click anywhere in the drop zone.
+Naturally, I have not tested everything. If you encounter errors, please consider patching the code as needed and submitting a pull request.
 
-**Accepted file types:**
-- **Video:** `.mp4` `.mov` `.avi` `.mkv` `.mxf` `.webm` `.m4v`
-- **Image sequences:** `.exr` `.png` `.tif` `.tiff` `.jpg` `.jpeg` `.dpx`
+## Features
 
-When you drop a video, it's automatically extracted to an image sequence via FFmpeg. Image sequence folders are loaded directly.
+*   **Physically Accurate Unmixing:** Clean extraction of straight color foreground and linear alpha channels, preserving hair, motion blur, and translucency.
+*   **Resolution Independent:** The engine dynamically scales inference to handle 4K plates while predicting using its native 2048x2048 high-fidelity backbone.
+*   **VFX Standard Outputs:** Natively reads and writes 16-bit and 32-bit Linear float EXR files, preserving true color math for integration in Nuke, Fusion, or Resolve.
+*   **Auto-Cleanup:** Includes a morphological cleanup system to automatically prune any tracking markers or tiny background features that slip through CorridorKey's detection.
 
----
+## Hardware Requirements
 
-## Clip Browser (Left Sidebar)
+This project was designed and built on a Linux workstation (Puget Systems PC) equipped with an NVIDIA RTX Pro 6000 with 96GB of VRAM. This project is not yet optimized for sub 24 gig VRAM systems, but with the help of the community, maybe we can make that happen.
 
-**Source:** [clip_browser.py](ui/widgets/clip_browser.py)
+*   **CorridorKey:** Running inference natively at 2048x2048 requires approximately **22.7 GB of VRAM**. You will need at least a 24GB GPU (such as a 3090, 4090, or the upcoming 5090). It is highly recommended to run this on a secondary GPU that is not driving your OS/displays, or on a rented cloud instance (like Runpod or Google Colab) to avoid Out-Of-Memory errors.
+*   **GVM (Optional):** Requires approximately **80 GB of VRAM** and utilizes massive Stable Video Diffusion models.
+*   **VideoMaMa (Optional):** Natively requires a massive chunk of VRAM as well (originally 80GB+). While the community has tweaked the architecture to run at less than 24GB, those extreme memory optimizations have not yet been fully implemented in this repository.
 
-The clip browser shows all clips in the current project. Each clip card displays:
-- **Thumbnail** (60×40px) — first frame of the clip
-- **State badge** — colored indicator showing processing state
-- **Clip name** (bold) — editable via right-click > Rename
-- **Processing indicator** — animated "..." when a job is running
+Because GVM and VideoMaMa have huge model file sizes and extreme hardware requirements, installing their modules is completely optional. You can always provide your own Alpha Hints generated from other, lighter software.
 
-### Adding Clips
+## Getting Started
 
-Click the **+ADD** button at the top:
-- **Import Folder...** — select a directory containing an image sequence
-- **Import Video(s)...** — select one or more video files
+### 1. Installation
 
-You can also drag-and-drop files directly onto the clip browser or the I/O tray.
+**One-Click Install (Windows / macOS / Linux):**
+1.  Clone or download this repository.
+2.  Ensure you have [Python 3.10+](https://python.org) installed (check "Add to PATH" on Windows).
+3.  Run the installer for your platform:
+    *   **Windows:** Double-click `1-install.bat`
+    *   **macOS / Linux:** Open a terminal and run `chmod +x 1-install.sh && ./1-install.sh`
+4.  The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), and model downloads. It will prompt you about optional models (GVM, VideoMaMa).
+5.  To launch: double-click `2-start.bat` (Windows) or run `./2-start.sh` (macOS/Linux).
 
-### Context Menu (Right-Click)
+**What the installer does:**
+*   Installs [uv](https://docs.astral.sh/uv/) (fast Python package manager) — falls back to pip if needed
+*   Creates a `.venv` virtual environment in the project folder
+*   Auto-detects your GPU and installs the correct PyTorch variant (CUDA on NVIDIA, MPS on Apple Silicon, CPU fallback)
+*   Downloads the CorridorKey model checkpoint (383MB, required)
+*   Optionally downloads GVM (~6GB) and VideoMaMa (~37GB) alpha hint generators
+*   Checks for FFmpeg and suggests install methods if missing
 
-- **Rename Project** — change the display name
-- **Open in Explorer** — open the project folder
-- **Clear Outputs** — delete FG/Matte/Comp/Processed outputs (resets COMPLETE → READY)
-- **Delete Project** — two-stage: "Remove from List" or "Delete from Disk"
-
-### Collapsing
-
-The clip browser can be collapsed to save space. When collapsed, a floating expand button (▶) appears at position (2, 2). Default width: 220px.
-
----
-
-## Dual Viewer (Center)
-
-**Source:** [dual_viewer.py](ui/widgets/dual_viewer.py), [split_view.py](ui/widgets/split_view.py)
-
-The main preview area shows two images side by side:
-- **Left viewer** — locked to INPUT mode (original footage)
-- **Right viewer** — switchable between view modes (default: COMP)
-
-Both viewers are synced to the same frame via the shared scrubber below.
-
-### Zoom & Pan
-
-| Action | Effect |
-|--------|--------|
-| **Ctrl + scroll wheel** | Zoom in/out (0.25× to 8.0×) |
-| **Middle-click + drag** | Pan the image |
-| **Double-click** | Reset zoom to 100% |
-
-The current zoom level is shown in the bottom-right corner (e.g., "100%").
-
-### Annotation Drawing
-
-When annotation mode is active (press **1** or **2**), the viewer becomes a drawing canvas:
-
-| Action | Effect |
-|--------|--------|
-| **Left-click + drag** | Paint brush stroke |
-| **Shift + drag up/down** | Resize brush radius |
-| **Alt + left-drag** | Draw straight line |
-| **Ctrl+Z** | Undo last stroke on current frame |
-| **Ctrl+C** | Clear all annotations |
-
-Annotations are used for the VideoMaMa alpha generation workflow. Green strokes (hotkey **1**) mark foreground, red strokes (hotkey **2**) mark background.
-
-**Source:** [annotation_overlay.py](ui/widgets/annotation_overlay.py), brush interactions in [split_view.py:64-86](ui/widgets/split_view.py#L64-L86)
-
----
-
-## View Modes
-
-**Source:** [view_mode_bar.py](ui/widgets/view_mode_bar.py), enum definition in [frame_index.py:27-42](ui/preview/frame_index.py#L27-L42)
-
-The view mode bar appears at the top of each preview viewport. Five buttons let you switch what the right viewer displays:
-
-| Mode | Source Directory | What You See |
-|------|-----------------|-------------|
-| **INPUT** | `Input/` or `Frames/` | Original unprocessed footage |
-| **FG** | `Output/FG/` | Foreground with green spill removed |
-| **MATTE** | `Output/Matte/` | Alpha matte (white = opaque, black = transparent) |
-| **COMP** | `Output/Comp/` | Final key composited over checkerboard |
-| **PROCESSED** | `Output/Processed/` | Production RGBA — premultiplied linear for compositing |
-
-**COMP** is the default view. Buttons are disabled until that mode has output frames available. If the current mode becomes unavailable, the viewer falls back to COMP → INPUT → first available.
-
-**Button colors:**
-- Active: yellow (#FFF203) background, black text, bold
-- Inactive: dark (#1A1900), gray text
-- Disabled: muted text, dark border
-
----
-
-## Frame Scrubber & Timeline
-
-**Source:** [frame_scrubber.py](ui/widgets/frame_scrubber.py)
-
-The scrubber sits below the dual viewer. From left to right:
-
-### Frame Counter
-Shows "X / Y" (1-indexed) — current frame and total frame count. Fixed width 90px.
-
-### Transport Buttons
-
-| Button | Action |
-|--------|--------|
-| **◀◀** | Jump to first frame |
-| **◀** | Step back one frame |
-| **▶ / ❚❚** | Play / Pause (shows ❚❚ during playback) |
-| **▶** | Step forward one frame |
-| **▶▶** | Jump to last frame |
-
-Playback runs at **24 fps** (42ms interval) by default. When in/out markers are set and loop is enabled (Preferences), playback loops within that range.
-
-### Coverage Bar
-
-**Source:** [frame_scrubber.py:21-120](ui/widgets/frame_scrubber.py#L21-L120) (CoverageBar class)
-
-A thin multi-lane bar above the slider showing which frames have data:
-
-| Lane | Color | Meaning |
-|------|-------|---------|
-| **Top** | Green (#2CC350) | Frames with annotation brush strokes |
-| **Middle** | White (#C8C8C8) | Frames with alpha hints (GVM or VideoMaMa) |
-| **Bottom** | Yellow (#FFF203) | Frames with inference output |
-
-Each lane is 3px tall with 1px gaps. The annotation lane only appears when annotations exist.
-
-### In/Out Markers
-
-**Source:** [frame_scrubber.py:122-318](ui/widgets/frame_scrubber.py#L122-L318) (MarkerOverlay class)
-
-Set a sub-range to process only part of a clip:
-
-| Action | Effect |
-|--------|--------|
-| Press **I** | Set in-point at current frame |
-| Press **O** | Set out-point at current frame |
-| Press **Alt+I** | Clear both markers |
-| **Drag** marker handle | Adjust in/out position |
-| **Middle-click** marker | Reset that marker to boundary |
-
-When markers are set:
-- Regions outside the range are dimmed (semi-transparent overlay)
-- RUN button changes to "RUN SELECTED"
-- Playback loops within the range (if loop enabled)
-- Markers are yellow (#FFF203) brackets with 6×8px triangle handles
-
----
-
-## Parameter Panel (Right Sidebar)
-
-**Source:** [parameter_panel.py](ui/widgets/parameter_panel.py), minimum width 240px
-
-The right sidebar contains all inference and output controls, organized into three sections.
-
-### Alpha Generation
-
-| Control | Description |
-|---------|-------------|
-| **GVM AUTO** button | Auto-generate alpha hints via GVM model. Available when clip is in RAW state. |
-| **VIDEOMAMA** button | Generate alpha from painted annotation masks. Requires frames with brush annotations. |
-| **EXPORT MASKS** button | Export annotation brush strokes as binary PNG masks for external VideoMaMa use. |
-
-**Source:** [parameter_panel.py:56-102](ui/widgets/parameter_panel.py#L56-L102)
-
-### Inference Controls
-
-| Control | Type | Range | Default | Description |
-|---------|------|-------|---------|-------------|
-| **Color Space** | Dropdown | sRGB, Linear | sRGB | Working color space for inference |
-| **Despill Strength** | Slider | 0.0 – 1.0 | 1.0 (slider value 10) | Green spill removal intensity. Higher = more aggressive cleanup of green fringing on edges. |
-| **Despeckle** | Checkbox + spinner | 50 – 2000 px | ON, 400 px | Morphological cleanup. Removes isolated artifacts smaller than the threshold. |
-| **Refiner Scale** | Slider | 0.0 – 3.0 | 1.0 (slider value 10) | Edge refinement pass intensity. 0 = disabled, higher = more cleanup. |
-| **Live Preview** | Checkbox | — | OFF | Reprocess current frame when parameters change. |
-
-**Middle-click** any slider to reset it to its default value.
-
-The **Despeckle Advanced** section (Dilation + Blur) is collapsed by default. Click to expand.
-
-**Source:** [parameter_panel.py:111-188](ui/widgets/parameter_panel.py#L111-L188)
-
-### Output Format
-
-Each output channel can be individually enabled/disabled and set to EXR or PNG:
-
-| Output | Default | Default Format | Description |
-|--------|---------|---------------|-------------|
-| **FG** | ON | EXR | Foreground RGB with green spill removed |
-| **Matte** | ON | EXR | Single-channel alpha (grayscale) |
-| **Comp** | ON | PNG | Key composited over checkerboard (for review) |
-| **Processed** | ON | EXR | Full RGBA premultiplied linear (for VFX compositing) |
-
-**Source:** [parameter_panel.py:191-262](ui/widgets/parameter_panel.py#L191-L262)
-
----
-
-## Queue Panel (Left Sidebar)
-
-**Source:** [queue_panel.py](ui/widgets/queue_panel.py)
-
-The queue panel shows all pending, active, and completed jobs. It's collapsible — when collapsed, only a 24px-wide vertical "QUEUE" tab is visible. Toggle with the **Q** hotkey.
-
-### Per-Job Display
-
-Each job row (60px height) shows:
-- **Job type** — Inference, GVM Auto, VideoMaMa, or Preview
-- **Progress bar** — frame-level progress for inference, pulsing for indeterminate jobs (GVM)
-- **Status label** with color:
-
-| Status | Color | Display Text |
-|--------|-------|-------------|
-| QUEUED | Gray (#808070) | "STARTING..." |
-| RUNNING | Yellow (#FFF203) | "PROCESSING" |
-| COMPLETED | Green (#22C55E) | "DONE" |
-| CANCELLED | Gray (#808070) | "CANCELLED" (strikethrough) |
-| FAILED | Red (#D10000) | "FAILED" |
-
-- **Cancel button** (×) — cancels a running or queued job
-
-The **Clear** button in the header removes completed and cancelled jobs from the list.
-
----
-
-## I/O Tray Panel (Bottom)
-
-**Source:** [io_tray_panel.py](ui/widgets/io_tray_panel.py)
-
-A horizontal-scrolling strip at the bottom of the workspace showing clip thumbnails.
-
-### Two Sections
-
-| Tab | Shows | Purpose |
-|-----|-------|---------|
-| **INPUT** | All loaded clips | Select clips to view/process |
-| **EXPORTS** | Only COMPLETE clips | Review finished output |
-
-### Card Content
-
-Each card (130px wide) displays:
-- **Thumbnail** (110×62px) — first frame of the clip
-- **State badge** (top-right) — colored text matching clip state
-- **Clip name** (bold, elided if long)
-- **Frame count** — "N frames" or "N frames (video)"
-
-### Card Interaction
-
-| Action | Effect |
-|--------|--------|
-| **Left-click** | Select clip (loads in preview) |
-| **Ctrl+click** | Toggle multi-select |
-| **Shift+click** | Range select |
-| **Right-click** | Context menu (project options) |
-
-Export cards show a tooltip with the inference settings used (output formats, color space, despill %, refiner %, despeckle settings).
-
----
-
-## Status Bar (Bottom)
-
-**Source:** [status_bar.py](ui/widgets/status_bar.py), height 44px
-
-### Left Side
-- **Progress bar** — 6px tall, 250px max width, shows inference progress
-- **Frame counter** — "42 / 1024 frames · 3.2s/frame · ETA 52m"
-- **Warning button** (orange) — shows warning count, click to view warning details
-
-### Right Side
-- **RUN INFERENCE** button (160×32px, primary CTA)
-  - Changes to "RUN SELECTED" when in/out range is set
-  - Disabled until clip is READY or COMPLETE
-  - Hotkey: **Ctrl+R**
-- **RESUME** button — appears only when partial outputs exist from a previous run
-- **STOP** button — appears during processing, cancels current job (hotkey: **Esc**)
-
----
-
-## Brand Bar (Top)
-
-**Source:** [main_window.py:264-299](ui/main_window.py#L264-L299)
-
-The top strip shows:
-- **Left:** "CORRIDOR" (yellow #FFF203) + "KEY" (green #2CC350) in Gagarin brand font
-- **Right:** GPU name (e.g., "RTX 5090"), VRAM usage bar (80px wide, 8px tall), VRAM text ("4.2 GB / 32.0 GB")
-
-The VRAM meter updates during inference via the GPU monitor worker. Tooltip: "GPU video memory usage — updates during inference."
-
----
-
-## Preferences
-
-**Source:** [preferences_dialog.py](ui/widgets/preferences_dialog.py), access via Edit > Preferences
-
-| Setting | Default | Key | Description |
-|---------|---------|-----|-------------|
-| **Show tooltips** | ON | `ui/show_tooltips` | Show helpful tooltips on all controls |
-| **UI sounds** | ON | `ui/sounds_enabled` | Play sound effects for actions |
-| **Copy source videos** | ON | `project/copy_source_videos` | Copy imported videos into the project folder (OFF = reference in place, saves disk space) |
-| **Loop playback** | ON | `playback/loop` | Loop within in/out range during playback |
-
-Settings persist via QSettings (platform-native storage — Windows Registry on Windows).
-
----
-
-## Sound Effects
-
-**Source:** [audio_manager.py](ui/sounds/audio_manager.py)
-
-The GUI plays contextual sound cues for workflow feedback. Toggle via Ctrl+M or Edit > Preferences.
-
-| Sound | Trigger |
-|-------|---------|
-| **Hover** | Mouse enters welcome screen buttons |
-| **Click** | Any button press (auto-installed on all QPushButtons) |
-| **Error** | Job failure or validation error |
-| **Frame Extract Done** | Video extraction completes |
-| **Mask Done** | VideoMaMa mask generation completes |
-| **Inference Done** | Inference job finishes |
-| **User Cancel** | Job cancelled |
-
----
-
-## Keyboard Shortcuts
-
-**Source:** [shortcut_registry.py](ui/widgets/shortcut_registry.py), viewable in-app via Edit > Hotkeys
-
-### Global
-
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl+R** | Run inference on selected clip |
-| **Ctrl+Shift+R** | Run all ready clips (batch) |
-| **Esc** | Stop / cancel current job |
-| **Ctrl+S** | Save session |
-| **Ctrl+O** | Open project |
-| **Ctrl+M** | Toggle mute (sound on/off) |
-| **Home** | Return to welcome screen |
-| **Del** | Remove selected clips |
-| **Q** | Toggle queue panel |
-
-### Timeline
-
-| Shortcut | Action |
-|----------|--------|
-| **I** | Set in-point marker |
-| **O** | Set out-point marker |
-| **Alt+I** | Clear in/out range |
-
-### Playback
-
-| Shortcut | Action |
-|----------|--------|
-| **Space** | Play / Pause |
-
-### Annotation
-
-| Shortcut | Action |
-|----------|--------|
-| **1** | Green (foreground) annotation brush |
-| **2** | Red (background) annotation brush |
-| **Ctrl+Z** | Undo last annotation stroke |
-| **Ctrl+C** | Clear all annotations |
-
-Shortcuts are rebindable via Edit > Hotkeys. The dialog shows all shortcuts grouped by category, with click-to-rebind buttons and conflict detection.
-
----
-
-## Status Colors
-
-Clip processing states are color-coded consistently across the entire UI — clip browser, I/O tray, queue panel, and status bar.
-
-| Color | Hex | State | Meaning |
-|-------|-----|-------|---------|
-| Orange | `#FF8C00` | EXTRACTING | Video being extracted to image sequence |
-| Gray | `#808070` | RAW | Frames loaded, no alpha hint generated yet |
-| Blue | `#009ADA` | MASKED | User annotation masks painted (ready for VideoMaMa) |
-| Yellow | `#FFF203` | READY | Alpha hint available, ready for inference |
-| Green | `#22C55E` | COMPLETE | Inference finished, all outputs available |
-| Red | `#D10000` | ERROR | Processing failed — can retry |
-
----
-
-## Typical Workflow
-
-### 1. Import
-
-Drop a video file onto the welcome screen (or File > Import Clips > Import Video).
-
-The video is extracted to an image sequence automatically. You'll see the extraction progress in the status bar and hear a sound when it completes.
-
-### 2. Generate Alpha Hint
-
-Your clip is now in **RAW** state (gray badge). You need an alpha hint before running inference.
-
-**Option A — GVM Auto (one-click):**
-Click the **GVM AUTO** button in the parameter panel. GVM generates alpha hints automatically from the input frames. This works for most green screen footage.
-
-**Option B — VideoMaMa (manual masking):**
-For difficult shots, use the annotation brush:
-1. Press **1** to activate foreground mode (green)
-2. Paint over the subject on a few key frames
-3. Press **2** to switch to background mode (red)
-4. Paint over background areas
-5. Click **VIDEOMAMA** in the parameter panel
-
-VideoMaMa uses your painted masks to generate alpha hints that are more accurate for complex footage.
-
-### 3. Run Inference
-
-Your clip is now **READY** (yellow badge). Set your parameters:
-- Adjust despill, despeckle, and refiner as needed
-- Optionally set in/out markers to process a sub-range
-- Click **RUN INFERENCE** (or press **Ctrl+R**)
-
-Watch the progress in the status bar and queue panel. Use the dual viewer to compare input vs output in real-time.
-
-### 4. Review
-
-When complete (green badge), switch between view modes to inspect results:
-- **COMP** — see the key over checkerboard
-- **FG** — check for green fringing
-- **MATTE** — inspect alpha quality
-- **PROCESSED** — verify the production RGBA
-
-### 5. Export
-
-Outputs are written to the project's `Output/` subdirectories during inference. For video export, use File > Export Video.
-
----
-
-## Project Structure
-
-Each imported clip creates a project folder under `Projects/`:
-
-```
-Projects/
-  260301_093000_Woman_Jumps/
-    Source/              # Original video (copied or referenced)
-    Frames/              # Extracted image sequence
-    AlphaHint/           # Generated alpha hints (GVM or VideoMaMa)
-    Output/
-      FG/                # Foreground EXR/PNG
-      Matte/             # Alpha matte EXR/PNG
-      Comp/              # Checkerboard composite PNG
-      Processed/         # Production RGBA EXR
-    project.json         # Metadata (name, settings, in/out range)
-```
-
-**Source:** Project creation in [project.py:52-107](backend/project.py#L52-L107)
-
----
-
-## Menu Reference
-
-### File
-| Item | Shortcut | Action |
-|------|----------|--------|
-| Import Clips > Import Folder... | — | Open folder browser for image sequences |
-| Import Clips > Import Video(s)... | — | Open file browser for video files |
-| Save Session | Ctrl+S | Save current workspace state |
-| Open Project... | Ctrl+O | Open an existing project folder |
-| Export Video... | — | Export composite video with audio |
-| Return to Home | Home | Go back to welcome screen |
-| Exit | — | Close the application |
-
-### Edit
-| Item | Action |
-|------|--------|
-| Preferences... | Open settings dialog |
-| Hotkeys... | View and rebind keyboard shortcuts |
-| Export Annotation Masks | Save brush annotations as PNG masks |
-| Clear Annotations | Remove all annotation brush strokes |
-
-### View
-| Item | Action |
-|------|--------|
-| Reset Layout | Restore default panel sizes |
-| Toggle Queue Panel | Show/hide queue sidebar |
-| Reset Zoom | Reset viewer zoom to 100% |
-
-### Help
-| Item | Action |
-|------|--------|
-| About | Application info and version |
-
-**Source:** Menu construction in [main_window.py:211-251](ui/main_window.py#L211-L251)
-
----
-
-## Theme & Branding
-
-The GUI uses a dark theme built around the Corridor Digital brand identity.
-
-**Primary palette:**
-| Role | Color | Hex |
-|------|-------|-----|
-| Brand accent | Yellow | `#FFF203` |
-| Secondary accent | Green | `#2CC350` |
-| Main background | Warm black | `#1A1900` |
-| Deep background | Near black | `#0E0D00` |
-| Card/panel surface | Dark | `#1E1D13` |
-| Hover surface | Subtle | `#454430` |
-| Border | Warm gray | `#2A2910` |
-| Primary text | Light gray | `#E0E0E0` |
-| Secondary text | Warm gray | `#CCCCAA` |
-| Dimmed text | Gray | `#808070` |
-| Link / interactive | Blue | `#009ADA` |
-| Error | Red | `#D10000` |
-| Warning | Orange | `#FFA500` |
-
-**Fonts:**
-- **Gagarin** — brand mark font (used only for "CORRIDOR KEY" in the brand bar)
-- **Open Sans** (13px) — all UI text, labels, buttons
-
-**Source:** [corridor_theme.qss](ui/theme/corridor_theme.qss), font loading in [app.py:37-88](ui/app.py#L37-L88)
-
----
-
-## Background Workers
-
-The GUI runs several background threads to keep the UI responsive:
-
-| Worker | Source | Purpose |
-|--------|--------|---------|
-| **GPUJobWorker** | [gpu_job_worker.py](ui/workers/gpu_job_worker.py) | Runs inference jobs from the queue. Emits progress per frame, preview every 5th frame. |
-| **ExtractWorker** | [extract_worker.py](ui/workers/extract_worker.py) | Extracts video to image sequences via FFmpeg. Multiple concurrent jobs supported. |
-| **GPUMonitor** | [gpu_monitor.py](ui/workers/gpu_monitor.py) | Polls VRAM usage every 2 seconds via pynvml. Drives the brand bar VRAM meter. |
-| **ThumbnailWorker** | [thumbnail_worker.py](ui/workers/thumbnail_worker.py) | Generates clip thumbnails asynchronously for the browser and I/O tray. |
-
-All workers use Qt signals to communicate with the main thread — no direct UI access from worker threads.
-
----
-
-## Running the Application
-
+**Manual Setup (if you prefer):**
 ```bash
-# GUI mode (default)
-python main.py
-
-# CLI mode (original terminal wizard)
-python main.py --cli
-
-# Verbose logging
-python main.py --log-level DEBUG
+git clone https://github.com/nikopueringer/CorridorKey.git
+cd CorridorKey
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -e .
+python scripts/setup_models.py --corridorkey    # Download required model
+python scripts/setup_models.py --check          # See what's installed
 ```
 
-Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log` with Eastern Time timestamps.
+**Download optional models later:**
+```bash
+python scripts/setup_models.py --gvm            # GVM alpha generator (~6GB)
+python scripts/setup_models.py --videomama      # VideoMaMa alpha generator (~37GB)
+```
 
-**Source:** Entry point in [main.py](main.py)
+**Updating:**
+To get the latest bug fixes and features, run the updater:
+*   **Windows:** Double-click `3-update.bat`
+*   **macOS / Linux:** `./3-update.sh`
+
+This pulls the latest code and updates dependencies. Your projects, settings, and model weights are preserved.
+
+### 2. How it Works
+
+CorridorKey requires two inputs to process a frame:
+1.  **The Original RGB Image:** The to-be-processed green screen footage. This requires the sRGB color gamut (interchangeable with REC709 gamut), and the engine can ingest either an sRGB gamma or Linear gamma curve.
+2.  **A Coarse Alpha Hint:** A rough black-and-white mask that generally isolates the subject. This does *not* need to be precise. It can be generated by you with a rough chroma key or AI roto.
+
+I've had the best results using GVM or VideoMaMa to create the AlphaHint, so I've repackaged those projects and integrated them here as optional modules inside `clip_manager.py`. Here is how they compare:
+
+*   **GVM:** Completely automatic and requires no additional input. It works exceptionally well for people, but can struggle with inanimate objects.
+*   **VideoMaMa:** Requires you to provide a rough VideoMamaMaskHint (often drawn by hand or AI) telling it what you want to key. If you choose to use this, place your mask hint in the `VideoMamaMaskHint/` folder that the wizard creates for your shot. VideoMaMa results are spectacular and can be controlled more easily than GVM due to this mask hint.
+
+Perhaps in the future, I will implement other generators for the AlphaHint! In the meantime, the better your Alpha Hint, the better CorridorKey's final result will be. Experiment with different amounts of mask erosion or feathering. The model was trained on coarse, blurry, eroded masks, and is exceptional at filling in details from the hint. However, it is generally less effective at subtracting unwanted mask details if your Alpha Hint is expanded too far.
+
+Please give feedback and share your results!
+
+### 3. Usage: The Command Line Wizard
+
+For the easiest experience, use the provided launcher scripts. These scripts launch a prompt-based configuration wizard in your terminal.
+
+*   **Windows:** Drag-and-drop a video file or folder onto `CorridorKey_local.bat` (Note: Only launch via Drag-and-Drop or CMD. Double-clicking the `.bat` directly will throw an error).
+*   **Linux / Mac:** Run or drag-and-drop a video file or folder onto `./CorridorKey_local.sh`
+
+**Workflow Steps:**
+1.  **Launch:** You can drag-and-drop a single loose video file (like an `.mp4`), a shot folder containing image sequences, or even a master "batch" folder containing multiple different shots all at once onto the launcher script.
+2.  **Organization:** The wizard will detect what you dragged in. If you dropped loose video files or unorganized folders, the first prompt will ask if you want it to organize your clips into the proper structure.
+    *   If you say Yes, the script will automatically create a shot folder, move your footage into an `Input/` sub-folder, and generate empty `AlphaHint/` and `VideoMamaMaskHint/` folders for you. This structure is required for the engine to pair your hints and footage correctly!
+3.  **Generate Hints (Optional):** If the wizard detects your shots are missing an `AlphaHint`, it will ask if you want to generate them automatically using the repackaged GVM or VideoMaMa modules.
+4.  **Configure:** Once your clips have both Inputs and AlphaHints, select "Process Ready Clips". The wizard will prompt you to configure the run:
+    *   **Gamma Space:** Tell the engine if your sequence uses a Linear or sRGB gamma curve.
+    *   **Despill Strength:** This is a traditional despill filter (0-10), if you wish to have it baked into the output now as opposed to applying it in your comp later.
+    *   **Auto-Despeckle:** Toggle automatic cleanup and define the size threshold. This isn't just for tracking dots, it removes any small, disconnected islands of pixels.
+    *   **Refiner Strength:** Use the default (1.0) unless you are experimenting with extreme detail pushing.
+5.  **Result:** The engine will generate several folders inside your shot directory:
+    *   `/Matte`: The raw Linear Alpha channel (EXR).
+    *   `/FG`: The raw Straight Foreground Color Object. (Note: The engine natively computes this in the sRGB gamut. You must manually convert this pass to linear gamma before being combined with the alpha in your compositing program).
+    *   `/Processed`: An RGBA image containing the Linear Foreground premultiplied against the Linear Alpha (EXR). This pass exists so you can immediately drop the footage into Premiere/Resolve for a quick preview without dealing with complex premultiplication routing. However, if you want more control over your image, working with the raw FG and Matte outputs will give you that.
+    *   `/Comp`: A simple preview of the key composited over a checkerboard (PNG).
+
+## But What About Training and Datasets?
+
+If enough people find this project interesting I'll get the training program and datasets uploaded so we can all really go to town making the absolute best keyer fine tunes! Just hit me with some messages on the Corridor Creates discord or here. If enough people lock in, I'll get this stuff packaged up. Hardware requirements are beefy and the gigabytes are plentiful so I don't want to commit the time unless there's demand.
+
+## Advanced Usage
+
+For developers looking for more details on the specifics of what is happening in the CorridorKey engine, check out the README in the `/CorridorKeyModule` folder. We also have a dedicated handover document outlining the pipeline architecture for AI assistants in `/docs/LLM_HANDOVER.md`.
+
+## CorridoKey Licensing and Permissions
+
+Use this tool for whatever you'd like. You may not repackage this tool and sell it, and any variations or improvements of this tool that are released must remain free and open source as well. You may not offer inference with this model as a paid API service. If you run a commercial software package or inference service and wish to incoporate this tool into your software, feel free to shoot us an email to work out an agreement. I promise we're easy to work with! contact@corridordigital.com. Outside of any commercial agreements, this license is effectively a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+Please keep the Corridor Key name in any future variations!
+
+## Acknowledgements and Licensing
+
+CorridorKey integrates several open-source modules for Alpha Hint generation. We would like to explicitly credit and thank the following research teams:
+
+*   **Generative Video Matting (GVM):** Developed by the Advanced Intelligent Machines (AIM) research team at Zhejiang University. The GVM code and models are heavily utilized in the `gvm_core` module. Their work is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/). You can find their source repository here: [aim-uofa/GVM](https://github.com/aim-uofa/GVM).
+*   **VideoMaMa:** Developed by the CVLAB at KAIST. The VideoMaMa architecture is utilized within the `VideoMaMaInferenceModule`. Their code is released under the [Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/), and their specific foundation model checkpoints (`dino_projection_mlp.pth`, `unet/*`) are subject to the [Stability AI Community License](https://stability.ai/license). You can find their source repository here: [cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa).
+
+By using these optional modules, you agree to abide by their respective Non-Commercial licenses. Please review their repositories for full terms.

@@ -6,6 +6,7 @@ Volume varies ±8% on each play for organic feel.
 Unified click sound system: install ButtonClickFilter on QApplication
 and every QPushButton automatically gets a click sound on press.
 """
+
 from __future__ import annotations
 
 import os
@@ -51,6 +52,7 @@ class UIAudio:
     _inference_done_sfx: QSoundEffect | None = None
     _loaded = False
     _muted = False
+    _volume: float = 1.0  # Master volume multiplier (0.0–1.0)
     _last_play_time: float = 0.0
     _DEBOUNCE_MS = 0.20  # 200ms debounce — prevents double-fire on dialog close
 
@@ -66,8 +68,10 @@ class UIAudio:
         cls._extract_done_sfx = _load_sfx("CorridorKey_UI_Frame Extract Done_v1.wav")
         cls._mask_done_sfx = _load_sfx("CorridorKey_UI_Mask Done_v2.wav")
         cls._inference_done_sfx = _load_sfx("CorridorKey_UI_Inference Done_v1.wav")
-        for fname in ("CorridorKey_UI_User Cancel_v1.wav",
-                       "CorridorKey_UI_User Cancel_v2.wav"):
+        for fname in (
+            "CorridorKey_UI_User Cancel_v1.wav",
+            "CorridorKey_UI_User Cancel_v2.wav",
+        ):
             sfx = _load_sfx(fname)
             if sfx:
                 cls._cancel_sfx.append(sfx)
@@ -82,9 +86,22 @@ class UIAudio:
         return cls._muted
 
     @classmethod
-    def _play(cls, sfx: QSoundEffect, variance: float = _VARIANCE,
-              db_offset: float = 0.0) -> None:
-        if cls._muted:
+    def set_volume(cls, volume: float) -> None:
+        """Set master volume (0.0–1.0). Persists to QSettings."""
+        cls._volume = max(0.0, min(1.0, volume))
+        from PySide6.QtCore import QSettings
+
+        QSettings().setValue("ui/sounds_volume", cls._volume)
+
+    @classmethod
+    def get_volume(cls) -> float:
+        return cls._volume
+
+    @classmethod
+    def _play(
+        cls, sfx: QSoundEffect, variance: float = _VARIANCE, db_offset: float = 0.0
+    ) -> None:
+        if cls._muted or cls._volume <= 0.0:
             return
         now = time.monotonic()
         if now - cls._last_play_time < cls._DEBOUNCE_MS:
@@ -93,6 +110,7 @@ class UIAudio:
         vol = _BASE_VOLUME + random.uniform(-variance, variance)
         if db_offset:
             vol *= 10 ** (db_offset / 20.0)
+        vol *= cls._volume
         sfx.setVolume(max(0.0, min(1.0, vol)))
         sfx.play()
 
@@ -163,6 +181,7 @@ class ButtonClickFilter(QObject):
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.MouseButtonPress:
             from PySide6.QtWidgets import QCheckBox, QPushButton
+
             if isinstance(obj, QPushButton) and obj.isEnabled():
                 UIAudio.click()
             elif isinstance(obj, QCheckBox) and obj.isEnabled():

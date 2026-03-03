@@ -10,7 +10,7 @@ import torch
 import cv2
 import numpy as np
 from PIL import Image
-from typing import List, Union, Optional
+from typing import Callable, List, Union, Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,8 @@ def run_inference(
     pipeline: VideoInferencePipeline,
     input_frames: List[np.ndarray],
     mask_frames: List[np.ndarray],
-    chunk_size: int = 24  # Adjusted default chunk size
+    chunk_size: int = 24,  # Adjusted default chunk size
+    on_status: Optional[Callable[[str], None]] = None,
 ) -> List[np.ndarray]:
     """
     Run VideoMaMa inference on video frames with mask conditioning.
@@ -114,6 +115,7 @@ def run_inference(
         input_frames (List[np.ndarray]): List of RGB frames (H,W,3) uint8.
         mask_frames (List[np.ndarray]): List of mask frames (H,W) uint8 (0-255) grayscale.
         chunk_size (int): Number of frames to process at once to avoid OOM.
+        on_status: Optional callback for phase updates (e.g. "chunk 2/4 — VAE decode 3/7").
 
     Yields:
         List[np.ndarray]: Chunk of output RGB frames (H,W,3) uint8.
@@ -153,11 +155,18 @@ def run_inference(
 
         torch.cuda.empty_cache()
 
+        # Build a sub-status callback that includes chunk context
+        def _sub_status(msg: str, _ci=chunk_idx, _tc=total_chunks) -> None:
+            full = f"Chunk {_ci}/{_tc} — {msg}"
+            if on_status:
+                on_status(full)
+
         chunk_output = pipeline.run(
             cond_frames=chunk_frames_pil,
             mask_frames=chunk_masks_pil,
             seed=42,
-            mask_cond_mode="vae"
+            mask_cond_mode="vae",
+            on_status=_sub_status,
         )
 
         # Resize output back to original resolution

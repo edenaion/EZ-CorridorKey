@@ -888,7 +888,7 @@ class VideoInferencePipeline:
                 model.to('cpu')
 
     def run(self, cond_frames, mask_frames, seed=42, mask_cond_mode="vae", fps=7, motion_bucket_id=127,
-            noise_aug_strength=0.0):
+            noise_aug_strength=0.0, on_status=None):
         """
         Runs the core inference process on a sequence of conditioning and mask frames.
 
@@ -913,6 +913,8 @@ class VideoInferencePipeline:
 
         with torch.no_grad():
             # --- 2. Get CLIP Image Embeddings ---
+            if on_status:
+                on_status("CLIP encode")
             first_frame_tensor = cond_video_tensor[:, 0, :, :, :]
             pixel_values_for_clip = self._resize_with_antialiasing(first_frame_tensor, (224, 224))
             pixel_values_for_clip = ((pixel_values_for_clip + 1.0) / 2.0).clamp(0, 1)
@@ -927,6 +929,8 @@ class VideoInferencePipeline:
             encoder_hidden_states = torch.zeros_like(image_embeddings).unsqueeze(1)
 
             # --- 3. Prepare Latents ---
+            if on_status:
+                on_status("VAE encode")
             # VAE encoding must happen in FP32
             cond_video_tensor_fp32 = cond_video_tensor.to(dtype=torch.float32)
             cond_latents = self._tensor_to_vae_latent(cond_video_tensor_fp32)
@@ -954,6 +958,8 @@ class VideoInferencePipeline:
                 raise ValueError(f"Unknown mask_cond_mode: {mask_cond_mode}")
 
             # --- 4. Run UNet Single-Step Inference ---
+            if on_status:
+                on_status("UNet forward pass")
             generator = torch.Generator(device=self.device).manual_seed(seed)
             noisy_latents = torch.randn(cond_latents.shape, generator=generator, device=self.device,
                                         dtype=self.weight_dtype)
@@ -972,9 +978,20 @@ class VideoInferencePipeline:
             # Process in chunks to avoid VRAM issues, especially for long videos
             # Decode in FP32
             pred_latents_fp32 = pred_latents.to(dtype=torch.float32)
+            import time as _time
+            n_decode_chunks = (pred_latents_fp32.shape[0] + 7) // 8
+            _logger.info(f"VAE decode: {pred_latents_fp32.shape[0]} frames in {n_decode_chunks} sub-chunks of 8, "
+                         f"VRAM {torch.cuda.memory_allocated() / 1e9:.1f}/{torch.cuda.max_memory_allocated() / 1e9:.1f} GB")
             for i in range(0, pred_latents_fp32.shape[0], 8):
+                _t0 = _time.monotonic()
+                _sc = i // 8 + 1
                 chunk = pred_latents_fp32[i: i + 8]
+                _logger.info(f"VAE decode sub-chunk {_sc}/{n_decode_chunks} ({chunk.shape[0]} frames)...")
+                if on_status:
+                    on_status(f"VAE decode {_sc}/{n_decode_chunks}")
                 decoded_chunk = self.vae.decode(chunk, num_frames=chunk.shape[0]).sample
+                _logger.info(f"VAE decode sub-chunk {_sc}/{n_decode_chunks} done in {_time.monotonic() - _t0:.1f}s, "
+                             f"VRAM {torch.cuda.memory_allocated() / 1e9:.1f} GB")
                 frames.append(decoded_chunk)
 
             video_tensor = torch.cat(frames, dim=0)

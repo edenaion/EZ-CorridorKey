@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QLabel, QHBoxLayout, QMessageBox, QStackedWidget,
     QProgressBar, QFileDialog, QInputDialog, QGraphicsOpacityEffect,
 )
-from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve, QSettings
 from PySide6.QtGui import QKeySequence, QAction, QImage, QPainter
 
 from backend import (
@@ -256,6 +256,11 @@ class MainWindow(QMainWindow):
         # Click sound on any menu action
         menu_bar.triggered.connect(lambda _: self._menu_click_sound())
 
+        # Volume control — right corner of the menu bar
+        from ui.widgets.volume_control import VolumeControl
+        self._volume_control = VolumeControl()
+        menu_bar.setCornerWidget(self._volume_control)
+
     def _menu_click_sound(self) -> None:
         from ui.sounds.audio_manager import UIAudio
         UIAudio.click()
@@ -389,6 +394,9 @@ class MainWindow(QMainWindow):
         muted = not UIAudio.is_muted()
         UIAudio.set_muted(muted)
         QSettings().setValue(KEY_UI_SOUNDS, not muted)
+        # Sync the menu-bar volume control
+        if hasattr(self, "_volume_control"):
+            self._volume_control.sync_mute_state()
         # Show overlay top-right
         icon = "\U0001F507" if muted else "\U0001F50A"  # muted vs speaker
         text = f"{icon}  Sound {'OFF' if muted else 'ON'}"
@@ -2165,10 +2173,15 @@ class MainWindow(QMainWindow):
         # is unnecessary — the setting takes full effect on next app launch.
 
     def _apply_sound_setting(self) -> None:
-        """Apply UI sounds on/off from saved preference."""
+        """Apply UI sounds on/off and volume from saved preferences."""
         from ui.widgets.preferences_dialog import KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS))
+        # Restore volume level
+        vol = QSettings().value("ui/sounds_volume", 1.0, type=float)
+        UIAudio.set_volume(vol)
+        if hasattr(self, "_volume_control"):
+            self._volume_control.sync_mute_state()
 
     def _show_about(self) -> None:
         box = QMessageBox(self)

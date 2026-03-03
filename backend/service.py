@@ -1009,7 +1009,8 @@ class CorridorKeyService:
         _status(f"Running inference (chunk 1/{total_chunks})...")
         frames_written = start_frame
         for chunk_idx, chunk_output in enumerate(
-            run_inference(pipeline, input_frames, mask_frames, chunk_size=chunk_size)
+            run_inference(pipeline, input_frames, mask_frames,
+                          chunk_size=chunk_size, on_status=on_status)
         ):
             _check_cancel("inference")
 

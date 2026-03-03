@@ -242,6 +242,25 @@ QSlider::sub-page:horizontal {
     background: #808070;
 }
 
+/* Volume slider (compact, in menu bar) */
+QSlider#volumeSlider::groove:horizontal {
+    height: 3px;
+}
+
+QSlider#volumeSlider::handle:horizontal {
+    width: 10px;
+    height: 10px;
+    margin: -4px 0;
+}
+
+QSlider#volumeSlider:disabled::handle:horizontal {
+    background: #454430;
+}
+
+QSlider#volumeSlider:disabled::sub-page:horizontal {
+    background: #454430;
+}
+
 /* === Spinbox / LineEdit === */
 QSpinBox,
 QDoubleSpinBox,

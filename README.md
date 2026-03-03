@@ -1,145 +1,313 @@
-# CorridorKey
+# EZ-CorridorKey
 
+A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
-https://github.com/user-attachments/assets/1fb27ea8-bc91-4ebc-818f-5a3b5585af08
+This GUI replaces the CLI drag-and-drop workflow with a complete desktop application while preserving 100% backward compatibility (`python main.py --cli` still runs the original wizard).
 
+| Capability | CLI (Upstream) | GUI (This Project) |
+|------------|---------------|-------------------|
+| Import clips | Drag onto .bat file | Drag-drop into app, or File > Import |
+| Configure inference | Terminal prompts | Sliders, dropdowns, checkboxes |
+| Monitor progress | Terminal text output | Progress bars, frame counter, ETA |
+| Preview results | Open output folder manually | Real-time dual viewer (input vs output) |
+| Job management | One clip at a time | Queue with batch processing |
+| GPU monitoring | None | Live VRAM meter in brand bar |
+| Keyboard shortcuts | None | 20+ hotkeys |
+| Sound feedback | None | 7 context-aware sound effects |
+| Session persistence | None | Recent projects, auto-save |
+| Annotation / masking | Manual external tool | Built-in brush tool for VideoMaMa masks |
 
-When you film something against a green screen, the edges of your subject inevitably blend with the green background. This creates pixels that are a mix of your subject's color and the green screen's color. Traditional keyers struggle to untangle these colors, forcing you to spend hours building complex edge mattes or manually rotoscoping. Even modern "AI Roto" solutions typically output a harsh binary mask, completely destroying the delicate, semi-transparent pixels needed for a realistic composite.
+---
 
-I built CorridorKey to solve this *unmixing* problem. 
+## Installation
 
-You input a raw green screen frame, and the neural network completely separates the foreground object from the green screen. For every single pixel, even the highly transparent ones like motion blur or out-of-focus edges, the model predicts the true, un-multiplied straight color of the foreground element, alongside a clean, linear alpha channel. It doesn't just guess what is opaque and what is transparent; it actively reconstructs the color of the foreground object as if the green screen was never there.
+**One-Click Install (Windows / macOS / Linux):**
+1. Clone or download this repository.
+2. Ensure you have [Python 3.10+](https://python.org) installed (check "Add to PATH" on Windows).
+3. Run the installer for your platform:
+   - **Windows:** Double-click `1-install.bat`
+   - **macOS / Linux:** `chmod +x 1-install.sh && ./1-install.sh`
+4. The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), and model downloads.
+5. To launch: double-click `2-start.bat` (Windows) or `./2-start.sh` (macOS/Linux).
 
-No more fighting with garbage mattes or agonizing over "core" vs "edge" keys. Give CorridorKey a hint of what you want, and it separates the light for you.
+**What the installer does:**
+- Installs [uv](https://docs.astral.sh/uv/) (fast Python package manager) — falls back to pip if needed
+- Creates a `.venv` virtual environment in the project folder
+- Auto-detects your GPU and installs the correct PyTorch variant (CUDA on NVIDIA, MPS on Apple Silicon, CPU fallback)
+- Downloads the CorridorKey model checkpoint (383 MB, required)
+- Optionally downloads GVM (~6 GB) and VideoMaMa (~37 GB) alpha hint generators
+- Checks for FFmpeg and suggests install methods if missing
 
-## Alert!
+**Updating:**
+- **Windows:** Double-click `3-update.bat`
+- **macOS / Linux:** `./3-update.sh`
 
-This is a brand new release, I'm sure you will discover many ways it can be improved! I invite everyone to help. Join us on the "Corridor Creates" Discord to share ideas, work, forks, etc! https://discord.gg/zvwUrdWXJm
+---
 
-Also, if you are a novice at using python scripts much like I was, consider downloading a smart IDE like Antigravity (from google, it's free), downloading this repository, and then asking Antigravity to help you get up and running. I even made a LLM Handover doc in the docs/ directory.
+## Application Layout
 
-Naturally, I have not tested everything. If you encounter errors, please consider patching the code as needed and submitting a pull request.
+```
++--------------------------------------------------------------------+
+| File | Edit | View | Help                             Volume ---->-|
+| CORRIDORKEY                                        RTX 5090  ## 4GB|
++------+------------------------+----------------------+-------------+
+|      | 241 frames - RAW      | 241 frames - RAW     |  ALPHA GEN   |
+|  Q   | [INPUT] FG MATTE COMP | INPUT FG MATTE [COMP]|  GVM AUTO    |
+|  U   +-----------------------+----------------------+  VIDEOMAMA   |
+|  E   |                       |                      |  EXPORT MASK |
+|  U   |                       |                      |--------------+
+|  E   |   INPUT viewer        |   OUTPUT viewer      | INFERENCE    |
+|      |   (left image)        |   (right image)      |  Color Space |
+|      |                       |                      |  Despill     |
+| tab  |                       |                      |  Despeckle   |
+|      |                       |                      |  Refiner     |
+|      |                       |                      |  Live Preview|
+|      |                       |                      |--------------+
+|      |                       |                      | OUTPUT       |
+|      |                       |                      |  FG          |
+|      |                       |                      |  Matte       |
+|      |                       |                      |  Comp        |
+|      |                    SCRUBBER                  |  Processed   |
+|      +<<--------------------------------------- < >>|--------------|
+|      | INPUT (8)       + ADD | EXPORTS (0)                         |
+|      | +-----+ +-----+ +-----+ +-----+ +-----+                     |
+|      | |thumb| |thumb| |thumb| |thumb| |thumb| ..                  |
+|      | +-----+ +-----+ +-----+ +-----+ +-----+                     |
++------+-----------------------------------------------+-------------+
+|  Status Bar                                            [RUN INF]   |
++--------------------------------------------------------------------+
+```
 
-## Features
+- **Brand bar + menu** — top row with logo, menu bar, GPU name + VRAM meter
+- **Queue panel** — collapsible sidebar (left), toggle with **Q**
+- **Dual viewer** — center, split into INPUT (left) and switchable output (right)
+- **Parameter panel** — right sidebar with Alpha Generation, Inference, and Output controls
+- **I/O tray** — horizontal thumbnail strip below the viewer
+- **Status bar** — progress bar and RUN INFERENCE button
 
-*   **Physically Accurate Unmixing:** Clean extraction of straight color foreground and linear alpha channels, preserving hair, motion blur, and translucency.
-*   **Resolution Independent:** The engine dynamically scales inference to handle 4K plates while predicting using its native 2048x2048 high-fidelity backbone.
-*   **VFX Standard Outputs:** Natively reads and writes 16-bit and 32-bit Linear float EXR files, preserving true color math for integration in Nuke, Fusion, or Resolve.
-*   **Auto-Cleanup:** Includes a morphological cleanup system to automatically prune any tracking markers or tiny background features that slip through CorridorKey's detection.
+---
+
+## Quick Start
+
+### 1. Import
+
+Drop a video file onto the welcome screen (or File > Import Clips > Import Video). The video is extracted to an image sequence automatically.
+
+### 2. Generate Alpha Hint
+
+Your clip starts in **RAW** state (gray badge). You need an alpha hint before running inference.
+
+**Option A — GVM Auto (one-click):**
+Click **GVM AUTO** in the parameter panel. Works great for most green screen footage with people.
+
+**Option B — VideoMaMa (manual masking):**
+For difficult shots, use the annotation brush:
+1. Press **1** to activate foreground mode (green)
+2. Paint over the subject on a few key frames
+3. Press **2** to switch to background mode (red)
+4. Paint over background areas
+5. Click **VIDEOMAMA** in the parameter panel
+
+### 3. Run Inference
+
+Your clip is now **READY** (yellow badge). Adjust parameters as needed, then click **RUN INFERENCE** (or **Ctrl+R**).
+
+### 4. Review
+
+Switch between view modes to inspect results:
+- **COMP** — key over checkerboard
+- **FG** — check for green fringing
+- **MATTE** — inspect alpha quality
+- **PROCESSED** — production RGBA
+
+Outputs are written to the project's `Output/` subdirectories during inference.
+
+---
+
+## Keyboard Shortcuts
+
+Viewable and rebindable in-app via Edit > Hotkeys.
+
+### Global
+
+| Shortcut | Action |
+|----------|--------|
+| **Ctrl+R** | Run inference on selected clip |
+| **Ctrl+Shift+R** | Run all ready clips (batch) |
+| **Esc** | Stop / cancel current job |
+| **Ctrl+S** | Save session |
+| **Ctrl+O** | Open project |
+| **Ctrl+M** | Toggle mute (sound on/off) |
+| **Home** | Return to welcome screen |
+| **Del** | Remove selected clips |
+| **Q** | Toggle queue panel |
+| **F12** | Toggle debug console |
+
+### Viewer
+
+| Shortcut | Action |
+|----------|--------|
+| **Ctrl + scroll wheel** | Zoom in/out toward cursor (0.25x to 8.0x) |
+| **Shift + scroll wheel** | Horizontal pan (left/right) |
+| **Middle-click + drag** | Pan the image |
+| **Double-click** | Reset zoom to 100% |
+
+### Timeline
+
+| Shortcut | Action |
+|----------|--------|
+| **Space** | Play / Pause |
+| **I** | Set in-point marker |
+| **O** | Set out-point marker |
+| **Alt+I** | Clear in/out range |
+
+### Annotation
+
+| Shortcut | Action |
+|----------|--------|
+| **1** | Foreground annotation brush (green) |
+| **2** | Background annotation brush (red) |
+| **C** | Cycle foreground color (green / blue) |
+| **Shift + drag up/down** | Resize brush |
+| **Alt + left-drag** | Draw straight line |
+| **Ctrl+Z** | Undo last stroke on current frame |
+| **Ctrl+C** | Clear all annotations |
+
+---
+
+## View Modes
+
+The view mode bar at the top of each viewport switches what the right viewer displays:
+
+| Mode | Source | What You See |
+|------|--------|-------------|
+| **INPUT** | `Input/` or `Frames/` | Original unprocessed footage |
+| **FG** | `Output/FG/` | Foreground with green spill removed |
+| **MATTE** | `Output/Matte/` | Alpha matte (white = opaque, black = transparent) |
+| **COMP** | `Output/Comp/` | Final key composited over checkerboard |
+| **PROCESSED** | `Output/Processed/` | Production RGBA — premultiplied linear for compositing |
+
+---
+
+## Inference Controls
+
+| Control | Range | Default | Description |
+|---------|-------|---------|-------------|
+| **Color Space** | sRGB, Linear | sRGB | Working color space |
+| **Despill Strength** | 0.0 – 1.0 | 1.0 | Green spill removal intensity |
+| **Despeckle** | 50 – 2000 px | ON, 400 px | Removes isolated artifacts smaller than threshold |
+| **Refiner Scale** | 0.0 – 3.0 | 1.0 | Edge refinement. 0 = disabled |
+| **Live Preview** | — | OFF | Reprocess current frame when parameters change |
+
+**Middle-click** any slider to reset it to default.
+
+### Output Format
+
+Each output channel can be individually enabled and set to EXR or PNG:
+
+| Output | Default | Format | Description |
+|--------|---------|--------|-------------|
+| **FG** | ON | EXR | Foreground RGB with spill removed |
+| **Matte** | ON | EXR | Single-channel alpha |
+| **Comp** | ON | PNG | Key over checkerboard (for review) |
+| **Processed** | ON | EXR | Full RGBA premultiplied linear (for VFX compositing) |
+
+---
+
+## Status Colors
+
+| Color | State | Meaning |
+|-------|-------|---------|
+| Orange | EXTRACTING | Video being extracted to image sequence |
+| Gray | RAW | Frames loaded, no alpha hint yet |
+| Blue | MASKED | Annotation masks painted (ready for VideoMaMa) |
+| Yellow | READY | Alpha hint available, ready for inference |
+| Green | COMPLETE | Inference finished, outputs available |
+| Red | ERROR | Processing failed — can retry |
+
+---
+
+## Frame Scrubber
+
+The scrubber below the dual viewer provides:
+
+- **Transport buttons:** First frame, step back, play/pause, step forward, last frame
+- **Coverage bar:** Three color-coded lanes showing which frames have annotations (green), alpha hints (white), and inference output (yellow)
+- **In/Out markers:** Press **I** / **O** to set a sub-range for processing. When set, the RUN button changes to "RUN SELECTED" and playback loops within the range.
+
+---
+
+## Project Structure
+
+Each imported clip creates a project folder:
+
+```
+Projects/
+  260301_093000_Woman_Jumps/
+    Source/              # Original video
+    Frames/              # Extracted image sequence
+    AlphaHint/           # Generated alpha hints
+    Output/
+      FG/                # Foreground EXR/PNG
+      Matte/             # Alpha matte EXR/PNG
+      Comp/              # Checkerboard composite PNG
+      Processed/         # Production RGBA EXR
+    project.json         # Metadata and settings
+```
+
+---
+
+## Preferences
+
+Access via Edit > Preferences.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| **Show tooltips** | ON | Helpful tooltips on all controls |
+| **UI sounds** | ON | Sound effects for actions |
+| **Copy source videos** | ON | Copy imports into project folder (OFF = reference in place) |
+| **Loop playback** | ON | Loop within in/out range during playback |
+
+---
+
+## Running from the Command Line
+
+```bash
+# GUI mode (default)
+python main.py
+
+# CLI mode (original terminal wizard)
+python main.py --cli
+
+# Verbose logging
+python main.py --log-level DEBUG
+```
+
+Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
+
+---
 
 ## Hardware Requirements
 
-This project was designed and built on a Linux workstation (Puget Systems PC) equipped with an NVIDIA RTX Pro 6000 with 96GB of VRAM. This project is not yet optimized for sub 24 gig VRAM systems, but with the help of the community, maybe we can make that happen.
+- **CorridorKey:** ~1.5 GB VRAM (8 GB GPU minimum, 12 GB recommended)
+- **GVM (Optional):** ~4.5 GB VRAM
+- **VideoMaMa (Optional):** ~6–8 GB VRAM
 
-*   **CorridorKey:** Running inference natively at 2048x2048 requires approximately **22.7 GB of VRAM**. You will need at least a 24GB GPU (such as a 3090, 4090, or the upcoming 5090). It is highly recommended to run this on a secondary GPU that is not driving your OS/displays, or on a rented cloud instance (like Runpod or Google Colab) to avoid Out-Of-Memory errors.
-*   **GVM (Optional):** Requires approximately **80 GB of VRAM** and utilizes massive Stable Video Diffusion models.
-*   **VideoMaMa (Optional):** Natively requires a massive chunk of VRAM as well (originally 80GB+). While the community has tweaked the architecture to run at less than 24GB, those extreme memory optimizations have not yet been fully implemented in this repository.
+Only one model is loaded at a time. A 12 GB GPU handles all three models comfortably.
 
-Because GVM and VideoMaMa have huge model file sizes and extreme hardware requirements, installing their modules is completely optional. You can always provide your own Alpha Hints generated from other, lighter software.
+---
 
-## Getting Started
+## Licensing & Attribution
 
-### 1. Installation
+This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey), licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
-**One-Click Install (Windows / macOS / Linux):**
-1.  Clone or download this repository.
-2.  Ensure you have [Python 3.10+](https://python.org) installed (check "Add to PATH" on Windows).
-3.  Run the installer for your platform:
-    *   **Windows:** Double-click `1-install.bat`
-    *   **macOS / Linux:** Open a terminal and run `chmod +x 1-install.sh && ./1-install.sh`
-4.  The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), and model downloads. It will prompt you about optional models (GVM, VideoMaMa).
-5.  To launch: double-click `2-start.bat` (Windows) or run `./2-start.sh` (macOS/Linux).
+GUI/SFX/Workflow enhancements by [Ed Zisk](https://github.com/edenaion).
+Logo by [Sara Ann Stewart](https://www.clade.design/).
 
-**What the installer does:**
-*   Installs [uv](https://docs.astral.sh/uv/) (fast Python package manager) — falls back to pip if needed
-*   Creates a `.venv` virtual environment in the project folder
-*   Auto-detects your GPU and installs the correct PyTorch variant (CUDA on NVIDIA, MPS on Apple Silicon, CPU fallback)
-*   Downloads the CorridorKey model checkpoint (383MB, required)
-*   Optionally downloads GVM (~6GB) and VideoMaMa (~37GB) alpha hint generators
-*   Checks for FFmpeg and suggests install methods if missing
+If you use or build on this project, please credit back.
 
-**Manual Setup (if you prefer):**
-```bash
-git clone https://github.com/nikopueringer/CorridorKey.git
-cd CorridorKey
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -e .
-python scripts/setup_models.py --corridorkey    # Download required model
-python scripts/setup_models.py --check          # See what's installed
-```
+Optional modules:
+- **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
+- **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License
 
-**Download optional models later:**
-```bash
-python scripts/setup_models.py --gvm            # GVM alpha generator (~6GB)
-python scripts/setup_models.py --videomama      # VideoMaMa alpha generator (~37GB)
-```
-
-**Updating:**
-To get the latest bug fixes and features, run the updater:
-*   **Windows:** Double-click `3-update.bat`
-*   **macOS / Linux:** `./3-update.sh`
-
-This pulls the latest code and updates dependencies. Your projects, settings, and model weights are preserved.
-
-### 2. How it Works
-
-CorridorKey requires two inputs to process a frame:
-1.  **The Original RGB Image:** The to-be-processed green screen footage. This requires the sRGB color gamut (interchangeable with REC709 gamut), and the engine can ingest either an sRGB gamma or Linear gamma curve. 
-2.  **A Coarse Alpha Hint:** A rough black-and-white mask that generally isolates the subject. This does *not* need to be precise. It can be generated by you with a rough chroma key or AI roto.
-
-I've had the best results using GVM or VideoMaMa to create the AlphaHint, so I've repackaged those projects and integrated them here as optional modules inside `clip_manager.py`. Here is how they compare:
-
-*   **GVM:** Completely automatic and requires no additional input. It works exceptionally well for people, but can struggle with inanimate objects.
-*   **VideoMaMa:** Requires you to provide a rough VideoMamaMaskHint (often drawn by hand or AI) telling it what you want to key. If you choose to use this, place your mask hint in the `VideoMamaMaskHint/` folder that the wizard creates for your shot. VideoMaMa results are spectacular and can be controlled more easily than GVM due to this mask hint. 
-
-Perhaps in the future, I will implement other generators for the AlphaHint! In the meantime, the better your Alpha Hint, the better CorridorKey's final result will be. Experiment with different amounts of mask erosion or feathering. The model was trained on coarse, blurry, eroded masks, and is exceptional at filling in details from the hint. However, it is generally less effective at subtracting unwanted mask details if your Alpha Hint is expanded too far. 
-
-Please give feedback and share your results!
-
-### 3. Usage: The Command Line Wizard
-
-For the easiest experience, use the provided launcher scripts. These scripts launch a prompt-based configuration wizard in your terminal.
-
-*   **Windows:** Drag-and-drop a video file or folder onto `CorridorKey_local.bat` (Note: Only launch via Drag-and-Drop or CMD. Double-clicking the `.bat` directly will throw an error).
-*   **Linux / Mac:** Run or drag-and-drop a video file or folder onto `./CorridorKey_local.sh`
-
-**Workflow Steps:**
-1.  **Launch:** You can drag-and-drop a single loose video file (like an `.mp4`), a shot folder containing image sequences, or even a master "batch" folder containing multiple different shots all at once onto the launcher script.
-2.  **Organization:** The wizard will detect what you dragged in. If you dropped loose video files or unorganized folders, the first prompt will ask if you want it to organize your clips into the proper structure. 
-    *   If you say Yes, the script will automatically create a shot folder, move your footage into an `Input/` sub-folder, and generate empty `AlphaHint/` and `VideoMamaMaskHint/` folders for you. This structure is required for the engine to pair your hints and footage correctly!
-3.  **Generate Hints (Optional):** If the wizard detects your shots are missing an `AlphaHint`, it will ask if you want to generate them automatically using the repackaged GVM or VideoMaMa modules.
-4.  **Configure:** Once your clips have both Inputs and AlphaHints, select "Process Ready Clips". The wizard will prompt you to configure the run:
-    *   **Gamma Space:** Tell the engine if your sequence uses a Linear or sRGB gamma curve.
-    *   **Despill Strength:** This is a traditional despill filter (0-10), if you wish to have it baked into the output now as opposed to applying it in your comp later.
-    *   **Auto-Despeckle:** Toggle automatic cleanup and define the size threshold. This isn't just for tracking dots, it removes any small, disconnected islands of pixels.
-    *   **Refiner Strength:** Use the default (1.0) unless you are experimenting with extreme detail pushing.
-5.  **Result:** The engine will generate several folders inside your shot directory:
-    *   `/Matte`: The raw Linear Alpha channel (EXR).
-    *   `/FG`: The raw Straight Foreground Color Object. (Note: The engine natively computes this in the sRGB gamut. You must manually convert this pass to linear gamma before being combined with the alpha in your compositing program).
-    *   `/Processed`: An RGBA image containing the Linear Foreground premultiplied against the Linear Alpha (EXR). This pass exists so you can immediately drop the footage into Premiere/Resolve for a quick preview without dealing with complex premultiplication routing. However, if you want more control over your image, working with the raw FG and Matte outputs will give you that.
-    *   `/Comp`: A simple preview of the key composited over a checkerboard (PNG).
-
-## But What About Training and Datasets?
-
-If enough people find this project interesting I'll get the training program and datasets uploaded so we can all really go to town making the absolute best keyer fine tunes! Just hit me with some messages on the Corridor Creates discord or here. If enough people lock in, I'll get this stuff packaged up. Hardware requirements are beefy and the gigabytes are plentiful so I don't want to commit the time unless there's demand.
-
-## Advanced Usage
-
-For developers looking for more details on the specifics of what is happening in the CorridorKey engine, check out the README in the `/CorridorKeyModule` folder. We also have a dedicated handover document outlining the pipeline architecture for AI assistants in `/docs/LLM_HANDOVER.md`.
-
-## CorridoKey Licensing and Permissions
-
-Use this tool for whatever you'd like. You may not repackage this tool and sell it, and any variations or improvements of this tool that are released must remain free and open source as well. You may not offer inference with this model as a paid API service. If you run a commercial software package or inference service and wish to incoporate this tool into your software, feel free to shoot us an email to work out an agreement. I promise we're easy to work with! contact@corridordigital.com. Outside of any commercial agreements, this license is effectively a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
-
-Please keep the Corridor Key name in any future variations!
-
-## Acknowledgements and Licensing
-
-CorridorKey integrates several open-source modules for Alpha Hint generation. We would like to explicitly credit and thank the following research teams:
-
-*   **Generative Video Matting (GVM):** Developed by the Advanced Intelligent Machines (AIM) research team at Zhejiang University. The GVM code and models are heavily utilized in the `gvm_core` module. Their work is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/). You can find their source repository here: [aim-uofa/GVM](https://github.com/aim-uofa/GVM).
-*   **VideoMaMa:** Developed by the CVLAB at KAIST. The VideoMaMa architecture is utilized within the `VideoMaMaInferenceModule`. Their code is released under the [Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0)](https://creativecommons.org/licenses/by-nc/4.0/), and their specific foundation model checkpoints (`dino_projection_mlp.pth`, `unet/*`) are subject to the [Stability AI Community License](https://stability.ai/license). You can find their source repository here: [cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa).
-
-By using these optional modules, you agree to abide by their respective Non-Commercial licenses. Please review their repositories for full terms.
+Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm

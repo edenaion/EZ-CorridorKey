@@ -268,10 +268,12 @@ class DebugConsoleWidget(QWidget):
     def _refilter(self) -> None:
         """Re-render the log output from the buffer (newest first)."""
         self._output.clear()
-        # Buffer is already newest-first, so just append in order
-        for html, levelno in self._log_buffer:
-            if levelno >= self._min_level:
-                self._output.append(html)
+        # Buffer is already newest-first — build all HTML then insert once
+        # to avoid QTextEdit scrolling to bottom on each append.
+        parts = [html for html, levelno in self._log_buffer if levelno >= self._min_level]
+        if parts:
+            self._output.setHtml("<br>".join(parts))
+        self._output.moveCursor(self._output.textCursor().MoveOperation.Start)
 
     # --- Backfill from session log file ----------------------------------
 
