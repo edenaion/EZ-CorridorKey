@@ -244,13 +244,23 @@ QSlider::sub-page:horizontal {
 
 /* Volume slider (compact, in menu bar) */
 QSlider#volumeSlider::groove:horizontal {
-    height: 3px;
+    height: 2px;
+    background: #2A2900;
+}
+
+QSlider#volumeSlider::sub-page:horizontal {
+    background: #808070;
 }
 
 QSlider#volumeSlider::handle:horizontal {
-    width: 10px;
-    height: 10px;
-    margin: -4px 0;
+    width: 8px;
+    height: 8px;
+    margin: -3px 0;
+    background: #E0E0E0;
+}
+
+QSlider#volumeSlider:disabled::groove:horizontal {
+    background: #1A1900;
 }
 
 QSlider#volumeSlider:disabled::handle:horizontal {
