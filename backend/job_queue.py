@@ -76,7 +76,7 @@ class GPUJob:
 
 
 # Callback type aliases
-ProgressCallback = Callable[[str, int, int], None]  # clip_name, current, total
+ProgressCallback = Callable[..., None]  # clip_name, current, total, **kwargs (fps, elapsed, eta_seconds)
 WarningCallback = Callable[[str], None]  # message
 CompletionCallback = Callable[[str], None]  # clip_name
 ErrorCallback = Callable[[str, str], None]  # clip_name, error_message
@@ -247,13 +247,16 @@ class GPUJobQueue:
             self._queue.clear()
             logger.info("All jobs cancelled")
 
-    def report_progress(self, clip_name: str, current: int, total: int) -> None:
-        """Report progress for the current job. Called by processing code."""
+    def report_progress(self, clip_name: str, current: int, total: int, **kwargs: float) -> None:
+        """Report progress for the current job. Called by processing code.
+
+        Optional kwargs: fps, elapsed, eta_seconds.
+        """
         if self._current_job:
             self._current_job.current_frame = current
             self._current_job.total_frames = total
         if self.on_progress:
-            self.on_progress(clip_name, current, total)
+            self.on_progress(clip_name, current, total, **kwargs)
 
     def report_warning(self, message: str) -> None:
         """Report a non-fatal warning. Called by processing code."""

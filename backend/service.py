@@ -19,7 +19,8 @@ import glob as glob_module
 import logging
 import threading
 import time
-from dataclasses import dataclass, field, asdict
+from collections import deque
+from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Any, Callable, Optional
 
@@ -55,7 +56,7 @@ from .frame_io import (
     read_video_frames,
     read_video_mask_at,
 )
-from .job_queue import GPUJob, GPUJobQueue, JobType
+from .job_queue import GPUJob, GPUJobQueue
 
 logger = logging.getLogger(__name__)
 
@@ -170,14 +171,17 @@ class CorridorKeyService:
     # --- Device & Engine Management ---
 
     def detect_device(self) -> str:
-        """Detect best available compute device."""
+        """Detect best available compute device (CUDA > MPS > CPU)."""
         try:
             import torch
             if torch.cuda.is_available():
                 self._device = 'cuda'
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                self._device = 'mps'
+                logger.info("Apple MPS acceleration available")
             else:
                 self._device = 'cpu'
-                logger.warning("CUDA not available — using CPU (will be very slow)")
+                logger.warning("No GPU acceleration available — using CPU (will be very slow)")
         except ImportError:
             self._device = 'cpu'
             logger.warning("PyTorch not installed — using CPU")
@@ -523,7 +527,7 @@ class CorridorKeyService:
         clip: ClipEntry,
         params: InferenceParams,
         job: Optional[GPUJob] = None,
-        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_progress: Optional[Callable[..., None]] = None,
         on_warning: Optional[Callable[[str], None]] = None,
         skip_stems: Optional[set[str]] = None,
         output_config: Optional[OutputConfig] = None,
@@ -535,7 +539,8 @@ class CorridorKeyService:
             clip: Must be in READY or COMPLETE state with both input_asset and alpha_asset.
             params: Frozen inference parameters.
             job: Optional GPUJob for cancel checking.
-            on_progress: Called with (clip_name, current_frame, total_frames).
+            on_progress: Called with (clip_name, current_frame, total_frames, **kwargs).
+                Optional kwargs: fps, elapsed, eta_seconds.
             on_warning: Called with warning messages for non-fatal issues.
             skip_stems: Set of frame stems to skip (for resume support).
             output_config: Which outputs to write and their formats.
@@ -585,6 +590,8 @@ class CorridorKeyService:
         results: list[FrameResult] = []
         skipped: list[int] = []
         skip_stems = skip_stems or set()
+        frame_times: deque[float] = deque(maxlen=10)  # rolling window for avg fps
+        processed_count = 0  # frames actually processed (not skipped/resumed)
 
         # Determine frame range (in/out markers or full clip)
         if frame_range is not None:
@@ -602,9 +609,18 @@ class CorridorKeyService:
                 if job and job.is_cancelled:
                     raise JobCancelledError(clip.name, i)
 
-                # Report progress every frame (enables responsive cancel + timer)
+                # Report progress with timing data
                 if on_progress:
-                    on_progress(clip.name, progress_i, range_count)
+                    timing_kwargs: dict[str, float] = {}
+                    elapsed = time.monotonic() - t_start
+                    timing_kwargs["elapsed"] = elapsed
+                    if frame_times:
+                        avg_time = sum(frame_times) / len(frame_times)
+                        fps = 1.0 / avg_time if avg_time > 0 else 0.0
+                        remaining = range_count - progress_i
+                        timing_kwargs["fps"] = fps
+                        timing_kwargs["eta_seconds"] = remaining * avg_time
+                    on_progress(clip.name, progress_i, range_count, **timing_kwargs)
 
                 try:
                     # Read input
@@ -647,7 +663,13 @@ class CorridorKeyService:
                             despeckle_blur=params.despeckle_blur,
                             refiner_scale=params.refiner_scale,
                         )
-                    logger.debug(f"Clip '{clip.name}' frame {i}: process_frame {time.monotonic() - t_frame:.3f}s")
+                    dt = time.monotonic() - t_frame
+                    frame_times.append(dt)
+                    processed_count += 1
+                    avg_fps = len(frame_times) / sum(frame_times) if frame_times else 0.0
+                    logger.debug(
+                        f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)"
+                    )
 
                     # Write outputs
                     self._write_outputs(res, dirs, input_stem, clip.name, i, cfg)
@@ -666,9 +688,13 @@ class CorridorKeyService:
                     if on_warning:
                         on_warning(str(e))
 
-            # Final progress
+            # Final progress (include final timing)
             if on_progress:
-                on_progress(clip.name, range_count, range_count)
+                final_elapsed = time.monotonic() - t_start
+                final_kwargs: dict[str, float] = {"elapsed": final_elapsed, "eta_seconds": 0.0}
+                if frame_times:
+                    final_kwargs["fps"] = len(frame_times) / sum(frame_times)
+                on_progress(clip.name, range_count, range_count, **final_kwargs)
 
         finally:
             if input_cap:
@@ -688,10 +714,11 @@ class CorridorKeyService:
                 on_warning(msg)
 
         t_total = time.monotonic() - t_start
+        avg_fps = processed_count / t_total if t_total > 0 and processed_count > 0 else 0.0
         range_label = f" (range {frame_range[0]}-{frame_range[1]})" if frame_range else ""
         logger.info(
             f"Clip '{clip.name}': inference complete{range_label}. {processed}/{range_count} frames "
-            f"in {t_total:.1f}s ({t_total / max(processed, 1):.2f}s/frame avg)"
+            f"in {t_total:.1f}s ({t_total / max(processed, 1):.2f}s/frame, {avg_fps:.1f} fps avg)"
         )
 
         # State transition — only set COMPLETE if full clip was processed

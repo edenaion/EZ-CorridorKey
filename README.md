@@ -41,30 +41,40 @@ Because GVM and VideoMaMa have huge model file sizes and extreme hardware requir
 
 ### 1. Installation
 
-**For Windows Users (Automated):**
-1.  Clone or download this repository to your local machine.
-2.  Ensure you have Python 3.10+ installed.
-3.  Double-click `Install_CorridorKey_Windows.bat`. This will automatically set up your python environment, install requirements, and download the CorridorKey model.
-4.  (Optional) Double-click `Install_GVM_Windows.bat` and `Install_VideoMaMa_Windows.bat` to automatically download the heavy optional Alpha Hint generators.
+**One-Click Install (Windows / macOS / Linux):**
+1.  Clone or download this repository.
+2.  Ensure you have [Python 3.10+](https://python.org) installed (check "Add to PATH" on Windows).
+3.  Run the installer for your platform:
+    *   **Windows:** Double-click `install.bat`
+    *   **macOS / Linux:** Open a terminal and run `chmod +x install.sh && ./install.sh`
+4.  The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), and model downloads. It will prompt you about optional models (GVM, VideoMaMa).
+5.  To launch: double-click `start.bat` (Windows) or run `./start.sh` (macOS/Linux).
 
-**For Linux / Mac Users (Manual Setup):**
-1.  Clone or download this repository to your local machine.
-2.  Ensure you have Python 3.10+ installed.
-3.  Set up a virtual environment and install the requirements:
-    ```bash
-    python -m venv venv
-    source venv/bin/activate # On Windows: venv\Scripts\activate
-    pip install -r requirements.txt
-    ```
-4.  **Download the Models:** You must manually download these open-source foundational models and place them in their exact respective folders:
-    *   **CorridorKey v1.0 Model (~300MB):** [Download CorridorKey_v1.0.pth](https://huggingface.co/nikopueringer/CorridorKey_v1.0/resolve/main/CorridorKey_v1.0.pth) 
-        *   Place inside: `CorridorKeyModule/checkpoints/` and ensure it is named exactly `CorridorKey.pth`.
-    *   **GVM Weights (Optional):** [HuggingFace: geyongtao/gvm](https://huggingface.co/geyongtao/gvm)
-        *   Install the HuggingFace CLI: `pip install -U "huggingface_hub[cli]"`
-        *   Download using the CLI: `huggingface-cli download geyongtao/gvm --local-dir gvm_core/weights`
-    *   **VideoMaMa Weights (Optional):** [HuggingFace: SammyLim/VideoMaMa](https://huggingface.co/SammyLim/VideoMaMa)
-        *   Install the HuggingFace CLI: `pip install -U "huggingface_hub[cli]"`
-        *   Download using the CLI: `huggingface-cli download SammyLim/VideoMaMa --local-dir VideoMaMaInferenceModule/checkpoints`
+**What the installer does:**
+*   Installs [uv](https://docs.astral.sh/uv/) (fast Python package manager) — falls back to pip if needed
+*   Creates a `.venv` virtual environment in the project folder
+*   Auto-detects your GPU and installs the correct PyTorch variant (CUDA on NVIDIA, MPS on Apple Silicon, CPU fallback)
+*   Downloads the CorridorKey model checkpoint (383MB, required)
+*   Optionally downloads GVM (~6GB) and VideoMaMa (~37GB) alpha hint generators
+*   Checks for FFmpeg and suggests install methods if missing
+
+**Manual Setup (if you prefer):**
+```bash
+git clone https://github.com/nikopueringer/CorridorKey.git
+cd CorridorKey
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -e .
+python scripts/setup_models.py --corridorkey    # Download required model
+python scripts/setup_models.py --check          # See what's installed
+```
+
+**Download optional models later:**
+```bash
+python scripts/setup_models.py --gvm            # GVM alpha generator (~6GB)
+python scripts/setup_models.py --videomama      # VideoMaMa alpha generator (~37GB)
+```
 
 ### 2. How it Works
 
