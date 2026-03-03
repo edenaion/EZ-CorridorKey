@@ -4,6 +4,32 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.1.0] - 2026-03-03 — EXR DWAB Half-Float Extraction
+
+### Frame Extraction Overhaul
+- Video frames now extracted as **EXR half-float** instead of PNG — preserves full floating-point precision from the video decoder, eliminating 8-bit quantization and banding
+- Two-pass pipeline: FFmpeg extracts to EXR ZIP16, then a recompression pass converts to **DWAB** (VFX-standard lossy compression, ~4× smaller than ZIP)
+- Even 8-bit source video benefits: FFmpeg's internal YUV→RGB conversion stays in float, avoiding rounding errors from integer pipelines
+- Hardware-accelerated decode (NVDEC/DXVA2) with automatic fallback to software decode
+- DWAB recompression runs in a **separate subprocess** — zero GIL contention, UI stays fully responsive
+
+### UI Performance Fixes
+- **Throttled progress signals**: Extraction progress emitted at most every 100ms (was per-frame ~500Hz), preventing main thread saturation
+- **Cached thumbnails**: `ThumbnailCanvas` scales thumbnails once on load, not on every repaint — eliminates repeated `Qt.SmoothTransformation` during progress updates
+- **Smart data-change handling**: Progress-only updates trigger lightweight `update()` instead of full `_rebuild()` with thumbnail rescaling
+
+### Display & Theme
+- **EXR input display fix**: Skip gamma correction and Reinhard tone mapping for INPUT mode frames (FFmpeg EXR output is sRGB-range float, not HDR linear)
+- **Opaque context menus**: Fixed QSS `background` vs `background-color` causing transparent right-click menus
+
+### GVM Compatibility
+- `ImageSequenceReader` now filters files by image extension — `.dwab_done` marker file and other non-image files no longer cause "cannot identify image file" errors
+
+### Version
+- Bumped to 1.1.0
+
+---
+
 ## [0.1.0] - 2026-03-02 — Release Prep
 
 ### Release Packaging
