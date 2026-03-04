@@ -55,6 +55,10 @@ class ReportIssueDialog(QDialog):
         layout.addWidget(QLabel("Issue title:"))
         self._title_edit = QLineEdit()
         self._title_edit.setPlaceholderText("Brief summary of the problem")
+        self._title_edit.setStyleSheet(
+            "QLineEdit { background: #1a1a1a; color: #E0E0E0; "
+            "border: 1px solid #555; border-radius: 3px; padding: 4px; }"
+        )
         layout.addWidget(self._title_edit)
 
         # --- Description ---
@@ -65,6 +69,10 @@ class ReportIssueDialog(QDialog):
             "Steps to reproduce are very helpful."
         )
         self._desc_edit.setMaximumHeight(120)
+        self._desc_edit.setStyleSheet(
+            "QTextEdit { background: #1a1a1a; color: #E0E0E0; "
+            "border: 1px solid #555; border-radius: 3px; padding: 4px; }"
+        )
         layout.addWidget(self._desc_edit)
 
         # --- System info preview ---
@@ -109,24 +117,63 @@ class ReportIssueDialog(QDialog):
     # System info
     # ------------------------------------------------------------------
 
-    def _build_system_info_text(self) -> str:
-        """Plain-text preview of system info for the user to see."""
-        lines = [
-            f"App Version: {_APP_VERSION}",
-            f"OS: {platform.platform()}",
-            f"Python: {platform.python_version()}",
+    @staticmethod
+    def _os_string() -> str:
+        """Return OS string, fixing Python's Win11-reports-as-Win10 bug."""
+        os_str = platform.platform()
+        if os_str.startswith("Windows-10"):
+            try:
+                build = int(platform.version().split(".")[-1])
+                if build >= 22000:
+                    os_str = os_str.replace("Windows-10", "Windows-11", 1)
+            except (ValueError, IndexError):
+                pass
+        return os_str
+
+    def _gather_info_pairs(self) -> list[tuple[str, str]]:
+        """Collect all system info as (label, value) pairs."""
+        pairs: list[tuple[str, str]] = [
+            ("App Version", _APP_VERSION),
+            ("OS", self._os_string()),
+            ("Python", platform.python_version()),
         ]
+
+        # PyTorch + CUDA
+        try:
+            import torch
+            pairs.append(("PyTorch", torch.version.__version__))
+            if torch.cuda.is_available():
+                pairs.append(("CUDA", torch.version.cuda or "N/A"))
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                pairs.append(("Compute", "MPS (Apple Metal)"))
+            else:
+                pairs.append(("Compute", "CPU"))
+        except ImportError:
+            pairs.append(("PyTorch", "not installed"))
+
+        # GPU + VRAM
         gpu = self._gpu_info
         if gpu.get("name"):
-            lines.append(f"GPU: {gpu['name']}")
+            pairs.append(("GPU", gpu["name"]))
             if "total_gb" in gpu and "used_gb" in gpu:
-                lines.append(
-                    f"VRAM: {gpu['total_gb']:.1f} GB total, "
-                    f"{gpu['used_gb']:.1f} GB used"
-                )
+                pairs.append((
+                    "VRAM",
+                    f"{gpu['total_gb']:.1f} GB total, {gpu['used_gb']:.1f} GB used"
+                ))
         else:
-            lines.append("GPU: N/A")
+            pairs.append(("GPU", "N/A"))
 
+        # Display resolution
+        screen = QApplication.primaryScreen()
+        if screen:
+            sz = screen.size()
+            pairs.append(("Display", f"{sz.width()}x{sz.height()}"))
+
+        return pairs
+
+    def _build_system_info_text(self) -> str:
+        """Plain-text preview of system info for the user to see."""
+        lines = [f"{label}: {value}" for label, value in self._gather_info_pairs()]
         if self._recent_errors:
             lines.append("")
             lines.append(f"Recent errors/warnings ({len(self._recent_errors)}):")
@@ -136,22 +183,9 @@ class ReportIssueDialog(QDialog):
 
     def _build_system_info_md(self) -> str:
         """Markdown-formatted system info for the GitHub issue body."""
-        lines = [
-            f"- **App Version:** {_APP_VERSION}",
-            f"- **OS:** {platform.platform()}",
-            f"- **Python:** {platform.python_version()}",
-        ]
-        gpu = self._gpu_info
-        if gpu.get("name"):
-            lines.append(f"- **GPU:** {gpu['name']}")
-            if "total_gb" in gpu and "used_gb" in gpu:
-                lines.append(
-                    f"- **VRAM:** {gpu['total_gb']:.1f} GB total, "
-                    f"{gpu['used_gb']:.1f} GB used"
-                )
-        else:
-            lines.append("- **GPU:** N/A")
-        return "\n".join(lines)
+        return "\n".join(
+            f"- **{label}:** {value}" for label, value in self._gather_info_pairs()
+        )
 
     # ------------------------------------------------------------------
     # URL builder
