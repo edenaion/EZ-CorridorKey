@@ -14,7 +14,6 @@ All notable changes to ez-CorridorKey are documented here.
 - Notice informs users a free GitHub account is required
 
 ### UI Polish
-- Click sound debounce increased to 200ms — fixes double-fire on dialog close
 - Fixed Python's `platform.platform()` misreporting Windows 11 as Windows 10
 
 ---
