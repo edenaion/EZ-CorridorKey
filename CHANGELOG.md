@@ -4,6 +4,21 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.1.2] - 2026-03-03 — In-App Issue Reporter, UI Polish
+
+### In-App Issue Reporter
+- **Help > Report Issue...** opens a dialog to file GitHub issues directly from the app
+- Auto-collects system info: app version, OS, Python, PyTorch, CUDA, GPU, VRAM, display resolution
+- Recent WARNING/ERROR log lines (up to 20) included automatically
+- Full report copied to clipboard before opening browser — survives GitHub login redirects
+- Notice informs users a free GitHub account is required
+
+### UI Polish
+- Click sound debounce increased to 200ms — fixes double-fire on dialog close
+- Fixed Python's `platform.platform()` misreporting Windows 11 as Windows 10
+
+---
+
 ## [1.1.1] - 2026-03-03 — Pipeline In/Out Fix, Reset I/O Button
 
 ### Pipeline Fix

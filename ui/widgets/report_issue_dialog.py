@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 logger = logging.getLogger(__name__)
 
 _GITHUB_ISSUES_URL = "https://github.com/edenaion/EZ-CorridorKey/issues/new"
-_APP_VERSION = "1.1.1"
+_APP_VERSION = "1.1.2"
 _MAX_URL_LENGTH = 7500  # stay well under 8192 to avoid 414 errors
 
 
