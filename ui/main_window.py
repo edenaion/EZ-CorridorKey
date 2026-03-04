@@ -252,6 +252,8 @@ class MainWindow(QMainWindow):
         help_menu = menu_bar.addMenu("Help")
         help_menu.addAction("Console", self._toggle_debug_console)
         help_menu.addSeparator()
+        help_menu.addAction("Report Issue...", self._show_report_issue)
+        help_menu.addSeparator()
         help_menu.addAction("About", self._show_about)
 
         # Click sound on any menu action
@@ -777,6 +779,7 @@ class MainWindow(QMainWindow):
     @Slot(dict)
     def _update_vram(self, info: dict) -> None:
         """Update VRAM meter in the top bar."""
+        self._last_vram_info = info  # stash for Report Issue dialog
         if not info.get("available"):
             self._vram_text.setText("No GPU")
             self._vram_bar.setValue(0)
@@ -2310,6 +2313,35 @@ class MainWindow(QMainWindow):
         UIAudio.set_volume(vol)
         if hasattr(self, "_volume_control"):
             self._volume_control.sync_mute_state()
+
+    def _show_report_issue(self) -> None:
+        import logging as _logging
+
+        from ui.widgets.report_issue_dialog import ReportIssueDialog
+
+        # Gather GPU info from last monitor update
+        gpu_info = {}
+        if hasattr(self, "_last_vram_info"):
+            gpu_info = self._last_vram_info
+
+        # Gather recent WARNING/ERROR log lines from debug console buffer
+        import re
+        recent_errors: list[str] = []
+        if hasattr(self, "_debug_console"):
+            for html, levelno in self._debug_console._log_buffer:
+                if levelno >= _logging.WARNING:
+                    plain = re.sub(r"<[^>]+>", "", html).strip()
+                    if plain:
+                        recent_errors.append(plain)
+                if len(recent_errors) >= 20:
+                    break
+
+        dlg = ReportIssueDialog(
+            gpu_info=gpu_info,
+            recent_errors=recent_errors,
+            parent=self,
+        )
+        dlg.exec()
 
     def _show_about(self) -> None:
         box = QMessageBox(self)
