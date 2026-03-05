@@ -309,11 +309,7 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 
 ## Hardware Requirements
 
-- **CorridorKey:** ~1.5 GB VRAM (8 GB GPU minimum, 12 GB recommended)
-- **GVM (Optional):** ~4.5 GB VRAM
-- **VideoMaMa (Optional):** ~6–8 GB VRAM
-
-Only one model is loaded at a time. A 12 GB GPU handles all three models comfortably.
+~24 GB of VRAM currently.
 
 ---
 
