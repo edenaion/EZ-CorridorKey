@@ -318,7 +318,7 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey), licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
 GUI/SFX/Workflow enhancements by [Ed Zisk](https://www.edzisk.com).
-Logo by [Sara Ann Stewart](https://www.clade.design/).
+Logo by [Sara Ann Stewart](https://www.instagram.com/sarastewartwork).
 
 If you use or build on this project, please star this repo and credit the contributors <3
 
