@@ -172,7 +172,7 @@ echo "[6/6] Optional models (can be downloaded later)"
 echo ""
 
 read -rp "  Download GVM alpha generator? (~6GB) [y/N]: " INSTALL_GVM
-if [[ "${INSTALL_GVM,,}" == "y" ]]; then
+if [[ "$(echo "$INSTALL_GVM" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
     .venv/bin/python scripts/setup_models.py --gvm
 fi
 
@@ -182,14 +182,14 @@ if [ "$OS_TYPE" = "macos" ]; then
     echo "  It works but will be slow. 37GB download — skip if unsure."
 fi
 read -rp "  Download VideoMaMa alpha generator? (~37GB) [y/N]: " INSTALL_VM
-if [[ "${INSTALL_VM,,}" == "y" ]]; then
+if [[ "$(echo "$INSTALL_VM" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
     .venv/bin/python scripts/setup_models.py --videomama
 fi
 
 # ── Create desktop shortcut ──
 echo ""
 read -rp "  Create desktop shortcut? [Y/n]: " CREATE_SHORTCUT
-if [[ "${CREATE_SHORTCUT,,}" != "n" ]]; then
+if [[ "$(echo "$CREATE_SHORTCUT" | tr '[:upper:]' '[:lower:]')" != "n" ]]; then
     ICON_PATH="$SCRIPT_DIR/ui/theme/corridorkey.png"
     if [ "$OS_TYPE" = "macos" ]; then
         # macOS: create a minimal .app bundle on Desktop (no Terminal window)

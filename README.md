@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.2.1](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.2.3](CHANGELOG.md)**
 
-> **Latest:** Partial alpha hints now unlock inference when in/out markers cover the range — [full changelog](CHANGELOG.md)
+> **Latest:** Cross-platform FFmpeg discovery for macOS GUI launches — [full changelog](CHANGELOG.md)
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -311,11 +311,7 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 
 ## Hardware Requirements
 
-- **CorridorKey:** ~1.5 GB VRAM (8 GB GPU minimum, 12 GB recommended)
-- **GVM (Optional):** ~4.5 GB VRAM
-- **VideoMaMa (Optional):** ~6–8 GB VRAM
-
-Only one model is loaded at a time. A 12 GB GPU handles all three models comfortably.
+~24 GB of VRAM currently.
 
 ---
 
@@ -324,7 +320,7 @@ Only one model is loaded at a time. A 12 GB GPU handles all three models comfort
 This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey), licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
 GUI/SFX/Workflow enhancements by [Ed Zisk](https://www.edzisk.com).
-Logo by [Sara Ann Stewart](https://www.clade.design/).
+Logo by [Sara Ann Stewart](https://www.instagram.com/sarastewartwork).
 
 If you use or build on this project, please star this repo and credit the contributors <3
 

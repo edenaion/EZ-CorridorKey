@@ -24,12 +24,25 @@ logger = logging.getLogger(__name__)
 
 _METADATA_FILENAME = ".video_metadata.json"
 
-# Common install locations on Windows
-_FFMPEG_SEARCH_PATHS = [
+# Common install locations per platform
+_FFMPEG_SEARCH_PATHS_WINDOWS = [
     r"C:\Program Files\ffmpeg\bin",
     r"C:\Program Files (x86)\ffmpeg\bin",
     r"C:\ffmpeg\bin",
 ]
+
+_FFMPEG_SEARCH_PATHS_UNIX = [
+    "/opt/homebrew/bin",        # macOS Homebrew (Apple Silicon)
+    "/usr/local/bin",           # macOS Homebrew (Intel) / Linux manual install
+    "/usr/bin",                 # Linux system package
+    "/snap/bin",                # Linux snap
+    os.path.expanduser("~/bin"),
+]
+
+_FFMPEG_SEARCH_PATHS = (
+    _FFMPEG_SEARCH_PATHS_WINDOWS if sys.platform == "win32"
+    else _FFMPEG_SEARCH_PATHS_UNIX
+)
 
 
 def find_ffmpeg() -> str | None:
@@ -37,8 +50,9 @@ def find_ffmpeg() -> str | None:
     found = shutil.which("ffmpeg")
     if found:
         return found
+    ext = ".exe" if sys.platform == "win32" else ""
     for d in _FFMPEG_SEARCH_PATHS:
-        candidate = os.path.join(d, "ffmpeg.exe")
+        candidate = os.path.join(d, f"ffmpeg{ext}")
         if os.path.isfile(candidate):
             return candidate
     return None
@@ -49,8 +63,9 @@ def find_ffprobe() -> str | None:
     found = shutil.which("ffprobe")
     if found:
         return found
+    ext = ".exe" if sys.platform == "win32" else ""
     for d in _FFMPEG_SEARCH_PATHS:
-        candidate = os.path.join(d, "ffprobe.exe")
+        candidate = os.path.join(d, f"ffprobe{ext}")
         if os.path.isfile(candidate):
             return candidate
     return None

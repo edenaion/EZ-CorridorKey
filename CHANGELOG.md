@@ -4,6 +4,18 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.2.3] - 2026-03-08 — Cross-Platform FFmpeg Discovery
+
+- FFmpeg/FFprobe discovery now checks common macOS/Linux install paths (`/opt/homebrew/bin`, `/usr/local/bin`, etc.) — fixes "FFmpeg not found" when GUI is launched from Finder/Dock where `~/.zshrc` PATH isn't loaded
+
+---
+
+## [1.2.2] - 2026-03-08 — macOS Installer Fix
+
+- Fixed `1-install.sh` failing on macOS due to Bash 4+ syntax (`${var,,}`) — macOS ships with Bash 3.2
+
+---
+
 ## [1.2.1] - 2026-03-08 — Partial Alpha + In/Out Range Support
 
 ### Partial Alpha Hint
@@ -64,7 +76,6 @@ All notable changes to ez-CorridorKey are documented here.
 - Notice informs users a free GitHub account is required
 
 ### UI Polish
-- Click sound debounce increased to 200ms — fixes double-fire on dialog close
 - Fixed Python's `platform.platform()` misreporting Windows 11 as Windows 10
 
 ---
