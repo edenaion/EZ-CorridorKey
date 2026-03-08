@@ -136,15 +136,13 @@ class CorridorKeyEngine:
 
         # Jhe Kimchi's Patch: fix Hiera global attention blocks so SDPA
         # uses FlashAttention instead of the memory-hungry math backend.
+        logger.info("Applying Hiera attention patch...")
         try:
             hiera = model.encoder.model  # unwrap FeatureGetterNet
             n_patched = _patch_hiera_global_attention(hiera)
-            if n_patched > 0:
-                logger.info(f"Hiera attention patch: {n_patched} global blocks → FlashAttention")
-            else:
-                logger.debug("Hiera attention patch: no global attention blocks found")
-        except AttributeError:
-            logger.debug("Hiera attention patch: model structure not compatible, skipping")
+            logger.info(f"Hiera attention patch: {n_patched} global blocks patched for FlashAttention")
+        except Exception as e:
+            logger.warning(f"Hiera attention patch failed: {type(e).__name__}: {e}")
 
         return model
 
