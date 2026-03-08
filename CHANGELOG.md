@@ -4,6 +4,12 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.2.2] - 2026-03-08 — macOS Installer Fix
+
+- Fixed `1-install.sh` failing on macOS due to Bash 4+ syntax (`${var,,}`) — macOS ships with Bash 3.2
+
+---
+
 ## [1.1.2] - 2026-03-03 — In-App Issue Reporter, UI Polish
 
 ### In-App Issue Reporter

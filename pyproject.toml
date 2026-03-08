@@ -1,6 +1,6 @@
 [project]
 name = "corridorkey"
-version = "1.1.2"
+version = "1.2.2"
 description = "AI Green Screen Keyer by Corridor Digital"
 license = {text = "CC-BY-NC-SA-4.0"}
 requires-python = ">=3.10"
