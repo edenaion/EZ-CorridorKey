@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to ez-CorridorKey are documented here.
+All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
