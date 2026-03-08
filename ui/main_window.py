@@ -1206,6 +1206,12 @@ class MainWindow(QMainWindow):
         self._current_clip.in_out_range = None
         from backend.project import save_in_out_range
         save_in_out_range(self._current_clip.root_path, None)
+        # Re-resolve state: removing in/out may drop READY → RAW
+        # if alpha only partially covers the full clip
+        self._current_clip._resolve_state()
+        self._clip_model.update_clip_state(
+            self._current_clip.name, self._current_clip.state)
+        self._io_tray.refresh()
         self._refresh_button_state()
 
     def _persist_in_out(self) -> None:
@@ -1218,6 +1224,12 @@ class MainWindow(QMainWindow):
             self._current_clip.in_out_range = rng
             from backend.project import save_in_out_range
             save_in_out_range(self._current_clip.root_path, rng)
+            # Re-resolve state: partial alpha + new in/out range may
+            # promote RAW → READY (v1.2.1 partial alpha logic)
+            self._current_clip._resolve_state()
+            self._clip_model.update_clip_state(
+                self._current_clip.name, self._current_clip.state)
+            self._io_tray.refresh()
         self._refresh_button_state()
 
     def _on_reset_all_in_out(self) -> None:
