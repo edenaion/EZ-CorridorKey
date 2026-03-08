@@ -2006,6 +2006,17 @@ class MainWindow(QMainWindow):
         count = 0
         for clip in clips:
             if clip.input_asset and clip.input_asset.asset_type == "video":
+                # If retrying after error, clean up partial extraction
+                # artifacts so extract_frames() doesn't think it's a resume
+                if clip.state == ClipState.ERROR:
+                    for subdir in ("Frames", "Input"):
+                        target = os.path.join(clip.root_path, subdir)
+                        dwab_marker = os.path.join(target, ".dwab_done")
+                        if os.path.isfile(dwab_marker):
+                            os.remove(dwab_marker)
+                    clip.error_message = None
+                    self._clip_model.update_clip_state(
+                        clip.name, ClipState.EXTRACTING)
                 self._extract_worker.submit(
                     clip.name, clip.input_asset.path, clip.root_path,
                 )
