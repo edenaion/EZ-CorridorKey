@@ -4,6 +4,15 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.2.1] - 2026-03-08 — Partial Alpha + In/Out Range Support
+
+### Partial Alpha Hint
+- Clips with partial alpha hints now promote to READY if in/out markers are set and alpha covers the in/out range
+- Previously, alpha had to cover ALL input frames regardless of in/out markers — Run Inference stayed greyed out
+- Without in/out markers, full-clip alpha coverage is still required (unchanged behavior)
+
+---
+
 ## [1.2.0] - 2026-03-08 — Import Alpha, Export UX
 
 ### Import Alpha Hint

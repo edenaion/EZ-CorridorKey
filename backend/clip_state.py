@@ -368,16 +368,24 @@ class ClipEntry:
                 self.state = ClipState.COMPLETE
                 return
 
-        # READY: AlphaHint must cover ALL input frames (not partial)
+        # READY: AlphaHint must cover the processing range
+        # If in/out markers are set, alpha only needs to cover that range.
+        # Otherwise, alpha must cover all input frames.
         if self.alpha_asset is not None:
-            if (self.input_asset is not None
-                    and self.alpha_asset.frame_count < self.input_asset.frame_count):
-                # Partial alpha — don't promote to READY, fall through
-                logger.info(
-                    f"Clip '{self.name}': partial alpha "
-                    f"({self.alpha_asset.frame_count}/{self.input_asset.frame_count}), "
-                    f"staying at lower state"
-                )
+            if self.input_asset is not None:
+                required = self.input_asset.frame_count
+                if self.in_out_range is not None:
+                    required = self.in_out_range.frame_count
+                if self.alpha_asset.frame_count < required:
+                    logger.info(
+                        f"Clip '{self.name}': partial alpha "
+                        f"({self.alpha_asset.frame_count}/{required}"
+                        f"{' in/out range' if self.in_out_range else ' total'}), "
+                        f"staying at lower state"
+                    )
+                else:
+                    self.state = ClipState.READY
+                    return
             else:
                 self.state = ClipState.READY
                 return

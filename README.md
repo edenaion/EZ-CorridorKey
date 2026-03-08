@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.2.0](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.2.1](CHANGELOG.md)**
 
-> **Latest:** Import your own alpha hints directly from the GUI — no manual file renaming or restart needed — [full changelog](CHANGELOG.md)
+> **Latest:** Partial alpha hints now unlock inference when in/out markers cover the range — [full changelog](CHANGELOG.md)
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
