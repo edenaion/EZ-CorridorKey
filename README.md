@@ -1,5 +1,7 @@
 # EZ-CorridorKey **[v1.1.3](CHANGELOG.md)**
 
+> **Latest:** VideoMaMa real-time status feedback, export card folder icons + per-output export menu, clear annotations cleanup, alpha panel UX polish — [full changelog](CHANGELOG.md)
+
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
 This GUI replaces the CLI drag-and-drop workflow with a complete desktop application while preserving 100% backward compatibility (`python main.py --cli` still runs the original wizard).
