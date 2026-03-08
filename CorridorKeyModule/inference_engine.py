@@ -144,6 +144,15 @@ class CorridorKeyEngine:
         except Exception as e:
             logger.warning(f"Hiera attention patch failed: {type(e).__name__}: {e}")
 
+        # torch.compile: JIT-compile the model graph for additional speedup.
+        # Must happen AFTER the Hiera patch so compiled graph uses patched forwards.
+        # First inference will be slower (compilation warmup).
+        try:
+            model = torch.compile(model)
+            logger.info("torch.compile applied to model")
+        except Exception as e:
+            logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
+
         return model
 
     @torch.no_grad()
