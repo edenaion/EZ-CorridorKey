@@ -24,6 +24,7 @@ class ParameterPanel(QWidget):
     gvm_requested = Signal()      # GVM AUTO button clicked
     videomama_requested = Signal() # VIDEOMAMA button clicked
     export_masks_requested = Signal()  # Export annotation masks clicked
+    import_alpha_requested = Signal()  # Import own AlphaHint folder
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -98,6 +99,22 @@ class ParameterPanel(QWidget):
         self._annotation_info = QLabel("")
         self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
         alpha_layout.addWidget(self._annotation_info)
+
+        or_label2 = QLabel("— or —")
+        or_label2.setAlignment(Qt.AlignCenter)
+        or_label2.setStyleSheet("color: #808070; font-size: 11px;")
+        alpha_layout.addWidget(or_label2)
+
+        self._import_alpha_btn = QPushButton("IMPORT ALPHA")
+        self._import_alpha_btn.setEnabled(False)
+        self._import_alpha_btn.setToolTip(
+            "Import your own alpha hint images (grayscale PNGs).\n"
+            "White = foreground, black = background.\n"
+            "Files are copied into the clip's AlphaHint/ folder\n"
+            "and the clip advances to READY state for inference."
+        )
+        self._import_alpha_btn.clicked.connect(self.import_alpha_requested.emit)
+        alpha_layout.addWidget(self._import_alpha_btn)
 
         layout.addWidget(alpha_group)
 
@@ -370,6 +387,10 @@ class ParameterPanel(QWidget):
     def set_videomama_enabled(self, enabled: bool) -> None:
         """Enable/disable VideoMaMa button based on clip state."""
         self._videomama_btn.setEnabled(enabled)
+
+    def set_import_alpha_enabled(self, enabled: bool) -> None:
+        """Enable/disable Import Alpha button based on clip state."""
+        self._import_alpha_btn.setEnabled(enabled)
 
     def set_annotation_info(self, annotated: int, total: int) -> None:
         """Update annotation frame counter."""

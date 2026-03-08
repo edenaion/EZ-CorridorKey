@@ -4,6 +4,18 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.2.0] - 2026-03-08 — Import Alpha, Export UX
+
+### Import Alpha Hint
+- New **IMPORT ALPHA** button in the Alpha Generation panel — import your own alpha hint images directly from the GUI
+- Supports PNG, JPG, TIFF, and EXR input (non-PNG auto-converted to grayscale PNG)
+- Files are automatically renamed to match input frame stems for correct 1:1 index matching
+- Natural/numeric sort handles any zero-padding scheme (e.g. `alpha_1.png` through `alpha_10.png` sorts correctly)
+- Frame count mismatch warning with option to proceed with partial pairing
+- Clip auto-advances to READY state after import — no restart needed
+
+---
+
 ## [1.1.3] - 2026-03-08 — VideoMaMa UX, Export Improvements
 
 ### VideoMaMa Status Feedback

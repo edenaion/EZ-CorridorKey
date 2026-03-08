@@ -622,6 +622,9 @@ class MainWindow(QMainWindow):
             or clip.mask_asset is not None
         )
         self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
+        self._param_panel.set_import_alpha_enabled(
+            clip.state in (ClipState.RAW, ClipState.MASKED)
+        )
 
         # Also refresh the run button and status bar state
         can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
@@ -745,6 +748,7 @@ class MainWindow(QMainWindow):
         self._param_panel.gvm_requested.connect(self._on_run_gvm)
         self._param_panel.videomama_requested.connect(self._on_run_videomama)
         self._param_panel.export_masks_requested.connect(self._on_export_masks)
+        self._param_panel.import_alpha_requested.connect(self._on_import_alpha)
 
         # Annotation stroke finished → update annotation counter + auto-save
         self._dual_viewer.input_viewer._split_view.stroke_finished.connect(
@@ -862,11 +866,14 @@ class MainWindow(QMainWindow):
             needs_extraction=needs_extraction,
         )
 
-        # Enable GVM/VideoMaMa buttons based on state
+        # Enable GVM/VideoMaMa/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
         # VideoMaMa: enable if MASKED, or if mask_asset exists (even if READY/COMPLETE)
         self._param_panel.set_videomama_enabled(
             clip.state == ClipState.MASKED or clip.mask_asset is not None
+        )
+        self._param_panel.set_import_alpha_enabled(
+            clip.state in (ClipState.RAW, ClipState.MASKED)
         )
 
     @Slot(str)
@@ -1534,6 +1541,117 @@ class MainWindow(QMainWindow):
             )
 
     @Slot()
+    def _on_import_alpha(self) -> None:
+        """Import user-provided alpha hint images into the clip's AlphaHint/ folder.
+
+        Files are renamed to match input frame stems so index-based matching
+        in the inference loop works correctly (frame 0 → frame 0, etc.).
+        """
+        clip = self._current_clip
+        if clip is None or clip.state not in (ClipState.RAW, ClipState.MASKED):
+            return
+        if clip.input_asset is None:
+            return
+
+        src_dir = QFileDialog.getExistingDirectory(
+            self, "Select Alpha Hint Folder",
+            "",
+            QFileDialog.ShowDirsOnly,
+        )
+        if not src_dir:
+            return
+
+        # Find image files in the selected folder (natural/numeric sort)
+        import glob as glob_module
+        import re as re_module
+        patterns = ("*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff", "*.exr")
+        src_files = []
+        for pat in patterns:
+            src_files.extend(glob_module.glob(os.path.join(src_dir, pat)))
+
+        def _natural_key(path: str):
+            """Sort key that handles any zero-padding scheme correctly."""
+            name = os.path.basename(path)
+            return [int(c) if c.isdigit() else c.lower()
+                    for c in re_module.split(r'(\d+)', name)]
+
+        src_files.sort(key=_natural_key)
+
+        if not src_files:
+            QMessageBox.warning(
+                self, "No Images",
+                "No image files found in the selected folder.\n"
+                "Expected grayscale images (white=foreground, black=background).",
+            )
+            return
+
+        # Get input frame stems for renaming
+        input_files = clip.input_asset.get_frame_files()
+        n_input = len(input_files)
+        n_src = len(src_files)
+
+        if n_src != n_input:
+            result = QMessageBox.warning(
+                self, "Frame Count Mismatch",
+                f"Clip '{clip.name}' has {n_input} input frames but you "
+                f"selected {n_src} alpha images.\n\n"
+                f"Each input frame needs a matching alpha hint.\n"
+                f"Only {min(n_src, n_input)} frames will be paired.",
+                QMessageBox.Ok | QMessageBox.Cancel,
+            )
+            if result == QMessageBox.Cancel:
+                return
+
+        # Confirm import
+        n_paired = min(n_src, n_input)
+        msg = f"Import {n_paired} alpha hint images into '{clip.name}'?"
+        if n_src != n_input:
+            msg += f"\n({abs(n_src - n_input)} frames will have no alpha hint)"
+        if QMessageBox.question(self, "Import Alpha", msg) != QMessageBox.Yes:
+            return
+
+        # Copy + rename to match input frame stems
+        import shutil
+        import cv2
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        if os.path.isdir(alpha_dir):
+            shutil.rmtree(alpha_dir)
+        os.makedirs(alpha_dir)
+
+        for i in range(n_paired):
+            src_path = src_files[i]
+            # Use the input frame's stem with .png extension
+            input_stem = os.path.splitext(input_files[i])[0]
+            dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
+
+            src_ext = os.path.splitext(src_path)[1].lower()
+            if src_ext == '.png':
+                shutil.copy2(src_path, dst_path)
+            else:
+                # Convert non-PNG to PNG (grayscale)
+                img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    cv2.imwrite(dst_path, img)
+                else:
+                    logger.warning(f"Failed to read alpha image: {src_path}")
+
+        logger.info(f"Imported {n_paired} alpha hints into {alpha_dir} "
+                     f"(renamed to match input stems)")
+
+        # Refresh clip state
+        clip.find_assets()
+        self._io_tray.refresh()
+
+        # Reload preview and button states
+        if self._current_clip and self._current_clip.name == clip.name:
+            self._dual_viewer.set_clip(clip)
+            self._refresh_button_state()
+            self._param_panel.set_import_alpha_enabled(
+                clip.state in (ClipState.RAW, ClipState.MASKED)
+            )
+
+        _Toast(self, f"Imported {n_src} alpha hints.\nClip is now {clip.state.value}.")
+
     def _on_run_gvm(self) -> None:
         """Run GVM alpha generation on the selected clip."""
         if self._current_clip is None or self._current_clip.state != ClipState.RAW:
@@ -1769,6 +1887,9 @@ class MainWindow(QMainWindow):
             self._param_panel.set_videomama_enabled(
                 self._current_clip.state == ClipState.MASKED
                 or self._current_clip.mask_asset is not None
+            )
+            self._param_panel.set_import_alpha_enabled(
+                self._current_clip.state in (ClipState.RAW, ClipState.MASKED)
             )
 
         logger.info(f"Clip finished ({job_type}): {clip_name} -> {target_state.value}")
