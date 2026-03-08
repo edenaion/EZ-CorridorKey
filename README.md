@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.2.3](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.2.4](CHANGELOG.md)**
 
-> **Latest:** Cross-platform FFmpeg discovery for macOS GUI launches — [full changelog](CHANGELOG.md)
+> **Latest:** In/out marker state fix, extraction retry fix — [full changelog](CHANGELOG.md)
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 

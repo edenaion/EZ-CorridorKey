@@ -4,6 +4,20 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.2.4] - 2026-03-08 — In/Out State Fix, Extraction Retry
+
+### In/Out Marker State Fix
+- Setting or clearing in/out markers now re-evaluates clip state immediately
+- Previously, partial alpha + in/out range wouldn't promote RAW to READY until app restart
+- RUN SELECTED button now enables as soon as in/out covers the alpha'd range
+
+### Extraction Retry Fix
+- Re-running extraction after an error now works correctly
+- Clears stale `.dwab_done` marker so `extract_frames()` doesn't skip the actual work
+- Resets clip state from ERROR to EXTRACTING before re-queueing
+
+---
+
 ## [1.2.3] - 2026-03-08 — Cross-Platform FFmpeg Discovery
 
 - FFmpeg/FFprobe discovery now checks common macOS/Linux install paths (`/opt/homebrew/bin`, `/usr/local/bin`, etc.) — fixes "FFmpeg not found" when GUI is launched from Finder/Dock where `~/.zshrc` PATH isn't loaded
