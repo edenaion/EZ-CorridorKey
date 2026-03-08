@@ -50,6 +50,7 @@ class ThumbnailCanvas(QWidget):
     multi_select_toggled = Signal(object)  # ClipEntry (Ctrl+click toggle)
     shift_select_requested = Signal(object)  # ClipEntry (Shift+click range)
     context_menu_requested = Signal(object)  # ClipEntry (right-click)
+    folder_icon_clicked = Signal(object)  # ClipEntry (folder icon click)
 
     CARD_WIDTH = 130
     CARD_SPACING = 4
@@ -210,22 +211,50 @@ class ThumbnailCanvas(QWidget):
             p.setPen(QColor("#808070"))
             p.drawText(info_rect, Qt.AlignLeft | Qt.AlignVCenter, info_text)
 
+        # Folder icon (top-left of thumbnail, export cards only)
+        if self._show_manifest_tooltip:
+            icon_size = 18
+            icon_rect = QRect(rect.x() + pad, rect.y() + pad, icon_size, icon_size)
+            is_icon_hovered = (clip.name == self._hovered_name
+                               and hasattr(self, '_hover_pos')
+                               and icon_rect.contains(self._hover_pos))
+            bg_alpha = 200 if is_icon_hovered else 140
+            p.fillRect(icon_rect, QColor(0, 0, 0, bg_alpha))
+            folder_font = p.font()
+            folder_font.setPointSize(10)
+            folder_font.setBold(False)
+            p.setFont(folder_font)
+            p.setPen(QColor("#FFF203") if is_icon_hovered else QColor("#C0C0A0"))
+            p.drawText(icon_rect, Qt.AlignCenter, "\U0001F4C2")
+
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         clip = self._card_at(event.position().x())
         name = clip.name if clip else None
+        self._hover_pos = event.position().toPoint()
         if name != self._hovered_name:
             self._hovered_name = name
-            self.update()
+        self.update()
 
     def leaveEvent(self, event) -> None:
         if self._hovered_name is not None:
             self._hovered_name = None
             self.update()
 
+    def _folder_icon_rect(self, clip_index: int) -> QRect:
+        """Return the folder icon QRect for a given card index."""
+        x = clip_index * (self.CARD_WIDTH + self.CARD_SPACING)
+        return QRect(x + self.CARD_PADDING, self.CARD_PADDING, 18, 18)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton and self._clips:
             clip = self._card_at(event.position().x())
             if clip:
+                # Check folder icon click (export cards only)
+                if self._show_manifest_tooltip:
+                    idx = int(event.position().x() // (self.CARD_WIDTH + self.CARD_SPACING))
+                    if self._folder_icon_rect(idx).contains(event.position().toPoint()):
+                        self.folder_icon_clicked.emit(clip)
+                        return
                 from ui.sounds.audio_manager import UIAudio
                 UIAudio.click()
                 if event.modifiers() & Qt.ShiftModifier:
@@ -323,7 +352,7 @@ class IOTrayPanel(QWidget):
     clips_dir_changed = Signal(str)  # folder path (import folder)
     files_imported = Signal(list)    # list of video file paths
     extract_requested = Signal(list) # list[ClipEntry] — re-run extraction
-    export_video_requested = Signal(object)  # ClipEntry — export as video
+    export_video_requested = Signal(object, str)  # ClipEntry, source_dir — export as video
     reset_in_out_requested = Signal()  # clear all in/out markers
 
     def __init__(self, model: ClipListModel, parent=None):
@@ -412,6 +441,7 @@ class IOTrayPanel(QWidget):
         self._export_canvas.card_clicked.connect(self.clip_clicked.emit)
         self._export_canvas.card_double_clicked.connect(self.clip_clicked.emit)
         self._export_canvas.context_menu_requested.connect(self._on_export_context_menu)
+        self._export_canvas.folder_icon_clicked.connect(self._open_export_folder)
         self._export_scroll.setWidget(self._export_canvas)
 
         export_section.addWidget(self._export_scroll, 1)
@@ -631,12 +661,24 @@ class IOTrayPanel(QWidget):
         """Show right-click context menu for an export card."""
         menu = QMenu(self)
 
-        # Export Video (only for COMPLETE clips)
-        if clip.state == ClipState.COMPLETE:
-            export_action = QAction("Export Video...", self)
-            export_action.triggered.connect(lambda: self.export_video_requested.emit(clip))
-            menu.addAction(export_action)
-            menu.addSeparator()
+        # Export Video — list each available output subdirectory
+        if clip.state == ClipState.COMPLETE and hasattr(clip, 'output_dir'):
+            output_dir = clip.output_dir
+            if os.path.isdir(output_dir):
+                subdirs = sorted(
+                    d for d in os.listdir(output_dir)
+                    if os.path.isdir(os.path.join(output_dir, d))
+                    and os.listdir(os.path.join(output_dir, d))
+                )
+                if subdirs:
+                    for subdir in subdirs:
+                        src = os.path.join(output_dir, subdir)
+                        action = QAction(f"Export {subdir} as Video...", self)
+                        action.triggered.connect(
+                            lambda checked=False, c=clip, s=src: self.export_video_requested.emit(c, s)
+                        )
+                        menu.addAction(action)
+                    menu.addSeparator()
 
         # Open containing folder (Output directory)
         output_dir = os.path.join(clip.root_path, "Output")
@@ -649,6 +691,14 @@ class IOTrayPanel(QWidget):
 
         from PySide6.QtGui import QCursor
         menu.exec(QCursor.pos())
+
+    def _open_export_folder(self, clip: ClipEntry) -> None:
+        """Open the export/output folder for a clip."""
+        output_dir = os.path.join(clip.root_path, "Output")
+        if not os.path.isdir(output_dir):
+            output_dir = clip.root_path
+        if os.path.isdir(output_dir):
+            os.startfile(output_dir)
 
     def _open_in_explorer(self, clip: ClipEntry) -> None:
         if os.path.isdir(clip.root_path):

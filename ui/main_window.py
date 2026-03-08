@@ -1982,11 +1982,13 @@ class MainWindow(QMainWindow):
 
     # ── Export Video ──
 
-    def _on_export_video(self, clip: ClipEntry | None = None) -> None:
+    def _on_export_video(self, clip: ClipEntry | None = None,
+                         source_dir: str | None = None) -> None:
         """Export output image sequence as video file.
 
         Args:
             clip: Specific clip to export. If None, uses current selection.
+            source_dir: Specific source directory. If None, auto-detect.
         """
         if clip is None:
             if self._current_clip is None:
@@ -2001,16 +2003,19 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Find output directory with frames (prefer Comp, fall back to FG)
-        comp_dir = os.path.join(clip.output_dir, "Comp")
-        fg_dir = os.path.join(clip.output_dir, "FG")
-        if os.path.isdir(comp_dir) and os.listdir(comp_dir):
-            source_dir = comp_dir
-        elif os.path.isdir(fg_dir) and os.listdir(fg_dir):
-            source_dir = fg_dir
+        # Use provided source_dir or auto-detect
+        if source_dir and os.path.isdir(source_dir) and os.listdir(source_dir):
+            pass  # use as-is
         else:
-            QMessageBox.warning(self, "No Output", "No output frames found to export.")
-            return
+            comp_dir = os.path.join(clip.output_dir, "Comp")
+            fg_dir = os.path.join(clip.output_dir, "FG")
+            if os.path.isdir(comp_dir) and os.listdir(comp_dir):
+                source_dir = comp_dir
+            elif os.path.isdir(fg_dir) and os.listdir(fg_dir):
+                source_dir = fg_dir
+            else:
+                QMessageBox.warning(self, "No Output", "No output frames found to export.")
+                return
 
         # Read video metadata for fps
         from backend.ffmpeg_tools import read_video_metadata, stitch_video, find_ffmpeg
@@ -2025,10 +2030,14 @@ class MainWindow(QMainWindow):
         metadata = read_video_metadata(clip.root_path)
         fps = metadata.get("fps", 24.0) if metadata else 24.0
 
-        # Ask for output path
-        default_name = f"{clip.name}_export.mp4"
+        # Default export to _EXPORTS in the clip's project folder
+        subdir_name = os.path.basename(source_dir)
+        exports_dir = os.path.join(clip.root_path, "_EXPORTS")
+        os.makedirs(exports_dir, exist_ok=True)
+        default_name = f"{clip.name}_{subdir_name}_export.mp4"
+        default_path = os.path.join(exports_dir, default_name)
         out_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Video", default_name,
+            self, "Export Video", default_path,
             "MP4 Video (*.mp4);;All Files (*)",
         )
         if not out_path:

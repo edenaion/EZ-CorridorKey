@@ -4,6 +4,35 @@ All notable changes to ez-CorridorKey are documented here.
 
 ---
 
+## [1.1.3] - 2026-03-08 — VideoMaMa UX, Export Improvements
+
+### VideoMaMa Status Feedback
+- Status bar now shows real-time phase updates during VideoMaMa: Loading model, Loading frames, Loading masks, Running inference
+- Eliminated silent 6+ minute gap where users had no feedback — each phase is now visible
+- Added "Running inference (chunk N/M)..." status before GPU inference begins
+- Cancel checks added during frame and mask loading phases (not just between chunks)
+
+### Alpha Generation Panel
+- Added "— or —" divider between GVM AUTO and VIDEOMAMA buttons for clarity
+- VideoMaMa tooltip now references hotkeys (1 for green/foreground, 2 for red/background)
+- Tooltip includes annotation strategy tip: annotate keyframes where subject changes shape
+
+### Clear Annotations Fix
+- Clearing annotations now removes exported `VideoMamaMaskHint/` directory and disables VideoMaMa button
+- Previously, clearing annotations left stale masks on disk, allowing VideoMaMa to run on outdated data
+
+### Export Card Improvements
+- Folder icon on export thumbnails — click to open output folder in Explorer
+- Double-click export card to load clip in the viewer
+- Right-click context menu lists each output type (Comp, FG, BG, etc.) as separate export options
+- Video exports now default to `_EXPORTS/` subdirectory in each clip's project folder
+- Export filenames include output type (e.g. `MyClip_Comp_export.mp4`)
+
+### VideoMaMa Cancel Toast
+- Cancel notification now appears centered on screen instead of bottom-left
+
+---
+
 ## [1.1.2] - 2026-03-03 — In-App Issue Reporter, UI Polish
 
 ### In-App Issue Reporter
