@@ -163,8 +163,15 @@ class CNNRefinerModule(nn.Module):
                 tile_delta = self._process_tile(tile)
 
                 tile_h, tile_w = tile_delta.shape[2], tile_delta.shape[3]
+                # Only ramp edges that overlap with adjacent tiles, not image boundaries.
+                at_top = (y0_adj == 0)
+                at_bottom = (y1 == H)
+                at_left = (x0_adj == 0)
+                at_right = (x1 == W)
                 blend_w = self._get_blend_weight(
-                    tile_h, tile_w, tile_overlap, full_input.device, full_input.dtype
+                    tile_h, tile_w, tile_overlap,
+                    at_top, at_bottom, at_left, at_right,
+                    full_input.device, full_input.dtype,
                 )
 
                 delta_sum[:, :, y0_adj:y1, x0_adj:x1] += tile_delta * blend_w
@@ -191,27 +198,41 @@ class CNNRefinerModule(nn.Module):
 
         return self._forward_tiled(full_input, coarse_pred.shape[1])
 
-    def _get_blend_weight(self, h, w, overlap, device, dtype):
-        key = (h, w, overlap, device, dtype)
+    def _get_blend_weight(self, h, w, overlap,
+                          at_top, at_bottom, at_left, at_right,
+                          device, dtype):
+        key = (h, w, overlap, at_top, at_bottom, at_left, at_right, device, dtype)
         weight = self._blend_weight_cache.get(key)
         if weight is None:
-            weight = self._blend_weight(h, w, overlap, device, dtype)
+            weight = self._blend_weight(h, w, overlap,
+                                        at_top, at_bottom, at_left, at_right,
+                                        device, dtype)
             self._blend_weight_cache[key] = weight
         return weight
 
     @staticmethod
-    def _blend_weight(h, w, overlap, device, dtype):
-        """Linear blend ramp for tile edges."""
+    def _blend_weight(h, w, overlap,
+                      at_top, at_bottom, at_left, at_right,
+                      device, dtype):
+        """Linear blend ramp for tile overlap regions.
+
+        Edges at image boundaries (at_top/bottom/left/right=True) keep
+        full weight — only internal tile-to-tile overlaps get ramped.
+        """
         weight = torch.ones(1, 1, h, w, device=device, dtype=dtype)
         if overlap <= 0:
             return weight
         ramp = torch.linspace(0.0, 1.0, overlap, device=device, dtype=dtype)
         for i in range(min(overlap, h)):
-            weight[:, :, i, :] *= ramp[i]
-            weight[:, :, h - 1 - i, :] *= ramp[i]
+            if not at_top:
+                weight[:, :, i, :] *= ramp[i]
+            if not at_bottom:
+                weight[:, :, h - 1 - i, :] *= ramp[i]
         for i in range(min(overlap, w)):
-            weight[:, :, :, i] *= ramp[i]
-            weight[:, :, :, w - 1 - i] *= ramp[i]
+            if not at_left:
+                weight[:, :, :, i] *= ramp[i]
+            if not at_right:
+                weight[:, :, :, w - 1 - i] *= ramp[i]
         return weight
 
 

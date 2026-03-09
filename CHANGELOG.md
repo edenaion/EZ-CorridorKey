@@ -4,6 +4,39 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.3.0] - 2026-03-09 — 2x Faster Inference, Low-VRAM Support
+
+### Performance (4K: 3.3s → 1.5-1.8s per frame)
+- **Hiera FlashAttention patch** — fixes timm's 5D non-contiguous Q/K/V tensors in 18 global attention blocks, enabling SDPA FlashAttention instead of O(N²) math fallback (credit: Jhe Kimchi)
+- **TF32 tensor cores** — `torch.set_float32_matmul_precision('high')` for ~15% throughput boost on Ampere+ GPUs (no-op on older hardware)
+- **torch.compile** — JIT compilation via Triton inductor backend with `fullgraph=False` for graph break support
+- **Quality verified** — 157+ dB PSNR across all optimization levels (mathematically identical output)
+
+### Low-VRAM Support (8GB GPUs)
+- **Tiled CNN refiner** — 512×512 tiles with 128px overlap (> 65px receptive field = lossless blending)
+- **Boundary-aware blending** — tile edges at image boundaries keep full weight, only internal overlaps get ramped
+- **Selective torch.compile** — `@torch.compiler.disable(recursive=False)` excludes tile scheduler from Dynamo; tile CNN compiled separately
+- **VRAM auto-detection** — ≥12GB uses speed mode (full compile), <12GB uses tiled mode
+- **cuDNN benchmark disabled** — saves 2-5 GB workspace memory
+- **Manual override** — `CORRIDORKEY_OPT_MODE=speed|lowvram|auto` environment variable
+
+### Fixes
+- **Zombie process on exit** — `os._exit()` kills Triton background threads that prevented clean shutdown (was holding ~5.5GB VRAM after window close)
+- **Debug console** — F12 console now closes with main window
+- **Batch launcher** — `2-start.bat` exits immediately after spawning app
+- **GPU flush** — `gc.collect()` + `torch.cuda.synchronize()` before `empty_cache()` in model unload
+- **Console window spam** — Triton compilation no longer opens flurry of terminal windows on Windows
+
+### Dependencies
+- Added `triton-windows>=3.5,<4` (Windows-only, enables torch.compile)
+- Added `OpenEXR>=3.4` to requirements.txt (was in pyproject.toml only)
+
+### Quality Scripts
+- `scripts/benchmark_quality.py` — compare 4 optimization levels on same frame (PSNR/MAE/max diff)
+- `scripts/compare_quality.py` — A/B comparison between two alpha output directories
+
+---
+
 ## [1.2.4] - 2026-03-08 — In/Out State Fix, Extraction Retry
 
 ### In/Out Marker State Fix
