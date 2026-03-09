@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 
 import numpy as np
@@ -46,7 +47,9 @@ from ui.widgets.io_tray_panel import IOTrayPanel
 from ui.widgets.welcome_screen import WelcomeScreen
 from ui.widgets.preferences_dialog import (
     PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
-    KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE, get_setting_bool,
+    KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE,
+    KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES,
+    get_setting_bool,
 )
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
@@ -221,6 +224,7 @@ class MainWindow(QMainWindow):
         import_menu = file_menu.addMenu("Import Clips")
         import_menu.addAction("Import Folder...", self._on_import_folder)
         import_menu.addAction("Import Video(s)...", self._on_import_videos)
+        import_menu.addAction("Import Image Sequence...", self._on_import_image_sequence)
         file_menu.addSeparator()
 
         # Session save/load (shortcuts managed by registry)
@@ -717,6 +721,8 @@ class MainWindow(QMainWindow):
         self._io_tray.selection_changed.connect(self._on_selection_changed)
         self._io_tray.clips_dir_changed.connect(self._on_tray_folder_imported)
         self._io_tray.files_imported.connect(self._on_tray_files_imported)
+        self._io_tray.sequence_folder_imported.connect(self._on_sequence_folder_imported)
+        self._io_tray.image_files_dropped.connect(self._on_image_files_dropped)
         self._io_tray.extract_requested.connect(self._on_extract_requested)
         self._io_tray.export_video_requested.connect(self._on_export_video)
         self._io_tray.reset_in_out_requested.connect(self._on_reset_all_in_out)
@@ -1037,19 +1043,28 @@ class MainWindow(QMainWindow):
     def _on_welcome_files(self, file_paths: list) -> None:
         """Handle files selected from welcome screen — creates a new project.
 
-        Creates ONE project folder for all selected videos, with each
-        video as a separate clip nested inside clips/.
+        Creates ONE project folder for all selected media (videos and/or images),
+        with each video as a separate clip nested inside clips/.
+        Image files are handled via the image_files_dropped flow.
         """
         if not file_paths:
             return
 
-        from backend.project import create_project, is_video_file
+        from backend.project import create_project, is_video_file, is_image_file
 
-        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
-
+        # Separate videos from images
         video_paths = [f for f in file_paths if is_video_file(f)]
+        image_paths = [f for f in file_paths if is_image_file(f)]
+
+        # If only images were selected, route to image handler
+        if not video_paths and image_paths:
+            self._on_image_files_dropped(image_paths)
+            return
+
         if not video_paths:
             return
+
+        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
 
         # Multi-video: ask user to name the project
         display_name = None
@@ -1107,19 +1122,46 @@ class MainWindow(QMainWindow):
             # Welcome screen — create a new project
             self._on_welcome_files(paths)
 
+    def _on_import_image_sequence(self) -> None:
+        """File → Import Clips → Import Image Sequence — context-aware."""
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "Select Image Sequence Folder", "",
+            QFileDialog.ShowDirsOnly,
+        )
+        if dir_path:
+            self._on_sequence_folder_imported(dir_path)
+
     def _add_folder_to_project(self, dir_path: str) -> None:
-        """Import all videos from a folder into the current project."""
-        from backend.project import is_video_file, add_clips_to_project
+        """Import all videos and image sequences from a folder into the current project."""
+        from backend.project import (
+            is_video_file, add_clips_to_project,
+            folder_has_image_sequence, add_sequences_to_project,
+        )
         videos = [
             os.path.join(dir_path, f) for f in os.listdir(dir_path)
             if is_video_file(os.path.join(dir_path, f))
         ]
-        if not videos:
-            QMessageBox.information(self, "No Videos", "No video files found in that folder.")
+        is_seq = folder_has_image_sequence(dir_path)
+
+        if not videos and not is_seq:
+            QMessageBox.information(
+                self, "No Media",
+                "No video files or image sequences found in that folder."
+            )
             return
-        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
-        add_clips_to_project(self._clips_dir, videos, copy_source=copy_source)
-        logger.info(f"Added {len(videos)} clip(s) from folder to project")
+
+        if videos:
+            copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
+            add_clips_to_project(self._clips_dir, videos, copy_source=copy_source)
+            logger.info(f"Added {len(videos)} video clip(s) from folder to project")
+
+        if is_seq:
+            copy_seq = get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES)
+            add_sequences_to_project(
+                self._clips_dir, [dir_path], copy_source=copy_seq,
+            )
+            logger.info(f"Added image sequence from folder to project")
+
         self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
 
     def _add_videos_to_project(self, file_paths: list) -> None:
@@ -1133,27 +1175,200 @@ class MainWindow(QMainWindow):
         logger.info(f"Added {len(videos)} clip(s) to project")
         self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
 
-    def _create_project_from_folder(self, dir_path: str) -> None:
-        """Create a new project from a folder of videos (welcome screen path).
+    @Slot(str)
+    def _on_sequence_folder_imported(self, folder_path: str) -> None:
+        """Handle image sequence folder from +ADD menu or drag-drop."""
+        from backend.project import (
+            folder_has_image_sequence, validate_sequence_stems,
+            count_sequence_frames, add_sequences_to_project,
+            create_project_from_media,
+        )
 
-        Scans the folder for video files, creates a project named after the
-        folder, and opens it.
+        if not folder_has_image_sequence(folder_path):
+            QMessageBox.information(
+                self, "No Images",
+                "No image files found in that folder.\n\n"
+                "Supported formats: PNG, JPG, EXR, TIF, TIFF, BMP, DPX"
+            )
+            return
+
+        # Check for duplicate stems (e.g. frame.png + frame.exr)
+        dupes = validate_sequence_stems(folder_path)
+        if dupes:
+            sample = ", ".join(dupes[:5])
+            if len(dupes) > 5:
+                sample += f" ... ({len(dupes)} total)"
+            QMessageBox.warning(
+                self, "Duplicate Filenames",
+                f"Found files with the same name but different extensions:\n"
+                f"{sample}\n\n"
+                f"This would cause output file conflicts. Please use one format "
+                f"per sequence folder."
+            )
+            return
+
+        n_frames = count_sequence_frames(folder_path)
+        logger.info(f"Importing image sequence: {folder_path} ({n_frames} frames)")
+
+        copy_seq = get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES)
+
+        if self._clips_dir:
+            add_sequences_to_project(
+                self._clips_dir, [folder_path], copy_source=copy_seq,
+            )
+            logger.info(f"Added image sequence to project: {folder_path}")
+            self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
+        else:
+            folder_name = os.path.basename(folder_path.rstrip("/\\"))
+            project_dir = create_project_from_media(
+                sequence_folders=[folder_path],
+                copy_sequences=copy_seq,
+                display_name=folder_name,
+            )
+            logger.info(f"Created project from image sequence: {folder_path}")
+            self._switch_to_workspace()
+            self._on_clips_dir_changed(project_dir, skip_session_restore=True)
+
+    @Slot(list)
+    def _on_image_files_dropped(self, file_paths: list) -> None:
+        """Handle individual image files dropped — popup for <5 or auto-detect."""
+        if not file_paths:
+            return
+
+        n = len(file_paths)
+        parent_folder = os.path.dirname(file_paths[0])
+
+        if n < 5:
+            # Show popup: "Just these N frames" or "Scan folder for full sequence?"
+            from backend.project import count_sequence_frames
+            folder_count = count_sequence_frames(parent_folder)
+
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Import Image Frames")
+            msg.setText(
+                f"You dropped {n} image file(s).\n"
+                f"The source folder contains {folder_count} image(s) total."
+            )
+            msg.setInformativeText("How would you like to import?")
+
+            btn_just_these = msg.addButton(
+                f"Copy Just These {n}", QMessageBox.AcceptRole,
+            )
+            btn_full_seq = msg.addButton(
+                "Import Full Sequence", QMessageBox.ActionRole,
+            )
+            msg.addButton(QMessageBox.Cancel)
+            msg.setDefaultButton(btn_full_seq)
+            msg.exec()
+
+            clicked = msg.clickedButton()
+            if clicked == btn_just_these:
+                self._import_specific_frames(parent_folder, file_paths)
+            elif clicked == btn_full_seq:
+                self._on_sequence_folder_imported(parent_folder)
+            # else: Cancel — do nothing
+        else:
+            # >= 5 files: auto-detect as full sequence from parent folder
+            self._on_sequence_folder_imported(parent_folder)
+
+    def _import_specific_frames(
+        self, source_folder: str, file_paths: list[str],
+    ) -> None:
+        """Import specific frames (always copies into Frames/)."""
+        from backend.project import (
+            create_clip_from_sequence, projects_root,
+            write_project_json,
+        )
+
+        filenames = [os.path.basename(f) for f in file_paths]
+
+        if self._clips_dir:
+            clips_dir = os.path.join(self._clips_dir, "clips")
+            os.makedirs(clips_dir, exist_ok=True)
+            create_clip_from_sequence(
+                clips_dir, source_folder,
+                copy_source=True, specific_files=filenames,
+            )
+            logger.info(f"Imported {len(filenames)} specific frame(s)")
+            self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
+        else:
+            # No project open — create one manually with specific files
+            from datetime import datetime
+            folder_name = os.path.basename(source_folder.rstrip("/\\"))
+            name_stem = re.sub(r"[^\w\-]", "_", folder_name)
+            name_stem = re.sub(r"_+", "_", name_stem).strip("_")[:60]
+            timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
+            project_dir = os.path.join(projects_root(), f"{timestamp}_{name_stem}")
+            clips_dir = os.path.join(project_dir, "clips")
+            os.makedirs(clips_dir, exist_ok=True)
+            clip_name = create_clip_from_sequence(
+                clips_dir, source_folder,
+                copy_source=True, specific_files=filenames,
+            )
+            write_project_json(project_dir, {
+                "version": 2,
+                "created": datetime.now().isoformat(),
+                "display_name": folder_name,
+                "clips": [clip_name],
+            })
+            logger.info(f"Created project with {len(filenames)} specific frame(s)")
+            self._switch_to_workspace()
+            self._on_clips_dir_changed(project_dir, skip_session_restore=True)
+
+    def _create_project_from_folder(self, dir_path: str) -> None:
+        """Create a new project from a folder of videos/sequences (welcome screen path).
+
+        Scans the folder for video files and image sequences, creates a project
+        named after the folder, and opens it.
         """
-        from backend.project import is_video_file, create_project
+        from backend.project import (
+            is_video_file, create_project, folder_has_image_sequence,
+            create_project_from_media,
+        )
         videos = sorted(
             os.path.join(dir_path, f) for f in os.listdir(dir_path)
             if is_video_file(os.path.join(dir_path, f))
         )
-        if not videos:
-            QMessageBox.information(self, "No Videos", "No video files found in that folder.")
+
+        # Check if folder itself is an image sequence (no subdirectories)
+        is_seq = folder_has_image_sequence(dir_path)
+
+        if not videos and not is_seq:
+            QMessageBox.information(
+                self, "No Media",
+                "No video files or image sequences found in that folder."
+            )
             return
+
         folder_name = os.path.basename(dir_path.rstrip("/\\"))
-        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
-        project_dir = create_project(
-            videos, copy_source=copy_source, display_name=folder_name,
-        )
+        copy_video = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
+        copy_seq = get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES)
+
+        if videos and not is_seq:
+            # Videos only — use existing path
+            project_dir = create_project(
+                videos, copy_source=copy_video, display_name=folder_name,
+            )
+        elif is_seq and not videos:
+            # Image sequence only
+            project_dir = create_project_from_media(
+                sequence_folders=[dir_path],
+                copy_sequences=copy_seq,
+                display_name=folder_name,
+            )
+        else:
+            # Mixed: videos + image sequence
+            project_dir = create_project_from_media(
+                video_paths=videos,
+                sequence_folders=[dir_path],
+                copy_video=copy_video,
+                copy_sequences=copy_seq,
+                display_name=folder_name,
+            )
+
+        media_count = len(videos) + (1 if is_seq else 0)
         logger.info(
-            f"Created project '{folder_name}' with {len(videos)} clip(s) from folder"
+            f"Created project '{folder_name}' with {media_count} source(s) from folder"
         )
         self._switch_to_workspace()
         self._on_clips_dir_changed(project_dir, skip_session_restore=True)
@@ -2497,11 +2712,17 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _show_about(self) -> None:
+        try:
+            from importlib.metadata import version
+            app_version = version("corridorkey")
+        except Exception:
+            app_version = "unknown"
+
         box = QMessageBox(self)
         box.setWindowTitle("About CorridorKey")
         box.setTextFormat(Qt.RichText)
         box.setText(
-            "<h2>CorridorKey</h2>"
+            f"<h2>CorridorKey v{app_version}</h2>"
             "<p>AI Green Screen Keyer<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"

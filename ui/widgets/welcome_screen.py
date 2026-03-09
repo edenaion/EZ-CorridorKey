@@ -82,7 +82,7 @@ class _DropZone(QWidget):
         layout.addSpacing(20)
 
         # Prompt text
-        prompt = QLabel("Drop Videos or Click to Import")
+        prompt = QLabel("Drop Videos, Image Sequences, or Click to Import")
         prompt.setAlignment(Qt.AlignCenter)
         prompt.setObjectName("welcomePrompt")
         layout.addWidget(prompt)
@@ -163,10 +163,17 @@ class WelcomeScreen(QWidget):
         self._recents_panel.refresh()
 
     def _on_browse(self) -> None:
-        """Open file dialog — users can pick video files."""
+        """Open file dialog — users can pick video or image files."""
+        media_filter = (
+            "Media Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v "
+            "*.png *.jpg *.jpeg *.exr *.tif *.tiff *.bmp *.dpx);;"
+            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;"
+            "Image Files (*.png *.jpg *.jpeg *.exr *.tif *.tiff *.bmp *.dpx);;"
+            "All Files (*)"
+        )
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select Video Files", "",
-            VIDEO_FILE_FILTER,
+            self, "Select Media Files", "",
+            media_filter,
         )
         if paths:
             self.files_selected.emit(paths)

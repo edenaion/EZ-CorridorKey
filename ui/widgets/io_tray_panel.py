@@ -22,7 +22,7 @@ from PySide6.QtCore import Qt, Signal, QRect, QSize, QEvent
 from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent, QAction
 
 from backend import ClipEntry, ClipState
-from backend.project import VIDEO_FILE_FILTER
+from backend.project import VIDEO_FILE_FILTER, is_image_file, is_video_file
 from ui.models.clip_model import ClipListModel
 
 logger = logging.getLogger(__name__)
@@ -198,6 +198,18 @@ class ThumbnailCanvas(QWidget):
         p.setPen(QColor("#E0E0E0"))
         p.drawText(name_rect, Qt.AlignLeft | Qt.AlignVCenter, elided)
 
+        # Source type badge (top-left over thumbnail, input cards only)
+        if not self._show_manifest_tooltip and clip.source_type != "unknown":
+            src_icon = "\U0001F39E" if clip.source_type == "video" else "\U0001F4F7"  # film frames / camera
+            src_font = p.font()
+            src_font.setPointSize(9)
+            src_font.setBold(False)
+            p.setFont(src_font)
+            src_rect = QRect(rect.x() + pad, rect.y() + pad, 18, 18)
+            p.fillRect(src_rect, QColor(0, 0, 0, 140))
+            p.setPen(QColor("#C0C0A0"))
+            p.drawText(src_rect, Qt.AlignCenter, src_icon)
+
         # Frame count (below name, with background)
         if clip.input_asset:
             font.setPointSize(8)
@@ -207,6 +219,8 @@ class ThumbnailCanvas(QWidget):
             info_text = f"{clip.input_asset.frame_count} frames"
             if clip.input_asset.asset_type == "video":
                 info_text += " (video)"
+            elif clip.source_type == "sequence":
+                info_text += " (imported)"
             p.fillRect(info_rect, QColor(0, 0, 0, 128))
             p.setPen(QColor("#808070"))
             p.drawText(info_rect, Qt.AlignLeft | Qt.AlignVCenter, info_text)
@@ -351,6 +365,8 @@ class IOTrayPanel(QWidget):
     selection_changed = Signal(list)  # list[ClipEntry] — multi-select changed
     clips_dir_changed = Signal(str)  # folder path (import folder)
     files_imported = Signal(list)    # list of video file paths
+    sequence_folder_imported = Signal(str)  # folder path containing image sequence
+    image_files_dropped = Signal(list)  # list of image file paths (for <5 popup)
     extract_requested = Signal(list) # list[ClipEntry] — re-run extraction
     export_video_requested = Signal(object, str)  # ClipEntry, source_dir — export as video
     reset_in_out_requested = Signal()  # clear all in/out markers
@@ -466,6 +482,7 @@ class IOTrayPanel(QWidget):
         menu = QMenu(self)
         menu.addAction("Import Folder...", self._import_folder)
         menu.addAction("Import Video(s)...", self._import_videos)
+        menu.addAction("Import Image Sequence...", self._import_image_sequence)
         menu.exec(self._add_btn.mapToGlobal(self._add_btn.rect().bottomLeft()))
 
     def _on_reset_in_out(self) -> None:
@@ -520,6 +537,14 @@ class IOTrayPanel(QWidget):
         if paths:
             self.files_imported.emit(paths)
 
+    def _import_image_sequence(self) -> None:
+        dir_path = QFileDialog.getExistingDirectory(
+            self, "Select Image Sequence Folder", "",
+            QFileDialog.ShowDirsOnly,
+        )
+        if dir_path:
+            self.sequence_folder_imported.emit(dir_path)
+
     # ── Drag-and-drop ──
 
     def dragEnterEvent(self, event) -> None:
@@ -527,19 +552,34 @@ class IOTrayPanel(QWidget):
             event.acceptProposedAction()
 
     def dropEvent(self, event) -> None:
-        from backend.project import is_video_file
+        from backend.project import folder_has_image_sequence
         folders = []
-        files = []
+        video_files = []
+        image_files = []
         for url in event.mimeData().urls():
             path = url.toLocalFile()
             if os.path.isdir(path):
                 folders.append(path)
-            elif os.path.isfile(path) and is_video_file(path):
-                files.append(path)
+            elif os.path.isfile(path):
+                if is_video_file(path):
+                    video_files.append(path)
+                elif is_image_file(path):
+                    image_files.append(path)
+
         if folders:
-            self.clips_dir_changed.emit(folders[0])
-        elif files:
-            self.files_imported.emit(files)
+            # Check if the folder contains images (sequence) vs subdirectories (project)
+            folder = folders[0]
+            if folder_has_image_sequence(folder):
+                self.sequence_folder_imported.emit(folder)
+            else:
+                self.clips_dir_changed.emit(folder)
+        elif video_files and not image_files:
+            self.files_imported.emit(video_files)
+        elif image_files:
+            # Image files dropped — emit for popup handling in main_window
+            self.image_files_dropped.emit(image_files)
+        elif video_files:
+            self.files_imported.emit(video_files)
 
     # ── Single / Multi-select management ──
 

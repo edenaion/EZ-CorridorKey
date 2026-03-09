@@ -156,6 +156,7 @@ class ClipEntry:
     alpha_asset: Optional[ClipAsset] = None
     mask_asset: Optional[ClipAsset] = None  # User-provided VideoMaMa mask
     in_out_range: Optional[InOutRange] = None  # Per-clip in/out markers (None = full clip)
+    source_type: str = "unknown"  # "video", "sequence", or "unknown" (legacy)
     warnings: list[str] = field(default_factory=list)
     error_message: Optional[str] = None
     extraction_progress: float = 0.0  # 0.0 to 1.0 during EXTRACTING
@@ -277,12 +278,68 @@ class ClipEntry:
             return path
         return None
 
+    def _resolve_external_sequence(self) -> Optional[str]:
+        """Resolve an externally-referenced image sequence folder from clip.json.
+
+        For imported image sequences that are referenced in-place (not copied),
+        clip.json stores source.type='sequence' and source.original_path pointing
+        to the external folder.
+
+        Returns the folder path if valid, or None. Sets ERROR state with a clear
+        message if the referenced folder no longer exists.
+        """
+        from .project import _read_clip_or_project_json
+        data = _read_clip_or_project_json(self.root_path)
+        if not data:
+            return None
+        source = data.get("source", {})
+        if source.get("type") != "sequence":
+            return None
+        path = source.get("original_path")
+        if not path:
+            return None
+        if os.path.isdir(path):
+            return path
+        # External folder is gone — set error state instead of raising
+        self.state = ClipState.ERROR
+        self.error_message = f"Source folder missing: {path}"
+        self.source_type = "sequence"
+        logger.warning(
+            f"Clip '{self.name}': external sequence folder no longer exists: {path}"
+        )
+        return None
+
+    def _resolve_source_type(self) -> str:
+        """Determine source_type from clip.json metadata.
+
+        Returns 'video', 'sequence', or 'unknown' (legacy clips without metadata).
+        """
+        from .project import _read_clip_or_project_json
+        data = _read_clip_or_project_json(self.root_path)
+        if not data:
+            return "unknown"
+        source = data.get("source", {})
+        src_type = source.get("type")
+        if src_type in ("video", "sequence"):
+            return src_type
+        # Legacy: has source.filename but no type field → video
+        if source.get("filename"):
+            return "video"
+        return "unknown"
+
     def find_assets(self) -> None:
         """Scan the clip directory for Input, AlphaHint, and mask assets.
 
         Updates state accordingly. Supports both new format (Frames/, Source/)
         and legacy format (Input/, Input.*) for backward compatibility.
+        Also supports externally-referenced image sequences via clip.json.
         """
+        # Reset stale state before rescanning
+        self.input_asset = None
+        self.alpha_asset = None
+        self.mask_asset = None
+        self.source_type = "unknown"
+
         # Input asset — check new names first, fall back to legacy
         frames_dir = os.path.join(self.root_path, "Frames")
         input_dir = os.path.join(self.root_path, "Input")
@@ -290,32 +347,48 @@ class ClipEntry:
 
         if os.path.isdir(frames_dir) and os.listdir(frames_dir):
             self.input_asset = ClipAsset(frames_dir, 'sequence')
+            # Determine source_type: check clip.json for provenance
+            self.source_type = self._resolve_source_type()
         elif os.path.isdir(input_dir) and os.listdir(input_dir):
             self.input_asset = ClipAsset(input_dir, 'sequence')
+            self.source_type = self._resolve_source_type()
         elif os.path.isdir(source_dir):
             videos = [f for f in os.listdir(source_dir) if _is_video_file(f)]
             if videos:
                 self.input_asset = ClipAsset(
                     os.path.join(source_dir, videos[0]), 'video',
                 )
+                self.source_type = "video"
             else:
                 # Source/ exists but is empty — check project.json for external reference
                 original = self._resolve_original_path()
                 if original:
                     self.input_asset = ClipAsset(original, 'video')
+                    self.source_type = "video"
                 else:
                     raise ClipScanError(f"Clip '{self.name}': 'Source' dir has no video.")
         else:
-            candidates = glob_module.glob(os.path.join(self.root_path, "[Ii]nput.*"))
-            candidates = [c for c in candidates if _is_video_file(c)]
-            if candidates:
-                self.input_asset = ClipAsset(candidates[0], 'video')
-            elif os.path.isdir(input_dir):
-                raise ClipScanError(
-                    f"Clip '{self.name}': Input dir is empty — no image files."
-                )
+            # No local Frames/Input/Source — check clip.json for external sequence ref
+            ext_seq = self._resolve_external_sequence()
+            if ext_seq:
+                self.input_asset = ClipAsset(ext_seq, 'sequence')
+                self.source_type = "sequence"
+            elif self.state == ClipState.ERROR:
+                # _resolve_external_sequence() set ERROR (missing source folder)
+                # Clip remains visible with error state — don't raise
+                return
             else:
-                raise ClipScanError(f"Clip '{self.name}': no Input found.")
+                candidates = glob_module.glob(os.path.join(self.root_path, "[Ii]nput.*"))
+                candidates = [c for c in candidates if _is_video_file(c)]
+                if candidates:
+                    self.input_asset = ClipAsset(candidates[0], 'video')
+                    self.source_type = "video"
+                elif os.path.isdir(input_dir):
+                    raise ClipScanError(
+                        f"Clip '{self.name}': Input dir is empty — no image files."
+                    )
+                else:
+                    raise ClipScanError(f"Clip '{self.name}': no Input found.")
 
         # Load display name from project.json if available
         from .project import get_display_name

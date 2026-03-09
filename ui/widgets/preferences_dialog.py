@@ -16,11 +16,13 @@ KEY_SHOW_TOOLTIPS = "ui/show_tooltips"
 KEY_UI_SOUNDS = "ui/sounds_enabled"
 KEY_COPY_SOURCE = "project/copy_source_videos"
 KEY_LOOP_PLAYBACK = "playback/loop"
+KEY_COPY_SEQUENCES = "project/copy_image_sequences"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
 DEFAULT_UI_SOUNDS = True
 DEFAULT_COPY_SOURCE = True
+DEFAULT_COPY_SEQUENCES = False
 DEFAULT_LOOP_PLAYBACK = True
 
 
@@ -79,6 +81,18 @@ class PreferencesDialog(QDialog):
         )
         proj_layout.addWidget(self._copy_source_cb)
 
+        self._copy_sequences_cb = QCheckBox("Copy imported image sequences into project folder")
+        self._copy_sequences_cb.setToolTip(
+            "When enabled, imported image sequence files are copied into the project.\n"
+            "When disabled (default), the project references the original files in place.\n\n"
+            "Referencing saves disk space for large EXR/TIF sequences.\n"
+            "Original files are never modified regardless of this setting."
+        )
+        self._copy_sequences_cb.setChecked(
+            get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES)
+        )
+        proj_layout.addWidget(self._copy_sequences_cb)
+
         layout.addWidget(proj_group)
 
         # Playback section
@@ -119,6 +133,7 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_SHOW_TOOLTIPS, self._tooltips_cb.isChecked())
         s.setValue(KEY_UI_SOUNDS, self._sounds_cb.isChecked())
         s.setValue(KEY_COPY_SOURCE, self._copy_source_cb.isChecked())
+        s.setValue(KEY_COPY_SEQUENCES, self._copy_sequences_cb.isChecked())
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
