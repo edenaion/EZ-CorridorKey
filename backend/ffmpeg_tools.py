@@ -143,7 +143,9 @@ def probe_video(path: str) -> dict:
     """Probe a video file for metadata.
 
     Returns dict with keys: fps (float), width (int), height (int),
-    frame_count (int), codec (str), duration (float).
+    frame_count (int), codec (str), duration (float), pix_fmt (str),
+    color_range (str), color_space (str), color_primaries (str),
+    color_transfer (str), chroma_location (str), bits_per_raw_sample (int).
     Raises RuntimeError if ffprobe fails.
     """
     ffprobe = find_ffprobe()
@@ -214,6 +216,8 @@ def probe_video(path: str) -> dict:
         "color_primaries": video_stream.get("color_primaries", ""),
         "color_transfer": video_stream.get("color_transfer", ""),
         "color_range": video_stream.get("color_range", ""),
+        "chroma_location": video_stream.get("chroma_location", ""),
+        "bits_per_raw_sample": int(video_stream.get("bits_per_raw_sample", 0) or 0),
     }
 
 
@@ -403,7 +407,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 
 # Values ffprobe reports that mean "unknown / missing"
-_UNKNOWN_COLOR = {"", "unknown", "unspecified", "reserved", None}
+_UNKNOWN_COLOR = {"", "unknown", "unspecified", "reserved", "unknown/unknown", None}
 
 
 def _is_rgb_pix_fmt(pix_fmt: str) -> bool:
@@ -416,50 +420,113 @@ def _is_rgb_pix_fmt(pix_fmt: str) -> bool:
             pf.startswith("abgr") or pf == "pal8")
 
 
-def _build_exr_vf(video_info: dict) -> str:
+def _is_yuv_pix_fmt(pix_fmt: str) -> bool:
+    """Return True for common YUV-family formats."""
+    if not pix_fmt:
+        return False
+    pf = pix_fmt.lower()
+    return (pf.startswith("yuv") or pf.startswith("yuva") or
+            pf.startswith("nv12") or pf.startswith("nv16") or
+            pf.startswith("nv21") or pf.startswith("p010") or
+            pf.startswith("p016") or pf.startswith("p210") or
+            pf.startswith("p216") or pf.startswith("p410") or
+            pf.startswith("p416") or pf.startswith("y210") or
+            pf.startswith("y212") or pf.startswith("y216"))
+
+
+def _clean_color_value(value: str | None) -> str:
+    """Normalize ffprobe color values for filter construction."""
+    if value is None:
+        return ""
+    cleaned = str(value).strip().lower()
+    return "" if cleaned in _UNKNOWN_COLOR else cleaned
+
+
+def _default_matrix(width: int, height: int, primaries: str) -> str:
+    """Best-effort matrix fallback when metadata is missing."""
+    if primaries == "bt2020":
+        return "bt2020nc"
+    if height == 576:
+        return "bt470bg"
+    if height in (480, 486):
+        return "smpte170m"
+    hd = width >= 1280 or height > 576
+    return "bt709" if hd else "smpte170m"
+
+
+def _default_primaries(width: int, height: int, matrix: str) -> str:
+    """Best-effort primaries fallback when metadata is missing."""
+    if matrix in {"bt2020nc", "bt2020c", "bt2020cl"}:
+        return "bt2020"
+    if matrix == "bt470bg":
+        return "bt470bg"
+    if matrix == "smpte170m":
+        return "smpte170m"
+    hd = width >= 1280 or height > 576
+    return "bt709" if hd else "smpte170m"
+
+
+def _default_transfer(primaries: str, bits_per_raw_sample: int) -> str:
+    """Best-effort transfer fallback when metadata is missing."""
+    if primaries == "bt2020":
+        return "bt2020-12" if bits_per_raw_sample > 10 else "bt2020-10"
+    if primaries == "bt470bg":
+        return "bt470bg"
+    if primaries == "smpte170m":
+        return "smpte170m"
+    return "bt709"
+
+
+def _default_range(pix_fmt: str) -> str:
+    """Default range fallback for missing ffprobe metadata."""
+    pf = (pix_fmt or "").lower()
+    return "pc" if pf.startswith("yuvj") else "tv"
+
+
+def build_exr_vf(video_info: dict) -> str:
     """Build the -vf string for converting to gbrpf32le (EXR output).
 
-    For RGB inputs, just does format conversion.
-    For YUV inputs, uses setparams to fill any missing color metadata
-    on the AVFrame so swscaler has everything it needs for the
-    YUV→RGB conversion. Works with all FFmpeg builds.
+    For RGB inputs, just do format conversion.
+    For YUV inputs, use an explicit scale+format chain and provide
+    input colour metadata directly to the scaler. This preserves the
+    current swscale conversion path for well-tagged files and only
+    falls back to heuristics when the source metadata is missing.
     """
-    pix_fmt = video_info.get("pix_fmt", "")
+    pix_fmt = (video_info.get("pix_fmt", "") or "").lower()
 
     if _is_rgb_pix_fmt(pix_fmt):
         return "format=gbrpf32le"
 
-    # YUV input — swscaler needs trc, primaries, matrix, and range
-    # to be non-null on the frame. setparams fills any gaps.
-    cs = video_info.get("color_space", "")
-    cp = video_info.get("color_primaries", "")
-    ct = video_info.get("color_transfer", "")
-    cr = video_info.get("color_range", "")
+    # Unknown / oddball formats keep the legacy implicit path.
+    if not _is_yuv_pix_fmt(pix_fmt):
+        return "format=gbrpf32le"
+
+    cs = _clean_color_value(video_info.get("color_space"))
+    cp = _clean_color_value(video_info.get("color_primaries"))
+    ct = _clean_color_value(video_info.get("color_transfer"))
+    cr = _clean_color_value(video_info.get("color_range"))
     w = video_info.get("width", 0)
     h = video_info.get("height", 0)
+    bits = int(video_info.get("bits_per_raw_sample", 0) or 0)
 
-    # Fill missing with heuristics based on resolution
-    hd = w >= 1280 or h > 576
-    if cs in _UNKNOWN_COLOR:
-        cs = "bt709" if hd else "smpte170m"
-    if cp in _UNKNOWN_COLOR:
-        cp = "bt709" if hd else "smpte170m"
-    if ct in _UNKNOWN_COLOR:
-        ct = "bt709"  # safe default for SDR content
-    if cr in _UNKNOWN_COLOR:
-        cr = "tv"  # limited range is standard for video
+    if not cs:
+        cs = _default_matrix(w, h, cp)
+    if not cp:
+        cp = _default_primaries(w, h, cs)
+    if not ct:
+        ct = _default_transfer(cp, bits)
+    if not cr:
+        cr = _default_range(pix_fmt)
 
-    # Map color_range to setparams range value
-    sp_range = "limited" if cr == "tv" else ("full" if cr == "pc" else cr)
+    logger.info(
+        "EXR colour conversion: pix_fmt=%s matrix=%s primaries=%s transfer=%s range=%s",
+        pix_fmt, cs, cp, ct, cr,
+    )
 
-    logger.info(f"Color metadata: pix_fmt={pix_fmt} space={cs} "
-                f"primaries={cp} transfer={ct} range={cr}")
-
-    # setparams stamps complete metadata onto every frame, then
-    # format=gbrpf32le triggers swscaler which now sees all fields.
-    return (f"setparams=colorspace={cs}:color_primaries={cp}"
-            f":color_trc={ct}:color_range={sp_range},"
-            f"format=gbrpf32le")
+    return (
+        f"scale=in_color_matrix={cs}:in_primaries={cp}:"
+        f"in_transfer={ct}:in_range={cr},format=gbrpf32le"
+    )
 
 
 def extract_frames(
@@ -539,7 +606,7 @@ def extract_frames(
     # EXR-specific FFmpeg args: ZIP16 compression, half-float.
     # Build an explicit colour conversion filter from probed metadata
     # so FFmpeg never has to guess missing trc/primaries/matrix.
-    vf_chain = _build_exr_vf(video_info or {})
+    vf_chain = build_exr_vf(video_info or {})
     exr_args = ["-compression", "3", "-format", "1", "-vf", vf_chain]
 
     # Hardware-accelerated decode (NVDEC / VideoToolbox / VAAPI / D3D11VA)
@@ -783,7 +850,8 @@ def write_video_metadata(clip_root: str, metadata: dict) -> None:
     """Write video metadata sidecar JSON to clip root.
 
     Metadata typically includes: source_path, fps, width, height,
-    frame_count, codec, duration.
+    frame_count, codec, duration, plus optional diagnostic fields such
+    as source_probe and exr_vf for extraction bug reports.
     """
     path = os.path.join(clip_root, _METADATA_FILENAME)
     with open(path, 'w') as f:

@@ -13,6 +13,8 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Desktop shortcut** — labeled as step 7/7
 
 ### Fixed
+- **EXR colour conversion accuracy** — replaced `setparams` filter with explicit `scale` filter providing input colour metadata (`in_color_matrix`, `in_primaries`, `in_transfer`, `in_range`) directly to swscale. Fixes washed-out or shifted colours on files with incomplete/missing colour tags (e.g. ProRes `.mov` from cameras).
+- **Colour metadata fallbacks** — resolution-aware heuristics for missing matrix (BT.709/BT.601/BT.2020), primaries, transfer, and range. SD PAL (576p), NTSC (480p), HD, and BT.2020 sources all get correct defaults.
 - **Deleted clips reappear on import** — removing clips from the I/O tray was UI-only; adding a new video triggered `os.listdir()` rescan that rediscovered all folders. Now persists removals to `removed_clips` list in `project.json`, filtered during `scan_project_clips()`. Re-importing a removed clip clears it from the list.
 - **Clip identity mismatch** — `clip.name` was mutable (overwritten by `display_name`), causing removal tracking to fail. Added stable `folder_name` property using `os.path.basename(root_path)`.
 - **Corrupt project.json on removal** — `add_removed_clip()` now guards against missing `project.json` (returns early with warning instead of creating partial file)
@@ -21,6 +23,7 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Re-import of removed clips blocked** — "Already Imported" dialog appeared for clips the user had removed. Duplicate check now skips removed clips; re-importing restores the original clip folder instead of creating duplicates.
 
 ### Added
+- **Extraction diagnostics** — `video_metadata.json` now includes `exr_vf` (exact FFmpeg filter used) and `source_probe` (raw colour metadata from ffprobe) for debugging colour issues
 - **Version in About dialog** — Help > About now shows app version via `importlib.metadata`
 - **`removed_clips` persistence** — new `get_removed_clips()`, `add_removed_clip()`, `clear_removed_clip()` functions in `backend/project.py`
 
@@ -35,6 +38,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Tests
 - 10 new tests in `TestRemovedClips` — empty default, missing JSON, add/clear, idempotency, scan filtering, sorted deterministic, re-import clears removed
+- 8 new tests in `test_ffmpeg_tools.py` — probe colour metadata, `build_exr_vf` for RGB/YUV/SD/BT.2020, extract filter chain, metadata roundtrip
 
 ---
 
