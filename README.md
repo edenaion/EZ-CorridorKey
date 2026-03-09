@@ -25,6 +25,10 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 ## Installation
 
+
+**Windows (Recommended)**
+Use (https://github.com/Grainory/Excutable-for-EZ-CorridorKey) for a simplified, one-click setup of the UI, dependencies, and all AI models.
+
 **One-Click Install (Windows / macOS / Linux):**
 1. Clone or download this repository.
 2. Ensure you have [Python 3.10+](https://python.org) installed (check "Add to PATH" on Windows).
