@@ -311,7 +311,19 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 
 ## Hardware Requirements
 
-~24 GB of VRAM currently.
+| | Minimum | Recommended | Comfortable |
+|---|---------|-------------|-------------|
+| **VRAM** | 8 GB | 12 GB | 16 GB+ |
+| **GPU** | NVIDIA (CUDA) | Ampere+ (RTX 30xx) | Ada/Blackwell (RTX 40xx/50xx) |
+
+### VRAM modes
+
+| Mode | VRAM usage | 4K speed | How it works |
+|------|-----------|----------|--------------|
+| **Speed** (≥12 GB) | ~8.7 GB | ~1.5s/frame | Full-frame refiner, full torch.compile |
+| **Low-VRAM** (<12 GB) | ~2.5 GB | ~1.6s/frame | 512×512 tiled refiner, selective compile |
+
+Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=speed|lowvram|auto`.
 
 ---
 
