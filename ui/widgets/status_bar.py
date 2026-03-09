@@ -148,6 +148,25 @@ class StatusBar(QWidget):
             self._btn_divider.hide()
             self._resume_btn.hide()
         self._stop_btn.setVisible(running)
+        if running:
+            self.set_stop_button_mode(force=False)
+
+    def set_stop_button_mode(self, force: bool) -> None:
+        """Switch STOP between cooperative cancel and hard-stop wording."""
+        if force:
+            self._stop_btn.setText("FORCE STOP")
+            self._stop_btn.setFixedWidth(120)
+            self._stop_btn.setToolTip(
+                "The current GPU step is blocked.\n"
+                "Force Stop will relaunch the app to break the stuck job."
+            )
+        else:
+            self._stop_btn.setText("STOP")
+            self._stop_btn.setFixedWidth(80)
+            self._stop_btn.setToolTip(
+                "Stop the current job (Escape).\n"
+                "Already-processed frames are kept on disk."
+            )
 
     def _on_run_clicked(self) -> None:
         """Route run button click to the appropriate signal."""

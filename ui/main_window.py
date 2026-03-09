@@ -197,6 +197,8 @@ class MainWindow(QMainWindow):
         # Track active job ID — set only once when job starts, not on every progress
         self._active_job_id: str | None = None
         self._cancel_requested_job_id: str | None = None
+        self._force_stop_armed = False
+        self._skip_shutdown_cleanup = False
         self._bg_cache: QImage | None = None
         # Batch pipeline: clip names queued for GVM→inference auto-chain
         self._batch_clips: set[str] = set()
@@ -569,14 +571,73 @@ class MainWindow(QMainWindow):
         queue.cancel_all()
         self._batch_clips.clear()
         self._status_bar.stop_job_timer()
-        self._status_bar.set_message("Stop requested — waiting for current GPU step...")
-        self._status_bar.set_running(False)
+        if current_job is not None:
+            self._force_stop_armed = True
+            self._status_bar.set_running(True)
+            self._status_bar.set_stop_button_mode(force=True)
+            self._status_bar.set_message(
+                "Stop requested — waiting for current GPU step. "
+                "Press FORCE STOP to relaunch if it stays stuck."
+            )
+        else:
+            self._force_stop_armed = False
+            self._status_bar.set_running(False)
+            self._status_bar.set_message("Cancelled queued work.")
         self._queue_panel.refresh()
         logger.info("Processing cancelled by user")
         if is_videomama:
             _Toast(self, "GPU is finishing the current chunk.\n"
                          "VideoMaMa will stop after it completes.",
                    center=True)
+
+    def _force_restart_app(self) -> None:
+        """Hard-stop a blocked GPU phase by relaunching the app process."""
+        import subprocess
+        import sys
+        from PySide6.QtWidgets import QApplication
+
+        try:
+            self._auto_save_annotations()
+        except Exception:
+            logger.exception("Force stop: failed to auto-save annotations")
+
+        try:
+            self._auto_save_session()
+        except Exception:
+            logger.exception("Force stop: failed to auto-save session")
+
+        if getattr(sys, "frozen", False):
+            cmd = [sys.executable, *sys.argv[1:]]
+            cwd = os.path.dirname(sys.executable)
+        else:
+            cmd = [sys.executable, os.path.abspath(sys.argv[0]), *sys.argv[1:]]
+            cwd = os.path.dirname(os.path.abspath(sys.argv[0]))
+
+        kwargs: dict = {"cwd": cwd}
+        if os.name == "nt":
+            kwargs["creationflags"] = (
+                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                | getattr(subprocess, "DETACHED_PROCESS", 0)
+            )
+        else:
+            kwargs["start_new_session"] = True
+
+        logger.warning("Force stop: relaunching application to break blocked GPU job")
+        try:
+            subprocess.Popen(cmd, **kwargs)
+        except Exception as e:
+            logger.exception(f"Force stop relaunch failed: {e}")
+            QMessageBox.critical(
+                self,
+                "Force Stop Failed",
+                "Could not relaunch the app automatically.\n\n"
+                "Please close and reopen CorridorKey manually.",
+            )
+            return
+
+        self._skip_shutdown_cleanup = True
+        self._status_bar.set_message("Force restarting...")
+        QApplication.instance().quit()
 
     def _toggle_annotation_fg(self) -> None:
         """Hotkey 1: toggle green (foreground) annotation brush."""
@@ -2114,7 +2175,9 @@ class MainWindow(QMainWindow):
         else:
             self._gpu_worker.wake()
 
+        self._force_stop_armed = False
         self._status_bar.set_running(True)
+        self._status_bar.set_stop_button_mode(force=False)
         self._status_bar.reset_progress()
         self._status_bar.start_job_timer(label=job_label)
         self._queue_panel.refresh()
@@ -2128,6 +2191,21 @@ class MainWindow(QMainWindow):
             return
         queue = self._service.job_queue
         if not queue.current_job and not queue.has_pending:
+            return
+
+        if self._force_stop_armed:
+            reply = QMessageBox.question(
+                self, "Force Stop",
+                "The current GPU step has not returned to Python.\n\n"
+                "Force Stop will auto-save the session and relaunch the app "
+                "to break the stuck job immediately.\n\n"
+                "Continue?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
+            self._force_restart_app()
             return
 
         reply = QMessageBox.question(
@@ -2195,6 +2273,8 @@ class MainWindow(QMainWindow):
 
     @Slot(str, str, str)
     def _on_worker_clip_finished(self, job_id: str, clip_name: str, job_type: str) -> None:
+        self._force_stop_armed = False
+        self._status_bar.set_stop_button_mode(force=False)
         # Map job type to correct next state
         # GVM/VideoMaMa produce AlphaHint -> clip becomes READY for inference
         if job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value):
@@ -2298,6 +2378,8 @@ class MainWindow(QMainWindow):
         if message.startswith("Cancelled:"):
             self._cancel_requested_job_id = None
             self._active_job_id = None
+            self._force_stop_armed = False
+            self._status_bar.set_stop_button_mode(force=False)
             # Job was cancelled — clear processing lock on the clip
             clip_name = message.removeprefix("Cancelled:").strip()
             for clip in self._clip_model.clips:
@@ -2323,6 +2405,8 @@ class MainWindow(QMainWindow):
         if self._cancel_requested_job_id == job_id:
             self._cancel_requested_job_id = None
             self._active_job_id = None
+        self._force_stop_armed = False
+        self._status_bar.set_stop_button_mode(force=False)
         self._status_bar.stop_job_timer()
         self._status_bar.set_running(False)
         self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
@@ -2344,6 +2428,8 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_queue_empty(self) -> None:
         self._cancel_requested_job_id = None
+        self._force_stop_armed = False
+        self._status_bar.set_stop_button_mode(force=False)
         self._status_bar.set_running(False)
         self._status_bar.stop_job_timer()
         self._active_job_id = None
@@ -3051,6 +3137,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         """Clean shutdown — auto-save session, stop workers, unload engines."""
+        if self._skip_shutdown_cleanup:
+            super().closeEvent(event)
+            return
         # Save annotation strokes before closing
         self._auto_save_annotations()
         # Auto-save session on close
