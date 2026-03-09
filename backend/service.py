@@ -384,6 +384,9 @@ class CorridorKeyService:
         ckpt_path = ckpt_files[0]
         logger.info(f"Loading checkpoint: {os.path.basename(ckpt_path)}")
         t0 = time.monotonic()
+        if on_status:
+            on_status("Initializing inference engine...")
+        logger.info("Constructing CorridorKeyEngine...")
         self._engine = CorridorKeyEngine(
             checkpoint_path=ckpt_path,
             device=self._device,
@@ -391,6 +394,7 @@ class CorridorKeyService:
             optimization_mode=os.environ.get('CORRIDORKEY_OPT_MODE', 'auto'),
             on_status=on_status,
         )
+        logger.info("CorridorKeyEngine construction complete")
         logger.info(f"Engine loaded in {time.monotonic() - t0:.1f}s")
         return self._engine
 

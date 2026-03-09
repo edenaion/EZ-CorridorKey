@@ -79,6 +79,7 @@ class CorridorKeyEngine:
 
     def __init__(self, checkpoint_path, device='cuda', img_size=2048, use_refiner=True,
                  optimization_mode='auto', tile_overlap=128, on_status=None):
+        logger.info("CorridorKeyEngine.__init__: begin")
         self.device = torch.device(device)
         self.img_size = img_size
         self.checkpoint_path = checkpoint_path
@@ -95,43 +96,51 @@ class CorridorKeyEngine:
         # Resolve optimization profile.
         # Low-VRAM mode keeps tiling, but graph-breaks the tile scheduler and
         # compiles the fixed-shape tile CNN separately.
-        vram_gb = self._get_vram_gb()
-
+        #
+        # Important: do NOT probe VRAM from inside constructor startup. This
+        # object is created during model handoff (e.g. GVM -> inference), and
+        # runtime CUDA/NVML queries here can stall startup on some systems.
+        # Use deterministic startup behavior instead.
         if optimization_mode == 'speed':
             self.tile_size = 0
             self._use_compile = True
-            logger.info(f"Optimization: speed mode (torch.compile, no tiling) "
-                        f"[VRAM: {vram_gb:.1f} GB]")
+            logger.info("Optimization: speed mode (torch.compile, no tiling)")
         elif optimization_mode == 'lowvram':
             self.tile_size = 512
             self._use_compile = True
-            logger.info(f"Optimization: low-VRAM mode (tiled refiner 512x512 + selective torch.compile) "
-                        f"[VRAM: {vram_gb:.1f} GB]")
+            logger.info("Optimization: low-VRAM mode (tiled refiner 512x512 + selective torch.compile)")
         else:  # auto
-            if vram_gb > 0 and vram_gb < self._VRAM_TILE_THRESHOLD_GB:
-                self.tile_size = 512
-                self._use_compile = True
-                logger.info(f"Optimization: auto → low-VRAM mode "
-                            f"({vram_gb:.1f} GB < {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
-            else:
-                self.tile_size = 0
-                self._use_compile = True
-                logger.info(f"Optimization: auto → speed mode "
-                            f"({vram_gb:.1f} GB ≥ {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
+            self.tile_size = 512
+            self._use_compile = True
+            logger.info("Optimization: auto -> low-VRAM deterministic startup")
 
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
 
+        logger.info("CorridorKeyEngine.__init__: entering _load_model")
         self.model = self._load_model()
 
     @staticmethod
     def _get_vram_gb() -> float:
-        """Return total GPU VRAM in GB, or 0 if unavailable."""
+        """Return total GPU VRAM in GB.
+
+        Prefer NVML (no CUDA context calls) and fall back to torch.cuda.
+        """
+        try:
+            import pynvml
+
+            pynvml.nvmlInit()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            return mem.total / (1024 ** 3)
+        except Exception:
+            pass
+
         try:
             if torch.cuda.is_available():
                 return torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"CUDA VRAM probe failed: {e}")
         return 0.0
         
     def _status(self, msg: str) -> None:

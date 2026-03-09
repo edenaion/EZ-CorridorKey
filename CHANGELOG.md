@@ -13,6 +13,7 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Desktop shortcut** — labeled as step 7/7
 
 ### Fixed
+- **GVM → Inference hang** — running inference immediately after GVM auto-alpha generation would hang at "Loading model..." indefinitely. Root cause: `CorridorKeyEngine.__init__` probed VRAM via `torch.cuda.get_device_properties()` during the model-switch window, which stalled after GVM's CUDA teardown. Fix: constructor no longer probes VRAM at startup; `auto` mode uses deterministic low-VRAM profile. `_get_vram_gb()` now prefers pynvml (no CUDA context calls) with torch fallback.
 - **EXR colour conversion accuracy** — replaced `setparams` filter with explicit `scale` filter providing input colour metadata (`in_color_matrix`, `in_primaries`, `in_transfer`, `in_range`) directly to swscale. Fixes washed-out or shifted colours on files with incomplete/missing colour tags (e.g. ProRes `.mov` from cameras).
 - **Colour metadata fallbacks** — resolution-aware heuristics for missing matrix (BT.709/BT.601/BT.2020), primaries, transfer, and range. SD PAL (576p), NTSC (480p), HD, and BT.2020 sources all get correct defaults.
 - **Deleted clips reappear on import** — removing clips from the I/O tray was UI-only; adding a new video triggered `os.listdir()` rescan that rediscovered all folders. Now persists removals to `removed_clips` list in `project.json`, filtered during `scan_project_clips()`. Re-importing a removed clip clears it from the list.
