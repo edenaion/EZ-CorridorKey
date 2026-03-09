@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 from .core.model_transformer import GreenFormer
 from .core import color_utils as cu
 
-
 def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
     """Monkey-patch MaskUnitAttention.forward on global-attention blocks.
 
@@ -134,6 +133,11 @@ class CorridorKeyEngine:
         if len(unexpected) > 0:
             logger.warning(f"Unexpected keys in checkpoint: {unexpected}")
 
+        # Enable TF32 tensor cores for FP32 matmuls (Ampere+).
+        # ~2x throughput with negligible precision loss for inference.
+        torch.set_float32_matmul_precision('high')
+        logger.info("TF32 matmul precision set to 'high'")
+
         # Jhe Kimchi's Patch: fix Hiera global attention blocks so SDPA
         # uses FlashAttention instead of the memory-hungry math backend.
         logger.info("Applying Hiera attention patch...")
@@ -143,6 +147,7 @@ class CorridorKeyEngine:
             logger.info(f"Hiera attention patch: {n_patched} global blocks patched for FlashAttention")
         except Exception as e:
             logger.warning(f"Hiera attention patch failed: {type(e).__name__}: {e}")
+
 
         return model
 
