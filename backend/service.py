@@ -395,9 +395,12 @@ class CorridorKeyService:
         self._gvm_processor = None
         self._videomama_pipeline = None
         self._active_model = _ActiveModel.NONE
+        import gc
+        gc.collect()
         try:
             import torch
             if torch.cuda.is_available():
+                torch.cuda.synchronize()
                 torch.cuda.empty_cache()
         except ImportError:
             logger.debug("torch not available for cache clear during unload")

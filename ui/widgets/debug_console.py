@@ -236,11 +236,12 @@ class DebugConsoleWidget(QWidget):
         super().hide()
 
     def close_permanently(self) -> None:
-        """Remove the log handler entirely (call on app shutdown)."""
+        """Remove the log handler and close the widget (call on app shutdown)."""
         if self._handler_installed:
             logging.getLogger().removeHandler(self._handler)
             self._handler_installed = False
         self._save_geometry()
+        self.close()
 
     # --- Log Display ----------------------------------------------------
 

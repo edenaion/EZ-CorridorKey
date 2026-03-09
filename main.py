@@ -94,7 +94,11 @@ def run_gui() -> int:
     store.prune_missing()
     window = MainWindow(service, store)
     window.show()
-    return app.exec()
+    rc = app.exec()
+    # Force-exit: torch.compile spawns Triton background threads that prevent
+    # clean shutdown, leaving a zombie process holding VRAM.
+    import os
+    os._exit(rc)
 
 
 def run_cli() -> int:
