@@ -1,4 +1,4 @@
-# EZ-CorridorKey **[v1.2.4](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.3.0](CHANGELOG.md)**
 
 > **Latest:** In/out marker state fix, extraction retry fix — [full changelog](CHANGELOG.md)
 
