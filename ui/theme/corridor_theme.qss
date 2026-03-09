@@ -286,7 +286,14 @@ QSlider#volumeSlider:disabled::sub-page:horizontal {
 
 /* === Spinbox / LineEdit === */
 QSpinBox,
-QDoubleSpinBox,
+QDoubleSpinBox {
+    background-color: #1A1900;
+    border: 1px solid #454430;
+    color: #E0E0E0;
+    padding: 2px 4px;
+    min-height: 22px;
+}
+
 QLineEdit {
     background-color: #1A1900;
     border: 1px solid #454430;
@@ -298,6 +305,59 @@ QSpinBox:focus,
 QDoubleSpinBox:focus,
 QLineEdit:focus {
     border-color: #FFF203;
+}
+
+QSpinBox::up-button,
+QDoubleSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 18px;
+    border-left: 1px solid #454430;
+    border-bottom: 1px solid #454430;
+    background: #2A2900;
+}
+
+QSpinBox::up-button:hover,
+QDoubleSpinBox::up-button:hover {
+    background: #3A3920;
+}
+
+QSpinBox::up-button:pressed,
+QDoubleSpinBox::up-button:pressed {
+    background: #FFF203;
+}
+
+QSpinBox::down-button,
+QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 18px;
+    border-left: 1px solid #454430;
+    background: #2A2900;
+}
+
+QSpinBox::down-button:hover,
+QDoubleSpinBox::down-button:hover {
+    background: #3A3920;
+}
+
+QSpinBox::down-button:pressed,
+QDoubleSpinBox::down-button:pressed {
+    background: #FFF203;
+}
+
+QSpinBox::up-arrow,
+QDoubleSpinBox::up-arrow {
+    image: url({{THEME_DIR}}/icons/arrow-up.svg);
+    width: 8px;
+    height: 5px;
+}
+
+QSpinBox::down-arrow,
+QDoubleSpinBox::down-arrow {
+    image: url({{THEME_DIR}}/icons/arrow-down.svg);
+    width: 8px;
+    height: 5px;
 }
 
 /* === ComboBox === */

@@ -756,7 +756,7 @@ class MainWindow(QMainWindow):
         )
         self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
         self._param_panel.set_import_alpha_enabled(
-            clip.state in (ClipState.RAW, ClipState.MASKED)
+            clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
         )
 
         # Also refresh the run button and status bar state
@@ -1008,7 +1008,7 @@ class MainWindow(QMainWindow):
             clip.state == ClipState.MASKED or clip.mask_asset is not None
         )
         self._param_panel.set_import_alpha_enabled(
-            clip.state in (ClipState.RAW, ClipState.MASKED)
+            clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
         )
 
     @Slot(str)
@@ -2000,10 +2000,22 @@ class MainWindow(QMainWindow):
         in the inference loop works correctly (frame 0 → frame 0, etc.).
         """
         clip = self._current_clip
-        if clip is None or clip.state not in (ClipState.RAW, ClipState.MASKED):
+        if clip is None or clip.state not in (ClipState.RAW, ClipState.MASKED, ClipState.READY):
             return
         if clip.input_asset is None:
             return
+
+        # If AlphaHint already exists, ask before replacing
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
+            result = QMessageBox.question(
+                self, "Replace Alpha Hints?",
+                f"Clip '{clip.name}' already has alpha hint images.\n\n"
+                "Do you want to replace them with new ones?",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+            if result != QMessageBox.Yes:
+                return
 
         src_dir = QFileDialog.getExistingDirectory(
             self, "Select Alpha Hint Folder",
@@ -2099,7 +2111,7 @@ class MainWindow(QMainWindow):
             self._dual_viewer.set_clip(clip)
             self._refresh_button_state()
             self._param_panel.set_import_alpha_enabled(
-                clip.state in (ClipState.RAW, ClipState.MASKED)
+                clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
 
         _Toast(self, f"Imported {n_src} alpha hints.\nClip is now {clip.state.value}.")
@@ -2368,7 +2380,7 @@ class MainWindow(QMainWindow):
                 or self._current_clip.mask_asset is not None
             )
             self._param_panel.set_import_alpha_enabled(
-                self._current_clip.state in (ClipState.RAW, ClipState.MASKED)
+                self._current_clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
 
         logger.info(f"Clip finished ({job_type}): {clip_name} -> {target_state.value}")

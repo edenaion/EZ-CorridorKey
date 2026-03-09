@@ -12,6 +12,13 @@ QSS_PATH = os.path.join(THEME_DIR, "corridor_theme.qss")
 
 
 def load_stylesheet() -> str:
-    """Load the brand QSS stylesheet."""
+    """Load the brand QSS stylesheet.
+
+    Resolves {{THEME_DIR}} placeholders to the actual theme directory
+    so QSS url() references work regardless of working directory.
+    """
     with open(QSS_PATH, "r", encoding="utf-8") as f:
-        return f.read()
+        qss = f.read()
+    # Forward slashes required in Qt QSS url() even on Windows
+    theme_path = THEME_DIR.replace("\\", "/")
+    return qss.replace("{{THEME_DIR}}", theme_path)
