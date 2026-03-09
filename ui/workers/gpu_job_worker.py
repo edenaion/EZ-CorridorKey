@@ -116,6 +116,15 @@ class GPUJobWorker(QThread):
                 self.error.emit(job_id, job.clip_name, f"Unknown job type: {job.job_type}")
                 return
 
+            # If cancel was requested during a non-interruptible phase
+            # (e.g. model load / CUDA teardown), honor it before marking the
+            # job completed.
+            if job.is_cancelled:
+                self._queue.mark_cancelled(job)
+                logger.info(f"Job cancelled after phase return [{job_id}]: {job.clip_name}")
+                self.warning.emit(job_id, f"Cancelled: {job.clip_name}")
+                return
+
             self._queue.complete_job(job)
             if job.job_type != JobType.PREVIEW_REPROCESS:
                 self.clip_finished.emit(job_id, job.clip_name, job.job_type.value)

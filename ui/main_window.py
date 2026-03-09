@@ -196,6 +196,7 @@ class MainWindow(QMainWindow):
         self._clips_dir: str | None = None
         # Track active job ID — set only once when job starts, not on every progress
         self._active_job_id: str | None = None
+        self._cancel_requested_job_id: str | None = None
         self._bg_cache: QImage | None = None
         # Batch pipeline: clip names queued for GVM→inference auto-chain
         self._batch_clips: set[str] = set()
@@ -561,12 +562,14 @@ class MainWindow(QMainWindow):
     def _cancel_inference(self) -> None:
         """Cancel all inference/GPU jobs."""
         queue = self._service.job_queue
+        current_job = queue.current_job
         is_videomama = (queue.current_job
                         and queue.current_job.job_type == JobType.VIDEOMAMA_ALPHA)
+        self._cancel_requested_job_id = current_job.id if current_job is not None else None
         queue.cancel_all()
         self._batch_clips.clear()
         self._status_bar.stop_job_timer()
-        self._status_bar.set_message("Cancelling...")
+        self._status_bar.set_message("Stop requested — waiting for current GPU step...")
         self._status_bar.set_running(False)
         self._queue_panel.refresh()
         logger.info("Processing cancelled by user")
@@ -2152,6 +2155,10 @@ class MainWindow(QMainWindow):
 
     @Slot(str, str, int, int)
     def _on_worker_progress(self, job_id: str, clip_name: str, current: int, total: int) -> None:
+        if self._cancel_requested_job_id == job_id:
+            self._queue_panel.refresh()
+            return
+
         # Set active_job_id only on first progress of a new job (not every event)
         if self._active_job_id != job_id:
             # Only update if this is genuinely a new running job
@@ -2172,12 +2179,16 @@ class MainWindow(QMainWindow):
         progress signals arrive, so _active_job_id may not match yet.
         Also set _active_job_id if not already set.
         """
+        if self._cancel_requested_job_id == job_id:
+            return
         if self._active_job_id is None:
             self._active_job_id = job_id
         self._status_bar.set_phase(message)
 
     @Slot(str, str, int, str)
     def _on_worker_preview(self, job_id: str, clip_name: str, frame_index: int, path: str) -> None:
+        if self._cancel_requested_job_id == job_id:
+            return
         # Only update preview if this is the active job
         if job_id == self._active_job_id:
             self._dual_viewer.load_preview_from_file(path, clip_name, frame_index)
@@ -2285,6 +2296,8 @@ class MainWindow(QMainWindow):
     @Slot(str, str)
     def _on_worker_warning(self, job_id: str, message: str) -> None:
         if message.startswith("Cancelled:"):
+            self._cancel_requested_job_id = None
+            self._active_job_id = None
             # Job was cancelled — clear processing lock on the clip
             clip_name = message.removeprefix("Cancelled:").strip()
             for clip in self._clip_model.clips:
@@ -2307,6 +2320,9 @@ class MainWindow(QMainWindow):
 
     @Slot(str, str, str)
     def _on_worker_error(self, job_id: str, clip_name: str, error_msg: str) -> None:
+        if self._cancel_requested_job_id == job_id:
+            self._cancel_requested_job_id = None
+            self._active_job_id = None
         self._status_bar.stop_job_timer()
         self._status_bar.set_running(False)
         self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
@@ -2327,6 +2343,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_queue_empty(self) -> None:
+        self._cancel_requested_job_id = None
         self._status_bar.set_running(False)
         self._status_bar.stop_job_timer()
         self._active_job_id = None
