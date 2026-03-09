@@ -148,6 +148,20 @@ class CorridorKeyEngine:
         except Exception as e:
             logger.warning(f"Hiera attention patch failed: {type(e).__name__}: {e}")
 
+        # torch.compile: JIT-compile the model graph via Triton inductor.
+        # First inference will be slower (compilation), subsequent frames faster.
+        try:
+            import subprocess, sys
+            if sys.platform == 'win32':
+                _orig_popen_init = subprocess.Popen.__init__
+                def _silent_popen_init(self, *args, **kwargs):
+                    kwargs.setdefault('creationflags', subprocess.CREATE_NO_WINDOW)
+                    _orig_popen_init(self, *args, **kwargs)
+                subprocess.Popen.__init__ = _silent_popen_init
+            model = torch.compile(model)
+            logger.info("torch.compile applied to model (inductor backend)")
+        except Exception as e:
+            logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
 
         return model
 
@@ -230,8 +244,8 @@ class CorridorKeyEngine:
         
         # 6. Post-Process (Resize Back to Original Resolution)
         # We use Lanczos4 for high-quality resampling to minimize blur when going back to 4K/Original.
-        res_alpha = pred_alpha[0].permute(1, 2, 0).cpu().numpy()
-        res_fg = pred_fg[0].permute(1, 2, 0).cpu().numpy()
+        res_alpha = pred_alpha[0].permute(1, 2, 0).float().cpu().numpy()
+        res_fg = pred_fg[0].permute(1, 2, 0).float().cpu().numpy()
         res_alpha = cv2.resize(res_alpha, (w, h), interpolation=cv2.INTER_LANCZOS4)
         res_fg = cv2.resize(res_fg, (w, h), interpolation=cv2.INTER_LANCZOS4)
         
