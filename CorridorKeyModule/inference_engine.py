@@ -78,12 +78,13 @@ class CorridorKeyEngine:
     VALID_OPT_MODES = ('auto', 'speed', 'lowvram')
 
     def __init__(self, checkpoint_path, device='cuda', img_size=2048, use_refiner=True,
-                 optimization_mode='auto', tile_overlap=128):
+                 optimization_mode='auto', tile_overlap=128, on_status=None):
         self.device = torch.device(device)
         self.img_size = img_size
         self.checkpoint_path = checkpoint_path
         self.use_refiner = use_refiner
         self.tile_overlap = tile_overlap
+        self._on_status = on_status
 
         # Allow env var override: CORRIDORKEY_OPT_MODE=speed|lowvram|auto
         env_mode = os.environ.get('CORRIDORKEY_OPT_MODE', '').lower()
@@ -133,63 +134,77 @@ class CorridorKeyEngine:
             pass
         return 0.0
         
+    def _status(self, msg: str) -> None:
+        """Emit status to UI callback and log."""
+        logger.info(msg)
+        if self._on_status:
+            self._on_status(msg)
+
     def _load_model(self):
+        import time as _time
+
         logger.info(f"Loading CorridorKey from {self.checkpoint_path}...")
-        # Initialize Model (Hiera Backbone)
-        model = GreenFormer(encoder_name='hiera_base_plus_224.mae_in1k_ft_in1k', 
-                          img_size=self.img_size, 
+
+        # Step 1: Initialize backbone
+        self._status("Initializing model backbone...")
+        t0 = _time.monotonic()
+        model = GreenFormer(encoder_name='hiera_base_plus_224.mae_in1k_ft_in1k',
+                          img_size=self.img_size,
                           use_refiner=self.use_refiner)
+        logger.info(f"GreenFormer init: {_time.monotonic() - t0:.1f}s")
+
+        # Step 2: Move to GPU
+        self._status("Moving model to GPU...")
+        t0 = _time.monotonic()
         model = model.to(self.device)
         model.eval()
-        
-        # Load Weights
+        logger.info(f"Model to device: {_time.monotonic() - t0:.1f}s")
+
+        # Step 3: Load checkpoint
         if not os.path.isfile(self.checkpoint_path):
             raise FileNotFoundError(f"Checkpoint not found: {self.checkpoint_path}")
-            
+
+        self._status("Loading checkpoint weights...")
+        t0 = _time.monotonic()
         checkpoint = torch.load(self.checkpoint_path, map_location=self.device)
         state_dict = checkpoint.get('state_dict', checkpoint)
-        
-        # Fix Compiled Model Prefix & Handle PosEmbed Mismatch
+        logger.info(f"Checkpoint loaded: {_time.monotonic() - t0:.1f}s")
+
+        # Step 4: Fix Compiled Model Prefix & Handle PosEmbed Mismatch
         new_state_dict = {}
         model_state = model.state_dict()
-        
+
         for k, v in state_dict.items():
             if k.startswith('_orig_mod.'):
                 k = k[10:]
-                
+
             # Check for PosEmbed Mismatch
             if 'pos_embed' in k and k in model_state:
                 if v.shape != model_state[k].shape:
                     logger.warning(f"PosEmbed shape mismatch: resizing {k} from {v.shape} to {model_state[k].shape}")
-                    # v: [1, N_src, C]
-                    # target: [1, N_dst, C]
-                    # We assume square grid
                     N_src = v.shape[1]
                     N_dst = model_state[k].shape[1]
                     C = v.shape[2]
-                    
+
                     grid_src = int(math.sqrt(N_src))
                     grid_dst = int(math.sqrt(N_dst))
-                    
-                    # Reshape to [1, C, H, W]
+
                     v_img = v.permute(0, 2, 1).view(1, C, grid_src, grid_src)
-                    
-                    # Interpolate
                     v_resized = F.interpolate(v_img, size=(grid_dst, grid_dst), mode='bicubic', align_corners=False)
-                    
-                    # Reshape back
                     v = v_resized.flatten(2).transpose(1, 2)
-            
+
             new_state_dict[k] = v
-            
+
+        self._status("Loading state dict...")
+        t0 = _time.monotonic()
         missing, unexpected = model.load_state_dict(new_state_dict, strict=False)
         if len(missing) > 0:
             logger.warning(f"Missing keys in checkpoint: {missing}")
         if len(unexpected) > 0:
             logger.warning(f"Unexpected keys in checkpoint: {unexpected}")
+        logger.info(f"State dict loaded: {_time.monotonic() - t0:.1f}s")
 
         # Enable TF32 tensor cores for FP32 matmuls (Ampere+).
-        # ~2x throughput with negligible precision loss for inference.
         torch.set_float32_matmul_precision('high')
         logger.info("TF32 matmul precision set to 'high'")
 
@@ -197,27 +212,25 @@ class CorridorKeyEngine:
         torch.backends.cudnn.benchmark = False
         logger.info("cuDNN benchmark disabled (saves 2-5 GB workspace)")
 
-        # Jhe Kimchi's Patch: fix Hiera global attention blocks so SDPA
-        # uses FlashAttention instead of the memory-hungry math backend.
-        logger.info("Applying Hiera attention patch...")
+        # Step 5: Hiera attention patch
+        self._status("Patching attention blocks...")
+        t0 = _time.monotonic()
         try:
-            hiera = model.encoder.model  # unwrap FeatureGetterNet
+            hiera = model.encoder.model
             n_patched = _patch_hiera_global_attention(hiera)
-            logger.info(f"Hiera attention patch: {n_patched} global blocks patched for FlashAttention")
+            logger.info(f"Hiera attention patch: {n_patched} blocks ({_time.monotonic() - t0:.1f}s)")
         except Exception as e:
             logger.warning(f"Hiera attention patch failed: {type(e).__name__}: {e}")
 
         # Configure tiled refiner for VRAM-constrained processing.
-        # 512x512 tiles with 128px overlap (> 65px receptive field = lossless).
         if self.tile_size > 0 and hasattr(model, 'refiner') and model.refiner is not None:
             model.refiner._tile_size = self.tile_size
             model.refiner._tile_overlap = self.tile_overlap
             logger.info(f"Tiled refiner: {self.tile_size}x{self.tile_size} tiles, {self.tile_overlap}px overlap")
 
-        # torch.compile: JIT-compile the model graph via Triton inductor.
-        # In tiled mode, the refiner's Python tile scheduler is excluded from
-        # capture and only the fixed-shape tile CNN is compiled.
+        # Step 6: torch.compile (Triton JIT — slow on first run)
         if self._use_compile:
+            self._status("Compiling model (first run may take a minute)...")
             import subprocess
             import sys
 
@@ -233,8 +246,9 @@ class CorridorKeyEngine:
 
             if self.tile_size > 0 and hasattr(model, 'refiner') and model.refiner is not None:
                 try:
+                    t0 = _time.monotonic()
                     model.refiner.compile_tile_kernel()
-                    logger.info("torch.compile applied to refiner tile kernel")
+                    logger.info(f"Refiner tile compile: {_time.monotonic() - t0:.1f}s")
                 except Exception as e:
                     logger.warning(
                         f"Refiner tile kernel compile failed (falling back to eager tiles): "
@@ -242,10 +256,13 @@ class CorridorKeyEngine:
                     )
 
             try:
+                t0 = _time.monotonic()
                 model = torch.compile(model, fullgraph=False)
-                logger.info("torch.compile applied to model (inductor backend, fullgraph=False)")
+                logger.info(f"torch.compile complete: {_time.monotonic() - t0:.1f}s")
             except Exception as e:
                 logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
+
+        self._status("Model ready")
         return model
 
     @torch.no_grad()

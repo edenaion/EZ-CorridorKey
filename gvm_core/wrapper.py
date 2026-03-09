@@ -97,6 +97,19 @@ class GVMProcessor:
         self.pipe = self.pipe.to(self.device, dtype=torch.float16)
         logger.info("Models loaded.")
 
+    def to(self, device, **kwargs):
+        """Move all internal models to *device* (enables VRAM offloading)."""
+        device = torch.device(device)
+        self.device = device
+        if self.pipe is not None:
+            self.pipe = self.pipe.to(device, **kwargs)
+        # vae/unet are owned by pipe, but move explicitly in case of ref drift
+        if self.vae is not None:
+            self.vae = self.vae.to(device)
+        if self.unet is not None:
+            self.unet = self.unet.to(device)
+        return self
+
     def process_sequence(self, input_path, output_dir,
                          num_frames_per_batch=8,
                          denoise_steps=1,

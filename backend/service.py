@@ -272,7 +272,8 @@ class CorridorKeyService:
         """
         if obj is None:
             return
-        logger.debug(f"Offloading model: {type(obj).__name__}")
+        name = type(obj).__name__
+        logger.debug(f"Offloading model: {name}")
         try:
             if hasattr(obj, 'unload'):
                 obj.unload()
@@ -280,10 +281,12 @@ class CorridorKeyService:
                 obj.to('cpu')
             elif hasattr(obj, 'cpu'):
                 obj.cpu()
+            else:
+                logger.warning(f"Model {name} has no .to()/.cpu()/.unload() — VRAM may leak")
         except Exception as e:
-            logger.debug(f"Model offload warning: {e}")
+            logger.warning(f"Model offload failed for {name}: {e}")
 
-    def _ensure_model(self, needed: _ActiveModel) -> None:
+    def _ensure_model(self, needed: _ActiveModel, on_status=None) -> None:
         """Model residency manager — unload current model if switching types.
 
         Only ONE heavy model stays in VRAM at a time. Before loading a
@@ -296,27 +299,59 @@ class CorridorKeyService:
         if self._active_model != _ActiveModel.NONE:
             # Snapshot VRAM before unload for leak diagnosis
             vram_before_mb = self._vram_allocated_mb()
+            if on_status:
+                on_status(f"Switching {self._active_model.value} -> {needed.value}...")
             logger.info(f"Unloading {self._active_model.value} model for {needed.value}"
                         f" (VRAM before: {vram_before_mb:.0f}MB)")
 
+            t0 = time.monotonic()
+            if on_status:
+                on_status(f"Offloading {self._active_model.value}...")
             if self._active_model == _ActiveModel.INFERENCE:
                 self._safe_offload(self._engine)
                 self._engine = None
             elif self._active_model == _ActiveModel.GVM:
-                self._safe_offload(self._gvm_processor)
+                # GVM has circular refs (pipe ↔ vae ↔ unet) — break them
+                # explicitly so gc can reclaim everything in one pass.
+                gvm = self._gvm_processor
                 self._gvm_processor = None
+                if gvm is not None:
+                    self._safe_offload(gvm)
+                    # Break circular references inside the diffusion pipeline
+                    for attr in ('pipe', 'vae', 'unet', 'scheduler'):
+                        try:
+                            setattr(gvm, attr, None)
+                        except Exception:
+                            pass
+                    del gvm
             elif self._active_model == _ActiveModel.VIDEOMAMA:
                 self._safe_offload(self._videomama_pipeline)
                 self._videomama_pipeline = None
+            logger.info(f"_safe_offload took {time.monotonic() - t0:.1f}s")
 
             import gc
+            t0 = time.monotonic()
+            # Two GC passes: first breaks cycles, second reclaims freed refs
+            if on_status:
+                on_status("Releasing Python references...")
             gc.collect()
+            gc.collect()
+            logger.info(f"gc.collect took {time.monotonic() - t0:.1f}s")
 
             try:
                 import torch
                 if torch.cuda.is_available():
+                    t0 = time.monotonic()
+                    if on_status:
+                        on_status("Waiting for CUDA to finish...")
                     torch.cuda.synchronize()
+                    logger.info(f"cuda.synchronize took {time.monotonic() - t0:.1f}s")
+                    t0 = time.monotonic()
+                    if on_status:
+                        on_status("Clearing CUDA cache...")
                     torch.cuda.empty_cache()
+                    torch.cuda.reset_peak_memory_stats()
+                    logger.info(f"cuda.empty_cache took {time.monotonic() - t0:.1f}s")
             except ImportError:
                 logger.debug("torch not available for cache clear during model switch")
 
@@ -326,9 +361,9 @@ class CorridorKeyService:
 
         self._active_model = needed
 
-    def _get_engine(self):
+    def _get_engine(self, on_status=None):
         """Lazy-load the CorridorKey inference engine."""
-        self._ensure_model(_ActiveModel.INFERENCE)
+        self._ensure_model(_ActiveModel.INFERENCE, on_status=on_status)
 
         if self._engine is not None:
             return self._engine
@@ -354,6 +389,7 @@ class CorridorKeyService:
             device=self._device,
             img_size=2048,
             optimization_mode=os.environ.get('CORRIDORKEY_OPT_MODE', 'auto'),
+            on_status=on_status,
         )
         logger.info(f"Engine loaded in {time.monotonic() - t0:.1f}s")
         return self._engine
@@ -402,7 +438,6 @@ class CorridorKeyService:
             import torch
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
-                torch.cuda.empty_cache()
         except ImportError:
             logger.debug("torch not available for cache clear during unload")
         logger.info("All engines unloaded, VRAM freed")
@@ -610,8 +645,10 @@ class CorridorKeyService:
 
         if on_status:
             on_status("Loading model...")
+        logger.info("run_inference: waiting for _gpu_lock")
         with self._gpu_lock:
-            engine = self._get_engine()
+            logger.info("run_inference: acquired _gpu_lock")
+            engine = self._get_engine(on_status=on_status)
         dirs = ensure_output_dirs(clip.root_path)
         cfg = output_config or OutputConfig()
 
@@ -898,7 +935,9 @@ class CorridorKeyService:
 
         t_start = time.monotonic()
 
+        logger.info("run_gvm: waiting for _gpu_lock")
         with self._gpu_lock:
+            logger.info("run_gvm: acquired _gpu_lock")
             gvm = self._get_gvm()
 
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")

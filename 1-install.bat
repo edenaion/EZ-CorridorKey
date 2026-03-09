@@ -172,6 +172,7 @@ if exist "venv\Scripts\activate.bat" (
 REM ── Step 3: Install/locate uv ──
 echo [2/7] Setting up package manager...
 set UV_AVAILABLE=0
+set "UV_USER_EXE="
 
 where uv >nul 2>&1
 if %errorlevel%==0 (
@@ -194,8 +195,27 @@ if exist "%LOCALAPPDATA%\uv\uv.exe" (
     goto :uv_done
 )
 
-echo   Installing uv (fast Python package manager)...
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex" >nul 2>&1
+for /f "delims=" %%i in ('python -c "import os, site; print(os.path.join(site.USER_BASE, 'Scripts', 'uv.exe'))" 2^>nul') do set "UV_USER_EXE=%%i"
+if defined UV_USER_EXE (
+    if exist "!UV_USER_EXE!" (
+        for %%d in ("!UV_USER_EXE!") do set "PATH=%%~dpd;%PATH%"
+        set UV_AVAILABLE=1
+        echo   [OK] uv found in Python user Scripts
+        goto :uv_done
+    )
+)
+
+echo   uv not found. Trying safer user-level install via pip...
+python -m pip install --user uv >nul 2>&1
+
+if defined UV_USER_EXE (
+    if exist "!UV_USER_EXE!" (
+        for %%d in ("!UV_USER_EXE!") do set "PATH=%%~dpd;%PATH%"
+        set UV_AVAILABLE=1
+        echo   [OK] uv installed to Python user Scripts
+        goto :uv_done
+    )
+)
 
 if exist "%USERPROFILE%\.local\bin\uv.exe" (
     set "PATH=%USERPROFILE%\.local\bin;%PATH%"
@@ -204,14 +224,8 @@ if exist "%USERPROFILE%\.local\bin\uv.exe" (
     goto :uv_done
 )
 
-if exist "%LOCALAPPDATA%\uv\uv.exe" (
-    set "PATH=%LOCALAPPDATA%\uv;%PATH%"
-    set UV_AVAILABLE=1
-    echo   [OK] uv installed
-    goto :uv_done
-)
-
 echo   [WARN] uv install failed, falling back to pip (slower)
+echo   Manual install: python -m pip install --user uv
 
 :uv_done
 
@@ -306,9 +320,14 @@ set "FFMPEG_ZIP=%TEMP%\ffmpeg-release-essentials.zip"
 set "FFMPEG_EXTRACT=%TEMP%\ffmpeg-extract"
 set "FFMPEG_DEST=%~dp0tools\ffmpeg"
 
-REM Download using PowerShell
+REM Prefer curl to avoid PowerShell download heuristics
 echo   Downloading ffmpeg (this may take a minute)...
-powershell -ExecutionPolicy ByPass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%FFMPEG_URL%' -OutFile '%FFMPEG_ZIP%'" >nul 2>&1
+where curl.exe >nul 2>&1
+if %errorlevel%==0 (
+    curl.exe -L --fail --output "%FFMPEG_ZIP%" "%FFMPEG_URL%" >nul 2>&1
+) else (
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%FFMPEG_URL%' -OutFile '%FFMPEG_ZIP%'" >nul 2>&1
+)
 if not exist "%FFMPEG_ZIP%" (
     echo   [WARN] FFmpeg download failed. Install manually:
     echo     winget install ffmpeg
@@ -320,7 +339,13 @@ if not exist "%FFMPEG_ZIP%" (
 REM Extract and move into tools\ffmpeg
 echo   Extracting...
 if exist "%FFMPEG_EXTRACT%" rmdir /s /q "%FFMPEG_EXTRACT%"
-powershell -ExecutionPolicy ByPass -Command "Expand-Archive -Path '%FFMPEG_ZIP%' -DestinationPath '%FFMPEG_EXTRACT%' -Force" >nul 2>&1
+mkdir "%FFMPEG_EXTRACT%" >nul 2>&1
+where tar.exe >nul 2>&1
+if %errorlevel%==0 (
+    tar.exe -xf "%FFMPEG_ZIP%" -C "%FFMPEG_EXTRACT%" >nul 2>&1
+) else (
+    powershell -NoProfile -Command "Expand-Archive -Path '%FFMPEG_ZIP%' -DestinationPath '%FFMPEG_EXTRACT%' -Force" >nul 2>&1
+)
 
 REM The zip contains a top-level folder like ffmpeg-7.1-essentials_build — find it and move contents
 for /d %%d in ("%FFMPEG_EXTRACT%\ffmpeg-*") do set "FFMPEG_INNER=%%d"
@@ -383,17 +408,16 @@ set "TARGET_PATH=%CD%\.venv\Scripts\pythonw.exe"
 set "ICON_PATH=%CD%\ui\theme\corridorkey.ico"
 set "WORK_DIR=%CD%"
 
-echo $ws = New-Object -ComObject WScript.Shell > "%TEMP%\mk_shortcut.ps1"
-echo $s = $ws.CreateShortcut("!SHORTCUT_PATH!") >> "%TEMP%\mk_shortcut.ps1"
-echo $s.TargetPath = "!TARGET_PATH!" >> "%TEMP%\mk_shortcut.ps1"
-echo $s.Arguments = "main.py" >> "%TEMP%\mk_shortcut.ps1"
-echo $s.WorkingDirectory = "!WORK_DIR!" >> "%TEMP%\mk_shortcut.ps1"
-echo $s.IconLocation = "!ICON_PATH!,0" >> "%TEMP%\mk_shortcut.ps1"
-echo $s.WindowStyle = 7 >> "%TEMP%\mk_shortcut.ps1"
-echo $s.Description = "CorridorKey - AI Green Screen" >> "%TEMP%\mk_shortcut.ps1"
-echo $s.Save() >> "%TEMP%\mk_shortcut.ps1"
-powershell -ExecutionPolicy ByPass -File "%TEMP%\mk_shortcut.ps1" >nul 2>&1
-del "%TEMP%\mk_shortcut.ps1" >nul 2>&1
+powershell -NoProfile -Command ^
+    "$ws = New-Object -ComObject WScript.Shell; " ^
+    "$s = $ws.CreateShortcut('!SHORTCUT_PATH!'); " ^
+    "$s.TargetPath = '!TARGET_PATH!'; " ^
+    "$s.Arguments = 'main.py'; " ^
+    "$s.WorkingDirectory = '!WORK_DIR!'; " ^
+    "$s.IconLocation = '!ICON_PATH!,0'; " ^
+    "$s.WindowStyle = 7; " ^
+    "$s.Description = 'CorridorKey - AI Green Screen'; " ^
+    "$s.Save()" >nul 2>&1
 
 if exist "!SHORTCUT_PATH!" (
     echo   [OK] Desktop shortcut created (no console window)
