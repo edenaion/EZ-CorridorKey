@@ -67,16 +67,72 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
     return patched
 
 class CorridorKeyEngine:
-    def __init__(self, checkpoint_path, device='cuda', img_size=2048, use_refiner=True):
+    # VRAM threshold for optimization profile selection.
+    # Below this: tiled refiner (fits in VRAM). Above: torch.compile (speed).
+    _VRAM_TILE_THRESHOLD_GB = 12
+
+    # Optimization modes:
+    #   'auto'  — detect VRAM and pick best strategy (default)
+    #   'speed' — torch.compile, no tiling (12GB+ VRAM)
+    #   'lowvram' — tiled refiner, no compile (8GB GPUs)
+    VALID_OPT_MODES = ('auto', 'speed', 'lowvram')
+
+    def __init__(self, checkpoint_path, device='cuda', img_size=2048, use_refiner=True,
+                 optimization_mode='auto', tile_overlap=128, cache_clearing=True):
         self.device = torch.device(device)
         self.img_size = img_size
         self.checkpoint_path = checkpoint_path
         self.use_refiner = use_refiner
-        
+        self.tile_overlap = tile_overlap
+        self.cache_clearing = cache_clearing
+
+        # Allow env var override: CORRIDORKEY_OPT_MODE=speed|lowvram|auto
+        env_mode = os.environ.get('CORRIDORKEY_OPT_MODE', '').lower()
+        if env_mode in self.VALID_OPT_MODES:
+            optimization_mode = env_mode
+            logger.info(f"Optimization mode override from env: {env_mode}")
+
+        # Resolve optimization profile.
+        # Tiled refiner and torch.compile are mutually exclusive:
+        # tiling's dynamic loops cause infinite Triton compilation.
+        vram_gb = self._get_vram_gb()
+
+        if optimization_mode == 'speed':
+            self.tile_size = 0
+            self._use_compile = True
+            logger.info(f"Optimization: speed mode (torch.compile, no tiling) "
+                        f"[VRAM: {vram_gb:.1f} GB]")
+        elif optimization_mode == 'lowvram':
+            self.tile_size = 512
+            self._use_compile = False
+            logger.info(f"Optimization: low-VRAM mode (tiled refiner 512x512, no torch.compile) "
+                        f"[VRAM: {vram_gb:.1f} GB]")
+        else:  # auto
+            if vram_gb > 0 and vram_gb < self._VRAM_TILE_THRESHOLD_GB:
+                self.tile_size = 512
+                self._use_compile = False
+                logger.info(f"Optimization: auto → low-VRAM mode "
+                            f"({vram_gb:.1f} GB < {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
+            else:
+                self.tile_size = 0
+                self._use_compile = True
+                logger.info(f"Optimization: auto → speed mode "
+                            f"({vram_gb:.1f} GB ≥ {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
+
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
-        
+
         self.model = self._load_model()
+
+    @staticmethod
+    def _get_vram_gb() -> float:
+        """Return total GPU VRAM in GB, or 0 if unavailable."""
+        try:
+            if torch.cuda.is_available():
+                return torch.cuda.get_device_properties(0).total_mem / (1024 ** 3)
+        except Exception:
+            pass
+        return 0.0
         
     def _load_model(self):
         logger.info(f"Loading CorridorKey from {self.checkpoint_path}...")
@@ -138,6 +194,10 @@ class CorridorKeyEngine:
         torch.set_float32_matmul_precision('high')
         logger.info("TF32 matmul precision set to 'high'")
 
+        # Disable cuDNN benchmark to prevent workspace memory allocation (2-5 GB).
+        torch.backends.cudnn.benchmark = False
+        logger.info("cuDNN benchmark disabled (saves 2-5 GB workspace)")
+
         # Jhe Kimchi's Patch: fix Hiera global attention blocks so SDPA
         # uses FlashAttention instead of the memory-hungry math backend.
         logger.info("Applying Hiera attention patch...")
@@ -148,20 +208,31 @@ class CorridorKeyEngine:
         except Exception as e:
             logger.warning(f"Hiera attention patch failed: {type(e).__name__}: {e}")
 
+        # Configure tiled refiner for VRAM-constrained processing.
+        # 512x512 tiles with 128px overlap (> 65px receptive field = lossless).
+        if self.tile_size > 0 and hasattr(model, 'refiner') and model.refiner is not None:
+            model.refiner._tile_size = self.tile_size
+            model.refiner._tile_overlap = self.tile_overlap
+            logger.info(f"Tiled refiner: {self.tile_size}x{self.tile_size} tiles, {self.tile_overlap}px overlap")
+
         # torch.compile: JIT-compile the model graph via Triton inductor.
-        # First inference will be slower (compilation), subsequent frames faster.
-        try:
-            import subprocess, sys
-            if sys.platform == 'win32':
-                _orig_popen_init = subprocess.Popen.__init__
-                def _silent_popen_init(self, *args, **kwargs):
-                    kwargs.setdefault('creationflags', subprocess.CREATE_NO_WINDOW)
-                    _orig_popen_init(self, *args, **kwargs)
-                subprocess.Popen.__init__ = _silent_popen_init
-            model = torch.compile(model)
-            logger.info("torch.compile applied to model (inductor backend)")
-        except Exception as e:
-            logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
+        # Only used in speed mode (no tiling) — tiling's dynamic loops
+        # cause infinite Triton compilation time.
+        if self._use_compile:
+            try:
+                import subprocess, sys
+                if sys.platform == 'win32':
+                    _orig_popen_init = subprocess.Popen.__init__
+                    def _silent_popen_init(self, *args, **kwargs):
+                        kwargs.setdefault('creationflags', subprocess.CREATE_NO_WINDOW)
+                        _orig_popen_init(self, *args, **kwargs)
+                    subprocess.Popen.__init__ = _silent_popen_init
+                model = torch.compile(model)
+                logger.info("torch.compile applied to model (inductor backend)")
+            except Exception as e:
+                logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
+        else:
+            logger.info("torch.compile skipped (tiled refiner mode)")
 
         return model
 

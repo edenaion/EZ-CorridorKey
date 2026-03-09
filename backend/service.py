@@ -352,6 +352,7 @@ class CorridorKeyService:
             checkpoint_path=ckpt_path,
             device=self._device,
             img_size=2048,
+            optimization_mode=os.environ.get('CORRIDORKEY_OPT_MODE', 'auto'),
         )
         logger.info(f"Engine loaded in {time.monotonic() - t0:.1f}s")
         return self._engine

@@ -112,20 +112,76 @@ class CNNRefinerModule(nn.Module):
         nn.init.normal_(self.final.weight, mean=0.0, std=1e-3)
         nn.init.constant_(self.final.bias, 0)
 
+    def _process_tile(self, x):
+        """Run refiner pipeline on a single tile. x: [B, 7, H, W]."""
+        feat = self.stem(x)
+        feat = self.res1(feat)
+        feat = self.res2(feat)
+        feat = self.res3(feat)
+        feat = self.res4(feat)
+        return self.final(feat) * 10.0
+
     def forward(self, img, coarse_pred):
-        # img: [B, 3, H, W]
-        # coarse_pred: [B, 4, H, W]
-        x = torch.cat([img, coarse_pred], dim=1)
-        
-        x = self.stem(x)
-        x = self.res1(x)
-        x = self.res2(x)
-        x = self.res3(x)
-        x = self.res4(x)
-        
-        # Output Scaling (10x Boost)
-        # Allows the Refiner to predict small stable values (e.g. 0.5) that become strong corrections (5.0).
-        return self.final(x) * 10.0
+        """Forward pass with optional tiled processing.
+
+        Tile size is set at construction time via set_tile_params().
+        Default (tile_size=0) processes at full resolution.
+        """
+        full_input = torch.cat([img, coarse_pred], dim=1)  # [B, 7, H, W]
+        tile_size = getattr(self, '_tile_size', 0)
+        tile_overlap = getattr(self, '_tile_overlap', 128)
+
+        if tile_size <= 0:
+            return self._process_tile(full_input)
+
+        B, _, H, W = full_input.shape
+
+        # Skip tiling if image fits in a single tile
+        if H <= tile_size and W <= tile_size:
+            return self._process_tile(full_input)
+
+        stride = tile_size - tile_overlap
+        out_channels = coarse_pred.shape[1]  # 4
+
+        delta_sum = torch.zeros(B, out_channels, H, W,
+                                device=img.device, dtype=img.dtype)
+        weight_sum = torch.zeros(B, 1, H, W,
+                                 device=img.device, dtype=img.dtype)
+
+        for y0 in range(0, H, stride):
+            for x0 in range(0, W, stride):
+                y1 = min(y0 + tile_size, H)
+                x1 = min(x0 + tile_size, W)
+                # Adjust start to ensure full tile_size when possible
+                y0_adj = max(0, y1 - tile_size)
+                x0_adj = max(0, x1 - tile_size)
+
+                tile = full_input[:, :, y0_adj:y1, x0_adj:x1]
+                tile_delta = self._process_tile(tile)
+
+                tile_h, tile_w = tile_delta.shape[2], tile_delta.shape[3]
+                blend_w = self._blend_weight(tile_h, tile_w, tile_overlap,
+                                             img.device, img.dtype)
+
+                delta_sum[:, :, y0_adj:y1, x0_adj:x1] += tile_delta * blend_w
+                weight_sum[:, :, y0_adj:y1, x0_adj:x1] += blend_w
+
+        return delta_sum / weight_sum.clamp(min=1e-6)
+
+    @staticmethod
+    def _blend_weight(h, w, overlap, device, dtype):
+        """Linear blend ramp for tile edges."""
+        weight = torch.ones(1, 1, h, w, device=device, dtype=dtype)
+        if overlap <= 0:
+            return weight
+        ramp = torch.linspace(0.0, 1.0, overlap, device=device, dtype=dtype)
+        for i in range(min(overlap, h)):
+            weight[:, :, i, :] *= ramp[i]
+            weight[:, :, h - 1 - i, :] *= ramp[i]
+        for i in range(min(overlap, w)):
+            weight[:, :, :, i] *= ramp[i]
+            weight[:, :, :, w - 1 - i] *= ramp[i]
+        return weight
 
 
 
@@ -216,58 +272,44 @@ class GreenFormer(nn.Module):
     def forward(self, x):
         # x: [B, 4, H, W]
         input_size = x.shape[2:]
-        
+
         # Encode
         features = self.encoder(x) # Returns list of features
-        
+
         # Decode Streams
         alpha_logits = self.alpha_decoder(features) # [B, 1, H/4, W/4]
         fg_logits = self.fg_decoder(features)       # [B, 3, H/4, W/4]
-        
+
         # Upsample to full resolution (Bilinear)
         # These are the "Coarse" LOGITS
         alpha_logits_up = F.interpolate(alpha_logits, size=input_size, mode='bilinear', align_corners=False)
         fg_logits_up = F.interpolate(fg_logits, size=input_size, mode='bilinear', align_corners=False)
-        
-        # --- HUMILITY CLAMP REMOVED (Phase 3) ---
-        # User requested NO CLAMPING to preserve all backbone detail.
-        # Refiner sees raw logits (-inf to +inf).
-        # alpha_logits_up = torch.clamp(alpha_logits_up, -3.0, 3.0)
-        # fg_logits_up = torch.clamp(fg_logits_up, -3.0, 3.0)
-        
+
         # Coarse Probs (for Loss and Refiner Input)
         alpha_coarse = torch.sigmoid(alpha_logits_up)
         fg_coarse = torch.sigmoid(fg_logits_up)
-        
+
         # --- Refinement (CNN Hybrid) ---
-        # 4. Refine (CNN)
-        # Input to refiner: RGB Image (first 3 channels of x) + Coarse Predictions (Probs)
-        # We give the refiner 'Probs' as input features because they are normalized [0,1]
         rgb = x[:, :3, :, :]
-        
-        # Feed the Refiner
         coarse_pred = torch.cat([alpha_coarse, fg_coarse], dim=1) # [B, 4, H, W]
-        
+
         # Refiner outputs DELTA LOGITS
-        # The refiner predicts the correction in valid score space (-inf, inf)
         if self.use_refiner and self.refiner is not None:
             delta_logits = self.refiner(rgb, coarse_pred)
         else:
-            # Zero Deltas
             delta_logits = torch.zeros_like(coarse_pred)
-        
+
         delta_alpha = delta_logits[:, 0:1]
         delta_fg = delta_logits[:, 1:4]
-        
+
         # Residual Addition in Logit Space
-        # This allows infinite correction capability and prevents saturation blocking
         alpha_final_logits = alpha_logits_up + delta_alpha
         fg_final_logits = fg_logits_up + delta_fg
-        
+
         # Final Activation
         alpha_final = torch.sigmoid(alpha_final_logits)
         fg_final = torch.sigmoid(fg_final_logits)
-        
+
         return {
             'alpha': alpha_final,
             'fg': fg_final
