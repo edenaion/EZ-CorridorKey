@@ -29,7 +29,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 **Windows (Recommended)**
 
 Use (https://github.com/Grainory/Excutable-for-EZ-CorridorKey) for a simplified, one-click setup with UI, dependencies, and all AI models.
-1. download released installer file at https://github.com/Grainory/Excutable-for-EZ-CorridorKey/releases/tag/1.0.0
+1. download released installer file at https://github.com/Grainory/Excutable-for-EZ-CorridorKey/releases/
 2. run the installer by Double click 'EZ-CorridorKey-Installer.exe'
    
 **One-Click Install (Windows / macOS / Linux):**
