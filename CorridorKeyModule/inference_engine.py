@@ -128,7 +128,7 @@ class CorridorKeyEngine:
         """Return total GPU VRAM in GB, or 0 if unavailable."""
         try:
             if torch.cuda.is_available():
-                return torch.cuda.get_device_properties(0).total_mem / (1024 ** 3)
+                return torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
         except Exception:
             pass
         return 0.0

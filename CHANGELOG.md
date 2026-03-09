@@ -4,6 +4,18 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.3.1] - 2026-03-09 — Low-VRAM compile fix, status callbacks
+
+### Fixed
+- **Low-VRAM mode hang on first frame** — `@torch.compiler.disable(recursive=False)` allowed Dynamo to re-enter the tile loop, causing O(N) graph breaks per tile. Changed to `@torch.compiler.disable` (recursive=True) so the tiled scheduler is a true eager island. First-frame compile now takes ~15s instead of hanging indefinitely.
+- **Tile kernel compile** — added `fullgraph=True` for the pure CNN tile kernel (no graph breaks needed)
+- **`total_mem` AttributeError** — corrected to `total_memory` in both inference engine and GPU monitor (PyTorch API)
+
+### Added
+- **Status callbacks** — `on_status` parameter on `run_inference()` for phase labels ("Loading model...", "Compiling...") piped to UI status bar via `status_update` signal
+
+---
+
 ## [1.3.0] - 2026-03-09 — 2x Faster Inference, Low-VRAM Support
 
 ### Performance (4K: 3.3s → 1.5-1.8s per frame)
@@ -13,9 +25,9 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Quality verified** — 157+ dB PSNR across all optimization levels (mathematically identical output)
 
 ### Low-VRAM Support (8GB GPUs)
-- **Tiled CNN refiner** — 512×512 tiles with 128px overlap (> 65px receptive field = lossless blending)
+- **Tiled CNN refiner** — 512×512 tiles with 128px overlap (> 65px receptive field = lossless blending) (credit: Marclie)
 - **Boundary-aware blending** — tile edges at image boundaries keep full weight, only internal overlaps get ramped
-- **Selective torch.compile** — `@torch.compiler.disable(recursive=False)` excludes tile scheduler from Dynamo; tile CNN compiled separately
+- **Selective torch.compile** — `@torch.compiler.disable` excludes tile scheduler from Dynamo; tile CNN compiled separately with `fullgraph=True`
 - **VRAM auto-detection** — ≥12GB uses speed mode (full compile), <12GB uses tiled mode
 - **cuDNN benchmark disabled** — saves 2-5 GB workspace memory
 - **Manual override** — `CORRIDORKEY_OPT_MODE=speed|lowvram|auto` environment variable

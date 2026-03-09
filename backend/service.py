@@ -578,6 +578,7 @@ class CorridorKeyService:
         job: Optional[GPUJob] = None,
         on_progress: Optional[Callable[..., None]] = None,
         on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
         skip_stems: Optional[set[str]] = None,
         output_config: Optional[OutputConfig] = None,
         frame_range: Optional[tuple[int, int]] = None,
@@ -591,6 +592,7 @@ class CorridorKeyService:
             on_progress: Called with (clip_name, current_frame, total_frames, **kwargs).
                 Optional kwargs: fps, elapsed, eta_seconds.
             on_warning: Called with warning messages for non-fatal issues.
+            on_status: Called with phase status text (e.g. "Loading model...").
             skip_stems: Set of frame stems to skip (for resume support).
             output_config: Which outputs to write and their formats.
 
@@ -606,6 +608,8 @@ class CorridorKeyService:
 
         t_start = time.monotonic()
 
+        if on_status:
+            on_status("Loading model...")
         with self._gpu_lock:
             engine = self._get_engine()
         dirs = ensure_output_dirs(clip.root_path)
@@ -652,11 +656,17 @@ class CorridorKeyService:
             frame_indices = range(num_frames)
             range_count = num_frames
 
+        _warmup_done = False
+
         try:
             for progress_i, i in enumerate(frame_indices):
                 # Check cancellation between frames
                 if job and job.is_cancelled:
                     raise JobCancelledError(clip.name, i)
+
+                # Show warmup status on first frame (torch.compile JIT)
+                if not _warmup_done and on_status:
+                    on_status("Compiling (first frame may take a minute)...")
 
                 # Report progress with timing data
                 if on_progress:
@@ -715,6 +725,12 @@ class CorridorKeyService:
                     dt = time.monotonic() - t_frame
                     frame_times.append(dt)
                     processed_count += 1
+
+                    # Clear warmup status after first successful frame
+                    if not _warmup_done:
+                        _warmup_done = True
+                        if on_status:
+                            on_status("")
                     total_t = sum(frame_times)
                     avg_fps = len(frame_times) / total_t if total_t > 0 else 0.0
                     logger.debug(

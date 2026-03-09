@@ -86,8 +86,9 @@ class RefinerBlock(nn.Module):
 class CNNRefinerModule(nn.Module):
     """
     Dilated Residual Refiner (Receptive Field ~65px).
-    designed to solve Macroblocking artifacts from Hiera.
+    Designed to solve Macroblocking artifacts from Hiera.
     Structure: Stem -> Res(d1) -> Res(d2) -> Res(d4) -> Res(d8) -> Projection.
+    Tiled CNN refiner by Marclie.
     """
     def __init__(self, in_channels=7, hidden_channels=64, out_channels=4):
         super().__init__()
@@ -129,14 +130,16 @@ class CNNRefinerModule(nn.Module):
     def compile_tile_kernel(self):
         """Compile the fixed-shape tile CNN without changing checkpoint keys."""
         if self._compiled_process_tile is None:
-            self._compiled_process_tile = torch.compile(self._process_tile_impl, dynamic=False)
+            self._compiled_process_tile = torch.compile(
+                self._process_tile_impl, dynamic=False, fullgraph=True,
+            )
 
     def _process_tile(self, x):
         if self._compiled_process_tile is not None:
             return self._compiled_process_tile(x)
         return self._process_tile_impl(x)
 
-    @torch.compiler.disable(recursive=False)
+    @torch.compiler.disable
     def _forward_tiled(self, full_input, out_channels):
         tile_size = self._tile_size
         tile_overlap = self._tile_overlap

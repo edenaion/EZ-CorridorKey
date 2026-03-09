@@ -160,6 +160,9 @@ class GPUJobWorker(QThread):
         def on_warning(message: str) -> None:
             self.warning.emit(job.id, message)
 
+        def on_status(message: str) -> None:
+            self.status_update.emit(job.id, message)
+
         output_config = job.params.get("_output_config")
         frame_range = job.params.get("_frame_range")
         self._service.run_inference(
@@ -168,6 +171,7 @@ class GPUJobWorker(QThread):
             job=job,
             on_progress=on_progress,
             on_warning=on_warning,
+            on_status=on_status,
             skip_stems=skip_stems,
             output_config=output_config,
             frame_range=frame_range,

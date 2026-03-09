@@ -116,7 +116,7 @@ class GPUMonitor(QObject):
         try:
             import torch
             props = torch.cuda.get_device_properties(0)
-            total = props.total_mem
+            total = props.total_memory
             reserved = torch.cuda.memory_reserved(0)
             free = total - reserved
             total_gb = total / (1024 ** 3)

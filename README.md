@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.3.0](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.3.1](CHANGELOG.md)**
 
-> **Latest:** 2x faster 4K inference (3.3s → 1.5s/frame), FlashAttention + TF32 + torch.compile, low-VRAM tiling for 8GB GPUs — [full changelog](CHANGELOG.md)
+> **Latest:** Fix low-VRAM mode hang on first frame, ~1.6s/frame 4K in tiled mode — [full changelog](CHANGELOG.md)
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
