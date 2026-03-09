@@ -97,10 +97,10 @@ class CorridorKeyEngine:
         # Low-VRAM mode keeps tiling, but graph-breaks the tile scheduler and
         # compiles the fixed-shape tile CNN separately.
         #
-        # Important: do NOT probe VRAM from inside constructor startup. This
-        # object is created during model handoff (e.g. GVM -> inference), and
-        # runtime CUDA/NVML queries here can stall startup on some systems.
-        # Use deterministic startup behavior instead.
+        # NOTE: _get_vram_gb() uses pynvml first (driver-level, no CUDA
+        # context) so it's safe during model handoff (GVM -> inference).
+        # The old torch.cuda.get_device_properties() call stalled after
+        # GVM teardown — pynvml doesn't have that problem.
         if optimization_mode == 'speed':
             self.tile_size = 0
             self._use_compile = True
@@ -110,9 +110,17 @@ class CorridorKeyEngine:
             self._use_compile = True
             logger.info("Optimization: low-VRAM mode (tiled refiner 512x512 + selective torch.compile)")
         else:  # auto
-            self.tile_size = 512
-            self._use_compile = True
-            logger.info("Optimization: auto -> low-VRAM deterministic startup")
+            vram_gb = self._get_vram_gb()
+            if vram_gb > 0 and vram_gb < self._VRAM_TILE_THRESHOLD_GB:
+                self.tile_size = 512
+                self._use_compile = True
+                logger.info(f"Optimization: auto → low-VRAM mode "
+                            f"({vram_gb:.1f} GB < {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
+            else:
+                self.tile_size = 0
+                self._use_compile = True
+                logger.info(f"Optimization: auto → speed mode "
+                            f"({vram_gb:.1f} GB ≥ {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
 
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
