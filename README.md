@@ -34,13 +34,19 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 4. The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), and model downloads.
 5. To launch: double-click `2-start.bat` (Windows) or `./2-start.sh` (macOS/Linux).
 
+**Prerequisites:**
+- [Python 3.10+](https://python.org) — check "Add to PATH" on Windows
+- NVIDIA GPU with CUDA support (8 GB+ VRAM)
+
 **What the installer does:**
+- Checks for [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ compiler needed by OpenEXR) — offers to auto-install if missing
 - Installs [uv](https://docs.astral.sh/uv/) (fast Python package manager) — falls back to pip if needed
 - Creates a `.venv` virtual environment in the project folder
 - Auto-detects your GPU and installs the correct PyTorch variant (CUDA on NVIDIA, MPS on Apple Silicon, CPU fallback)
+- Downloads and installs [FFmpeg](https://ffmpeg.org/) locally if not found on PATH (used for video import)
 - Downloads the CorridorKey model checkpoint (383 MB, required)
 - Optionally downloads GVM (~6 GB) and VideoMaMa (~37 GB) alpha hint generators
-- Checks for FFmpeg and suggests install methods if missing
+- Creates a desktop shortcut (optional)
 
 **Updating:**
 - **Windows:** Double-click `3-update.bat`

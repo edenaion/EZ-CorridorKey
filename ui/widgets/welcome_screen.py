@@ -165,9 +165,9 @@ class WelcomeScreen(QWidget):
     def _on_browse(self) -> None:
         """Open file dialog — users can pick video or image files."""
         media_filter = (
-            "Media Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v "
+            "Media Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v *.gif "
             "*.png *.jpg *.jpeg *.exr *.tif *.tiff *.bmp *.dpx);;"
-            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;"
+            "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v *.gif);;"
             "Image Files (*.png *.jpg *.jpeg *.exr *.tif *.tiff *.bmp *.dpx);;"
             "All Files (*)"
         )

@@ -8,6 +8,9 @@ if not exist ".venv\Scripts\activate.bat" (
     exit /b 1
 )
 
+REM Add local ffmpeg to PATH if present
+if exist "%~dp0tools\ffmpeg\bin\ffmpeg.exe" set "PATH=%~dp0tools\ffmpeg\bin;%PATH%"
+
 call .venv\Scripts\activate.bat
 start "" pythonw main.py %*
 exit

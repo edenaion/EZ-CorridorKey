@@ -29,9 +29,9 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-_VIDEO_EXTS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v"})
+_VIDEO_EXTS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v", ".gif"})
 _IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff", ".bmp", ".dpx"})
-VIDEO_FILE_FILTER = "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v);;All Files (*)"
+VIDEO_FILE_FILTER = "Video Files (*.mp4 *.mov *.avi *.mkv *.mxf *.webm *.m4v *.gif);;All Files (*)"
 
 _app_dir: str | None = None
 
@@ -410,6 +410,26 @@ def validate_sequence_stems(folder_path: str) -> list[str]:
         stem = os.path.splitext(f)[0]
         stems.setdefault(stem, []).append(f)
     return [stem for stem, files in stems.items() if len(files) > 1]
+
+
+def find_clip_by_source(project_dir: str, source_path: str) -> str | None:
+    """Check if any clip in the project already references the given source.
+
+    Compares against source.original_path in each clip's clip.json.
+    Works for both video and sequence sources.
+
+    Returns the clip display name if a duplicate is found, or None.
+    """
+    normalised = os.path.normcase(os.path.abspath(source_path))
+    for clip_dir in get_clip_dirs(project_dir):
+        data = read_clip_json(clip_dir)
+        if not data:
+            continue
+        source = data.get("source", {})
+        existing = source.get("original_path", "")
+        if existing and os.path.normcase(os.path.abspath(existing)) == normalised:
+            return data.get("display_name", os.path.basename(clip_dir))
+    return None
 
 
 def create_clip_from_sequence(

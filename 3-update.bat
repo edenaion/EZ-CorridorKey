@@ -25,6 +25,9 @@ if %errorlevel% neq 0 (
     echo   [OK] Code updated
 )
 
+:: ── Step 1b: Ensure local tools are on PATH ──
+if exist "%~dp0tools\ffmpeg\bin\ffmpeg.exe" set "PATH=%~dp0tools\ffmpeg\bin;%PATH%"
+
 :: ── Step 2: Update dependencies ──
 echo [2/3] Updating dependencies...
 

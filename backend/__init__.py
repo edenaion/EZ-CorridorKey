@@ -14,7 +14,8 @@ from .project import (
     get_display_name, set_display_name,
     is_video_file, is_image_file, VIDEO_FILE_FILTER,
     folder_has_image_sequence, count_sequence_frames,
-    validate_sequence_stems, create_clip_from_sequence,
+    validate_sequence_stems, find_clip_by_source,
+    create_clip_from_sequence,
     add_sequences_to_project, create_project_from_media,
 )
 from .natural_sort import natural_sort_key, natsorted
@@ -60,6 +61,7 @@ __all__ = [
     "folder_has_image_sequence",
     "count_sequence_frames",
     "validate_sequence_stems",
+    "find_clip_by_source",
     "create_clip_from_sequence",
     "add_sequences_to_project",
     "create_project_from_media",

@@ -1128,8 +1128,21 @@ class MainWindow(QMainWindow):
             self, "Select Image Sequence Folder", "",
             QFileDialog.ShowDirsOnly,
         )
-        if dir_path:
-            self._on_sequence_folder_imported(dir_path)
+        if not dir_path:
+            return
+        # When no project is open, prompt for a name (pre-filled with folder name)
+        display_name = None
+        if not self._clips_dir:
+            folder_name = os.path.basename(dir_path.rstrip("/\\"))
+            name, ok = QInputDialog.getText(
+                self, "Name Your Project",
+                "Give your project a name:",
+                text=folder_name,
+            )
+            if not ok:
+                return
+            display_name = name.strip() or folder_name
+        self._on_sequence_folder_imported(dir_path, display_name=display_name)
 
     def _add_folder_to_project(self, dir_path: str) -> None:
         """Import all videos and image sequences from a folder into the current project."""
@@ -1166,22 +1179,45 @@ class MainWindow(QMainWindow):
 
     def _add_videos_to_project(self, file_paths: list) -> None:
         """Import selected video files into the current project."""
-        from backend.project import is_video_file, add_clips_to_project
+        from backend.project import is_video_file, add_clips_to_project, find_clip_by_source
         videos = [f for f in file_paths if is_video_file(f)]
         if not videos:
             return
+        # Filter out videos already in the project
+        new_videos = []
+        skipped = []
+        for v in videos:
+            existing = find_clip_by_source(self._clips_dir, v)
+            if existing:
+                skipped.append(existing)
+            else:
+                new_videos.append(v)
+        if skipped and not new_videos:
+            names = ", ".join(f'"{s}"' for s in skipped[:3])
+            QMessageBox.information(
+                self, "Already Imported",
+                f"All selected videos are already in the project ({names})."
+            )
+            return
+        if not new_videos:
+            return
         copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
-        add_clips_to_project(self._clips_dir, videos, copy_source=copy_source)
-        logger.info(f"Added {len(videos)} clip(s) to project")
+        add_clips_to_project(self._clips_dir, new_videos, copy_source=copy_source)
+        msg = f"Added {len(new_videos)} clip(s) to project"
+        if skipped:
+            msg += f" ({len(skipped)} duplicate(s) skipped)"
+        logger.info(msg)
         self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
 
     @Slot(str)
-    def _on_sequence_folder_imported(self, folder_path: str) -> None:
+    def _on_sequence_folder_imported(
+        self, folder_path: str, display_name: str | None = None,
+    ) -> None:
         """Handle image sequence folder from +ADD menu or drag-drop."""
         from backend.project import (
             folder_has_image_sequence, validate_sequence_stems,
             count_sequence_frames, add_sequences_to_project,
-            create_project_from_media,
+            create_project_from_media, find_clip_by_source,
         )
 
         if not folder_has_image_sequence(folder_path):
@@ -1191,6 +1227,16 @@ class MainWindow(QMainWindow):
                 "Supported formats: PNG, JPG, EXR, TIF, TIFF, BMP, DPX"
             )
             return
+
+        # Check if this source is already in the project
+        if self._clips_dir:
+            existing = find_clip_by_source(self._clips_dir, folder_path)
+            if existing:
+                QMessageBox.information(
+                    self, "Already Imported",
+                    f"This sequence is already in the project as \"{existing}\"."
+                )
+                return
 
         # Check for duplicate stems (e.g. frame.png + frame.exr)
         dupes = validate_sequence_stems(folder_path)
@@ -1219,11 +1265,11 @@ class MainWindow(QMainWindow):
             logger.info(f"Added image sequence to project: {folder_path}")
             self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
         else:
-            folder_name = os.path.basename(folder_path.rstrip("/\\"))
+            proj_name = display_name or os.path.basename(folder_path.rstrip("/\\"))
             project_dir = create_project_from_media(
                 sequence_folders=[folder_path],
                 copy_sequences=copy_seq,
-                display_name=folder_name,
+                display_name=proj_name,
             )
             logger.info(f"Created project from image sequence: {folder_path}")
             self._switch_to_workspace()
@@ -1237,6 +1283,20 @@ class MainWindow(QMainWindow):
 
         n = len(file_paths)
         parent_folder = os.path.dirname(file_paths[0])
+
+        # When no project is open, prompt for a project name (loose files
+        # may come from generic folders like "Downloads").
+        display_name = None
+        if not self._clips_dir:
+            folder_name = os.path.basename(parent_folder.rstrip("/\\"))
+            name, ok = QInputDialog.getText(
+                self, "Name Your Project",
+                "Give your project a name:",
+                text=folder_name,
+            )
+            if not ok:
+                return  # user cancelled
+            display_name = name.strip() or folder_name
 
         if n < 5:
             # Show popup: "Just these N frames" or "Scan folder for full sequence?"
@@ -1263,16 +1323,23 @@ class MainWindow(QMainWindow):
 
             clicked = msg.clickedButton()
             if clicked == btn_just_these:
-                self._import_specific_frames(parent_folder, file_paths)
+                self._import_specific_frames(
+                    parent_folder, file_paths, display_name=display_name,
+                )
             elif clicked == btn_full_seq:
-                self._on_sequence_folder_imported(parent_folder)
+                self._on_sequence_folder_imported(
+                    parent_folder, display_name=display_name,
+                )
             # else: Cancel — do nothing
         else:
             # >= 5 files: auto-detect as full sequence from parent folder
-            self._on_sequence_folder_imported(parent_folder)
+            self._on_sequence_folder_imported(
+                parent_folder, display_name=display_name,
+            )
 
     def _import_specific_frames(
         self, source_folder: str, file_paths: list[str],
+        display_name: str | None = None,
     ) -> None:
         """Import specific frames (always copies into Frames/)."""
         from backend.project import (
@@ -1294,8 +1361,8 @@ class MainWindow(QMainWindow):
         else:
             # No project open — create one manually with specific files
             from datetime import datetime
-            folder_name = os.path.basename(source_folder.rstrip("/\\"))
-            name_stem = re.sub(r"[^\w\-]", "_", folder_name)
+            proj_name = display_name or os.path.basename(source_folder.rstrip("/\\"))
+            name_stem = re.sub(r"[^\w\-]", "_", proj_name)
             name_stem = re.sub(r"_+", "_", name_stem).strip("_")[:60]
             timestamp = datetime.now().strftime("%y%m%d_%H%M%S")
             project_dir = os.path.join(projects_root(), f"{timestamp}_{name_stem}")
@@ -1308,7 +1375,7 @@ class MainWindow(QMainWindow):
             write_project_json(project_dir, {
                 "version": 2,
                 "created": datetime.now().isoformat(),
-                "display_name": folder_name,
+                "display_name": proj_name,
                 "clips": [clip_name],
             })
             logger.info(f"Created project with {len(filenames)} specific frame(s)")

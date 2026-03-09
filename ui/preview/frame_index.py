@@ -82,6 +82,7 @@ def build_frame_index(
     clip_root: str,
     input_asset_type: str = "sequence",
     video_path: str | None = None,
+    input_sequence_dir: str | None = None,
 ) -> FrameIndex:
     """Build a FrameIndex by scanning all relevant directories.
 
@@ -93,6 +94,9 @@ def build_frame_index(
         input_asset_type: 'sequence' or 'video' (affects Input mode).
         video_path: Direct path to video file (for standalone video clips
                     where the video isn't at clip_root/Input.*).
+        input_sequence_dir: Explicit directory for input frames. Used for
+                    externally-referenced image sequences where frames live
+                    outside the clip folder.
     """
     index = FrameIndex()
     all_stems: set[str] = set()
@@ -123,13 +127,15 @@ def build_frame_index(
                                 break
                 continue
 
-            # Image sequence — try Frames/ then Input/
+            # Image sequence — try Frames/ then Input/, fall back to external dir
             dir_path = None
             for candidate in ("Frames", "Input"):
                 candidate_path = os.path.join(clip_root, candidate)
                 if os.path.isdir(candidate_path):
                     dir_path = candidate_path
                     break
+            if dir_path is None and input_sequence_dir and os.path.isdir(input_sequence_dir):
+                dir_path = input_sequence_dir
             if dir_path is None:
                 continue
         else:

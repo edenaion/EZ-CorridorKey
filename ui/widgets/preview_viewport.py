@@ -187,7 +187,11 @@ class PreviewViewport(QWidget):
         # Build frame index
         asset_type = clip.input_asset.asset_type if clip.input_asset else "sequence"
         video_path = clip.input_asset.path if (clip.input_asset and asset_type == "video") else None
-        self._frame_index = build_frame_index(clip.root_path, asset_type, video_path=video_path)
+        seq_dir = clip.input_asset.path if (clip.input_asset and asset_type == "sequence") else None
+        self._frame_index = build_frame_index(
+            clip.root_path, asset_type, video_path=video_path,
+            input_sequence_dir=seq_dir,
+        )
 
         # Configure mode bar (unless locked)
         if self._locked_mode is None:
@@ -227,7 +231,11 @@ class PreviewViewport(QWidget):
         if self._clip:
             asset_type = self._clip.input_asset.asset_type if self._clip.input_asset else "sequence"
             video_path = self._clip.input_asset.path if (self._clip.input_asset and asset_type == "video") else None
-            self._frame_index = build_frame_index(self._clip.root_path, asset_type, video_path=video_path)
+            seq_dir = self._clip.input_asset.path if (self._clip.input_asset and asset_type == "sequence") else None
+            self._frame_index = build_frame_index(
+                self._clip.root_path, asset_type, video_path=video_path,
+                input_sequence_dir=seq_dir,
+            )
             # Enable mode buttons as new output types appear during inference
             self._mode_bar.set_available_modes(self._frame_index.available_modes())
 
