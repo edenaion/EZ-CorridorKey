@@ -4,6 +4,40 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.3.2] - 2026-03-09 — Installer overhaul, clip removal persistence
+
+### Installer (`1-install.bat`)
+- **Auto-install FFmpeg** — downloads from gyan.dev, extracts to `tools/ffmpeg/`, adds to PATH. No more manual FFmpeg install needed.
+- **VS Build Tools check** — detects MSVC via `cl.exe` and `vswhere.exe`, offers auto-install via winget or direct download if missing (needed for OpenEXR compilation)
+- **Python 3.14 rejection** — installer now blocks Python 3.14+ (PyTorch lacks wheels). Requires 3.10–3.13.
+- **Desktop shortcut** — labeled as step 7/7
+
+### Fixed
+- **Deleted clips reappear on import** — removing clips from the I/O tray was UI-only; adding a new video triggered `os.listdir()` rescan that rediscovered all folders. Now persists removals to `removed_clips` list in `project.json`, filtered during `scan_project_clips()`. Re-importing a removed clip clears it from the list.
+- **Clip identity mismatch** — `clip.name` was mutable (overwritten by `display_name`), causing removal tracking to fail. Added stable `folder_name` property using `os.path.basename(root_path)`.
+- **Corrupt project.json on removal** — `add_removed_clip()` now guards against missing `project.json` (returns early with warning instead of creating partial file)
+- **Extraction retry fails on ERROR clips** — retrying extraction only removed the `.dwab_done` marker, leaving partial EXR frames that triggered resume logic. Now wipes the entire Frames/ directory on retry for a clean start.
+- **FFmpeg hardware decode fallback** — if NVDEC fails (e.g. unsupported codec in `.mov`), automatically retries with software decode instead of failing permanently.
+- **Re-import of removed clips blocked** — "Already Imported" dialog appeared for clips the user had removed. Duplicate check now skips removed clips; re-importing restores the original clip folder instead of creating duplicates.
+
+### Added
+- **Version in About dialog** — Help > About now shows app version via `importlib.metadata`
+- **`removed_clips` persistence** — new `get_removed_clips()`, `add_removed_clip()`, `clear_removed_clip()` functions in `backend/project.py`
+
+### Installer & Scripts
+- **`2-start.bat`** — adds local `tools/ffmpeg/bin` to PATH before launch
+- **`3-update.bat`** — adds local `tools/ffmpeg/bin` to PATH after git pull
+- **`pyproject.toml`** — `requires-python` updated to `">=3.10,<3.14"`
+- **`.gitignore`** — added `tools/` to prevent ffmpeg binary from being committed
+
+### Documentation
+- **README** — updated Prerequisites (Python 3.10–3.13, NVIDIA GPU 8GB+), installer feature list (VS Build Tools, FFmpeg auto-install, desktop shortcut)
+
+### Tests
+- 10 new tests in `TestRemovedClips` — empty default, missing JSON, add/clear, idempotency, scan filtering, sorted deterministic, re-import clears removed
+
+---
+
 ## [1.3.1] - 2026-03-09 — Low-VRAM compile fix, status callbacks
 
 ### Fixed

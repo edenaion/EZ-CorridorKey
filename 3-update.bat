@@ -76,6 +76,14 @@ echo  ========================================
 echo   Update complete!
 echo  ========================================
 echo.
+
+:: Auto-relaunch if called with --relaunch flag
+if "%~1"=="--relaunch" (
+    echo   Relaunching CorridorKey...
+    call "%~dp02-start.bat"
+    exit /b 0
+)
+
 echo   To launch: double-click 2-start.bat
 echo.
 pause

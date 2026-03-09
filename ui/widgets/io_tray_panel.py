@@ -672,6 +672,12 @@ class IOTrayPanel(QWidget):
             menu.addAction(extract_action)
             menu.addSeparator()
 
+        # Rename — single only
+        rename_action = QAction("Rename...", self)
+        rename_action.setEnabled(not multi)
+        rename_action.triggered.connect(lambda: self._rename_clip(clip))
+        menu.addAction(rename_action)
+
         # Open in Explorer — single only
         explorer_action = QAction("Open in Explorer", self)
         explorer_action.setEnabled(not multi)
@@ -739,6 +745,21 @@ class IOTrayPanel(QWidget):
             output_dir = clip.root_path
         if os.path.isdir(output_dir):
             os.startfile(output_dir)
+
+    def _rename_clip(self, clip: ClipEntry) -> None:
+        """Prompt user to rename a clip's display name."""
+        from PySide6.QtWidgets import QInputDialog
+        from backend.project import set_display_name
+
+        current = clip.name
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Clip", "New name:", text=current,
+        )
+        if not ok or not new_name.strip() or new_name.strip() == current:
+            return
+        set_display_name(clip.root_path, new_name.strip())
+        clip.find_assets()  # re-reads display_name into clip.name
+        self._rebuild()
 
     def _open_in_explorer(self, clip: ClipEntry) -> None:
         if os.path.isdir(clip.root_path):
@@ -812,8 +833,25 @@ class IOTrayPanel(QWidget):
             self._delete_clips_from_disk(clips)
 
     def _remove_clips_from_list(self, clips: list[ClipEntry]) -> None:
-        """Remove clips from the list (files stay on disk)."""
+        """Remove clips from the list (files stay on disk).
+
+        Records removed clip folder names in project.json so they don't
+        reappear on the next project rescan.  Uses folder_name (stable
+        on-disk identity) rather than display name which is mutable.
+        """
+        from backend.project import add_removed_clip, is_v2_project
+
         names = {c.name for c in clips}
+
+        # Persist removal in project.json for v2 projects
+        for clip in clips:
+            # v2 clip root_path: .../project_dir/clips/clip_folder
+            parent = os.path.dirname(clip.root_path)
+            if os.path.basename(parent) == "clips":
+                project_dir = os.path.dirname(parent)
+                if is_v2_project(project_dir):
+                    add_removed_clip(project_dir, clip.folder_name)
+
         # Remove in reverse index order to avoid index shifting
         indices = [i for i, c in enumerate(self._model.clips) if c.name in names]
         for i in sorted(indices, reverse=True):
@@ -826,8 +864,12 @@ class IOTrayPanel(QWidget):
             if os.path.isdir(clip.root_path):
                 shutil.rmtree(clip.root_path, ignore_errors=True)
                 logger.info(f"Deleted from disk: {clip.root_path}")
-        # Then remove from model
-        self._remove_clips_from_list(clips)
+        # Remove from model (skip persistence — folder is gone, won't reappear)
+        names = {c.name for c in clips}
+        indices = [i for i, c in enumerate(self._model.clips) if c.name in names]
+        for i in sorted(indices, reverse=True):
+            self._model.remove_clip(i)
+        logger.info(f"Deleted {len(clips)} clip(s) from disk")
 
     # ── Selection highlight ──
 

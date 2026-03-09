@@ -208,6 +208,12 @@ def probe_video(path: str) -> dict:
         "codec": video_stream.get("codec_name", "unknown"),
         "duration": float(video_stream.get("duration", 0) or
                           data.get("format", {}).get("duration", 0)),
+        # Color metadata for building explicit conversion filters
+        "pix_fmt": video_stream.get("pix_fmt", ""),
+        "color_space": video_stream.get("color_space", ""),
+        "color_primaries": video_stream.get("color_primaries", ""),
+        "color_transfer": video_stream.get("color_transfer", ""),
+        "color_range": video_stream.get("color_range", ""),
     }
 
 
@@ -392,6 +398,70 @@ if __name__ == "__main__":
     logger.info(f"DWAB recompression complete: {total} frames")
 
 
+# ---------------------------------------------------------------------------
+#  Probe-driven colour-space filter chain
+# ---------------------------------------------------------------------------
+
+# Values ffprobe reports that mean "unknown / missing"
+_UNKNOWN_COLOR = {"", "unknown", "unspecified", "reserved", None}
+
+
+def _is_rgb_pix_fmt(pix_fmt: str) -> bool:
+    """Return True if the pixel format is already RGB-family."""
+    if not pix_fmt:
+        return False
+    pf = pix_fmt.lower()
+    return (pf.startswith("rgb") or pf.startswith("bgr") or
+            pf.startswith("gbr") or pf.startswith("argb") or
+            pf.startswith("abgr") or pf == "pal8")
+
+
+def _build_exr_vf(video_info: dict) -> str:
+    """Build the -vf string for converting to gbrpf32le (EXR output).
+
+    For RGB inputs, just does format conversion.
+    For YUV inputs, uses setparams to fill any missing color metadata
+    on the AVFrame so swscaler has everything it needs for the
+    YUV→RGB conversion. Works with all FFmpeg builds.
+    """
+    pix_fmt = video_info.get("pix_fmt", "")
+
+    if _is_rgb_pix_fmt(pix_fmt):
+        return "format=gbrpf32le"
+
+    # YUV input — swscaler needs trc, primaries, matrix, and range
+    # to be non-null on the frame. setparams fills any gaps.
+    cs = video_info.get("color_space", "")
+    cp = video_info.get("color_primaries", "")
+    ct = video_info.get("color_transfer", "")
+    cr = video_info.get("color_range", "")
+    w = video_info.get("width", 0)
+    h = video_info.get("height", 0)
+
+    # Fill missing with heuristics based on resolution
+    hd = w >= 1280 or h > 576
+    if cs in _UNKNOWN_COLOR:
+        cs = "bt709" if hd else "smpte170m"
+    if cp in _UNKNOWN_COLOR:
+        cp = "bt709" if hd else "smpte170m"
+    if ct in _UNKNOWN_COLOR:
+        ct = "bt709"  # safe default for SDR content
+    if cr in _UNKNOWN_COLOR:
+        cr = "tv"  # limited range is standard for video
+
+    # Map color_range to setparams range value
+    sp_range = "limited" if cr == "tv" else ("full" if cr == "pc" else cr)
+
+    logger.info(f"Color metadata: pix_fmt={pix_fmt} space={cs} "
+                f"primaries={cp} transfer={ct} range={cr}")
+
+    # setparams stamps complete metadata onto every frame, then
+    # format=gbrpf32le triggers swscaler which now sees all fields.
+    return (f"setparams=colorspace={cs}:color_primaries={cp}"
+            f":color_trc={ct}:color_range={sp_range},"
+            f"format=gbrpf32le")
+
+
 def extract_frames(
     video_path: str,
     out_dir: str,
@@ -428,13 +498,15 @@ def extract_frames(
 
     os.makedirs(out_dir, exist_ok=True)
 
-    # Probe for total if not provided
+    # Always probe — we need color metadata for the filter chain,
+    # and total_frames for progress
     video_info = None
-    if total_frames <= 0:
-        try:
-            video_info = probe_video(video_path)
+    try:
+        video_info = probe_video(video_path)
+        if total_frames <= 0:
             total_frames = video_info.get("frame_count", 0)
-        except Exception:
+    except Exception:
+        if total_frames <= 0:
             total_frames = 0
 
     # Resume: detect existing frames and skip ahead with conservative rollback.
@@ -464,34 +536,38 @@ def extract_frames(
             logger.info(f"Resuming extraction from frame {start_frame} "
                         f"({len(existing)} existed, rolled back {remove_count})")
 
-    # EXR-specific FFmpeg args: ZIP16 compression, half-float, float pixel format
-    exr_args = ["-compression", "3", "-format", "1", "-pix_fmt", "gbrpf32le"]
+    # EXR-specific FFmpeg args: ZIP16 compression, half-float.
+    # Build an explicit colour conversion filter from probed metadata
+    # so FFmpeg never has to guess missing trc/primaries/matrix.
+    vf_chain = _build_exr_vf(video_info or {})
+    exr_args = ["-compression", "3", "-format", "1", "-vf", vf_chain]
 
     # Hardware-accelerated decode (NVDEC / VideoToolbox / VAAPI / D3D11VA)
     # Falls back to software decode if none available
     hwaccel_flags = detect_hwaccel(ffmpeg)
 
-    if start_frame > 0 and total_frames > 0:
-        # Seek to the resume point
-        if video_info is None:
-            video_info = probe_video(video_path)
-        fps = video_info.get("fps", 24.0)
-        seek_sec = start_frame / fps
-        cmd = [
+    def _build_cmd(hw_flags: list[str]) -> list[str]:
+        if start_frame > 0 and total_frames > 0:
+            if video_info is None:
+                _vi = probe_video(video_path)
+            else:
+                _vi = video_info
+            fps = _vi.get("fps", 24.0)
+            seek_sec = start_frame / fps
+            return [
+                ffmpeg,
+                *hw_flags,
+                "-ss", f"{seek_sec:.4f}",
+                "-i", video_path,
+                "-start_number", str(start_frame),
+                "-vsync", "passthrough",
+                *exr_args,
+                out_dir + "/" + pattern,
+                "-y",
+            ]
+        return [
             ffmpeg,
-            *hwaccel_flags,
-            "-ss", f"{seek_sec:.4f}",
-            "-i", video_path,
-            "-start_number", str(start_frame),
-            "-vsync", "passthrough",
-            *exr_args,
-            out_dir + "/" + pattern,
-            "-y",
-        ]
-    else:
-        cmd = [
-            ffmpeg,
-            *hwaccel_flags,
+            *hw_flags,
             "-i", video_path,
             "-start_number", "0",
             "-vsync", "passthrough",
@@ -500,70 +576,109 @@ def extract_frames(
             "-y",
         ]
 
-    hwaccel_label = hwaccel_flags[1] if hwaccel_flags else "software"
-    logger.info(f"Extracting frames (EXR half-float, decode={hwaccel_label}): "
-                f"{video_path} -> {out_dir} (start_frame={start_frame})")
+    def _run_ffmpeg(hw_flags: list[str]) -> tuple[int, str]:
+        """Run FFmpeg extraction. Returns (return_code, last_stderr_lines)."""
+        nonlocal last_frame
 
-    proc = subprocess.Popen(
-        cmd,
-        stdin=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        text=True,
-        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-    )
+        cmd = _build_cmd(hw_flags)
+        hwaccel_label = hw_flags[1] if hw_flags else "software"
+        logger.info(f"Extracting frames (EXR half-float, decode={hwaccel_label}): "
+                    f"{video_path} -> {out_dir} (start_frame={start_frame})")
+
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+
+        frame_re = re.compile(r"frame=\s*(\d+)")
+        stderr_tail: list[str] = []  # keep last N lines for error reporting
+
+        import queue as _queue
+        line_q: _queue.Queue[str | None] = _queue.Queue()
+
+        def _reader():
+            for ln in proc.stderr:
+                line_q.put(ln)
+            line_q.put(None)
+
+        reader_thread = threading.Thread(target=_reader, daemon=True)
+        reader_thread.start()
+
+        try:
+            while True:
+                if cancel_event and cancel_event.is_set():
+                    proc.kill()
+                    try:
+                        proc.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    logger.info("Extraction cancelled — FFmpeg killed")
+                    return 0, ""
+
+                try:
+                    line = line_q.get(timeout=0.2)
+                except _queue.Empty:
+                    if proc.poll() is not None:
+                        break
+                    continue
+
+                if line is None:
+                    break
+
+                stderr_tail.append(line.rstrip())
+                if len(stderr_tail) > 30:
+                    stderr_tail.pop(0)
+
+                match = frame_re.search(line)
+                if match:
+                    last_frame = start_frame + int(match.group(1))
+                    if on_progress and total_frames > 0:
+                        on_progress(last_frame, total_frames)
+
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise RuntimeError("FFmpeg extraction timed out")
+
+        if proc.returncode != 0:
+            tail = "\n".join(stderr_tail[-15:])
+            logger.error(f"FFmpeg failed (code {proc.returncode}):\n{tail}")
+
+        return proc.returncode, "\n".join(stderr_tail[-15:])
 
     last_frame = start_frame
-    frame_re = re.compile(r"frame=\s*(\d+)")
+    returncode, stderr_out = _run_ffmpeg(hwaccel_flags)
 
-    # Read stderr in a background thread so cancel checks aren't blocked
-    import queue as _queue
-    line_q: _queue.Queue[str | None] = _queue.Queue()
+    # If hardware decode failed, retry with software decode
+    if returncode != 0 and hwaccel_flags and not (cancel_event and cancel_event.is_set()):
+        logger.warning(f"Hardware decode failed (code {returncode}), "
+                       f"retrying with software decode...")
+        # Clean up any partial frames from the failed attempt
+        for f in os.listdir(out_dir):
+            if f.lower().endswith('.exr'):
+                os.remove(os.path.join(out_dir, f))
+        last_frame = start_frame
+        returncode, stderr_out = _run_ffmpeg([])  # empty = software decode
 
-    def _reader():
-        for ln in proc.stderr:
-            line_q.put(ln)
-        line_q.put(None)  # sentinel
-
-    reader_thread = threading.Thread(target=_reader, daemon=True)
-    reader_thread.start()
-
-    try:
-        while True:
-            # Check cancellation every 0.2s even if no output
-            if cancel_event and cancel_event.is_set():
-                proc.kill()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    pass
-                logger.info("Extraction cancelled — FFmpeg killed")
-                return last_frame
-
-            try:
-                line = line_q.get(timeout=0.2)
-            except _queue.Empty:
-                # No output yet — check if process is still alive
-                if proc.poll() is not None:
+    if returncode != 0 and not (cancel_event and cancel_event.is_set()):
+        # Extract a meaningful error message from FFmpeg stderr
+        err_detail = ""
+        if stderr_out:
+            for line in stderr_out.splitlines():
+                low = line.lower()
+                if any(kw in low for kw in ("error", "invalid", "no such",
+                                             "not found", "unknown",
+                                             "unrecognized", "failed")):
+                    err_detail = line.strip()
                     break
-                continue
-
-            if line is None:
-                break  # stderr closed — process ending
-
-            match = frame_re.search(line)
-            if match:
-                last_frame = start_frame + int(match.group(1))
-                if on_progress and total_frames > 0:
-                    on_progress(last_frame, total_frames)
-
-        proc.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        raise RuntimeError("FFmpeg extraction timed out")
-
-    if proc.returncode != 0 and not (cancel_event and cancel_event.is_set()):
-        raise RuntimeError(f"FFmpeg extraction failed with code {proc.returncode}")
+        msg = f"FFmpeg extraction failed (code {returncode})"
+        if err_detail:
+            msg += f": {err_detail}"
+        raise RuntimeError(msg)
 
     # Count extracted frames
     extracted = len([f for f in os.listdir(out_dir)

@@ -164,6 +164,11 @@ class ClipEntry:
     _processing: bool = field(default=False, repr=False)  # lock: watcher must not reclassify
 
     @property
+    def folder_name(self) -> str:
+        """The on-disk folder basename (stable identity, unlike display name)."""
+        return os.path.basename(self.root_path)
+
+    @property
     def is_processing(self) -> bool:
         """True while a GPU job is actively working on this clip."""
         return self._processing
@@ -479,22 +484,29 @@ def scan_project_clips(project_dir: str) -> list[ClipEntry]:
     v2 projects (with ``clips/`` subdir): each subdirectory inside clips/ is a clip.
     v1 projects (no ``clips/`` subdir): the project dir itself is a single clip.
 
+    Clips that the user previously removed from the list (tracked in
+    project.json ``removed_clips``) are skipped.
+
     Args:
         project_dir: Absolute path to a project folder.
 
     Returns:
         List of ClipEntry objects with root_path pointing to clip subdirectories.
     """
-    from .project import is_v2_project
+    from .project import is_v2_project, get_removed_clips
 
     if is_v2_project(project_dir):
         clips_dir = os.path.join(project_dir, "clips")
+        removed = get_removed_clips(project_dir)
         entries: list[ClipEntry] = []
         for item in sorted(os.listdir(clips_dir)):
             item_path = os.path.join(clips_dir, item)
             if item.startswith('.') or item.startswith('_'):
                 continue
             if not os.path.isdir(item_path):
+                continue
+            if item in removed:
+                logger.debug(f"Skipping removed clip: {item}")
                 continue
             clip = ClipEntry(name=item, root_path=item_path)
             try:

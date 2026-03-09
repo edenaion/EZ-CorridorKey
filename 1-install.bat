@@ -31,6 +31,11 @@ if !PYMAJOR!==3 if !PYMINOR! LSS 10 (
     echo   [ERROR] Python 3.10+ required, found !PYVER!
     goto :fail
 )
+if !PYMAJOR!==3 if !PYMINOR! GEQ 14 (
+    echo   [ERROR] Python 3.14+ is not yet supported (PyTorch lacks wheels^).
+    echo   Please install Python 3.10-3.13 from https://python.org
+    goto :fail
+)
 echo   [OK] Python !PYVER!
 
 REM ── Step 1b: Check Visual Studio Build Tools (needed to compile OpenEXR etc.) ──

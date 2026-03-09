@@ -27,8 +27,9 @@ from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QVBoxLayout, QWidget,
     QLabel, QHBoxLayout, QMessageBox, QStackedWidget,
     QProgressBar, QFileDialog, QInputDialog, QGraphicsOpacityEffect,
+    QPushButton,
 )
-from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve, QSettings
+from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve, QSettings, QThread, Signal
 from PySide6.QtGui import QKeySequence, QAction, QImage, QPainter
 
 from backend import (
@@ -141,6 +142,44 @@ class _MuteOverlay(QLabel):
         self.raise_()
 
 
+class _UpdateChecker(QThread):
+    """Background thread that checks GitHub for a newer version."""
+    update_available = Signal(str)  # emits the remote version string
+
+    def __init__(self, local_version: str):
+        super().__init__()
+        self._local = local_version
+
+    def run(self):
+        try:
+            import urllib.request
+            url = (
+                "https://raw.githubusercontent.com/edenaion/EZ-CorridorKey"
+                "/main/pyproject.toml"
+            )
+            req = urllib.request.Request(url, headers={"User-Agent": "CorridorKey"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                text = resp.read().decode("utf-8")
+            for line in text.splitlines():
+                if line.strip().startswith("version"):
+                    remote = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if self._is_newer(remote, self._local):
+                        self.update_available.emit(remote)
+                    return
+        except Exception:
+            pass  # silently fail — no internet, no button
+
+    @staticmethod
+    def _is_newer(remote: str, local: str) -> bool:
+        """Simple semver comparison: 1.4.0 > 1.3.1."""
+        try:
+            r = tuple(int(x) for x in remote.split("."))
+            l = tuple(int(x) for x in local.split("."))
+            return r > l
+        except (ValueError, AttributeError):
+            return False
+
+
 class MainWindow(QMainWindow):
     """CorridorKey main application window."""
 
@@ -216,6 +255,9 @@ class MainWindow(QMainWindow):
         self._apply_tooltip_setting()
         self._apply_sound_setting()
 
+        # Check for updates (non-blocking background thread)
+        self._check_for_updates()
+
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
 
@@ -263,10 +305,31 @@ class MainWindow(QMainWindow):
         # Click sound on any menu action
         menu_bar.triggered.connect(lambda _: self._menu_click_sound())
 
-        # Volume control — right corner of the menu bar
+        # Right corner: update button (hidden) + volume control
+        self._corner_widget = QWidget()
+        corner_layout = QHBoxLayout(self._corner_widget)
+        corner_layout.setContentsMargins(0, 0, 4, 0)
+        corner_layout.setSpacing(8)
+
+        self._update_btn = QPushButton("Update Available")
+        self._update_btn.setVisible(False)
+        self._update_btn.setCursor(Qt.PointingHandCursor)
+        self._update_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: #FFF203; color: #141300; border: none;"
+            "  border-radius: 3px; padding: 2px 10px;"
+            "  font-family: 'Open Sans'; font-size: 11px; font-weight: 700;"
+            "}"
+            "QPushButton:hover { background: #E0D600; }"
+        )
+        self._update_btn.clicked.connect(self._run_update)
+        corner_layout.addWidget(self._update_btn)
+
         from ui.widgets.volume_control import VolumeControl
-        self._volume_control = VolumeControl()
-        menu_bar.setCornerWidget(self._volume_control)
+        self._volume_control = VolumeControl(self._corner_widget)
+        corner_layout.addWidget(self._volume_control)
+
+        menu_bar.setCornerWidget(self._corner_widget)
 
     def _menu_click_sound(self) -> None:
         from ui.sounds.audio_manager import UIAudio
@@ -477,6 +540,8 @@ class MainWindow(QMainWindow):
         self._extract_worker.error.connect(self._on_extract_error)
         self._extract_progress.clear()
         self._status_bar.reset_progress()
+        # Clear extraction overlay on the viewer
+        self._dual_viewer.set_extraction_progress(0.0, 0)
         # Reset any EXTRACTING clips back to their original state
         for clip in self._clip_model.clips:
             if clip.state == ClipState.EXTRACTING:
@@ -1179,35 +1244,56 @@ class MainWindow(QMainWindow):
 
     def _add_videos_to_project(self, file_paths: list) -> None:
         """Import selected video files into the current project."""
-        from backend.project import is_video_file, add_clips_to_project, find_clip_by_source
+        from backend.project import (
+            is_video_file, add_clips_to_project, find_clip_by_source,
+            find_removed_clip_by_source, clear_removed_clip,
+        )
         videos = [f for f in file_paths if is_video_file(f)]
         if not videos:
             return
-        # Filter out videos already in the project
+
+        # Categorise: already active, removed (restore), or genuinely new
         new_videos = []
         skipped = []
+        restored = []
+        project_dir = self._clips_dir  # project root (contains clips/ subdir)
         for v in videos:
             existing = find_clip_by_source(self._clips_dir, v)
             if existing:
                 skipped.append(existing)
-            else:
-                new_videos.append(v)
-        if skipped and not new_videos:
+                continue
+            # Check if this was previously removed — restore instead of
+            # creating a duplicate folder
+            removed_folder = find_removed_clip_by_source(project_dir, v)
+            if removed_folder:
+                clear_removed_clip(project_dir, removed_folder)
+                restored.append(removed_folder)
+                continue
+            new_videos.append(v)
+
+        if skipped and not new_videos and not restored:
             names = ", ".join(f'"{s}"' for s in skipped[:3])
             QMessageBox.information(
                 self, "Already Imported",
                 f"All selected videos are already in the project ({names})."
             )
             return
-        if not new_videos:
-            return
-        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
-        add_clips_to_project(self._clips_dir, new_videos, copy_source=copy_source)
-        msg = f"Added {len(new_videos)} clip(s) to project"
+
+        if new_videos:
+            copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
+            add_clips_to_project(self._clips_dir, new_videos, copy_source=copy_source)
+
+        parts = []
+        if new_videos:
+            parts.append(f"{len(new_videos)} added")
+        if restored:
+            parts.append(f"{len(restored)} restored")
         if skipped:
-            msg += f" ({len(skipped)} duplicate(s) skipped)"
-        logger.info(msg)
-        self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
+            parts.append(f"{len(skipped)} duplicate(s) skipped")
+        logger.info(f"Import: {', '.join(parts)}")
+
+        if new_videos or restored:
+            self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
 
     @Slot(str)
     def _on_sequence_folder_imported(
@@ -1228,7 +1314,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Check if this source is already in the project
+        # Check if this source is already in the project (skip removed clips)
         if self._clips_dir:
             existing = find_clip_by_source(self._clips_dir, folder_path)
             if existing:
@@ -1236,6 +1322,14 @@ class MainWindow(QMainWindow):
                     self, "Already Imported",
                     f"This sequence is already in the project as \"{existing}\"."
                 )
+                return
+            # Restore if it was previously removed
+            from backend.project import find_removed_clip_by_source, clear_removed_clip
+            removed_folder = find_removed_clip_by_source(self._clips_dir, folder_path)
+            if removed_folder:
+                clear_removed_clip(self._clips_dir, removed_folder)
+                logger.info(f"Restored removed sequence: {removed_folder}")
+                self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
                 return
 
         # Check for duplicate stems (e.g. frame.png + frame.exr)
@@ -2300,14 +2394,15 @@ class MainWindow(QMainWindow):
         count = 0
         for clip in clips:
             if clip.input_asset and clip.input_asset.asset_type == "video":
-                # If retrying after error, clean up partial extraction
-                # artifacts so extract_frames() doesn't think it's a resume
+                # If retrying after error, wipe partial frames so
+                # extract_frames() starts fresh instead of resuming
                 if clip.state == ClipState.ERROR:
                     for subdir in ("Frames", "Input"):
                         target = os.path.join(clip.root_path, subdir)
-                        dwab_marker = os.path.join(target, ".dwab_done")
-                        if os.path.isfile(dwab_marker):
-                            os.remove(dwab_marker)
+                        if os.path.isdir(target):
+                            shutil.rmtree(target)
+                            os.makedirs(target, exist_ok=True)
+                            logger.info(f"Cleared {subdir}/ for retry: {clip.name}")
                     clip.error_message = None
                     self._clip_model.update_clip_state(
                         clip.name, ClipState.EXTRACTING)
@@ -2400,6 +2495,9 @@ class MainWindow(QMainWindow):
                 clip.error_message = error_msg
                 break
         self._extract_progress.pop(clip_name, None)
+        # Clear the extraction overlay on the viewer
+        if self._current_clip and self._current_clip.name == clip_name:
+            self._dual_viewer.set_extraction_progress(0.0, 0)
         if not self._extract_worker.is_busy:
             self._status_bar.reset_progress()
         from ui.sounds.audio_manager import UIAudio
@@ -2783,7 +2881,14 @@ class MainWindow(QMainWindow):
             from importlib.metadata import version
             app_version = version("corridorkey")
         except Exception:
-            app_version = "unknown"
+            # Running from source — read version from pyproject.toml
+            try:
+                import tomllib
+                pyproject = os.path.join(os.path.dirname(os.path.dirname(__file__)), "pyproject.toml")
+                with open(pyproject, "rb") as f:
+                    app_version = tomllib.load(f)["project"]["version"]
+            except Exception:
+                app_version = "unknown"
 
         box = QMessageBox(self)
         box.setWindowTitle("About CorridorKey")
@@ -2796,14 +2901,69 @@ class MainWindow(QMainWindow):
             "<p><b>Special Thanks</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
-            '<a href="https://www.edzisk.com">Ed Zisk</a> — GUI, workflow, SFX<br>'
-            '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo'
+            '<a href="https://www.edzisk.com">Ed Zisk</a> — GUI, workflow, SFX, QA<br>'
+            '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo<br>'
+            '<a href="https://github.com/Raiden129">Jhe Kim</a> — Hiera optimization<br>'
+            '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization'
             "</p>"
         )
         # QMessageBox uses an internal QLabel — find it and enable clickable links
         for label in box.findChildren(QLabel):
             label.setOpenExternalLinks(True)
         box.exec()
+
+    # ── Update Check ──────────────────────────────────────────
+
+    def _get_local_version(self) -> str:
+        try:
+            from importlib.metadata import version
+            return version("corridorkey")
+        except Exception:
+            try:
+                import tomllib
+                pyproject = os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)), "pyproject.toml"
+                )
+                with open(pyproject, "rb") as f:
+                    return tomllib.load(f)["project"]["version"]
+            except Exception:
+                return "0.0.0"
+
+    def _check_for_updates(self) -> None:
+        self._update_thread = _UpdateChecker(self._get_local_version())
+        self._update_thread.update_available.connect(self._on_update_available)
+        self._update_thread.start()
+
+    @Slot(str)
+    def _on_update_available(self, remote_version: str) -> None:
+        self._update_btn.setText(f"Update Available (v{remote_version})")
+        self._update_btn.setToolTip(
+            f"A new version (v{remote_version}) is available.\n"
+            "Click to save your session and run the updater."
+        )
+        self._update_btn.setVisible(True)
+
+    def _run_update(self) -> None:
+        reply = QMessageBox.question(
+            self, "Update CorridorKey",
+            "This will save your session, close the app, and run the updater.\n"
+            "The app will relaunch automatically after updating.\n\n"
+            "Continue?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        # Save session before closing
+        self._auto_save_session()
+        # Launch 3-update.bat --relaunch detached, then quit
+        import subprocess
+        bat = os.path.join(os.path.dirname(os.path.dirname(__file__)), "3-update.bat")
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", bat, "--relaunch"],
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+        from PySide6.QtWidgets import QApplication
+        QApplication.instance().quit()
 
     def paintEvent(self, event) -> None:
         """Paint dithered diagonal gradient background.

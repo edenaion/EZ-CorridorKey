@@ -11,6 +11,9 @@ from backend.project import (
     create_project,
     add_clips_to_project,
     get_clip_dirs,
+    get_removed_clips,
+    add_removed_clip,
+    clear_removed_clip,
     is_v2_project,
     write_project_json,
     read_project_json,
@@ -383,3 +386,126 @@ class TestGetClipDirs:
             os.makedirs(os.path.join(clips_dir, "_internal"))
             result = get_clip_dirs(tmpdir)
             assert len(result) == 1
+
+
+class TestRemovedClips:
+    """Tests for the removed_clips persistence mechanism."""
+
+    def _make_v2_project(self, tmpdir):
+        """Helper: create a v2 project with 3 clip folders containing Frames/."""
+        clips_dir = os.path.join(tmpdir, "clips")
+        for name in ["clip_a", "clip_b", "clip_c"]:
+            frames = os.path.join(clips_dir, name, "Frames")
+            os.makedirs(frames)
+            # Need at least one image file for find_assets()
+            with open(os.path.join(frames, "frame_001.png"), "wb") as f:
+                f.write(b"\x89PNG" + b"\x00" * 100)
+        write_project_json(tmpdir, {
+            "version": 2,
+            "clips": ["clip_a", "clip_b", "clip_c"],
+        })
+        return tmpdir
+
+    def test_get_removed_clips_empty_default(self):
+        """No removed_clips key → empty set."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {"version": 2, "clips": []})
+            assert get_removed_clips(tmpdir) == set()
+
+    def test_get_removed_clips_missing_json(self):
+        """Missing project.json → empty set."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            assert get_removed_clips(tmpdir) == set()
+
+    def test_add_removed_clip(self):
+        """add_removed_clip persists to project.json."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {"version": 2, "clips": ["a", "b"]})
+            add_removed_clip(tmpdir, "b")
+            data = read_project_json(tmpdir)
+            assert "b" in data["removed_clips"]
+            # Original data preserved
+            assert data["version"] == 2
+            assert data["clips"] == ["a", "b"]
+
+    def test_add_removed_clip_missing_json_noop(self):
+        """add_removed_clip does nothing if project.json is missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            add_removed_clip(tmpdir, "clip_x")
+            # No file created
+            assert read_project_json(tmpdir) is None
+
+    def test_add_removed_clip_idempotent(self):
+        """Adding same clip twice doesn't duplicate."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {"version": 2, "clips": ["a"]})
+            add_removed_clip(tmpdir, "a")
+            add_removed_clip(tmpdir, "a")
+            data = read_project_json(tmpdir)
+            assert data["removed_clips"] == ["a"]
+
+    def test_clear_removed_clip(self):
+        """clear_removed_clip restores a clip."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {
+                "version": 2, "clips": ["a"], "removed_clips": ["a", "b"],
+            })
+            clear_removed_clip(tmpdir, "a")
+            assert get_removed_clips(tmpdir) == {"b"}
+
+    def test_clear_nonexistent_noop(self):
+        """Clearing a clip that isn't removed is a no-op."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {
+                "version": 2, "clips": ["a"], "removed_clips": ["x"],
+            })
+            clear_removed_clip(tmpdir, "a")
+            assert get_removed_clips(tmpdir) == {"x"}
+
+    def test_scan_project_clips_skips_removed(self):
+        """scan_project_clips filters out removed clip folders."""
+        from backend.clip_state import scan_project_clips
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._make_v2_project(tmpdir)
+            add_removed_clip(tmpdir, "clip_b")
+
+            clips = scan_project_clips(tmpdir)
+            names = [c.folder_name for c in clips]
+            assert "clip_a" in names
+            assert "clip_b" not in names
+            assert "clip_c" in names
+
+    def test_removed_clips_sorted_deterministic(self):
+        """removed_clips list is always sorted for stable JSON output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {"version": 2, "clips": []})
+            add_removed_clip(tmpdir, "z_clip")
+            add_removed_clip(tmpdir, "a_clip")
+            add_removed_clip(tmpdir, "m_clip")
+            data = read_project_json(tmpdir)
+            assert data["removed_clips"] == ["a_clip", "m_clip", "z_clip"]
+
+    def test_add_clips_clears_removed(self):
+        """Re-importing a clip with same folder name clears it from removed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video = os.path.join(tmpdir, "test.mp4")
+            with open(video, "wb") as f:
+                f.write(b"\x00" * 100)
+
+            with patch("backend.project.projects_root", return_value=tmpdir):
+                project_dir = create_project(video)
+
+            # Mark a clip as removed
+            data = read_project_json(project_dir)
+            clip_name = data["clips"][0]
+            add_removed_clip(project_dir, clip_name)
+            assert clip_name in get_removed_clips(project_dir)
+
+            # Adding a new clip doesn't affect the removed entry
+            # (different folder name due to dedup)
+            video2 = os.path.join(tmpdir, "other.mp4")
+            with open(video2, "wb") as f:
+                f.write(b"\x00" * 100)
+            add_clips_to_project(project_dir, [video2])
+            assert clip_name in get_removed_clips(project_dir)

@@ -176,12 +176,16 @@ def add_clips_to_project(
         )
         new_paths.append(os.path.join(clips_dir, clip_name))
 
-    # Update project.json clips list
+    # Update project.json clips list + clear from removed_clips if re-imported
     data = read_project_json(project_dir) or {}
     existing = data.get("clips", [])
+    removed = set(data.get("removed_clips", []))
     for p in new_paths:
-        existing.append(os.path.basename(p))
+        name = os.path.basename(p)
+        existing.append(name)
+        removed.discard(name)
     data["clips"] = existing
+    data["removed_clips"] = sorted(removed)
     write_project_json(project_dir, data)
 
     return new_paths
@@ -249,6 +253,47 @@ def get_clip_dirs(project_dir: str) -> list[str]:
         )
     # v1 fallback: project dir itself is the clip
     return [project_dir]
+
+
+def get_removed_clips(project_dir: str) -> set[str]:
+    """Return the set of clip folder basenames that the user has removed."""
+    data = read_project_json(project_dir)
+    if data and "removed_clips" in data:
+        return set(data["removed_clips"])
+    return set()
+
+
+def add_removed_clip(project_dir: str, clip_name: str) -> None:
+    """Record a clip folder as removed so it won't reappear on rescan.
+
+    Uses clip folder basename (stable identity), not display name.
+    Only updates the removed_clips key — never overwrites a missing file.
+    """
+    data = read_project_json(project_dir)
+    if data is None:
+        logger.warning(f"Cannot persist removal: project.json missing at {project_dir}")
+        return
+    removed = set(data.get("removed_clips", []))
+    removed.add(clip_name)
+    data["removed_clips"] = sorted(removed)
+    write_project_json(project_dir, data)
+    logger.info(f"Marked clip folder as removed: {clip_name}")
+
+
+def clear_removed_clip(project_dir: str, clip_name: str) -> None:
+    """Un-remove a clip (e.g. when user explicitly re-imports it).
+
+    Uses clip folder basename (stable identity), not display name.
+    """
+    data = read_project_json(project_dir)
+    if data is None:
+        return
+    removed = set(data.get("removed_clips", []))
+    if clip_name in removed:
+        removed.discard(clip_name)
+        data["removed_clips"] = sorted(removed)
+        write_project_json(project_dir, data)
+        logger.info(f"Restored removed clip folder: {clip_name}")
 
 
 def is_v2_project(project_dir: str) -> bool:
@@ -412,16 +457,27 @@ def validate_sequence_stems(folder_path: str) -> list[str]:
     return [stem for stem, files in stems.items() if len(files) > 1]
 
 
-def find_clip_by_source(project_dir: str, source_path: str) -> str | None:
+def find_clip_by_source(
+    project_dir: str,
+    source_path: str,
+    *,
+    include_removed: bool = False,
+) -> str | None:
     """Check if any clip in the project already references the given source.
 
     Compares against source.original_path in each clip's clip.json.
     Works for both video and sequence sources.
 
+    By default, skips clips that the user has removed (still on disk but
+    hidden). Set *include_removed=True* to search all clips.
+
     Returns the clip display name if a duplicate is found, or None.
     """
     normalised = os.path.normcase(os.path.abspath(source_path))
+    removed = get_removed_clips(project_dir) if not include_removed else set()
     for clip_dir in get_clip_dirs(project_dir):
+        if os.path.basename(clip_dir) in removed:
+            continue
         data = read_clip_json(clip_dir)
         if not data:
             continue
@@ -429,6 +485,30 @@ def find_clip_by_source(project_dir: str, source_path: str) -> str | None:
         existing = source.get("original_path", "")
         if existing and os.path.normcase(os.path.abspath(existing)) == normalised:
             return data.get("display_name", os.path.basename(clip_dir))
+    return None
+
+
+def find_removed_clip_by_source(project_dir: str, source_path: str) -> str | None:
+    """Find a removed clip folder that references the given source.
+
+    Returns the clip folder basename if found in removed_clips, or None.
+    Used to restore removed clips instead of creating duplicates.
+    """
+    normalised = os.path.normcase(os.path.abspath(source_path))
+    removed = get_removed_clips(project_dir)
+    if not removed:
+        return None
+    for clip_dir in get_clip_dirs(project_dir):
+        folder = os.path.basename(clip_dir)
+        if folder not in removed:
+            continue
+        data = read_clip_json(clip_dir)
+        if not data:
+            continue
+        source = data.get("source", {})
+        existing = source.get("original_path", "")
+        if existing and os.path.normcase(os.path.abspath(existing)) == normalised:
+            return folder
     return None
 
 
@@ -545,12 +625,16 @@ def add_sequences_to_project(
         )
         new_paths.append(os.path.join(clips_dir, clip_name))
 
-    # Update project.json clips list
+    # Update project.json clips list + clear from removed_clips if re-imported
     data = read_project_json(project_dir) or {}
     existing = data.get("clips", [])
+    removed = set(data.get("removed_clips", []))
     for p in new_paths:
-        existing.append(os.path.basename(p))
+        name = os.path.basename(p)
+        existing.append(name)
+        removed.discard(name)
     data["clips"] = existing
+    data["removed_clips"] = sorted(removed)
     write_project_json(project_dir, data)
 
     return new_paths

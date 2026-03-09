@@ -27,7 +27,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 **One-Click Install (Windows / macOS / Linux):**
 1. Clone or download this repository.
-2. Ensure you have [Python 3.10+](https://python.org) installed (check "Add to PATH" on Windows).
+2. Ensure you have [Python 3.10–3.13](https://python.org) installed (check "Add to PATH" on Windows). Python 3.14 is **not yet supported** (PyTorch/dependencies lack wheels).
 3. Run the installer for your platform:
    - **Windows:** Double-click `1-install.bat`
    - **macOS / Linux:** `chmod +x 1-install.sh && ./1-install.sh`
@@ -35,7 +35,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 5. To launch: double-click `2-start.bat` (Windows) or `./2-start.sh` (macOS/Linux).
 
 **Prerequisites:**
-- [Python 3.10+](https://python.org) — check "Add to PATH" on Windows
+- [Python 3.10–3.13](https://python.org) — check "Add to PATH" on Windows (3.10 and 3.11 tested; 3.14 not yet supported)
 - NVIDIA GPU with CUDA support (8 GB+ VRAM)
 
 **What the installer does:**
@@ -337,8 +337,10 @@ Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=s
 
 This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey), licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
-GUI/SFX/Workflow enhancements by [Ed Zisk](https://www.edzisk.com).
+GUI/SFX/Workflow/QA by [Ed Zisk](https://www.edzisk.com).
 Logo by [Sara Ann Stewart](https://www.instagram.com/sarastewartwork).
+Hiera optimization by [Jhe Kim](https://github.com/Raiden129).
+Tiling optimization by [MarcelLieb](https://github.com/MarcelLieb).
 
 If you use or build on this project, please star this repo and credit the contributors <3
 
