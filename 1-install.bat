@@ -67,16 +67,20 @@ if /i "!INSTALL_BT!"=="n" (
     goto :buildtools_done
 )
 
-REM Try winget first
+REM Try winget first (run in separate cmd so it can't kill our window)
 where winget >nul 2>&1
 if %errorlevel%==0 (
     echo   Installing via winget (this may take several minutes)...
-    winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait" --accept-source-agreements --accept-package-agreements
-    if !errorlevel!==0 (
-        echo   [OK] VS Build Tools installed
-        goto :buildtools_done
+    cmd /c "winget install Microsoft.VisualStudio.2022.BuildTools --override \"--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait\" --accept-source-agreements --accept-package-agreements" 2>&1
+    REM Re-check if it actually installed (don't trust exit code)
+    set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+    if exist "!VSWHERE!" (
+        for /f "tokens=*" %%p in ('"!VSWHERE!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul') do (
+            echo   [OK] VS Build Tools installed at %%p
+            goto :buildtools_done
+        )
     )
-    echo   [WARN] winget install failed, trying direct download...
+    echo   [WARN] winget install may not have completed, trying direct download...
 )
 
 REM Fallback: download installer directly
@@ -85,12 +89,9 @@ set "BT_INSTALLER=%TEMP%\vs_buildtools.exe"
 powershell -ExecutionPolicy ByPass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://aka.ms/vs/17/release/vs_buildtools.exe' -OutFile '%BT_INSTALLER%'" >nul 2>&1
 if exist "!BT_INSTALLER!" (
     echo   Launching installer (select "Desktop development with C++")...
-    start /wait "" "!BT_INSTALLER!" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait
-    if !errorlevel!==0 (
-        echo   [OK] VS Build Tools installed
-    ) else (
-        echo   [WARN] Installer exited with errors. You may need to run it manually.
-    )
+    echo   NOTE: If a UAC prompt appears, click Yes to allow the install.
+    cmd /c "start /wait "" "!BT_INSTALLER!" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait" 2>&1
+    echo   [INFO] VS Build Tools installer finished (check for errors above)
     del "!BT_INSTALLER!" >nul 2>&1
 ) else (
     echo   [WARN] Download failed. Install manually:
@@ -119,12 +120,17 @@ if /i "!INSTALL_GIT!"=="n" (
 where winget >nul 2>&1
 if %errorlevel%==0 (
     echo   Installing via winget...
-    winget install Git.Git --accept-source-agreements --accept-package-agreements
-    if !errorlevel!==0 (
-        echo   [OK] Git installed. You may need to restart your terminal for it to be on PATH.
+    cmd /c "winget install Git.Git --accept-source-agreements --accept-package-agreements" 2>&1
+    REM Check if git is now available (don't trust winget exit code)
+    if exist "%ProgramFiles%\Git\cmd\git.exe" (
+        echo   [OK] Git installed
         goto :git_done
     )
-    echo   [WARN] winget install failed.
+    if exist "%LOCALAPPDATA%\Programs\Git\cmd\git.exe" (
+        echo   [OK] Git installed
+        goto :git_done
+    )
+    echo   [WARN] winget install may not have completed.
 )
 
 echo   [INFO] Install Git manually from https://git-scm.com
