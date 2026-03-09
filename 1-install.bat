@@ -101,6 +101,65 @@ if exist "!BT_INSTALLER!" (
 :buildtools_done
 echo.
 
+REM ── Step 1c: Check Git (needed for updates) ──
+echo [1c/7] Checking Git...
+where git >nul 2>&1
+if %errorlevel%==0 (
+    echo   [OK] Git found
+    goto :git_done
+)
+
+echo   Git not found. Git is needed for updates (3-update.bat).
+set /p INSTALL_GIT="  Install Git now? [Y/n]: "
+if /i "!INSTALL_GIT!"=="n" (
+    echo   Skipping — updates will use ZIP download fallback instead of git pull.
+    goto :git_done
+)
+
+where winget >nul 2>&1
+if %errorlevel%==0 (
+    echo   Installing via winget...
+    winget install Git.Git --accept-source-agreements --accept-package-agreements
+    if !errorlevel!==0 (
+        echo   [OK] Git installed. You may need to restart your terminal for it to be on PATH.
+        goto :git_done
+    )
+    echo   [WARN] winget install failed.
+)
+
+echo   [INFO] Install Git manually from https://git-scm.com
+echo   Without Git, 3-update.bat will download updates as a ZIP instead.
+
+:git_done
+
+REM If git is available but this isn't a repo (ZIP download), link it
+REM After winget install, git may not be on PATH yet — check common locations
+set "GIT_CMD="
+where git >nul 2>&1
+if %errorlevel%==0 (
+    set "GIT_CMD=git"
+) else (
+    if exist "%ProgramFiles%\Git\cmd\git.exe" set "GIT_CMD=%ProgramFiles%\Git\cmd\git.exe"
+    if exist "%ProgramFiles(x86)%\Git\cmd\git.exe" set "GIT_CMD=%ProgramFiles(x86)%\Git\cmd\git.exe"
+    if exist "%LOCALAPPDATA%\Programs\Git\cmd\git.exe" set "GIT_CMD=%LOCALAPPDATA%\Programs\Git\cmd\git.exe"
+)
+
+if defined GIT_CMD (
+    if not exist ".git" (
+        echo   Linking to git repo for future updates...
+        "!GIT_CMD!" init >nul 2>&1
+        "!GIT_CMD!" remote add origin https://github.com/nikopueringer/CorridorKey.git >nul 2>&1
+        "!GIT_CMD!" fetch origin >nul 2>&1
+        "!GIT_CMD!" reset --mixed origin/master >nul 2>&1
+        if !errorlevel!==0 (
+            echo   [OK] Linked to git — 3-update.bat will use git pull
+        ) else (
+            echo   [WARN] Git link failed — 3-update.bat will use ZIP fallback
+        )
+    )
+)
+echo.
+
 REM ── Step 2: Check for old venv ──
 if exist "venv\Scripts\activate.bat" (
     if not exist ".venv\Scripts\activate.bat" (
