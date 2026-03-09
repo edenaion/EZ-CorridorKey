@@ -175,8 +175,7 @@ class CNNRefinerModule(nn.Module):
     def forward(self, img, coarse_pred):
         """Forward pass with optional tiled processing.
 
-        Tile size is set at construction time via set_tile_params().
-        Default (tile_size=0) processes at full resolution.
+        Tile size is set via _tile_size attribute (0 = full resolution).
         """
         full_input = torch.cat([img, coarse_pred], dim=1)  # [B, 7, H, W]
         tile_size = self._tile_size

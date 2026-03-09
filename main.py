@@ -97,7 +97,6 @@ def run_gui() -> int:
     rc = app.exec()
     # Force-exit: torch.compile spawns Triton background threads that prevent
     # clean shutdown, leaving a zombie process holding VRAM.
-    import os
     os._exit(rc)
 
 

@@ -78,13 +78,12 @@ class CorridorKeyEngine:
     VALID_OPT_MODES = ('auto', 'speed', 'lowvram')
 
     def __init__(self, checkpoint_path, device='cuda', img_size=2048, use_refiner=True,
-                 optimization_mode='auto', tile_overlap=128, cache_clearing=True):
+                 optimization_mode='auto', tile_overlap=128):
         self.device = torch.device(device)
         self.img_size = img_size
         self.checkpoint_path = checkpoint_path
         self.use_refiner = use_refiner
         self.tile_overlap = tile_overlap
-        self.cache_clearing = cache_clearing
 
         # Allow env var override: CORRIDORKEY_OPT_MODE=speed|lowvram|auto
         env_mode = os.environ.get('CORRIDORKEY_OPT_MODE', '').lower()
@@ -247,9 +246,6 @@ class CorridorKeyEngine:
                 logger.info("torch.compile applied to model (inductor backend, fullgraph=False)")
             except Exception as e:
                 logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
-        else:
-            logger.info("torch.compile skipped")
-
         return model
 
     @torch.no_grad()
@@ -371,5 +367,5 @@ class CorridorKeyEngine:
             'alpha': res_alpha,        # Linear, Raw Prediction
             'fg': res_fg,              # sRGB, Raw Prediction (Straight)
             'comp': comp_srgb,         # sRGB, Composite
-            'processed': processed_rgba # sRGB/Premul, RGBA, Garbage Matted & Despilled
+            'processed': processed_rgba # Linear/Premul, RGBA, Garbage Matted & Despilled
         }
