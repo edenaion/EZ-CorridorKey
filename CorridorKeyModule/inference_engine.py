@@ -68,13 +68,13 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
 
 class CorridorKeyEngine:
     # VRAM threshold for optimization profile selection.
-    # Below this: tiled refiner (fits in VRAM). Above: torch.compile (speed).
+    # Below this: tiled refiner + selective compile. Above: full-frame compile.
     _VRAM_TILE_THRESHOLD_GB = 12
 
     # Optimization modes:
     #   'auto'  — detect VRAM and pick best strategy (default)
     #   'speed' — torch.compile, no tiling (12GB+ VRAM)
-    #   'lowvram' — tiled refiner, no compile (8GB GPUs)
+    #   'lowvram' — tiled refiner + compiled tile kernel (8GB GPUs)
     VALID_OPT_MODES = ('auto', 'speed', 'lowvram')
 
     def __init__(self, checkpoint_path, device='cuda', img_size=2048, use_refiner=True,
@@ -93,8 +93,8 @@ class CorridorKeyEngine:
             logger.info(f"Optimization mode override from env: {env_mode}")
 
         # Resolve optimization profile.
-        # Tiled refiner and torch.compile are mutually exclusive:
-        # tiling's dynamic loops cause infinite Triton compilation.
+        # Low-VRAM mode keeps tiling, but graph-breaks the tile scheduler and
+        # compiles the fixed-shape tile CNN separately.
         vram_gb = self._get_vram_gb()
 
         if optimization_mode == 'speed':
@@ -104,13 +104,13 @@ class CorridorKeyEngine:
                         f"[VRAM: {vram_gb:.1f} GB]")
         elif optimization_mode == 'lowvram':
             self.tile_size = 512
-            self._use_compile = False
-            logger.info(f"Optimization: low-VRAM mode (tiled refiner 512x512, no torch.compile) "
+            self._use_compile = True
+            logger.info(f"Optimization: low-VRAM mode (tiled refiner 512x512 + selective torch.compile) "
                         f"[VRAM: {vram_gb:.1f} GB]")
         else:  # auto
             if vram_gb > 0 and vram_gb < self._VRAM_TILE_THRESHOLD_GB:
                 self.tile_size = 512
-                self._use_compile = False
+                self._use_compile = True
                 logger.info(f"Optimization: auto → low-VRAM mode "
                             f"({vram_gb:.1f} GB < {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
             else:
@@ -216,23 +216,39 @@ class CorridorKeyEngine:
             logger.info(f"Tiled refiner: {self.tile_size}x{self.tile_size} tiles, {self.tile_overlap}px overlap")
 
         # torch.compile: JIT-compile the model graph via Triton inductor.
-        # Only used in speed mode (no tiling) — tiling's dynamic loops
-        # cause infinite Triton compilation time.
+        # In tiled mode, the refiner's Python tile scheduler is excluded from
+        # capture and only the fixed-shape tile CNN is compiled.
         if self._use_compile:
+            import subprocess
+            import sys
+
+            if sys.platform == 'win32' and not getattr(subprocess.Popen, '_corridorkey_no_window', False):
+                _orig_popen_init = subprocess.Popen.__init__
+
+                def _silent_popen_init(self, *args, **kwargs):
+                    kwargs.setdefault('creationflags', subprocess.CREATE_NO_WINDOW)
+                    _orig_popen_init(self, *args, **kwargs)
+
+                subprocess.Popen.__init__ = _silent_popen_init
+                subprocess.Popen._corridorkey_no_window = True
+
+            if self.tile_size > 0 and hasattr(model, 'refiner') and model.refiner is not None:
+                try:
+                    model.refiner.compile_tile_kernel()
+                    logger.info("torch.compile applied to refiner tile kernel")
+                except Exception as e:
+                    logger.warning(
+                        f"Refiner tile kernel compile failed (falling back to eager tiles): "
+                        f"{type(e).__name__}: {e}"
+                    )
+
             try:
-                import subprocess, sys
-                if sys.platform == 'win32':
-                    _orig_popen_init = subprocess.Popen.__init__
-                    def _silent_popen_init(self, *args, **kwargs):
-                        kwargs.setdefault('creationflags', subprocess.CREATE_NO_WINDOW)
-                        _orig_popen_init(self, *args, **kwargs)
-                    subprocess.Popen.__init__ = _silent_popen_init
-                model = torch.compile(model)
-                logger.info("torch.compile applied to model (inductor backend)")
+                model = torch.compile(model, fullgraph=False)
+                logger.info("torch.compile applied to model (inductor backend, fullgraph=False)")
             except Exception as e:
                 logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
         else:
-            logger.info("torch.compile skipped (tiled refiner mode)")
+            logger.info("torch.compile skipped")
 
         return model
 
@@ -297,18 +313,9 @@ class CorridorKeyEngine:
         inp_t = torch.from_numpy(inp_np.transpose((2, 0, 1))).float().unsqueeze(0).to(self.device)
         
         # 5. Inference
-        # Hook for Refiner Scaling
-        handle = None
-        if refiner_scale != 1.0 and self.model.refiner is not None:
-             def scale_hook(module, input, output):
-                 return output * refiner_scale
-             handle = self.model.refiner.register_forward_hook(scale_hook)
-             
+        refiner_scale_t = inp_t.new_tensor(refiner_scale)
         with torch.autocast(device_type=self.device.type, dtype=torch.float16):
-            out = self.model(inp_t)
-        
-        if handle:
-            handle.remove()
+            out = self.model(inp_t, refiner_scale=refiner_scale_t)
             
         pred_alpha = out['alpha']
         pred_fg = out['fg'] # Output is sRGB (Sigmoid)

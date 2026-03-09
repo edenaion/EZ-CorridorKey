@@ -91,7 +91,7 @@ class CNNRefinerModule(nn.Module):
     """
     def __init__(self, in_channels=7, hidden_channels=64, out_channels=4):
         super().__init__()
-        
+
         # Stem
         self.stem = nn.Sequential(
             nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1),
@@ -107,12 +107,17 @@ class CNNRefinerModule(nn.Module):
         
         # Final Projection (No Activation, purely additive logits)
         self.final = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
-        
+
         # Tiny Noise Init (Whisper) - Provides gradients without shock
         nn.init.normal_(self.final.weight, mean=0.0, std=1e-3)
         nn.init.constant_(self.final.bias, 0)
 
-    def _process_tile(self, x):
+        self._tile_size = 0
+        self._tile_overlap = 128
+        self._compiled_process_tile = None
+        self._blend_weight_cache = {}
+
+    def _process_tile_impl(self, x):
         """Run refiner pipeline on a single tile. x: [B, 7, H, W]."""
         feat = self.stem(x)
         feat = self.res1(feat)
@@ -121,38 +126,36 @@ class CNNRefinerModule(nn.Module):
         feat = self.res4(feat)
         return self.final(feat) * 10.0
 
-    def forward(self, img, coarse_pred):
-        """Forward pass with optional tiled processing.
+    def compile_tile_kernel(self):
+        """Compile the fixed-shape tile CNN without changing checkpoint keys."""
+        if self._compiled_process_tile is None:
+            self._compiled_process_tile = torch.compile(self._process_tile_impl, dynamic=False)
 
-        Tile size is set at construction time via set_tile_params().
-        Default (tile_size=0) processes at full resolution.
-        """
-        full_input = torch.cat([img, coarse_pred], dim=1)  # [B, 7, H, W]
-        tile_size = getattr(self, '_tile_size', 0)
-        tile_overlap = getattr(self, '_tile_overlap', 128)
+    def _process_tile(self, x):
+        if self._compiled_process_tile is not None:
+            return self._compiled_process_tile(x)
+        return self._process_tile_impl(x)
 
-        if tile_size <= 0:
-            return self._process_tile(full_input)
+    @torch.compiler.disable(recursive=False)
+    def _forward_tiled(self, full_input, out_channels):
+        tile_size = self._tile_size
+        tile_overlap = self._tile_overlap
+        stride = tile_size - tile_overlap
+        if stride <= 0:
+            raise ValueError(
+                f"Invalid refiner tiling parameters: tile_size={tile_size}, "
+                f"tile_overlap={tile_overlap}"
+            )
 
         B, _, H, W = full_input.shape
-
-        # Skip tiling if image fits in a single tile
-        if H <= tile_size and W <= tile_size:
-            return self._process_tile(full_input)
-
-        stride = tile_size - tile_overlap
-        out_channels = coarse_pred.shape[1]  # 4
-
-        delta_sum = torch.zeros(B, out_channels, H, W,
-                                device=img.device, dtype=img.dtype)
-        weight_sum = torch.zeros(B, 1, H, W,
-                                 device=img.device, dtype=img.dtype)
+        delta_sum = full_input.new_zeros((B, out_channels, H, W))
+        weight_sum = full_input.new_zeros((B, 1, H, W))
 
         for y0 in range(0, H, stride):
             for x0 in range(0, W, stride):
                 y1 = min(y0 + tile_size, H)
                 x1 = min(x0 + tile_size, W)
-                # Adjust start to ensure full tile_size when possible
+                # Adjust start to ensure full tile_size when possible.
                 y0_adj = max(0, y1 - tile_size)
                 x0_adj = max(0, x1 - tile_size)
 
@@ -160,13 +163,42 @@ class CNNRefinerModule(nn.Module):
                 tile_delta = self._process_tile(tile)
 
                 tile_h, tile_w = tile_delta.shape[2], tile_delta.shape[3]
-                blend_w = self._blend_weight(tile_h, tile_w, tile_overlap,
-                                             img.device, img.dtype)
+                blend_w = self._get_blend_weight(
+                    tile_h, tile_w, tile_overlap, full_input.device, full_input.dtype
+                )
 
                 delta_sum[:, :, y0_adj:y1, x0_adj:x1] += tile_delta * blend_w
                 weight_sum[:, :, y0_adj:y1, x0_adj:x1] += blend_w
 
         return delta_sum / weight_sum.clamp(min=1e-6)
+
+    def forward(self, img, coarse_pred):
+        """Forward pass with optional tiled processing.
+
+        Tile size is set at construction time via set_tile_params().
+        Default (tile_size=0) processes at full resolution.
+        """
+        full_input = torch.cat([img, coarse_pred], dim=1)  # [B, 7, H, W]
+        tile_size = self._tile_size
+
+        if tile_size <= 0:
+            return self._process_tile(full_input)
+
+        _, _, H, W = full_input.shape
+
+        # Skip tiling if image fits in a single tile
+        if H <= tile_size and W <= tile_size:
+            return self._process_tile(full_input)
+
+        return self._forward_tiled(full_input, coarse_pred.shape[1])
+
+    def _get_blend_weight(self, h, w, overlap, device, dtype):
+        key = (h, w, overlap, device, dtype)
+        weight = self._blend_weight_cache.get(key)
+        if weight is None:
+            weight = self._blend_weight(h, w, overlap, device, dtype)
+            self._blend_weight_cache[key] = weight
+        return weight
 
     @staticmethod
     def _blend_weight(h, w, overlap, device, dtype):
@@ -269,7 +301,7 @@ class GreenFormer(nn.Module):
         
         print(f"Patched input layer: 3 channels -> {in_channels} channels (Extra initialized to 0)")
 
-    def forward(self, x):
+    def forward(self, x, refiner_scale=None):
         # x: [B, 4, H, W]
         input_size = x.shape[2:]
 
@@ -296,6 +328,10 @@ class GreenFormer(nn.Module):
         # Refiner outputs DELTA LOGITS
         if self.use_refiner and self.refiner is not None:
             delta_logits = self.refiner(rgb, coarse_pred)
+            if refiner_scale is not None:
+                if torch.is_tensor(refiner_scale):
+                    refiner_scale = refiner_scale.to(device=delta_logits.device, dtype=delta_logits.dtype)
+                delta_logits = delta_logits * refiner_scale
         else:
             delta_logits = torch.zeros_like(coarse_pred)
 
@@ -314,5 +350,3 @@ class GreenFormer(nn.Module):
             'alpha': alpha_final,
             'fg': fg_final
         }
-
-
