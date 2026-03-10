@@ -237,9 +237,62 @@ All modules use `logging.getLogger(__name__)`:
 | `ui.widgets.preview_viewport` | ui/widgets/preview_viewport.py |
 | `ui.widgets.recent_projects_panel` | ui/widgets/recent_projects_panel.py |
 
+## Process Chain: GVM→Inference Model Handoff (Bug #3)
+
+Critical path that caused hang when switching from GVM to inference in same session.
+
+```
+run_inference()
+├─ "run_inference: waiting for _gpu_lock" (INFO)
+├─ "run_inference: acquired _gpu_lock" (INFO)
+├─ _get_engine()
+│   ├─ _ensure_model(INFERENCE)
+│   │   ├─ "Unloading gvm model for inference (VRAM before: NMB)" (INFO)
+│   │   ├─ _safe_offload(gvm_processor)  → "Offloading model: GVMProcessor" (DEBUG)
+│   │   │                                → "_safe_offload took Xs" (INFO)
+│   │   ├─ gc.collect()                  → "gc.collect took Xs" (INFO)
+│   │   ├─ torch.cuda.synchronize()      → "cuda.synchronize took Xs" (INFO)
+│   │   ├─ torch.cuda.empty_cache()      → "cuda.empty_cache took Xs" (INFO)
+│   │   └─ "VRAM after unload: NMB (freed NMB)" (INFO)
+│   ├─ "Constructing CorridorKeyEngine..." (INFO)
+│   ├─ CorridorKeyEngine.__init__
+│   │   ├─ "__init__: begin" (INFO)
+│   │   ├─ "Optimization: auto mode — probing VRAM..." (INFO)
+│   │   ├─ _get_vram_gb() [pynvml first, torch.cuda fallback]
+│   │   │   ├─ "_get_vram_gb: entering" (DEBUG)
+│   │   │   ├─ "_get_vram_gb: pynvml reports N.N GB" (DEBUG)
+│   │   │   └─ OR "_get_vram_gb: torch.cuda reports N.N GB" (DEBUG)
+│   │   ├─ "Optimization: auto → speed mode (N GB ≥ 12 GB)" (INFO)
+│   │   ├─ "__init__: entering _load_model" (INFO)
+│   │   └─ _load_model()  → [see inference chain above]
+│   └─ "CorridorKeyEngine construction complete" (INFO)
+└─ (inference loop continues)
+```
+
+**Hang diagnosis:** If log stops at `__init__: begin` or `entering _load_model`, the
+constructor or model load is blocking. Check VRAM probe path and torch.compile status.
+
+## Known Debug Gaps (2026-03-09 Audit)
+
+### Priority 1 — Error Handling
+- 3 bare `except:` clauses: clip_manager.py:929, model_transformer.py:267, pipeline_gvm.py:212
+- `set_error()` in clip_state.py accepts reason but never logs it
+- 5 `print()` in model_transformer.py not integrated with logging system
+
+### Priority 2 — State Visibility
+- `_resolve_state()` sets initial clip state silently (6 branches at lines 446-478)
+- Job queue tracks status changes but not elapsed wall-clock time per job
+- UI widget enable/disable changes are completely unlogged
+
+### Priority 3 — Latency Gaps
+- gvm_core/wrapper.py: model load and per-file processing not timed
+- VideoMaMaInferenceModule/inference.py: per-chunk inference duration not captured
+- FFmpeg extraction: total operation duration not logged (only frame count)
+
 ## Audit History
 
 | Date | Changes |
 |------|---------|
 | 2026-02-28 | Initial creation: dual-handler setup, Eastern Time, latency tracking, silent exception logging |
 | 2026-03-02 | Audit update: VRAM reporting in _ensure_model, model load timing for GVM/VideoMaMa, error logging in gpu_job_worker CorridorKeyError branch, print→logger in VideoMaMa and GVM wrapper, root-logger fix in gvm_core, logging added to recent_projects_panel, 3 new process chains (model switch, extraction, project mgmt), 16 new module logger entries |
+| 2026-03-09 | Full audit (8 parallel agents): 223 logging statements catalogued across 58 files. Added GVM→Inference handoff chain. Identified 3 bare except clauses, 7 silent failures, 6 unlogged state initializations, 5 print() calls in model_transformer.py. Log locations fully compliant (single system, YYMMDD_HHMMSS naming, ./logs/backend/). Coverage rated Complete for model lifecycle + inference engine, Partial for job queue (no elapsed time), GVM wrapper (no timing), clip state (silent init). Gaps documented above for future fix passes. |

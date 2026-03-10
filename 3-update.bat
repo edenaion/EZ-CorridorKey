@@ -31,7 +31,7 @@ if !USE_GIT!==1 (
     )
 ) else (
     echo   No git repo detected — downloading latest release as ZIP...
-    set "UPDATE_URL=https://github.com/edenaion/EZ-CorridorKey/archive/refs/heads/master.zip"
+    set "UPDATE_URL=https://github.com/edenaion/EZ-CorridorKey/archive/refs/heads/main.zip"
     set "UPDATE_ZIP=%TEMP%\corridorkey-update.zip"
     set "UPDATE_EXTRACT=%TEMP%\corridorkey-update"
 
@@ -45,7 +45,7 @@ if !USE_GIT!==1 (
     if exist "!UPDATE_EXTRACT!" rmdir /s /q "!UPDATE_EXTRACT!"
     powershell -ExecutionPolicy ByPass -Command "Expand-Archive -Path '!UPDATE_ZIP!' -DestinationPath '!UPDATE_EXTRACT!' -Force" >nul 2>&1
 
-    :: The zip contains a top-level folder like EZ-CorridorKey-master
+    :: The zip contains a top-level folder like EZ-CorridorKey-main
     set "UPDATE_INNER="
     for /d %%d in ("!UPDATE_EXTRACT!\EZ-CorridorKey-*") do set "UPDATE_INNER=%%d"
     if not defined UPDATE_INNER (
