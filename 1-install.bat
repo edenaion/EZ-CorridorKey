@@ -313,7 +313,11 @@ if %errorlevel%==0 (
 
 echo [3c/7] Optional SAM2 tracker...
 set INSTALL_SAM2=y
-set /p INSTALL_SAM2_INPUT="  Install SAM2 tracking support? [Y/n]: "
+if defined CORRIDORKEY_INSTALL_SAM2 (
+    set "INSTALL_SAM2_INPUT=%CORRIDORKEY_INSTALL_SAM2%"
+) else (
+    set /p INSTALL_SAM2_INPUT="  Install SAM2 tracking support? [Y/n]: "
+)
 if /i "!INSTALL_SAM2_INPUT!"=="n" set INSTALL_SAM2=n
 
 if /i "!INSTALL_SAM2!"=="y" (
@@ -333,7 +337,11 @@ if /i "!INSTALL_SAM2!"=="y" (
 
     if !SAM2_OK!==1 (
         echo   [OK] SAM2 tracker support installed
-        set /p DOWNLOAD_SAM2="  Pre-download default SAM2 Base+ model? (324MB) [Y/n]: "
+        if defined CORRIDORKEY_PREDOWNLOAD_SAM2 (
+            set "DOWNLOAD_SAM2=%CORRIDORKEY_PREDOWNLOAD_SAM2%"
+        ) else (
+            set /p DOWNLOAD_SAM2="  Pre-download default SAM2 Base+ model? (324MB) [Y/n]: "
+        )
         if /i not "!DOWNLOAD_SAM2!"=="n" (
             .venv\Scripts\python.exe scripts\setup_models.py --sam2
         )
@@ -432,12 +440,20 @@ if %errorlevel% neq 0 (
 echo.
 echo [6/7] Optional models (can be downloaded later)
 echo.
-set /p INSTALL_GVM="  Download GVM alpha generator? (~6GB) [y/N]: "
+if defined CORRIDORKEY_INSTALL_GVM (
+    set "INSTALL_GVM=%CORRIDORKEY_INSTALL_GVM%"
+) else (
+    set /p INSTALL_GVM="  Download GVM alpha generator? (~6GB) [y/N]: "
+)
 if /i "!INSTALL_GVM!"=="y" (
     .venv\Scripts\python.exe scripts\setup_models.py --gvm
 )
 
-set /p INSTALL_VM="  Download VideoMaMa alpha generator? (~37GB) [y/N]: "
+if defined CORRIDORKEY_INSTALL_VIDEOMAMA (
+    set "INSTALL_VM=%CORRIDORKEY_INSTALL_VIDEOMAMA%"
+) else (
+    set /p INSTALL_VM="  Download VideoMaMa alpha generator? (~37GB) [y/N]: "
+)
 if /i "!INSTALL_VM!"=="y" (
     .venv\Scripts\python.exe scripts\setup_models.py --videomama
 )
@@ -445,7 +461,11 @@ if /i "!INSTALL_VM!"=="y" (
 REM ── Step 7: Create desktop shortcut ──
 echo.
 echo [7/7] Desktop shortcut
-set /p CREATE_SHORTCUT="  Create desktop shortcut? [Y/n]: "
+if defined CORRIDORKEY_CREATE_SHORTCUT (
+    set "CREATE_SHORTCUT=%CORRIDORKEY_CREATE_SHORTCUT%"
+) else (
+    set /p CREATE_SHORTCUT="  Create desktop shortcut? [Y/n]: "
+)
 if /i "!CREATE_SHORTCUT!"=="n" goto :skip_shortcut
 
 set "SHORTCUT_PATH=%USERPROFILE%\Desktop\CorridorKey.lnk"

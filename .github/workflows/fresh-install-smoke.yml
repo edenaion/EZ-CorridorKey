@@ -1,0 +1,82 @@
+name: Fresh Install Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/fresh-install-smoke.yml"
+      - "1-install.bat"
+      - "1-install.sh"
+      - "3-update.bat"
+      - "3-update.sh"
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "scripts/setup_models.py"
+      - "scripts/ci_smoke.py"
+      - "main.py"
+      - "backend/**"
+      - "ui/**"
+
+jobs:
+  smoke:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    env:
+      CORRIDORKEY_INSTALL_SAM2: y
+      CORRIDORKEY_PREDOWNLOAD_SAM2: n
+      CORRIDORKEY_INSTALL_GVM: n
+      CORRIDORKEY_INSTALL_VIDEOMAMA: n
+      CORRIDORKEY_CREATE_SHORTCUT: n
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Windows installer
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: 1-install.bat
+
+      - name: Run Unix installer
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x 1-install.sh
+          ./1-install.sh
+
+      - name: Check installed model status (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: .venv\Scripts\python.exe scripts\setup_models.py --check
+
+      - name: Check installed model status (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: .venv/bin/python scripts/setup_models.py --check
+
+      - name: Headless startup smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        env:
+          CORRIDORKEY_SKIP_STARTUP_DIAGNOSTICS: "1"
+          CORRIDORKEY_SKIP_UPDATE_CHECK: "1"
+        run: .venv\Scripts\python.exe scripts\ci_smoke.py
+
+      - name: Headless startup smoke (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          CORRIDORKEY_SKIP_STARTUP_DIAGNOSTICS: "1"
+          CORRIDORKEY_SKIP_UPDATE_CHECK: "1"
+        run: .venv/bin/python scripts/ci_smoke.py

@@ -140,7 +140,10 @@ INSTALL_SAM2="y"
 if [ "$OS_TYPE" = "macos" ]; then
     echo "  [NOTE] SAM2 tracking on macOS is experimental in CorridorKey."
 fi
-read -rp "  Install SAM2 tracking support? [Y/n]: " INSTALL_SAM2_INPUT
+INSTALL_SAM2_INPUT="${CORRIDORKEY_INSTALL_SAM2:-}"
+if [ -z "$INSTALL_SAM2_INPUT" ]; then
+    read -rp "  Install SAM2 tracking support? [Y/n]: " INSTALL_SAM2_INPUT
+fi
 if [[ "$(echo "${INSTALL_SAM2_INPUT:-y}" | tr '[:upper:]' '[:lower:]')" == "n" ]]; then
     INSTALL_SAM2="n"
 fi
@@ -166,7 +169,10 @@ if [ "$INSTALL_SAM2" = "y" ]; then
 
     if [ "$SAM2_OK" -eq 1 ]; then
         echo "  [OK] SAM2 tracker support installed"
-        read -rp "  Pre-download default SAM2 Base+ model? (324MB) [Y/n]: " DOWNLOAD_SAM2
+        DOWNLOAD_SAM2="${CORRIDORKEY_PREDOWNLOAD_SAM2:-}"
+        if [ -z "$DOWNLOAD_SAM2" ]; then
+            read -rp "  Pre-download default SAM2 Base+ model? (324MB) [Y/n]: " DOWNLOAD_SAM2
+        fi
         if [[ "$(echo "${DOWNLOAD_SAM2:-y}" | tr '[:upper:]' '[:lower:]')" != "n" ]]; then
             .venv/bin/python scripts/setup_models.py --sam2
         fi
@@ -213,24 +219,33 @@ echo ""
 echo "[6/6] Optional models (can be downloaded later)"
 echo ""
 
-read -rp "  Download GVM alpha generator? (~6GB) [y/N]: " INSTALL_GVM
+INSTALL_GVM="${CORRIDORKEY_INSTALL_GVM:-}"
+if [ -z "$INSTALL_GVM" ]; then
+    read -rp "  Download GVM alpha generator? (~6GB) [y/N]: " INSTALL_GVM
+fi
 if [[ "$(echo "$INSTALL_GVM" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
     .venv/bin/python scripts/setup_models.py --gvm
 fi
 
 if [ "$OS_TYPE" = "macos" ]; then
     echo ""
-    echo "  [NOTE] VideoMaMa runs on CPU on macOS (no MPS support yet)."
-    echo "  It works but will be slow. 37GB download — skip if unsure."
+echo "  [NOTE] VideoMaMa runs on CPU on macOS (no MPS support yet)."
+echo "  It works but will be slow. 37GB download — skip if unsure."
 fi
-read -rp "  Download VideoMaMa alpha generator? (~37GB) [y/N]: " INSTALL_VM
+INSTALL_VM="${CORRIDORKEY_INSTALL_VIDEOMAMA:-}"
+if [ -z "$INSTALL_VM" ]; then
+    read -rp "  Download VideoMaMa alpha generator? (~37GB) [y/N]: " INSTALL_VM
+fi
 if [[ "$(echo "$INSTALL_VM" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
     .venv/bin/python scripts/setup_models.py --videomama
 fi
 
 # ── Create desktop shortcut ──
 echo ""
-read -rp "  Create desktop shortcut? [Y/n]: " CREATE_SHORTCUT
+CREATE_SHORTCUT="${CORRIDORKEY_CREATE_SHORTCUT:-}"
+if [ -z "$CREATE_SHORTCUT" ]; then
+    read -rp "  Create desktop shortcut? [Y/n]: " CREATE_SHORTCUT
+fi
 if [[ "$(echo "$CREATE_SHORTCUT" | tr '[:upper:]' '[:lower:]')" != "n" ]]; then
     ICON_PATH="$SCRIPT_DIR/ui/theme/corridorkey.png"
     if [ "$OS_TYPE" = "macos" ]; then

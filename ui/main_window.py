@@ -252,7 +252,8 @@ class MainWindow(QMainWindow):
         logger.info(f"Compute device: {device}")
 
         # Run startup diagnostics (deferred so the window is visible first)
-        QTimer.singleShot(500, lambda: self._run_startup_diagnostics(device))
+        if os.environ.get("CORRIDORKEY_SKIP_STARTUP_DIAGNOSTICS") != "1":
+            QTimer.singleShot(500, lambda: self._run_startup_diagnostics(device))
 
         # Always start on welcome screen — user picks a project from recents or imports
         # Deferred sync of IO tray divider with viewer splitter
@@ -264,7 +265,8 @@ class MainWindow(QMainWindow):
         self._apply_tracker_model_setting()
 
         # Check for updates (non-blocking background thread)
-        self._check_for_updates()
+        if os.environ.get("CORRIDORKEY_SKIP_UPDATE_CHECK") != "1":
+            self._check_for_updates()
 
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
