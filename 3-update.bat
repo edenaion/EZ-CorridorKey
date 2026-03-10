@@ -22,6 +22,7 @@ if %errorlevel%==0 (
 )
 
 if !USE_GIT!==1 (
+    call :migrate_git_branch
     git pull --recurse-submodules 2>&1
     if %errorlevel% neq 0 (
         echo   [WARN] Git pull had issues. You may have local changes.
@@ -143,3 +144,39 @@ echo  Update failed. See errors above.
 echo.
 pause
 exit /b 1
+
+:migrate_git_branch
+set "CURRENT_BRANCH="
+set "CURRENT_UPSTREAM="
+for /f "tokens=*" %%b in ('git branch --show-current 2^>nul') do set "CURRENT_BRANCH=%%b"
+
+if /i "!CURRENT_BRANCH!"=="master" (
+    echo   [MIGRATE] Moving local branch from master to main...
+    git fetch origin main --recurse-submodules >nul 2>&1
+    git show-ref --verify --quiet refs/heads/main
+    if !errorlevel! == 0 (
+        git checkout main >nul 2>&1
+    ) else (
+        git branch -m master main >nul 2>&1
+    )
+    if !errorlevel! neq 0 (
+        echo   [WARN] Automatic branch rename failed. Trying a fresh local main branch...
+        git checkout -b main origin/main >nul 2>&1
+    )
+    if !errorlevel! neq 0 (
+        echo   [WARN] Could not auto-migrate this checkout to main.
+        echo   Finish this update, then run: git fetch origin ^&^& git checkout main
+        exit /b 0
+    )
+    git branch --set-upstream-to=origin/main main >nul 2>&1
+    if !errorlevel! == 0 echo   [OK] Now tracking origin/main
+) else if /i "!CURRENT_BRANCH!"=="main" (
+    for /f "tokens=*" %%u in ('git rev-parse --abbrev-ref --symbolic-full-name @{u} 2^>nul') do set "CURRENT_UPSTREAM=%%u"
+    if /i "!CURRENT_UPSTREAM!"=="origin/master" (
+        echo   [MIGRATE] Repointing main to track origin/main...
+        git fetch origin main --recurse-submodules >nul 2>&1
+        git branch --set-upstream-to=origin/main main >nul 2>&1
+        if !errorlevel! == 0 echo   [OK] Now tracking origin/main
+    )
+)
+exit /b 0
