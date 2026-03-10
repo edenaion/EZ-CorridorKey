@@ -16,6 +16,7 @@ dependencies = [
     "diffusers",
     "easydict",
     "einops",
+    "kornia",
     "imageio",
     "huggingface_hub",
     "peft",
