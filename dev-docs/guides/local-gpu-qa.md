@@ -31,11 +31,18 @@ Optional stricter run:
 .venv\Scripts\python.exe scripts\local_gpu_qa.py ^
   --frames 8 ^
   --chunk-size 8 ^
+  --sam2-model large ^
   --min-sam2-iou 0.75 ^
   --min-videomama-iou 0.95 ^
   --json-out logs\gpu-qa-summary.json ^
   --keep-dir .tmp\gpu-qa
 ```
+
+Available SAM2 checkpoints:
+
+- `--sam2-model small`
+- `--sam2-model base-plus` (default)
+- `--sam2-model large`
 
 ## What The Script Does
 

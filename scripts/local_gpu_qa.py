@@ -31,6 +31,12 @@ import numpy as np
 
 from backend import ClipAsset, ClipEntry, ClipState, CorridorKeyService
 
+SAM2_MODEL_IDS = {
+    "small": "facebook/sam2.1-hiera-small",
+    "base-plus": "facebook/sam2.1-hiera-base-plus",
+    "large": "facebook/sam2.1-hiera-large",
+}
+
 
 def _human_part(
     image: np.ndarray,
@@ -242,6 +248,7 @@ def run_local_gpu_qa(
     width: int = 320,
     height: int = 256,
     chunk_size: int = 8,
+    sam2_model: str | None = None,
     min_sam2_iou: float = 0.75,
     min_videomama_iou: float | None = 0.90,
     keep_dir: str | None = None,
@@ -266,6 +273,8 @@ def run_local_gpu_qa(
     device = service.detect_device()
     if device != "cuda":
         raise RuntimeError(f"GPU QA requires CUDA. Detected device: {device}")
+    if sam2_model is not None:
+        service.set_sam2_model(SAM2_MODEL_IDS[sam2_model])
 
     clip = ClipEntry(
         name="gpu_qa_fixture",
@@ -281,6 +290,7 @@ def run_local_gpu_qa(
         "width": width,
         "height": height,
         "chunk_size": chunk_size,
+        "sam2_model_key": sam2_model or "base-plus",
         "sam2_model": service.sam2_model_id,
         "status_messages": [],
     }
@@ -369,6 +379,12 @@ def main() -> int:
     parser.add_argument("--width", type=int, default=320, help="Fixture frame width")
     parser.add_argument("--height", type=int, default=256, help="Fixture frame height")
     parser.add_argument("--chunk-size", type=int, default=8, help="VideoMaMa chunk size")
+    parser.add_argument(
+        "--sam2-model",
+        choices=sorted(SAM2_MODEL_IDS.keys()),
+        default="base-plus",
+        help="SAM2 checkpoint to test. Default: base-plus.",
+    )
     parser.add_argument("--keep-dir", type=str, default="", help="Directory to keep outputs instead of using a temp dir")
     parser.add_argument("--json-out", type=str, default="", help="Optional path to write the JSON summary")
     parser.add_argument("--min-sam2-iou", type=float, default=0.75, help="Fail if SAM2 mean IoU drops below this")
@@ -385,6 +401,7 @@ def main() -> int:
         width=args.width,
         height=args.height,
         chunk_size=args.chunk_size,
+        sam2_model=args.sam2_model,
         min_sam2_iou=args.min_sam2_iou,
         min_videomama_iou=args.min_videomama_iou,
         keep_dir=args.keep_dir or None,
