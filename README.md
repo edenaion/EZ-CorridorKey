@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.3.2](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.4.0](CHANGELOG.md)**
 
-> **Latest:** Installer overhaul, clip fixes, accurate EXR colour conversion — [full changelog](CHANGELOG.md)
+> **Latest:** Import alpha, despeckle, installer fixes, GVM hang fix — [full changelog](CHANGELOG.md)
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -124,6 +124,17 @@ For difficult shots, use the annotation brush:
 3. Press **2** to switch to background mode (red)
 4. Paint over background areas
 5. Click **VIDEOMAMA** in the parameter panel
+
+**Option C — Import Alpha (bring your own):**
+If you already have alpha mattes from another tool (Rotobrush, Silhouette, etc.), click **IMPORT ALPHA** in the parameter panel and select the folder containing your images.
+
+- Supported formats: **PNG, JPG, JPEG, TIF, TIFF, EXR**
+- Images should be **grayscale** (white = foreground, black = background)
+- Frame count should match your input sequence
+- Non-PNG files are automatically converted to grayscale PNG on import
+- Files are copied into the clip's `AlphaHint/` folder and the clip advances to **READY** state
+
+You can re-import at any time — if the clip already has alpha hints, you'll be asked whether to overwrite them.
 
 ### 3. Run Inference
 

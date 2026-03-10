@@ -483,6 +483,69 @@ def _default_range(pix_fmt: str) -> str:
     return "pc" if pf.startswith("yuvj") else "tv"
 
 
+# ---------------------------------------------------------------------------
+#  ffprobe → FFmpeg scale filter value mapping
+# ---------------------------------------------------------------------------
+# ffprobe reports ITU-T H.264/H.265 colour identifiers.  FFmpeg's `scale`
+# filter only accepts a subset of named constants.  Values not in the
+# "known safe" set get mapped to compatible equivalents.
+#
+# Built from libavutil/pixfmt.h + libswscale colour table.  If ffprobe
+# reports a value we haven't seen, _safe_scale_value() logs a WARNING
+# so we can add it before it crashes an extraction.
+# ---------------------------------------------------------------------------
+
+# in_color_matrix (swscale colorspace table)
+_SCALE_MATRIX_MAP = {
+    "bt470bg": "bt601",          # BT.470 System B/G = same matrix as BT.601
+    "bt2020c": "bt2020ncl",     # constant-luminance → non-constant (swscale compat)
+}
+_KNOWN_MATRICES = {
+    "bt709", "fcc", "bt601", "smpte170m", "smpte240m",
+    "bt2020nc", "bt2020ncl",
+}
+
+# in_primaries
+_SCALE_PRIMARIES_MAP = {
+    # Most ffprobe primaries pass through. Guard edge cases.
+    "film": "bt470m",           # "film" (SMPTE-C) → bt470m
+}
+_KNOWN_PRIMARIES = {
+    "bt709", "bt470m", "bt470bg", "smpte170m", "smpte240m",
+    "film", "bt2020", "smpte428", "smpte431", "smpte432",
+}
+
+# in_transfer
+_SCALE_TRANSFER_MAP = {
+    "bt470bg": "gamma28",       # BT.470 System B/G = gamma 2.8
+    "bt470m": "gamma22",        # BT.470 System M = gamma 2.2
+    "bt2020-12": "bt2020-12",   # pass through (explicit for clarity)
+    "bt2020-10": "bt2020-10",
+}
+_KNOWN_TRANSFERS = {
+    "bt709", "gamma22", "gamma28", "smpte170m", "smpte240m",
+    "linear", "log", "log_sqrt", "iec61966-2-4", "bt1361e",
+    "iec61966-2-1", "bt2020-10", "bt2020-12", "smpte2084",
+    "smpte428", "arib-std-b67",
+}
+
+
+def _safe_scale_value(value: str, mapping: dict, known: set, param_name: str) -> str:
+    """Map an ffprobe colour identifier to an FFmpeg scale-filter-safe name.
+
+    Logs a WARNING for unrecognised values so we can add them to the
+    mapping before they crash an extraction.
+    """
+    mapped = mapping.get(value, value)
+    if mapped and mapped not in known:
+        logger.warning(
+            "Unknown %s value '%s' (mapped from '%s') — FFmpeg may reject this. "
+            "Add it to _SCALE_%s_MAP in ffmpeg_tools.py",
+            param_name, mapped, value, param_name.upper(),
+        )
+    return mapped
+
+
 def build_exr_vf(video_info: dict) -> str:
     """Build the -vf string for converting to gbrpf32le (EXR output).
 
@@ -517,6 +580,12 @@ def build_exr_vf(video_info: dict) -> str:
         ct = _default_transfer(cp, bits)
     if not cr:
         cr = _default_range(pix_fmt)
+
+    # Map ffprobe identifiers → scale-filter-safe names.
+    # Warns on unknown values so we catch new edge cases in logs.
+    cs = _safe_scale_value(cs, _SCALE_MATRIX_MAP, _KNOWN_MATRICES, "matrix")
+    cp = _safe_scale_value(cp, _SCALE_PRIMARIES_MAP, _KNOWN_PRIMARIES, "primaries")
+    ct = _safe_scale_value(ct, _SCALE_TRANSFER_MAP, _KNOWN_TRANSFERS, "transfer")
 
     logger.info(
         "EXR colour conversion: pix_fmt=%s matrix=%s primaries=%s transfer=%s range=%s",

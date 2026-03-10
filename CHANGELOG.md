@@ -4,38 +4,70 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [1.3.2] - 2026-03-09 — Installer overhaul, clip removal persistence
+## [1.4.0] - 2026-03-09 — Full Pipeline, Model Handoff, Force-Stop, Installer Overhaul
+
+### Full Pipeline Routing
+- **Automatic clip classification** — `PipelineRoute` classifies each clip and auto-chains the correct job sequence: GVM → inference, VideoMaMa → inference, or inference-only
+- **GVM auto-alpha pipeline** — one-click GVM diffusion-based alpha generation for RAW clips without annotations, automatically chains inference on completion
+- **VideoMaMa guided pipeline** — annotation-based alpha generation: exports masks (CPU), runs VideoMaMa, then auto-chains inference
+- **Batch processing** — "Run All" queues every selected clip through its classified pipeline route (GVM, VideoMaMa, or inference-only)
+- **Alpha hint re-import** — importing alpha hints on a clip that already has them now asks to overwrite (previously showed "Already Imported")
+
+### Model Residency & GPU Handoff
+- **`torch._dynamo.reset()` after model switch** — clears stale Triton compilation cache when switching between GVM/VideoMaMa/inference models, fixing the hang where `torch.compile` would deadlock on cached CUDA state from the previous diffusion pipeline
+- **pynvml VRAM detection** — `_get_vram_gb()` now uses NVML (driver-level, no CUDA context calls) instead of `torch.cuda.get_device_properties()` which stalled after GVM teardown. Falls back to torch.cuda if pynvml unavailable
+- **Granular model-switch status callbacks** — status bar shows each phase: "Switching GVM → inference...", "Offloading GVM...", "Releasing Python references...", "Waiting for CUDA to finish...", "Clearing CUDA cache..."
+- **Diagnostic logging in `_load_model()`** — force-flushed `_diag()` messages at every step (GreenFormer init, model.to(device), checkpoint load, state_dict, hiera patch, torch.compile) for hang diagnosis
+
+### Force-Stop Escape Hatch
+- **Double-click STOP to force-stop** — first STOP sends cooperative cancel; if the GPU job is stuck (e.g. in a non-interruptible CUDA operation), clicking STOP again triggers a force-stop that auto-saves the session and relaunches the app
+- **Status bar FORCE STOP mode** — after first stop attempt, button changes to "FORCE STOP" with warning tooltip
+- **Improved stop handling** — cooperative cancel now propagates through model load and CUDA teardown phases, not just frame processing
 
 ### Installer (`1-install.bat`)
-- **Auto-install FFmpeg** — downloads from gyan.dev, extracts to `tools/ffmpeg/`, adds to PATH. No more manual FFmpeg install needed.
-- **VS Build Tools check** — detects MSVC via `cl.exe` and `vswhere.exe`, offers auto-install via winget or direct download if missing (needed for OpenEXR compilation)
-- **Python 3.14 rejection** — installer now blocks Python 3.14+ (PyTorch lacks wheels). Requires 3.10–3.13.
-- **Desktop shortcut** — labeled as step 7/7
+- **Auto-install FFmpeg** — downloads from gyan.dev, extracts to `tools/ffmpeg/`, adds to PATH. No more manual FFmpeg install needed
+- **VS Build Tools auto-install** — detects MSVC via `cl.exe` and `vswhere.exe`, offers auto-install via winget if missing (needed for OpenEXR compilation). Fully unattended — no user interaction required in the VS installer window
+- **Python 3.10–3.13 supported** — installer accepts 3.10–3.13, blocks 3.14+ (PyTorch lacks wheels)
+- **Git auto-install** — offers to install Git via winget, then links the extracted folder to the upstream repo for `git pull` updates
+- **Desktop shortcut** — optional shortcut creation (no console window)
+
+### UI Polish
+- **Toast notifications** — animated overlay messages for transient events (alpha import complete, foreground color change, stop-while-chunking, etc.)
+- **Update checker** — background thread checks for new versions on GitHub at startup
+- **Despeckle spinbox arrows** — custom SVG up/down arrows (`arrow-up.svg`, `arrow-down.svg`) with themed hover/press states for QSpinBox and QDoubleSpinBox controls
+- **QSS spinbox styling** — full restyle of spin box up/down buttons with proper hit areas, hover feedback, and brand-consistent sizing
 
 ### Fixed
-- **GVM → Inference hang** — running inference immediately after GVM auto-alpha generation would hang at "Loading model..." indefinitely. Root cause: `CorridorKeyEngine.__init__` probed VRAM via `torch.cuda.get_device_properties()` during the model-switch window, which stalled after GVM's CUDA teardown. Fix: constructor no longer probes VRAM at startup; `auto` mode uses deterministic low-VRAM profile. `_get_vram_gb()` now prefers pynvml (no CUDA context calls) with torch fallback.
-- **EXR colour conversion accuracy** — replaced `setparams` filter with explicit `scale` filter providing input colour metadata (`in_color_matrix`, `in_primaries`, `in_transfer`, `in_range`) directly to swscale. Fixes washed-out or shifted colours on files with incomplete/missing colour tags (e.g. ProRes `.mov` from cameras).
-- **Colour metadata fallbacks** — resolution-aware heuristics for missing matrix (BT.709/BT.601/BT.2020), primaries, transfer, and range. SD PAL (576p), NTSC (480p), HD, and BT.2020 sources all get correct defaults.
-- **Deleted clips reappear on import** — removing clips from the I/O tray was UI-only; adding a new video triggered `os.listdir()` rescan that rediscovered all folders. Now persists removals to `removed_clips` list in `project.json`, filtered during `scan_project_clips()`. Re-importing a removed clip clears it from the list.
-- **Clip identity mismatch** — `clip.name` was mutable (overwritten by `display_name`), causing removal tracking to fail. Added stable `folder_name` property using `os.path.basename(root_path)`.
+- **GVM → inference hang (root cause)** — `torch.compile` deadlocked on stale Triton/dynamo state from GVM's diffusion pipeline. `torch._dynamo.reset()` in `_ensure_model()` clears the cache before loading the next model. Compile stays enabled in all modes (speed, lowvram, auto) — no performance loss
+- **VRAM probe stall during model switch** — `torch.cuda.get_device_properties()` blocked after GVM teardown; replaced with pynvml (NVML driver API)
+- **Auto mode resolved to speed but kept compile enabled** — explicit `speed` mode disabled compile (TEMP workaround) but `auto` on ≥12GB cards still ran compile without the dynamo reset. Now all paths are safe
+- **FFmpeg bt470bg color space extraction failure** — Photo-JPEG `.mov` files (e.g. Apple cameras) report `color_space: bt470bg` which FFmpeg's scale filter doesn't accept. Built comprehensive mapping tables for matrix (`bt470bg→bt601`), primaries, and transfer (`bt470bg→gamma28`) identifiers. Unknown values now log a WARNING with the exact mapping file/line to update, so future color spaces are caught immediately instead of silently failing
+- **EXR colour conversion accuracy** — replaced `setparams` filter with explicit `scale` filter providing input colour metadata (`in_color_matrix`, `in_primaries`, `in_transfer`, `in_range`) directly to swscale. Fixes washed-out or shifted colours on files with incomplete/missing colour tags (e.g. ProRes `.mov` from cameras)
+- **Colour metadata fallbacks** — resolution-aware heuristics for missing matrix (BT.709/BT.601/BT.2020), primaries, transfer, and range. SD PAL (576p), NTSC (480p), HD, and BT.2020 sources all get correct defaults
+- **Deleted clips reappear on import** — removing clips from the I/O tray was UI-only; adding a new video triggered `os.listdir()` rescan that rediscovered all folders. Now persists removals to `removed_clips` list in `project.json`, filtered during `scan_project_clips()`. Re-importing a removed clip clears it from the list
+- **Clip identity mismatch** — `clip.name` was mutable (overwritten by `display_name`), causing removal tracking to fail. Added stable `folder_name` property using `os.path.basename(root_path)`
 - **Corrupt project.json on removal** — `add_removed_clip()` now guards against missing `project.json` (returns early with warning instead of creating partial file)
-- **Extraction retry fails on ERROR clips** — retrying extraction only removed the `.dwab_done` marker, leaving partial EXR frames that triggered resume logic. Now wipes the entire Frames/ directory on retry for a clean start.
-- **FFmpeg hardware decode fallback** — if NVDEC fails (e.g. unsupported codec in `.mov`), automatically retries with software decode instead of failing permanently.
-- **Re-import of removed clips blocked** — "Already Imported" dialog appeared for clips the user had removed. Duplicate check now skips removed clips; re-importing restores the original clip folder instead of creating duplicates.
+- **Extraction retry fails on ERROR clips** — retrying extraction only removed the `.dwab_done` marker, leaving partial EXR frames that triggered resume logic. Now wipes the entire Frames/ directory on retry for a clean start
+- **FFmpeg hardware decode fallback** — if NVDEC fails (e.g. unsupported codec in `.mov`), automatically retries with software decode instead of failing permanently
+- **Re-import of removed clips blocked** — "Already Imported" dialog appeared for clips the user had removed. Duplicate check now skips removed clips; re-importing restores the original clip folder instead of creating duplicates
+- **Despeckle spinbox arrows invisible** — default Qt arrows had no contrast against dark theme; replaced with explicit SVG icons
+- **Installer winget quoting** — VS Build Tools `--override` flag now works correctly on all Windows versions (temp batch file avoids nested-quote escaping)
 
 ### Added
 - **Extraction diagnostics** — `video_metadata.json` now includes `exr_vf` (exact FFmpeg filter used) and `source_probe` (raw colour metadata from ffprobe) for debugging colour issues
 - **Version in About dialog** — Help > About now shows app version via `importlib.metadata`
 - **`removed_clips` persistence** — new `get_removed_clips()`, `add_removed_clip()`, `clear_removed_clip()` functions in `backend/project.py`
+- **Import Alpha documentation** — README now documents Option C (bring your own alpha mattes) with supported formats
 
 ### Installer & Scripts
 - **`2-start.bat`** — adds local `tools/ffmpeg/bin` to PATH before launch
-- **`3-update.bat`** — adds local `tools/ffmpeg/bin` to PATH after git pull
+- **`3-update.bat`** — adds local `tools/ffmpeg/bin` to PATH after git pull; ZIP fallback for non-git installs
 - **`pyproject.toml`** — `requires-python` updated to `">=3.10,<3.14"`
 - **`.gitignore`** — added `tools/` to prevent ffmpeg binary from being committed
 
-### Documentation
-- **README** — updated Prerequisites (Python 3.10–3.13, NVIDIA GPU 8GB+), installer feature list (VS Build Tools, FFmpeg auto-install, desktop shortcut)
+### Debug Infrastructure
+- **Debug log bible updated** — added GVM→Inference handoff chain, 3 bare `except:` clauses catalogued, 7 silent failures identified, 6 unlogged state initializations documented
+- **Force-flush diagnostics** — `_load_model()` uses `_diag()` that flushes all log handlers immediately, ensuring last message is visible even on hang
 
 ### Tests
 - 10 new tests in `TestRemovedClips` — empty default, missing JSON, add/clear, idempotency, scan filtering, sorted deterministic, re-import clears removed

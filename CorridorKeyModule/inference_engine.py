@@ -110,17 +110,18 @@ class CorridorKeyEngine:
             self._use_compile = True
             logger.info("Optimization: low-VRAM mode (tiled refiner 512x512 + selective torch.compile)")
         else:  # auto
+            logger.info("Optimization: auto mode - probing VRAM...")
             vram_gb = self._get_vram_gb()
             if vram_gb > 0 and vram_gb < self._VRAM_TILE_THRESHOLD_GB:
                 self.tile_size = 512
                 self._use_compile = True
-                logger.info(f"Optimization: auto → low-VRAM mode "
+                logger.info(f"Optimization: auto -> low-VRAM mode "
                             f"({vram_gb:.1f} GB < {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
             else:
                 self.tile_size = 0
                 self._use_compile = True
-                logger.info(f"Optimization: auto → speed mode "
-                            f"({vram_gb:.1f} GB ≥ {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
+                logger.info(f"Optimization: auto -> speed mode "
+                            f"({vram_gb:.1f} GB >= {self._VRAM_TILE_THRESHOLD_GB} GB threshold)")
 
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
@@ -134,21 +135,30 @@ class CorridorKeyEngine:
 
         Prefer NVML (no CUDA context calls) and fall back to torch.cuda.
         """
+        logger.debug("_get_vram_gb: entering")
         try:
             import pynvml
-
+            logger.debug("_get_vram_gb: pynvml imported, calling nvmlInit...")
             pynvml.nvmlInit()
+            logger.debug("_get_vram_gb: nvmlInit done, getting handle...")
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            logger.debug("_get_vram_gb: got handle, querying memory...")
             mem = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            return mem.total / (1024 ** 3)
-        except Exception:
-            pass
+            vram = mem.total / (1024 ** 3)
+            logger.debug(f"_get_vram_gb: pynvml reports {vram:.1f} GB")
+            return vram
+        except Exception as e:
+            logger.debug(f"_get_vram_gb: pynvml failed: {e}")
 
         try:
+            logger.debug("_get_vram_gb: falling back to torch.cuda...")
             if torch.cuda.is_available():
-                return torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+                vram = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+                logger.debug(f"_get_vram_gb: torch.cuda reports {vram:.1f} GB")
+                return vram
         except Exception as e:
-            logger.debug(f"CUDA VRAM probe failed: {e}")
+            logger.debug(f"_get_vram_gb: torch.cuda failed: {e}")
+        logger.debug("_get_vram_gb: all probes failed, returning 0")
         return 0.0
         
     def _status(self, msg: str) -> None:
@@ -159,32 +169,46 @@ class CorridorKeyEngine:
 
     def _load_model(self):
         import time as _time
+        import logging as _logging
 
+        def _diag(msg):
+            """Force-flush diagnostic — visible in log file immediately."""
+            logger.info(msg)
+            for h in _logging.getLogger().handlers:
+                h.flush()
+
+        _diag("_load_model ENTERED")
         logger.info(f"Loading CorridorKey from {self.checkpoint_path}...")
 
         # Step 1: Initialize backbone
+        _diag("Step 1: GreenFormer init...")
         self._status("Initializing model backbone...")
         t0 = _time.monotonic()
         model = GreenFormer(encoder_name='hiera_base_plus_224.mae_in1k_ft_in1k',
                           img_size=self.img_size,
                           use_refiner=self.use_refiner)
+        _diag(f"Step 1 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"GreenFormer init: {_time.monotonic() - t0:.1f}s")
 
         # Step 2: Move to GPU
+        _diag("Step 2: model.to(device)...")
         self._status("Moving model to GPU...")
         t0 = _time.monotonic()
         model = model.to(self.device)
         model.eval()
+        _diag(f"Step 2 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"Model to device: {_time.monotonic() - t0:.1f}s")
 
         # Step 3: Load checkpoint
         if not os.path.isfile(self.checkpoint_path):
             raise FileNotFoundError(f"Checkpoint not found: {self.checkpoint_path}")
 
+        _diag("Step 3: torch.load checkpoint...")
         self._status("Loading checkpoint weights...")
         t0 = _time.monotonic()
         checkpoint = torch.load(self.checkpoint_path, map_location=self.device)
         state_dict = checkpoint.get('state_dict', checkpoint)
+        _diag(f"Step 3 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"Checkpoint loaded: {_time.monotonic() - t0:.1f}s")
 
         # Step 4: Fix Compiled Model Prefix & Handle PosEmbed Mismatch
@@ -212,6 +236,7 @@ class CorridorKeyEngine:
 
             new_state_dict[k] = v
 
+        _diag("Step 4: load_state_dict...")
         self._status("Loading state dict...")
         t0 = _time.monotonic()
         missing, unexpected = model.load_state_dict(new_state_dict, strict=False)
@@ -219,6 +244,7 @@ class CorridorKeyEngine:
             logger.warning(f"Missing keys in checkpoint: {missing}")
         if len(unexpected) > 0:
             logger.warning(f"Unexpected keys in checkpoint: {unexpected}")
+        _diag(f"Step 4 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"State dict loaded: {_time.monotonic() - t0:.1f}s")
 
         # Enable TF32 tensor cores for FP32 matmuls (Ampere+).

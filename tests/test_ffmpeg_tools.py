@@ -106,10 +106,12 @@ class TestBuildExrVf:
             "bits_per_raw_sample": 8,
         })
 
+        # bt470bg is remapped: matrix→bt601, transfer→gamma28
+        # (FFmpeg's scale filter doesn't accept 'bt470bg' as in_color_matrix)
         assert (
             vf ==
-            "scale=in_color_matrix=bt470bg:in_primaries=bt470bg:"
-            "in_transfer=bt470bg:in_range=tv,format=gbrpf32le"
+            "scale=in_color_matrix=bt601:in_primaries=bt470bg:"
+            "in_transfer=gamma28:in_range=tv,format=gbrpf32le"
         )
 
 

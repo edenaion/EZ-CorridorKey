@@ -355,6 +355,17 @@ class CorridorKeyService:
             except ImportError:
                 logger.debug("torch not available for cache clear during model switch")
 
+            # Reset Triton/dynamo compilation cache so torch.compile
+            # doesn't choke on stale CUDA state from the previous model
+            # (e.g. GVM diffusion pipeline leaves Triton state that causes
+            # torch.compile to hang when building a fresh CorridorKeyEngine).
+            try:
+                import torch._dynamo
+                torch._dynamo.reset()
+                logger.info("torch._dynamo.reset() — cleared compilation cache")
+            except Exception as e:
+                logger.debug(f"dynamo reset skipped: {e}")
+
             vram_after_mb = self._vram_allocated_mb()
             freed = vram_before_mb - vram_after_mb
             logger.info(f"VRAM after unload: {vram_after_mb:.0f}MB (freed {freed:.0f}MB)")

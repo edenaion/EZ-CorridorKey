@@ -24,15 +24,15 @@ for /f "tokens=1,2 delims=." %%a in ("!PYVER!") do (
     set PYMINOR=%%b
 )
 if !PYMAJOR! LSS 3 (
-    echo   [ERROR] Python 3.10+ required, found !PYVER!
+    echo   [ERROR] Python 3.10 or 3.11 required, found !PYVER!
     goto :fail
 )
 if !PYMAJOR!==3 if !PYMINOR! LSS 10 (
-    echo   [ERROR] Python 3.10+ required, found !PYVER!
+    echo   [ERROR] Python 3.10 or 3.11 required, found !PYVER!
     goto :fail
 )
 if !PYMAJOR!==3 if !PYMINOR! GEQ 14 (
-    echo   [ERROR] Python 3.14+ is not yet supported (PyTorch lacks wheels^).
+    echo   [ERROR] Python !PYVER! is not yet supported.
     echo   Please install Python 3.10-3.13 from https://python.org
     goto :fail
 )
@@ -69,10 +69,12 @@ if /i "!INSTALL_BT!"=="n" (
 
 REM Launch VS Build Tools install in a SEPARATE window (fully detached)
 REM so it cannot kill our installer window under any circumstances.
-echo   Installing VS Build Tools in a separate window...
-echo   Please wait for it to finish, then press any key here to continue.
+echo   Installing VS Build Tools (this may take 5-10 minutes)...
 echo.
-start "VS Build Tools Install" /wait cmd /c "winget install Microsoft.VisualStudio.2022.BuildTools --override \"--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait\" --accept-source-agreements --accept-package-agreements 2>&1 & pause"
+REM Write winget command to temp file to avoid nested-quote escaping hell
+>"%TEMP%\_install_bt.bat" echo winget install Microsoft.VisualStudio.2022.BuildTools --override "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait" --accept-source-agreements --accept-package-agreements
+start "VS Build Tools Install" /wait cmd /c "%TEMP%\_install_bt.bat"
+del "%TEMP%\_install_bt.bat" >nul 2>&1
 echo.
 REM Verify it actually installed
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -147,9 +149,9 @@ if defined GIT_CMD (
     if not exist ".git" (
         echo   Linking to git repo for future updates...
         "!GIT_CMD!" init >nul 2>&1
-        "!GIT_CMD!" remote add origin https://github.com/nikopueringer/CorridorKey.git >nul 2>&1
+        "!GIT_CMD!" remote add origin https://github.com/edenaion/EZ-CorridorKey.git >nul 2>&1
         "!GIT_CMD!" fetch origin >nul 2>&1
-        "!GIT_CMD!" reset --mixed origin/master >nul 2>&1
+        "!GIT_CMD!" reset --mixed origin/main >nul 2>&1 || "!GIT_CMD!" reset --mixed origin/master >nul 2>&1
         if !errorlevel!==0 (
             echo   [OK] Linked to git — 3-update.bat will use git pull
         ) else (
