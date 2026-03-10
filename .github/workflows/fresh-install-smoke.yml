@@ -43,6 +43,18 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install Ubuntu Qt runtime libraries
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 \
+            libgl1 \
+            libopengl0 \
+            libxkbcommon-x11-0 \
+            libxcb-cursor0
+
       - name: Run Windows installer
         if: runner.os == 'Windows'
         shell: cmd
