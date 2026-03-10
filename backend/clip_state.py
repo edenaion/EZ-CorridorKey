@@ -26,6 +26,7 @@ Transitions:
 """
 from __future__ import annotations
 
+import json
 import os
 import glob as glob_module
 import logging
@@ -37,6 +38,8 @@ from .errors import InvalidStateTransitionError, ClipScanError
 from .project import is_image_file as _is_image_file, is_video_file as _is_video_file
 
 logger = logging.getLogger(__name__)
+
+MASK_TRACK_MANIFEST = ".corridorkey_mask_manifest.json"
 
 
 class ClipState(Enum):
@@ -63,9 +66,22 @@ class PipelineRoute(Enum):
     """Pipeline route for a clip in batch processing."""
     INFERENCE_ONLY = "inference_only"       # READY/COMPLETE → inference
     GVM_PIPELINE = "gvm_pipeline"           # RAW, no annotations → GVM → inference
-    VIDEOMAMA_PIPELINE = "videomama_pipeline"  # RAW with annotations → export masks → VideoMaMa → inference
+    VIDEOMAMA_PIPELINE = "videomama_pipeline"  # Annotations → track dense masks → VideoMaMa → inference
     VIDEOMAMA_INFERENCE = "videomama_inference" # MASKED → VideoMaMa → inference
     SKIP = "skip"                           # EXTRACTING or ERROR — cannot process
+
+
+def mask_sequence_is_videomama_ready(root_path: str) -> bool:
+    """Return True when the mask sequence is known to be dense/track-generated."""
+    manifest_path = os.path.join(root_path, MASK_TRACK_MANIFEST)
+    if not os.path.isfile(manifest_path):
+        return False
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError, TypeError):
+        return False
+    return data.get("source") in {"sam2", "imported"}
 
 
 def classify_pipeline_route(clip: "ClipEntry") -> PipelineRoute:
@@ -74,14 +90,21 @@ def classify_pipeline_route(clip: "ClipEntry") -> PipelineRoute:
     For RAW clips, checks for annotations.json on disk to decide
     between GVM (automatic) and VideoMaMa (annotation-based) paths.
     """
+    ann_path = os.path.join(clip.root_path, "annotations.json")
+    has_annotations = os.path.isfile(ann_path) and os.path.getsize(ann_path) > 2
+    mask_ready = mask_sequence_is_videomama_ready(clip.root_path)
+
+    if clip.state in (ClipState.EXTRACTING, ClipState.ERROR):
+        return PipelineRoute.SKIP
+    if has_annotations and not mask_ready:
+        return PipelineRoute.VIDEOMAMA_PIPELINE
     if clip.state in (ClipState.READY, ClipState.COMPLETE):
         return PipelineRoute.INFERENCE_ONLY
+    if clip.mask_asset is not None and (mask_ready or not has_annotations):
+        return PipelineRoute.VIDEOMAMA_INFERENCE
     if clip.state == ClipState.MASKED:
         return PipelineRoute.VIDEOMAMA_INFERENCE
     if clip.state == ClipState.RAW:
-        ann_path = os.path.join(clip.root_path, "annotations.json")
-        if os.path.isfile(ann_path) and os.path.getsize(ann_path) > 2:
-            return PipelineRoute.VIDEOMAMA_PIPELINE
         return PipelineRoute.GVM_PIPELINE
     return PipelineRoute.SKIP
 

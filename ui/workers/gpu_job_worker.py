@@ -107,6 +107,8 @@ class GPUJobWorker(QThread):
                 self._run_inference(job)
             elif job.job_type == JobType.GVM_ALPHA:
                 self._run_gvm(job)
+            elif job.job_type == JobType.SAM2_TRACK:
+                self._run_sam2_track(job)
             elif job.job_type == JobType.VIDEOMAMA_ALPHA:
                 self._run_videomama(job)
             elif job.job_type == JobType.PREVIEW_REPROCESS:
@@ -205,10 +207,33 @@ class GPUJobWorker(QThread):
             on_warning=on_warning,
         )
 
+    def _run_sam2_track(self, job: GPUJob) -> None:
+        """Run SAM2 prompt-to-mask tracking."""
+        clip = job.params.get("_clip_snapshot")
+        if clip is None:
+            raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
+
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
+            self.progress.emit(job.id, clip_name, current, total)
+
+        def on_warning(message: str) -> None:
+            self.warning.emit(job.id, message)
+
+        def on_status(message: str) -> None:
+            self.status_update.emit(job.id, message)
+
+        self._service.run_sam2_track(
+            clip=clip,
+            job=job,
+            on_progress=on_progress,
+            on_warning=on_warning,
+            on_status=on_status,
+        )
+
     def _run_videomama(self, job: GPUJob) -> None:
         """Run VideoMaMa guided alpha generation."""
         clip = job.params.get("_clip_snapshot")
-        chunk_size = job.params.get("_chunk_size", 50)
+        chunk_size = job.params.get("_chunk_size", 16)
 
         if clip is None:
             raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
@@ -287,7 +312,7 @@ def create_job_snapshot(
     params: InferenceParams | None = None,
     job_type: JobType = JobType.INFERENCE,
     resume: bool = False,
-    chunk_size: int = 50,
+    chunk_size: int = 16,
 ) -> GPUJob:
     """Create a frozen job snapshot for the queue.
 

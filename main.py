@@ -18,6 +18,37 @@ import sys
 from datetime import datetime
 
 
+class _NullTextStream:
+    """Minimal text stream used when GUI launches without a console."""
+
+    encoding = "utf-8"
+    errors = "replace"
+
+    def write(self, data) -> int:
+        if data is None:
+            return 0
+        if isinstance(data, bytes):
+            return len(data)
+        return len(str(data))
+
+    def flush(self) -> None:
+        pass
+
+    def isatty(self) -> bool:
+        return False
+
+    def writable(self) -> bool:
+        return True
+
+
+def ensure_standard_streams() -> None:
+    """Provide harmless stdout/stderr sinks for pythonw/PyInstaller GUI launches."""
+    if sys.stdout is None:
+        sys.stdout = _NullTextStream()
+    if sys.stderr is None:
+        sys.stderr = _NullTextStream()
+
+
 def get_base_dir() -> str:
     """Get the project base directory, handling both dev and frozen (PyInstaller) modes.
 
@@ -83,6 +114,10 @@ def setup_logging(level: str = "INFO") -> None:
 
 def run_gui() -> int:
     """Launch the PySide6 desktop application."""
+    ensure_standard_streams()
+    # The GUI has its own progress UI; external library progress bars just create
+    # stderr/console issues in pythonw and frozen launches.
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     from ui.app import create_app
     from ui.main_window import MainWindow
     from ui.recent_sessions import RecentSessionsStore
@@ -127,6 +162,7 @@ def run_cli() -> int:
 
 
 def main() -> int:
+    ensure_standard_streams()
     parser = argparse.ArgumentParser(
         description="CorridorKey — AI Green Screen Keyer",
         formatter_class=argparse.RawDescriptionHelpFormatter,

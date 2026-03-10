@@ -2,7 +2,8 @@
 
 from .clip_state import (
     ClipAsset, ClipEntry, ClipState, InOutRange, PipelineRoute,
-    classify_pipeline_route, scan_clips_dir, scan_project_clips,
+    classify_pipeline_route, mask_sequence_is_videomama_ready,
+    scan_clips_dir, scan_project_clips,
 )
 from .errors import CorridorKeyError
 from .job_queue import GPUJob, GPUJobQueue, JobType, JobStatus
@@ -33,6 +34,7 @@ __all__ = [
     "InOutRange",
     "PipelineRoute",
     "classify_pipeline_route",
+    "mask_sequence_is_videomama_ready",
     "scan_clips_dir",
     "scan_project_clips",
     # Job queue

@@ -86,6 +86,9 @@ class CorridorKeyEngine:
         self.use_refiner = use_refiner
         self.tile_overlap = tile_overlap
         self._on_status = on_status
+        self._eager_model = None
+        self._compiled_model = None
+        self._compile_error = None
 
         # Allow env var override: CORRIDORKEY_OPT_MODE=speed|lowvram|auto
         env_mode = os.environ.get('CORRIDORKEY_OPT_MODE', '').lower()
@@ -166,6 +169,80 @@ class CorridorKeyEngine:
         logger.info(msg)
         if self._on_status:
             self._on_status(msg)
+
+    @staticmethod
+    def _iter_exception_chain(exc: Exception):
+        """Yield an exception plus its cause/context chain without looping."""
+        seen = set()
+        current = exc
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            yield current
+            current = current.__cause__ or current.__context__
+
+    def _has_compiled_artifacts(self) -> bool:
+        """Return True if this engine may still touch compiled Torch/Triton code."""
+        refiner = getattr(self._eager_model, 'refiner', None)
+        tile_kernel = getattr(refiner, '_compiled_process_tile', None) if refiner is not None else None
+        return self._compiled_model is not None or tile_kernel is not None
+
+    def _is_compile_failure(self, exc: Exception) -> bool:
+        """Best-effort filter for torch.compile/Triton/Inductor runtime failures."""
+        markers = (
+            'triton',
+            'torchinductor',
+            'torch._inductor',
+            'torch._dynamo',
+            'backendcompilerfailed',
+            'loweringexception',
+            'asynccompile',
+            'compileworker',
+            'inductor',
+        )
+        for err in self._iter_exception_chain(exc):
+            text = f"{type(err).__module__} {type(err).__name__} {err}".lower()
+            if any(marker in text for marker in markers):
+                return True
+        return False
+
+    def _disable_compile(self, exc: Exception) -> None:
+        """Permanently fall back to eager mode for this engine instance."""
+        self._compile_error = f"{type(exc).__name__}: {exc}"
+        self._use_compile = False
+        self._compiled_model = None
+
+        if self._eager_model is not None:
+            refiner = getattr(self._eager_model, 'refiner', None)
+            if refiner is not None and getattr(refiner, '_compiled_process_tile', None) is not None:
+                refiner._compiled_process_tile = None
+            self.model = self._eager_model
+
+        try:
+            import torch._dynamo as _dynamo
+            _dynamo.reset()
+        except Exception as reset_error:
+            logger.debug(f"dynamo reset skipped after compile failure: {reset_error}")
+
+        try:
+            if self.device.type == 'cuda' and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception as cache_error:
+            logger.debug(f"cuda cache clear skipped after compile failure: {cache_error}")
+
+        logger.warning(
+            "Compile runtime failed (%s); falling back to eager mode for this session",
+            self._compile_error,
+        )
+
+    def _forward_model(self, inp_t: torch.Tensor, refiner_scale_t: torch.Tensor):
+        """Run the model once, retrying eagerly only for compile-specific failures."""
+        try:
+            return self.model(inp_t, refiner_scale=refiner_scale_t)
+        except Exception as e:
+            if not self._has_compiled_artifacts() or not self._is_compile_failure(e):
+                raise
+            self._disable_compile(e)
+            return self.model(inp_t, refiner_scale=refiner_scale_t)
 
     def _load_model(self):
         import time as _time
@@ -271,6 +348,10 @@ class CorridorKeyEngine:
             model.refiner._tile_overlap = self.tile_overlap
             logger.info(f"Tiled refiner: {self.tile_size}x{self.tile_size} tiles, {self.tile_overlap}px overlap")
 
+        eager_model = model
+        self._eager_model = eager_model
+        self._compiled_model = None
+
         # Step 6: torch.compile (Triton JIT — slow on first run)
         if self._use_compile:
             self._status("Compiling model (first run may take a minute)...")
@@ -287,10 +368,16 @@ class CorridorKeyEngine:
                 subprocess.Popen.__init__ = _silent_popen_init
                 subprocess.Popen._corridorkey_no_window = True
 
-            if self.tile_size > 0 and hasattr(model, 'refiner') and model.refiner is not None:
+            try:
+                import triton  # noqa: F401
+            except Exception as e:
+                self._use_compile = False
+                logger.warning(f"Triton unavailable, skipping torch.compile: {type(e).__name__}: {e}")
+
+            if self._use_compile and self.tile_size > 0 and hasattr(eager_model, 'refiner') and eager_model.refiner is not None:
                 try:
                     t0 = _time.monotonic()
-                    model.refiner.compile_tile_kernel()
+                    eager_model.refiner.compile_tile_kernel()
                     logger.info(f"Refiner tile compile: {_time.monotonic() - t0:.1f}s")
                 except Exception as e:
                     logger.warning(
@@ -298,12 +385,15 @@ class CorridorKeyEngine:
                         f"{type(e).__name__}: {e}"
                     )
 
-            try:
-                t0 = _time.monotonic()
-                model = torch.compile(model, fullgraph=False)
-                logger.info(f"torch.compile complete: {_time.monotonic() - t0:.1f}s")
-            except Exception as e:
-                logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
+            if self._use_compile:
+                try:
+                    t0 = _time.monotonic()
+                    self._compiled_model = torch.compile(eager_model, fullgraph=False)
+                    model = self._compiled_model
+                    logger.info(f"torch.compile complete: {_time.monotonic() - t0:.1f}s")
+                except Exception as e:
+                    self._compiled_model = None
+                    logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
 
         self._status("Model ready")
         return model
@@ -371,7 +461,7 @@ class CorridorKeyEngine:
         # 5. Inference
         refiner_scale_t = inp_t.new_tensor(refiner_scale)
         with torch.autocast(device_type=self.device.type, dtype=torch.float16):
-            out = self.model(inp_t, refiner_scale=refiner_scale_t)
+            out = self._forward_model(inp_t, refiner_scale_t)
             
         pred_alpha = out['alpha']
         pred_fg = out['fg'] # Output is sRGB (Sigmoid)

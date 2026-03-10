@@ -1,34 +1,40 @@
 @echo off
-REM Corridor Key Launcher - Local
+TITLE CorridorKey - CLI Wizard
+cd /d "%~dp0"
 
-REM Set local python and script paths.
-REM Assumes 'python' is in PATH and 'clip_manager.py' is in the same directory as this batch file.
-set "SCRIPT_DIR=%~dp0"
-set "LOCAL_PYTHON=python"
-set "LOCAL_SCRIPT=%SCRIPT_DIR%clip_manager.py"
-
-REM SAFETY CHECK: Ensure a folder was dragged onto the script
+REM SAFETY CHECK: Ensure a folder or file was dragged onto the script
 if "%~1"=="" (
-    echo [ERROR] No target folder provided.
+    echo [ERROR] No target provided.
     echo.
-    echo USAGE: 
-    echo Please DRAG AND DROP a folder onto this script to process it.
+    echo USAGE:
+    echo Please DRAG AND DROP a folder or video file onto this script.
     echo Do not double-click this script directly.
     echo.
     pause
     exit /b
 )
 
-REM Folder dragged? Use it as the target path.
+REM Check for venv
+if not exist ".venv\Scripts\activate.bat" (
+    echo [ERROR] .venv not found. Run 1-install.bat first!
+    pause
+    exit /b 1
+)
+
+REM Activate venv
+call .venv\Scripts\activate.bat
+
+REM Add local ffmpeg to PATH if present
+if exist "%~dp0tools\ffmpeg\bin\ffmpeg.exe" set "PATH=%~dp0tools\ffmpeg\bin;%PATH%"
+
 set "WIN_PATH=%~1"
 
 REM Strip trailing slash if present
 if "%WIN_PATH:~-1%"=="\" set "WIN_PATH=%WIN_PATH:~0,-1%"
 
-echo Starting Corridor Key locally...
+echo Starting Corridor Key CLI Wizard...
 echo Target: "%WIN_PATH%"
 
-REM Run the python script with the windows path
-%LOCAL_PYTHON% "%LOCAL_SCRIPT%" --action wizard --win_path "%WIN_PATH%"
+python "%~dp0clip_manager.py" --action wizard --win_path "%WIN_PATH%"
 
 pause

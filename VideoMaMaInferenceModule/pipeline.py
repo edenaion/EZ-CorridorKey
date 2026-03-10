@@ -859,6 +859,7 @@ class VideoInferencePipeline:
         _logger.info("Initializing Inference Pipeline and Loading Models")
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.weight_dtype = weight_dtype
+        self.model_dtype = torch.float32 if self.device.type == "cpu" else weight_dtype
 
         # Load models from pretrained paths
         try:
@@ -871,11 +872,9 @@ class VideoInferencePipeline:
         except Exception as e:
             raise IOError(f"Fatal error loading models: {e}")
 
-        # Move models to the specified device and set to evaluation mode
-        # CLIP must run in FP32 to avoid CUBLAS errors
-        self.image_encoder.to(self.device, dtype=torch.float32).eval()
-        # VAE must also run in FP32 to avoid CUBLAS errors
-        self.vae.to(self.device, dtype=torch.float32).eval()
+        # Use the configured inference dtype on CUDA; CPU falls back to FP32.
+        self.image_encoder.to(self.device, dtype=self.model_dtype).eval()
+        self.vae.to(self.device, dtype=self.model_dtype).eval()
         self.unet.to(self.device, dtype=self.weight_dtype).eval()
 
         _logger.info(f"Models Loaded Successfully on {self.device}")
@@ -919,8 +918,9 @@ class VideoInferencePipeline:
             pixel_values_for_clip = self._resize_with_antialiasing(first_frame_tensor, (224, 224))
             pixel_values_for_clip = ((pixel_values_for_clip + 1.0) / 2.0).clamp(0, 1)
             pixel_values = self.feature_extractor(images=pixel_values_for_clip, do_rescale=False, return_tensors="pt").pixel_values
-            # Run CLIP in FP32
-            image_embeddings = self.image_encoder(pixel_values.to(self.device, dtype=torch.float32)).image_embeds
+            image_embeddings = self.image_encoder(
+                pixel_values.to(self.device, dtype=self.model_dtype)
+            ).image_embeds
             
             _logger.debug(f"CLIP Embeds Max: {image_embeddings.max().item():.4f}, Mean: {image_embeddings.mean().item():.4f}")
 
@@ -931,9 +931,8 @@ class VideoInferencePipeline:
             # --- 3. Prepare Latents ---
             if on_status:
                 on_status("VAE encode")
-            # VAE encoding must happen in FP32
-            cond_video_tensor_fp32 = cond_video_tensor.to(dtype=torch.float32)
-            cond_latents = self._tensor_to_vae_latent(cond_video_tensor_fp32)
+            cond_video_tensor_model = cond_video_tensor.to(dtype=self.model_dtype)
+            cond_latents = self._tensor_to_vae_latent(cond_video_tensor_model)
             
             _logger.debug(f"Cond Latents Max: {cond_latents.max().item():.4f}, Mean: {cond_latents.mean().item():.4f}")
 
@@ -942,8 +941,8 @@ class VideoInferencePipeline:
             cond_latents = cond_latents / self.vae.config.scaling_factor
 
             if mask_cond_mode == "vae":
-                mask_video_tensor_fp32 = mask_video_tensor.to(dtype=torch.float32)
-                mask_latents = self._tensor_to_vae_latent(mask_video_tensor_fp32)
+                mask_video_tensor_model = mask_video_tensor.to(dtype=self.model_dtype)
+                mask_latents = self._tensor_to_vae_latent(mask_video_tensor_model)
                 _logger.debug(f"Mask Latents Max: {mask_latents.max().item():.4f}, Mean: {mask_latents.mean().item():.4f}")
                 mask_latents = mask_latents.to(dtype=self.weight_dtype)
                 mask_latents = mask_latents / self.vae.config.scaling_factor
@@ -972,27 +971,58 @@ class VideoInferencePipeline:
             _logger.debug(f"Pred Latents Max: {pred_latents.max().item():.4f}, Mean: {pred_latents.mean().item():.4f}")
 
             # --- 5. Decode Latents to Video Frames ---
-            pred_latents = (1 / self.vae.config.scaling_factor) * pred_latents.squeeze(0)
+            pred_latents = ((1 / self.vae.config.scaling_factor) * pred_latents.squeeze(0)).to(
+                dtype=self.model_dtype
+            )
+
+            # The decode stage is the VRAM hotspot. Drop no-longer-needed tensors
+            # before entering chunked VAE decode.
+            del cond_video_tensor
+            del mask_video_tensor
+            del cond_latents
+            del mask_latents
+            del noisy_latents
+            del unet_input
+            del encoder_hidden_states
+            del image_embeddings
+            del pixel_values
+            del pixel_values_for_clip
+            if "cond_video_tensor_model" in locals():
+                del cond_video_tensor_model
+            if "mask_video_tensor_model" in locals():
+                del mask_video_tensor_model
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             frames = []
             # Process in chunks to avoid VRAM issues, especially for long videos
-            # Decode in FP32
-            pred_latents_fp32 = pred_latents.to(dtype=torch.float32)
             import time as _time
-            n_decode_chunks = (pred_latents_fp32.shape[0] + 7) // 8
-            _logger.info(f"VAE decode: {pred_latents_fp32.shape[0]} frames in {n_decode_chunks} sub-chunks of 8, "
-                         f"VRAM {torch.cuda.memory_allocated() / 1e9:.1f}/{torch.cuda.max_memory_allocated() / 1e9:.1f} GB")
-            for i in range(0, pred_latents_fp32.shape[0], 8):
+            n_decode_chunks = (pred_latents.shape[0] + 7) // 8
+            def _cuda_gb() -> tuple[float, float]:
+                if not torch.cuda.is_available():
+                    return 0.0, 0.0
+                return (
+                    torch.cuda.memory_allocated() / 1e9,
+                    torch.cuda.max_memory_allocated() / 1e9,
+                )
+            cur_gb, peak_gb = _cuda_gb()
+            _logger.info(f"VAE decode: {pred_latents.shape[0]} frames in {n_decode_chunks} sub-chunks of 8, "
+                         f"VRAM {cur_gb:.1f}/{peak_gb:.1f} GB")
+            for i in range(0, pred_latents.shape[0], 8):
                 _t0 = _time.monotonic()
                 _sc = i // 8 + 1
-                chunk = pred_latents_fp32[i: i + 8]
+                chunk = pred_latents[i: i + 8]
                 _logger.info(f"VAE decode sub-chunk {_sc}/{n_decode_chunks} ({chunk.shape[0]} frames)...")
                 if on_status:
                     on_status(f"VAE decode {_sc}/{n_decode_chunks}")
-                decoded_chunk = self.vae.decode(chunk, num_frames=chunk.shape[0]).sample
+                decoded_chunk = self.vae.decode(chunk, num_frames=chunk.shape[0]).sample.cpu()
+                cur_gb, _ = _cuda_gb()
                 _logger.info(f"VAE decode sub-chunk {_sc}/{n_decode_chunks} done in {_time.monotonic() - _t0:.1f}s, "
-                             f"VRAM {torch.cuda.memory_allocated() / 1e9:.1f} GB")
+                             f"VRAM {cur_gb:.1f} GB")
                 frames.append(decoded_chunk)
+                del chunk
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
             video_tensor = torch.cat(frames, dim=0)
             _logger.debug(f"Video Tensor (Pre-Clamp) Max: {video_tensor.max().item():.4f}, Mean: {video_tensor.mean().item():.4f}")

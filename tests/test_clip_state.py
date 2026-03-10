@@ -9,6 +9,8 @@ from backend.clip_state import (
     ClipAsset,
     ClipEntry,
     ClipState,
+    PipelineRoute,
+    classify_pipeline_route,
     scan_clips_dir,
     scan_project_clips,
 )
@@ -103,6 +105,46 @@ class TestClipStateTransitions:
         clip.set_error("some error")
         clip.transition_to(ClipState.READY)  # ERROR → READY
         assert clip.error_message is None
+
+
+class TestPipelineRouteClassification:
+    def test_annotations_without_manifest_require_tracking(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "Input")
+            mask_dir = os.path.join(tmpdir, "VideoMamaMaskHint")
+            os.makedirs(input_dir)
+            os.makedirs(mask_dir)
+            with open(os.path.join(input_dir, "frame_00000.png"), "w") as handle:
+                handle.write("dummy")
+            with open(os.path.join(mask_dir, "frame_00000.png"), "w") as handle:
+                handle.write("dummy")
+            with open(os.path.join(tmpdir, "annotations.json"), "w") as handle:
+                json.dump({"0": [{"points": [[1, 1]], "brush_type": "fg", "radius": 10.0}]}, handle)
+
+            clip = ClipEntry(name="shot1", root_path=tmpdir)
+            clip.find_assets()
+
+            assert classify_pipeline_route(clip) == PipelineRoute.VIDEOMAMA_PIPELINE
+
+    def test_manifested_masks_can_run_videomama(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "Input")
+            mask_dir = os.path.join(tmpdir, "VideoMamaMaskHint")
+            os.makedirs(input_dir)
+            os.makedirs(mask_dir)
+            with open(os.path.join(input_dir, "frame_00000.png"), "w") as handle:
+                handle.write("dummy")
+            with open(os.path.join(mask_dir, "frame_00000.png"), "w") as handle:
+                handle.write("dummy")
+            with open(os.path.join(tmpdir, "annotations.json"), "w") as handle:
+                json.dump({"0": [{"points": [[1, 1]], "brush_type": "fg", "radius": 10.0}]}, handle)
+            with open(os.path.join(tmpdir, ".corridorkey_mask_manifest.json"), "w") as handle:
+                json.dump({"source": "sam2", "frame_stems": ["frame_00000"]}, handle)
+
+            clip = ClipEntry(name="shot1", root_path=tmpdir)
+            clip.find_assets()
+
+            assert classify_pipeline_route(clip) == PipelineRoute.VIDEOMAMA_INFERENCE
 
 
 # --- ClipEntry asset scanning ---

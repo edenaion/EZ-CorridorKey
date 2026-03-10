@@ -35,7 +35,7 @@ from PySide6.QtGui import QKeySequence, QAction, QImage, QPainter
 from backend import (
     CorridorKeyService, ClipEntry, ClipState, InferenceParams,
     InOutRange, OutputConfig, JobType,
-    PipelineRoute, classify_pipeline_route,
+    PipelineRoute, classify_pipeline_route, mask_sequence_is_videomama_ready,
 )
 from backend.project import VIDEO_FILE_FILTER
 
@@ -50,7 +50,8 @@ from ui.widgets.preferences_dialog import (
     PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
     KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE,
     KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES,
-    get_setting_bool,
+    KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
+    get_setting_bool, get_setting_str,
 )
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
@@ -200,8 +201,8 @@ class MainWindow(QMainWindow):
         self._force_stop_armed = False
         self._skip_shutdown_cleanup = False
         self._bg_cache: QImage | None = None
-        # Batch pipeline: clip names queued for GVM→inference auto-chain
-        self._batch_clips: set[str] = set()
+        # Batch pipeline: clip_name -> remaining queued steps after the current one.
+        self._pipeline_steps: dict[str, list[JobType]] = {}
         # Debug console — created eagerly so log handler captures from startup
         from ui.widgets.debug_console import DebugConsoleWidget
         self._debug_console = DebugConsoleWidget()
@@ -250,6 +251,9 @@ class MainWindow(QMainWindow):
         device = self._service.detect_device()
         logger.info(f"Compute device: {device}")
 
+        # Run startup diagnostics (deferred so the window is visible first)
+        QTimer.singleShot(500, lambda: self._run_startup_diagnostics(device))
+
         # Always start on welcome screen — user picks a project from recents or imports
         # Deferred sync of IO tray divider with viewer splitter
         QTimer.singleShot(0, self._sync_io_divider)
@@ -257,6 +261,7 @@ class MainWindow(QMainWindow):
         # Apply persisted preferences (e.g. tooltip visibility, sound mute)
         self._apply_tooltip_setting()
         self._apply_sound_setting()
+        self._apply_tracker_model_setting()
 
         # Check for updates (non-blocking background thread)
         self._check_for_updates()
@@ -287,7 +292,7 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Preferences...", self._show_preferences)
         edit_menu.addAction("Hotkeys...", self._show_hotkeys)
         edit_menu.addSeparator()
-        edit_menu.addAction("Export Annotation Masks", self._on_export_masks)
+        edit_menu.addAction("Track Annotation Masks", self._on_track_masks)
         edit_menu.addAction("Clear Annotations", self._on_clear_annotations)
 
         # View menu
@@ -569,7 +574,7 @@ class MainWindow(QMainWindow):
                         and queue.current_job.job_type == JobType.VIDEOMAMA_ALPHA)
         self._cancel_requested_job_id = current_job.id if current_job is not None else None
         queue.cancel_all()
-        self._batch_clips.clear()
+        self._pipeline_steps.clear()
         self._status_bar.stop_job_timer()
         if current_job is not None:
             self._force_stop_armed = True
@@ -667,6 +672,24 @@ class MainWindow(QMainWindow):
         if self._current_clip is not None:
             iv = self._dual_viewer.input_viewer
             iv.annotation_model.save(self._current_clip.root_path)
+            manifest_path = os.path.join(
+                self._current_clip.root_path,
+                ".corridorkey_mask_manifest.json",
+            )
+            if os.path.isfile(manifest_path):
+                os.remove(manifest_path)
+            self._param_panel.set_videomama_enabled(
+                self._clip_has_videomama_ready_mask(self._current_clip)
+            )
+
+    def _clip_has_videomama_ready_mask(self, clip: ClipEntry | None) -> bool:
+        """True when the clip has a dense mask track VideoMaMa can consume."""
+        if clip is None or clip.mask_asset is None:
+            return False
+        if mask_sequence_is_videomama_ready(clip.root_path):
+            return True
+        ann_path = os.path.join(clip.root_path, "annotations.json")
+        return not (os.path.isfile(ann_path) and os.path.getsize(ann_path) > 2)
 
     def _undo_annotation(self) -> None:
         """Ctrl+Z: undo last annotation stroke on current frame."""
@@ -676,11 +699,12 @@ class MainWindow(QMainWindow):
                 iv._split_view.update()
                 self._auto_save_annotations()
 
-    def _on_export_masks(self) -> None:
-        """Export annotation strokes as VideoMamaMaskHint PNGs and refresh clip."""
+    def _on_track_masks(self) -> None:
+        """Run SAM2 to convert sparse annotations into dense VideoMaMa masks."""
         clip = self._current_clip
         if clip is None:
             return
+        self._auto_save_annotations()
         iv = self._dual_viewer.input_viewer
         model = iv.annotation_model
         if not model.has_annotations():
@@ -690,92 +714,30 @@ class MainWindow(QMainWindow):
             )
             return
 
-        fi = iv._frame_index
-        if fi is None:
-            return
-
-        # Get input dimensions from the first frame
-        from backend.frame_io import read_image_frame
-        if not fi.availability:
-            return
-        sample_path = fi.get_path(
-            next(iter(fi.availability.keys())), 0
-        )
-        if sample_path is None:
-            return
-        sample = read_image_frame(sample_path)
-        if sample is None:
-            return
-        h, w = sample.shape[:2]
-
-        # Export masks — respect in/out range if set
-        start_idx = 0
-        stems = fi.stems
-        if clip.in_out_range:
-            lo = clip.in_out_range.in_point
-            hi = clip.in_out_range.out_point
-            stems = fi.stems[lo:hi + 1]
-            start_idx = lo
-        mask_dir = model.export_masks(clip.root_path, stems, w, h,
-                                      start_index=start_idx)
-        logger.info(f"Exported {len(stems)} annotation masks to {mask_dir}")
-
         # If AlphaHint already exists, it must be removed so the clip drops
-        # to MASKED state (otherwise READY takes priority and VideoMaMa
-        # button stays disabled). Ask the user first since this is destructive.
+        # to MASKED state before a new tracked mask sequence is generated.
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
             reply = QMessageBox.question(
                 self, "Replace Existing Alpha?",
                 "This clip already has an AlphaHint (from GVM or a previous run).\n\n"
-                "To use your annotations with VideoMaMa, the existing AlphaHint "
-                "must be removed so it can be regenerated.\n\n"
+                "Tracking a new mask sequence will replace that alpha hint.\n\n"
                 "Remove existing AlphaHint and proceed?",
             )
             if reply != QMessageBox.Yes:
                 return
-            shutil.rmtree(alpha_dir)
-            logger.info(f"Removed existing AlphaHint/ to allow re-generation")
+            shutil.rmtree(alpha_dir, ignore_errors=True)
+            clip.alpha_asset = None
+            clip.find_assets()
+            self._refresh_button_state()
+            logger.info("Removed existing AlphaHint/ before SAM2 tracking")
 
-        # Reset stale asset references before re-scan (find_assets only sets
-        # assets if directories exist — doesn't clear removed ones)
-        clip.alpha_asset = None
-        clip.mask_asset = None
+        job = create_job_snapshot(clip, job_type=JobType.SAM2_TRACK)
+        if not self._service.job_queue.submit(job):
+            return
 
-        # Re-scan clip assets to detect the new VideoMamaMaskHint directory
-        clip.find_assets()
-
-        logger.info(f"After re-scan: state={clip.state.value}, "
-                     f"mask_asset={clip.mask_asset is not None}, "
-                     f"alpha_asset={clip.alpha_asset is not None}")
-
-        # Update button states — VideoMaMa should now be enabled
-        self._param_panel.set_videomama_enabled(
-            clip.state == ClipState.MASKED
-            or clip.mask_asset is not None
-        )
-        self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
-        self._param_panel.set_import_alpha_enabled(
-            clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
-        )
-
-        # Also refresh the run button and status bar state
-        can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
-        self._status_bar.update_button_state(
-            can_run=can_run,
-            has_partial=clip.completed_frame_count() > 0,
-            has_in_out=clip.in_out_range is not None,
-        )
-
-        # Update annotation info on param panel + scrubber markers
-        self._update_annotation_info()
-
-        QMessageBox.information(
-            self, "Masks Exported",
-            f"Exported {fi.frame_count} mask frames "
-            f"({model.annotated_frame_count()} annotated).\n"
-            f"Click VIDEOMAMA to generate the alpha hint.",
-        )
+        clip.set_processing(True)
+        self._start_worker_if_needed(job.id, job_label="Track Mask")
 
     def _confirm_clear_annotations(self) -> None:
         """Ctrl+C: choose to clear annotations on this frame, entire clip, or cancel."""
@@ -809,7 +771,7 @@ class MainWindow(QMainWindow):
             self._on_clear_annotations()
 
     def _on_clear_annotations(self) -> None:
-        """Clear all annotations on the current clip and remove exported masks."""
+        """Clear all annotations on the current clip and remove tracked masks."""
         iv = self._dual_viewer.input_viewer
         iv.clear_annotations()
         self._update_annotation_info()
@@ -821,11 +783,13 @@ class MainWindow(QMainWindow):
             if os.path.isdir(mask_dir):
                 shutil.rmtree(mask_dir, ignore_errors=True)
                 logger.info(f"Removed mask hints: {mask_dir}")
+            manifest_path = os.path.join(clip.root_path, ".corridorkey_mask_manifest.json")
+            if os.path.isfile(manifest_path):
+                os.remove(manifest_path)
             clip.mask_asset = None
             clip.find_assets()
             self._param_panel.set_videomama_enabled(
-                clip.state == ClipState.MASKED
-                or clip.mask_asset is not None
+                self._clip_has_videomama_ready_mask(clip)
             )
 
     def _update_annotation_info(self) -> None:
@@ -879,10 +843,10 @@ class MainWindow(QMainWindow):
         # Queue panel cancel signals
         self._queue_panel.cancel_job_requested.connect(self._on_cancel_job)
 
-        # Parameter panel — wire GVM/VideoMaMa buttons + annotation export
+        # Parameter panel — wire GVM / Track Mask / VideoMaMa
         self._param_panel.gvm_requested.connect(self._on_run_gvm)
         self._param_panel.videomama_requested.connect(self._on_run_videomama)
-        self._param_panel.export_masks_requested.connect(self._on_export_masks)
+        self._param_panel.track_masks_requested.connect(self._on_track_masks)
         self._param_panel.import_alpha_requested.connect(self._on_import_alpha)
 
         # Annotation stroke finished → update annotation counter + auto-save
@@ -1003,9 +967,8 @@ class MainWindow(QMainWindow):
 
         # Enable GVM/VideoMaMa/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
-        # VideoMaMa: enable if MASKED, or if mask_asset exists (even if READY/COMPLETE)
         self._param_panel.set_videomama_enabled(
-            clip.state == ClipState.MASKED or clip.mask_asset is not None
+            self._clip_has_videomama_ready_mask(clip)
         )
         self._param_panel.set_import_alpha_enabled(
             clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
@@ -1878,13 +1841,14 @@ class MainWindow(QMainWindow):
         Routes per clip (see PipelineRoute):
         - INFERENCE_ONLY: queue inference directly
         - GVM_PIPELINE: queue GVM, auto-chain inference on completion
-        - VIDEOMAMA_PIPELINE: export masks (CPU), queue VideoMaMa, auto-chain inference
+        - VIDEOMAMA_PIPELINE: track dense masks, queue VideoMaMa, auto-chain inference
         - VIDEOMAMA_INFERENCE: queue VideoMaMa, auto-chain inference
         - SKIP: skip clips in EXTRACTING/ERROR state
         """
         selected = self._io_tray.get_selected_clips()
         if not selected:
             return
+        self._auto_save_annotations()
 
         params = self._param_panel.get_params()
         output_config = self._param_panel.get_output_config()
@@ -1904,77 +1868,44 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Phase 0 (CPU): export masks for annotated RAW clips
-        from backend.service import export_masks_headless
-        for clip in selected:
-            if routes.get(clip.name) != PipelineRoute.VIDEOMAMA_PIPELINE:
-                continue
-            mask_dir = export_masks_headless(clip)
-            if mask_dir:
-                # Remove existing AlphaHint so clip drops to MASKED
-                alpha_dir = os.path.join(clip.root_path, "AlphaHint")
-                if os.path.isdir(alpha_dir):
-                    shutil.rmtree(alpha_dir)
-                clip.alpha_asset = None
-                clip.mask_asset = None
-                clip.find_assets()
-                if clip.state != ClipState.MASKED:
-                    clip.state = ClipState.MASKED
-                    self._clip_model.update_clip_state(clip.name, ClipState.MASKED)
-                logger.info(f"Pipeline: exported masks for '{clip.name}'")
-            else:
-                logger.warning(f"Pipeline: mask export failed for '{clip.name}', falling back to GVM")
-                routes[clip.name] = PipelineRoute.GVM_PIPELINE
-
-        # Track alpha-needing clips for auto-chain (alpha → inference)
-        self._batch_clips = {
-            name for name, route in routes.items()
-            if route in (PipelineRoute.GVM_PIPELINE,
-                         PipelineRoute.VIDEOMAMA_PIPELINE,
-                         PipelineRoute.VIDEOMAMA_INFERENCE)
-        }
+        self._pipeline_steps.clear()
 
         queued = 0
         first_job_id = None
 
-        # Phase 1: queue GVM jobs
-        for clip in selected:
-            if routes.get(clip.name) != PipelineRoute.GVM_PIPELINE:
-                continue
-            job = create_job_snapshot(clip, job_type=JobType.GVM_ALPHA)
-            if self._service.job_queue.submit(job):
-                clip.set_processing(True)
-                if first_job_id is None:
-                    first_job_id = job.id
-                queued += 1
-
-        # Phase 2: queue VideoMaMa jobs
         for clip in selected:
             route = routes.get(clip.name)
-            if route not in (PipelineRoute.VIDEOMAMA_PIPELINE,
-                             PipelineRoute.VIDEOMAMA_INFERENCE):
+            if route is None:
                 continue
-            job = create_job_snapshot(clip, job_type=JobType.VIDEOMAMA_ALPHA)
+            job = None
+            next_steps: list[JobType] = []
+
+            if route == PipelineRoute.GVM_PIPELINE:
+                job = create_job_snapshot(clip, job_type=JobType.GVM_ALPHA)
+                next_steps = [JobType.INFERENCE]
+            elif route == PipelineRoute.VIDEOMAMA_PIPELINE:
+                job = create_job_snapshot(clip, job_type=JobType.SAM2_TRACK)
+                next_steps = [JobType.VIDEOMAMA_ALPHA, JobType.INFERENCE]
+            elif route == PipelineRoute.VIDEOMAMA_INFERENCE:
+                job = create_job_snapshot(clip, job_type=JobType.VIDEOMAMA_ALPHA)
+                next_steps = [JobType.INFERENCE]
+            elif route == PipelineRoute.INFERENCE_ONLY:
+                if clip.state == ClipState.COMPLETE:
+                    clip.transition_to(ClipState.READY)
+                job = create_job_snapshot(clip, params)
+                job.params["_output_config"] = output_config
+                if clip.in_out_range:
+                    job.params["_frame_range"] = (
+                        clip.in_out_range.in_point,
+                        clip.in_out_range.out_point,
+                    )
+
+            if job is None:
+                continue
             if self._service.job_queue.submit(job):
                 clip.set_processing(True)
-                if first_job_id is None:
-                    first_job_id = job.id
-                queued += 1
-
-        # Phase 3: queue inference for already-READY/COMPLETE clips
-        for clip in selected:
-            if routes.get(clip.name) != PipelineRoute.INFERENCE_ONLY:
-                continue
-            if clip.state == ClipState.COMPLETE:
-                clip.transition_to(ClipState.READY)
-            job = create_job_snapshot(clip, params)
-            job.params["_output_config"] = output_config
-            if clip.in_out_range:
-                job.params["_frame_range"] = (
-                    clip.in_out_range.in_point,
-                    clip.in_out_range.out_point,
-                )
-            if self._service.job_queue.submit(job):
+                if next_steps:
+                    self._pipeline_steps[clip.name] = next_steps
                 if first_job_id is None:
                     first_job_id = job.id
                 queued += 1
@@ -1982,14 +1913,13 @@ class MainWindow(QMainWindow):
         if queued > 0:
             self._start_worker_if_needed(first_job_id, job_label="Pipeline")
             gvm_n = sum(1 for r in routes.values() if r == PipelineRoute.GVM_PIPELINE)
-            vm_n = sum(1 for r in routes.values()
-                       if r in (PipelineRoute.VIDEOMAMA_PIPELINE,
-                                PipelineRoute.VIDEOMAMA_INFERENCE))
+            track_n = sum(1 for r in routes.values() if r == PipelineRoute.VIDEOMAMA_PIPELINE)
+            vm_n = sum(1 for r in routes.values() if r == PipelineRoute.VIDEOMAMA_INFERENCE)
             inf_n = sum(1 for r in routes.values() if r == PipelineRoute.INFERENCE_ONLY)
             logger.info(
-                f"Pipeline queued: {gvm_n} GVM + {vm_n} VideoMaMa + "
+                f"Pipeline queued: {gvm_n} GVM + {track_n} Track Mask + {vm_n} VideoMaMa + "
                 f"{inf_n} inference = {queued} initial jobs "
-                f"(+{len(self._batch_clips)} auto-chain pending)"
+                f"(+{sum(len(v) for v in self._pipeline_steps.values())} auto-chain pending)"
             )
 
     @Slot()
@@ -2161,9 +2091,12 @@ class MainWindow(QMainWindow):
         """Run VideoMaMa alpha generation on the selected clip."""
         if self._current_clip is None:
             return
-        # Accept MASKED state or any clip that has mask_asset (covers READY/COMPLETE
-        # clips that had AlphaHint removed and masks re-exported)
-        if self._current_clip.state != ClipState.MASKED and self._current_clip.mask_asset is None:
+        if not self._clip_has_videomama_ready_mask(self._current_clip):
+            QMessageBox.information(
+                self,
+                "Track Mask First",
+                "Paint prompts and run Track Mask before using VideoMaMa.",
+            )
             return
 
         job = create_job_snapshot(self._current_clip, job_type=JobType.VIDEOMAMA_ALPHA)
@@ -2287,9 +2220,10 @@ class MainWindow(QMainWindow):
     def _on_worker_clip_finished(self, job_id: str, clip_name: str, job_type: str) -> None:
         self._force_stop_armed = False
         self._status_bar.set_stop_button_mode(force=False)
-        # Map job type to correct next state
-        # GVM/VideoMaMa produce AlphaHint -> clip becomes READY for inference
-        if job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value):
+        # Map job type to correct next state.
+        if job_type == JobType.SAM2_TRACK.value:
+            target_state = ClipState.MASKED
+        elif job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value):
             target_state = ClipState.READY
         else:
             target_state = ClipState.COMPLETE
@@ -2300,24 +2234,23 @@ class MainWindow(QMainWindow):
         for clip in self._clip_model.clips:
             if clip.name == clip_name:
                 clip.set_processing(False)
-                # Rescan assets so alpha hints are discovered
-                if target_state == ClipState.READY:
+                if target_state in (ClipState.MASKED, ClipState.READY):
                     try:
                         clip.find_assets()
                     except Exception:
                         pass
-                    # find_assets calls _resolve_state() which demotes
-                    # partial-alpha clips to RAW — override: GVM/VideoMaMa
-                    # completion is authoritative, clip is READY for inference
                     clip.state = target_state
                     self._clip_model.update_clip_state(clip_name, target_state)
                 break
 
-        # Pipeline auto-chain: alpha completed on a batch clip → queue inference
-        if target_state == ClipState.READY and clip_name in self._batch_clips:
-            self._batch_clips.discard(clip_name)
+        # Pipeline auto-chain: queue the next stage, if any.
+        if clip_name in self._pipeline_steps and self._pipeline_steps[clip_name]:
+            next_step = self._pipeline_steps[clip_name].pop(0)
+            queued_next = False
             for clip in self._clip_model.clips:
-                if clip.name == clip_name:
+                if clip.name != clip_name:
+                    continue
+                if next_step == JobType.INFERENCE:
                     params = self._param_panel.get_params()
                     job = create_job_snapshot(clip, params)
                     job.params["_output_config"] = self._param_panel.get_output_config()
@@ -2326,12 +2259,26 @@ class MainWindow(QMainWindow):
                             clip.in_out_range.in_point,
                             clip.in_out_range.out_point,
                         )
-                    if self._service.job_queue.submit(job):
-                        logger.info(f"Pipeline auto-chain: queued inference for {clip_name}")
-                    break
+                else:
+                    job = create_job_snapshot(clip, job_type=next_step)
+                clip.set_processing(True)
+                if self._service.job_queue.submit(job):
+                    queued_next = True
+                    logger.info(
+                        "Pipeline auto-chain: queued %s for %s",
+                        next_step.value,
+                        clip_name,
+                    )
+                else:
+                    clip.set_processing(False)
+                break
+            if not self._pipeline_steps[clip_name]:
+                self._pipeline_steps.pop(clip_name, None)
+            elif not queued_next:
+                logger.warning("Pipeline auto-chain failed to queue next step for %s", clip_name)
 
         # Stop timer; only exit running state if no more jobs are pending
-        has_more = self._service.job_queue.has_pending or self._batch_clips
+        has_more = self._service.job_queue.has_pending or self._pipeline_steps
         self._status_bar.stop_job_timer()
         if not has_more:
             self._status_bar.set_running(False)
@@ -2342,6 +2289,7 @@ class MainWindow(QMainWindow):
             if next_job:
                 _label_map = {
                     JobType.GVM_ALPHA: "GVM Auto",
+                    JobType.SAM2_TRACK: "Track Mask",
                     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
                     JobType.INFERENCE: "Inference",
                 }
@@ -2351,7 +2299,10 @@ class MainWindow(QMainWindow):
             self._status_bar.start_job_timer(label=next_label)
 
         from ui.sounds.audio_manager import UIAudio
-        if target_state == ClipState.READY:
+        if target_state == ClipState.MASKED:
+            UIAudio.mask_done()
+            self._status_bar.set_message(f"Track Mask complete for {clip_name}")
+        elif target_state == ClipState.READY:
             UIAudio.mask_done()
             type_label = "GVM Auto" if job_type == JobType.GVM_ALPHA.value else "VideoMaMa"
             # Show alpha coverage count
@@ -2376,8 +2327,7 @@ class MainWindow(QMainWindow):
             self._dual_viewer.set_clip(self._current_clip)
             self._refresh_button_state()
             self._param_panel.set_videomama_enabled(
-                self._current_clip.state == ClipState.MASKED
-                or self._current_clip.mask_asset is not None
+                self._clip_has_videomama_ready_mask(self._current_clip)
             )
             self._param_panel.set_import_alpha_enabled(
                 self._current_clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
@@ -2394,6 +2344,7 @@ class MainWindow(QMainWindow):
             self._status_bar.set_stop_button_mode(force=False)
             # Job was cancelled — clear processing lock on the clip
             clip_name = message.removeprefix("Cancelled:").strip()
+            self._pipeline_steps.pop(clip_name, None)
             for clip in self._clip_model.clips:
                 if clip.name == clip_name:
                     clip.set_processing(False)
@@ -2421,6 +2372,7 @@ class MainWindow(QMainWindow):
         self._status_bar.set_stop_button_mode(force=False)
         self._status_bar.stop_job_timer()
         self._status_bar.set_running(False)
+        self._pipeline_steps.pop(clip_name, None)
         self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
         # Clear processing lock
         for clip in self._clip_model.clips:
@@ -2435,7 +2387,21 @@ class MainWindow(QMainWindow):
         logger.error(f"Worker error for {clip_name}: {error_msg}")
         from ui.sounds.audio_manager import UIAudio
         UIAudio.error()
-        QMessageBox.critical(self, "Processing Error", f"Clip: {clip_name}\n\n{error_msg}")
+
+        # Try to match a known error pattern for actionable diagnostics
+        from ui.widgets.diagnostic_dialog import match_diagnostic, DiagnosticDialog
+        diag = match_diagnostic(error_msg)
+        if diag:
+            dlg = DiagnosticDialog(
+                diag, error_msg,
+                gpu_info=self._service.get_vram_info(),
+                recent_errors=self._debug_console.recent_errors()
+                if hasattr(self, '_debug_console') else None,
+                parent=self,
+            )
+            dlg.exec()
+        else:
+            QMessageBox.critical(self, "Processing Error", f"Clip: {clip_name}\n\n{error_msg}")
 
     @Slot()
     def _on_queue_empty(self) -> None:
@@ -2445,7 +2411,7 @@ class MainWindow(QMainWindow):
         self._status_bar.set_running(False)
         self._status_bar.stop_job_timer()
         self._active_job_id = None
-        self._batch_clips.clear()
+        self._pipeline_steps.clear()
         self._queue_panel.refresh()
         logger.info("All jobs completed")
 
@@ -2926,12 +2892,21 @@ class MainWindow(QMainWindow):
         else:
             self._debug_console.show()
 
+    def _run_startup_diagnostics(self, device: str) -> None:
+        """Check environment for known issues and show a diagnostic dialog."""
+        from ui.widgets.diagnostic_dialog import run_startup_diagnostics, StartupDiagnosticDialog
+        issues = run_startup_diagnostics(device)
+        if issues:
+            dlg = StartupDiagnosticDialog(issues, parent=self)
+            dlg.exec()
+
     def _show_preferences(self) -> None:
         """Open the Preferences dialog and apply changes."""
         dlg = PreferencesDialog(self)
         if dlg.exec() == PreferencesDialog.Accepted:
             self._apply_tooltip_setting()
             self._apply_sound_setting()
+            self._apply_tracker_model_setting()
 
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
@@ -2961,6 +2936,11 @@ class MainWindow(QMainWindow):
         UIAudio.set_volume(vol)
         if hasattr(self, "_volume_control"):
             self._volume_control.sync_mute_state()
+
+    def _apply_tracker_model_setting(self) -> None:
+        """Apply saved SAM2 tracker model preference to the backend service."""
+        model_id = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
+        self._service.set_sam2_model(model_id)
 
     def _show_report_issue(self) -> None:
         import logging as _logging

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
-    QGroupBox,
+    QComboBox, QGroupBox,
 )
 from PySide6.QtCore import QSettings, Qt
 
@@ -17,6 +17,7 @@ KEY_UI_SOUNDS = "ui/sounds_enabled"
 KEY_COPY_SOURCE = "project/copy_source_videos"
 KEY_LOOP_PLAYBACK = "playback/loop"
 KEY_COPY_SEQUENCES = "project/copy_image_sequences"
+KEY_TRACKER_MODEL = "tracking/sam2_model"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
@@ -24,12 +25,26 @@ DEFAULT_UI_SOUNDS = True
 DEFAULT_COPY_SOURCE = True
 DEFAULT_COPY_SEQUENCES = False
 DEFAULT_LOOP_PLAYBACK = True
+DEFAULT_TRACKER_MODEL = "facebook/sam2.1-hiera-base-plus"
+
+TRACKER_MODEL_OPTIONS = [
+    ("Fast", "facebook/sam2.1-hiera-small"),
+    ("Base+ (Default)", "facebook/sam2.1-hiera-base-plus"),
+    ("Highest Quality", "facebook/sam2.1-hiera-large"),
+]
 
 
 def get_setting_bool(key: str, default: bool) -> bool:
     """Read a boolean setting from QSettings."""
     s = QSettings()
     return s.value(key, default, type=bool)
+
+
+def get_setting_str(key: str, default: str) -> str:
+    """Read a string setting from QSettings."""
+    s = QSettings()
+    value = s.value(key, default, type=str)
+    return value or default
 
 
 class PreferencesDialog(QDialog):
@@ -110,6 +125,28 @@ class PreferencesDialog(QDialog):
         play_layout.addWidget(self._loop_cb)
 
         layout.addWidget(play_group)
+
+        # Tracking section
+        tracking_group = QGroupBox("Tracking")
+        tracking_layout = QVBoxLayout(tracking_group)
+
+        tracking_label = QLabel("SAM2 model")
+        tracking_layout.addWidget(tracking_label)
+
+        self._tracker_model_combo = QComboBox()
+        saved_model = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
+        for label, model_id in TRACKER_MODEL_OPTIONS:
+            self._tracker_model_combo.addItem(label, model_id)
+        idx = self._tracker_model_combo.findData(saved_model)
+        self._tracker_model_combo.setCurrentIndex(max(0, idx))
+        self._tracker_model_combo.setToolTip(
+            "Fast: lower VRAM, lower quality.\n"
+            "Base+: best default tradeoff for this app.\n"
+            "Highest Quality: slowest, heaviest tracker."
+        )
+        tracking_layout.addWidget(self._tracker_model_combo)
+
+        layout.addWidget(tracking_group)
         layout.addStretch(1)
 
         # Buttons
@@ -135,6 +172,7 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_COPY_SOURCE, self._copy_source_cb.isChecked())
         s.setValue(KEY_COPY_SEQUENCES, self._copy_sequences_cb.isChecked())
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
+        s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
@@ -147,3 +185,8 @@ class PreferencesDialog(QDialog):
     @property
     def copy_source(self) -> bool:
         return self._copy_source_cb.isChecked()
+
+    @property
+    def tracker_model(self) -> str:
+        data = self._tracker_model_combo.currentData()
+        return str(data or DEFAULT_TRACKER_MODEL)

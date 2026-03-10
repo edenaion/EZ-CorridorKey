@@ -301,6 +301,16 @@ echo   [OK] Dependencies installed via pip
 
 :deps_done
 
+echo [3b/7] Verifying Triton...
+.venv\Scripts\python.exe -c "import triton, torch; print(triton.__version__); print(torch.__version__)" >nul 2>&1
+if %errorlevel%==0 (
+    echo   [OK] Triton import verified
+) else (
+    echo   [WARN] Triton import check failed. CorridorKey will fall back to eager mode if compile is unavailable.
+    echo   [WARN] You can retry manually with:
+    echo     .venv\Scripts\python.exe -m pip install -U "triton-windows^>=3.5,^<3.6"
+)
+
 REM ── Step 5: Check/Install FFmpeg ──
 echo [4/7] Checking FFmpeg...
 where ffmpeg >nul 2>&1

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import glob as glob_module
 import logging
@@ -34,11 +35,15 @@ from .clip_state import (
     ClipAsset,
     ClipEntry,
     ClipState,
+    MASK_TRACK_MANIFEST,
+    mask_sequence_is_videomama_ready,
     scan_clips_dir,
 )
+from .annotation_prompts import load_annotation_prompt_frames
 from .errors import (
     CorridorKeyError,
     FrameReadError,
+    GPURequiredError,
     WriteFailureError,
     JobCancelledError,
 )
@@ -71,6 +76,7 @@ class _ActiveModel(Enum):
     NONE = "none"
     INFERENCE = "inference"
     GVM = "gvm"
+    SAM2 = "sam2"
     VIDEOMAMA = "videomama"
 
 
@@ -198,10 +204,12 @@ class CorridorKeyService:
     def __init__(self):
         self._engine = None
         self._gvm_processor = None
+        self._sam2_tracker = None
         self._videomama_pipeline = None
         self._active_model = _ActiveModel.NONE
         self._device: str = 'cpu'
         self._job_queue: Optional[GPUJobQueue] = None
+        self._sam2_model_id: str = "facebook/sam2.1-hiera-base-plus"
         # GPU mutex — serializes ALL model operations (Codex: thread safety)
         self._gpu_lock = threading.Lock()
 
@@ -211,6 +219,29 @@ class CorridorKeyService:
         if self._job_queue is None:
             self._job_queue = GPUJobQueue()
         return self._job_queue
+
+    @property
+    def sam2_model_id(self) -> str:
+        """Current SAM2 checkpoint preference."""
+        return self._sam2_model_id
+
+    def set_sam2_model(self, model_id: str) -> None:
+        """Update the SAM2 checkpoint used for future tracking jobs."""
+        if not model_id or model_id == self._sam2_model_id:
+            return
+        logger.info("SAM2 model preference changed: %s -> %s", self._sam2_model_id, model_id)
+        self._sam2_model_id = model_id
+        if self._sam2_tracker is not None:
+            self._safe_offload(self._sam2_tracker)
+            self._sam2_tracker = None
+            if self._active_model == _ActiveModel.SAM2:
+                self._active_model = _ActiveModel.NONE
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                logger.debug("CUDA cache clear skipped after SAM2 model switch", exc_info=True)
 
     # --- Device & Engine Management ---
 
@@ -324,6 +355,9 @@ class CorridorKeyService:
                         except Exception:
                             pass
                     del gvm
+            elif self._active_model == _ActiveModel.SAM2:
+                self._safe_offload(self._sam2_tracker)
+                self._sam2_tracker = None
             elif self._active_model == _ActiveModel.VIDEOMAMA:
                 self._safe_offload(self._videomama_pipeline)
                 self._videomama_pipeline = None
@@ -423,6 +457,30 @@ class CorridorKeyService:
         logger.info(f"GVM loaded in {time.monotonic() - t0:.1f}s")
         return self._gvm_processor
 
+    def _get_sam2_tracker(self):
+        """Lazy-load the optional SAM2 tracker."""
+        self._ensure_model(_ActiveModel.SAM2)
+
+        if self._sam2_tracker is not None:
+            return self._sam2_tracker
+
+        from sam2_tracker import SAM2Tracker
+
+        logger.info("Loading SAM2 tracker...")
+        t0 = time.monotonic()
+        self._sam2_tracker = SAM2Tracker(
+            model_id=self._sam2_model_id,
+            device=self._device,
+            # Meta's VOS path aggressively torch.compiles multiple components.
+            # That is a poor default for this GUI app on Windows: it can spawn
+            # compiler subprocesses, freeze the desktop, and hide progress.
+            vos_optimized=False,
+            offload_video_to_cpu=self._device.startswith("cuda"),
+            offload_state_to_cpu=False,
+        )
+        logger.info(f"SAM2 tracker ready in {time.monotonic() - t0:.1f}s")
+        return self._sam2_tracker
+
     def _get_videomama_pipeline(self):
         """Lazy-load the VideoMaMa inference pipeline."""
         self._ensure_model(_ActiveModel.VIDEOMAMA)
@@ -442,9 +500,11 @@ class CorridorKeyService:
         """Free GPU memory by unloading all engines."""
         self._safe_offload(self._engine)
         self._safe_offload(self._gvm_processor)
+        self._safe_offload(self._sam2_tracker)
         self._safe_offload(self._videomama_pipeline)
         self._engine = None
         self._gvm_processor = None
+        self._sam2_tracker = None
         self._videomama_pipeline = None
         self._active_model = _ActiveModel.NONE
         import gc
@@ -948,6 +1008,9 @@ class CorridorKeyService:
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for GVM")
 
+        if self._device == 'cpu':
+            raise GPURequiredError("GVM Auto Alpha")
+
         t_start = time.monotonic()
 
         logger.info("run_gvm: waiting for _gpu_lock")
@@ -1007,6 +1070,181 @@ class CorridorKeyService:
 
         logger.info(f"GVM complete for '{clip.name}': {clip.alpha_asset.frame_count} alpha frames in {time.monotonic() - t_start:.1f}s")
 
+    def _selected_sequence_files(self, clip: ClipEntry) -> list[str]:
+        """Return the ordered frame filenames for the clip's active in/out range."""
+        if clip.input_asset is None or clip.input_asset.asset_type != "sequence":
+            return []
+        files = clip.input_asset.get_frame_files()
+        if clip.in_out_range is not None:
+            lo = clip.in_out_range.in_point
+            hi = clip.in_out_range.out_point
+            files = files[lo:hi + 1]
+        return files
+
+    def _load_named_sequence_frames(
+        self,
+        asset: ClipAsset,
+        file_names: list[str],
+        clip_name: str,
+        *,
+        job: Optional[GPUJob] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ) -> list[tuple[str, np.ndarray]]:
+        """Load named image-sequence frames as uint8 RGB for tracker/VideoMaMa."""
+        named_frames: list[tuple[str, np.ndarray]] = []
+        total = len(file_names)
+        for index, fname in enumerate(file_names):
+            if job and job.is_cancelled:
+                raise JobCancelledError(clip_name, index)
+            fpath = os.path.join(asset.path, fname)
+            img = read_image_frame(fpath, gamma_correct_exr=True)
+            if img is None:
+                raise FrameReadError(clip_name, index, fpath)
+            named_frames.append(
+                (fname, (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8))
+            )
+            if on_status and index % 20 == 0 and index > 0:
+                on_status(f"Loading frames ({index}/{total})...")
+        return named_frames
+
+    @staticmethod
+    def _write_mask_track_manifest(
+        clip: ClipEntry,
+        *,
+        source: str,
+        frame_stems: list[str],
+        model_id: str | None = None,
+    ) -> None:
+        """Persist provenance for dense VideoMaMa-ready mask tracks."""
+        manifest_path = os.path.join(clip.root_path, MASK_TRACK_MANIFEST)
+        payload = {
+            "source": source,
+            "frame_stems": frame_stems,
+            "model_id": model_id,
+        }
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+
+    @staticmethod
+    def _remove_alpha_hint_dir(clip: ClipEntry) -> None:
+        """Remove AlphaHint so a new mask/alpha run is authoritative."""
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        if os.path.isdir(alpha_dir):
+            shutil.rmtree(alpha_dir, ignore_errors=True)
+
+    def run_sam2_track(
+        self,
+        clip: ClipEntry,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Turn sparse annotations into dense VideoMaMa mask hints with SAM2."""
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for SAM2 tracking")
+        if clip.input_asset.asset_type != "sequence":
+            raise CorridorKeyError("SAM2 tracking currently requires an extracted image sequence")
+
+        selected_files = self._selected_sequence_files(clip)
+        if not selected_files:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for SAM2 tracking")
+
+        start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
+        allowed_indices = list(range(start_index, start_index + len(selected_files)))
+        prompt_frames = load_annotation_prompt_frames(
+            clip.root_path,
+            allowed_indices=allowed_indices,
+        )
+        if not prompt_frames:
+            raise CorridorKeyError(
+                f"Clip '{clip.name}' has no usable annotations for SAM2 tracking"
+            )
+
+        def _status(message: str) -> None:
+            logger.info(f"SAM2 [{clip.name}]: {message}")
+            if on_status:
+                on_status(message)
+
+        def _check_cancel() -> None:
+            if job and job.is_cancelled:
+                raise JobCancelledError(clip.name, 0)
+
+        with self._gpu_lock:
+            tracker = self._get_sam2_tracker()
+        _check_cancel()
+
+        _status("Loading frames...")
+        named_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            selected_files,
+            clip.name,
+            job=job,
+            on_status=on_status,
+        )
+        _check_cancel()
+
+        from sam2_tracker import PromptFrame, SAM2NotInstalledError
+
+        local_prompts = [
+            PromptFrame(
+                frame_index=prompt.frame_index - start_index,
+                positive_points=prompt.positive_points,
+                negative_points=prompt.negative_points,
+                box=prompt.box,
+            )
+            for prompt in prompt_frames
+        ]
+
+        _status("Running SAM2 tracker...")
+        try:
+            masks = tracker.track_video(
+                [frame for _, frame in named_frames],
+                local_prompts,
+                on_progress=(
+                    None
+                    if on_progress is None
+                    else lambda current, total: on_progress(clip.name, current, total)
+                ),
+                on_status=on_status,
+                check_cancel=_check_cancel,
+            )
+        except SAM2NotInstalledError as exc:
+            raise CorridorKeyError(str(exc)) from exc
+        _check_cancel()
+
+        mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
+        os.makedirs(mask_dir, exist_ok=True)
+        for fname in os.listdir(mask_dir):
+            if fname.lower().endswith((".png", ".jpg", ".jpeg")):
+                os.remove(os.path.join(mask_dir, fname))
+
+        stems: list[str] = []
+        for (fname, _), mask in zip(named_frames, masks):
+            stem = os.path.splitext(fname)[0]
+            stems.append(stem)
+            out_path = os.path.join(mask_dir, f"{stem}.png")
+            if not cv2.imwrite(out_path, mask):
+                raise WriteFailureError(clip.name, len(stems) - 1, out_path)
+
+        self._write_mask_track_manifest(
+            clip,
+            source="sam2",
+            frame_stems=stems,
+            model_id=getattr(tracker, "model_id", None),
+        )
+        self._remove_alpha_hint_dir(clip)
+        clip.alpha_asset = None
+        clip.mask_asset = None
+        clip.find_assets()
+        clip.state = ClipState.MASKED
+
+        logger.info(
+            "SAM2 tracking complete for '%s': %d dense masks",
+            clip.name,
+            len(stems),
+        )
+
     # --- VideoMaMa Alpha Generation ---
 
     def run_videomama(
@@ -1016,7 +1254,7 @@ class CorridorKeyService:
         on_progress: Optional[Callable[[str, int, int], None]] = None,
         on_warning: Optional[Callable[[str], None]] = None,
         on_status: Optional[Callable[[str], None]] = None,
-        chunk_size: int = 50,
+        chunk_size: int = 16,
     ) -> None:
         """Run VideoMaMa guided alpha generation for a clip.
 
@@ -1028,12 +1266,23 @@ class CorridorKeyService:
             on_progress: Progress callback with per-chunk updates.
             on_warning: Warning callback.
             on_status: Phase status callback (e.g. "Loading model...").
-            chunk_size: Frames per chunk (lower = less VRAM, default 50).
+            chunk_size: Frames per chunk (lower = less VRAM, default 16).
         """
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for VideoMaMa")
         if clip.mask_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing mask asset for VideoMaMa")
+
+        if self._device == 'cpu':
+            raise GPURequiredError("VideoMaMa")
+        if clip.input_asset.asset_type != "sequence":
+            raise CorridorKeyError("VideoMaMa currently requires an extracted image sequence")
+        ann_path = os.path.join(clip.root_path, "annotations.json")
+        has_annotations = os.path.isfile(ann_path) and os.path.getsize(ann_path) > 2
+        if has_annotations and not mask_sequence_is_videomama_ready(clip.root_path):
+            raise CorridorKeyError(
+                "VideoMaMa requires dense tracked masks. Run Track Mask first."
+            )
 
         def _status(msg: str) -> None:
             logger.info(f"VideoMaMa [{clip.name}]: {msg}")
@@ -1061,9 +1310,17 @@ class CorridorKeyService:
 
         # ── Phase 2: Load input frames ──
         _status("Loading frames...")
-        input_frames = self._load_frames_for_videomama(
-            clip.input_asset, clip.name, job=job, on_status=on_status,
+        selected_input_names = self._selected_sequence_files(clip)
+        if not selected_input_names:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for VideoMaMa")
+        named_input_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            selected_input_names,
+            clip.name,
+            job=job,
+            on_status=on_status,
         )
+        input_frames = [frame for _, frame in named_input_frames]
         _check_cancel("frame load")
 
         # ── Phase 3: Load + stem-match masks ──
@@ -1084,11 +1341,8 @@ class CorridorKeyService:
             for i, m in enumerate(raw_masks):
                 mask_stems[f"frame_{i:06d}"] = m
 
-        # Build output filenames from input stems
-        if clip.input_asset and clip.input_asset.asset_type == 'sequence':
-            input_names = clip.input_asset.get_frame_files()
-        else:
-            input_names = [f"frame_{i:06d}.png" for i in range(len(input_frames))]
+        # Build output filenames from the selected input stems
+        input_names = [fname for fname, _ in named_input_frames]
 
         # Align masks to input frames by stem, defaulting to all-black
         num_frames = len(input_frames)
@@ -1147,17 +1401,19 @@ class CorridorKeyService:
             # Write chunk frames
             t_chunk = time.monotonic()
             for frame in chunk_output:
-                out_bgr = cv2.cvtColor(
-                    (np.clip(frame, 0.0, 1.0) * 255.0).astype(np.uint8),
-                    cv2.COLOR_RGB2BGR,
-                )
+                if frame.dtype == np.uint8:
+                    frame_u8 = frame
+                else:
+                    frame_u8 = (np.clip(frame, 0.0, 1.0) * 255.0).astype(np.uint8)
+                out_bgr = cv2.cvtColor(frame_u8, cv2.COLOR_RGB2BGR)
                 if frames_written < len(input_names):
                     stem = os.path.splitext(input_names[frames_written])[0]
                     out_name = f"{stem}.png"
                 else:
                     out_name = f"frame_{frames_written:06d}.png"
                 out_path = os.path.join(alpha_dir, out_name)
-                cv2.imwrite(out_path, out_bgr)
+                if not cv2.imwrite(out_path, out_bgr):
+                    raise WriteFailureError(clip.name, frames_written, out_path)
                 frames_written += 1
             logger.debug(f"Clip '{clip.name}' chunk {chunk_idx}: {len(chunk_output)} frames in {time.monotonic() - t_chunk:.3f}s")
 

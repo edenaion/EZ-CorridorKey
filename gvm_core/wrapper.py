@@ -61,9 +61,14 @@ class GVMProcessor:
                  seed=None):
         self.device = torch.device(device)
         
-        # Resolve default weights path relative to this file
+        # Resolve default weights path relative to this file,
+        # falling back to the HuggingFace repo ID if local weights aren't present.
         if model_base is None:
-            model_base = osp.join(osp.dirname(__file__), "weights")
+            local_weights = osp.join(osp.dirname(__file__), "weights")
+            if osp.isdir(local_weights):
+                model_base = local_weights
+            else:
+                model_base = "geyongtao/gvm"
             
         self.model_base = model_base
         self.unet_base = unet_base

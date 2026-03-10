@@ -824,8 +824,16 @@ def interactive_wizard(win_path):
     print(f"Linux Path:   {linux_path}")
     
     if not os.path.exists(linux_path):
-        print(f"\n[ERROR] Path does not exist on Linux mount!")
-        print(f"Expected: {LINUX_MOUNT_ROOT}")
+        print(f"\n[ERROR] Path does not exist!")
+        return
+
+    # If user dragged a single video file, use its parent directory
+    if os.path.isfile(linux_path) and is_video_file(linux_path):
+        print(f"\nDetected single video file — using parent directory.")
+        linux_path = os.path.dirname(linux_path)
+        print(f"Working in: {linux_path}")
+    elif os.path.isfile(linux_path):
+        print(f"\n[ERROR] Path is a file, not a directory or video: {linux_path}")
         return
 
     # 2. Analyze

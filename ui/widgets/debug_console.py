@@ -318,6 +318,17 @@ class DebugConsoleWidget(QWidget):
                     self._refilter()
                 return  # only use the first file handler found
 
+    def recent_errors(self, limit: int = 20) -> list[str]:
+        """Return recent WARNING/ERROR log messages as plain text (newest first)."""
+        strip_html = re.compile(r"<[^>]+>")
+        results: list[str] = []
+        for html, levelno in self._log_buffer:
+            if levelno >= logging.WARNING:
+                results.append(strip_html.sub("", html).strip())
+                if len(results) >= limit:
+                    break
+        return results
+
     def _toggle_pause(self) -> None:
         self._paused = not self._paused
         self._pause_btn.setText("Resume" if self._paused else "Pause")

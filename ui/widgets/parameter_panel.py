@@ -1,10 +1,4 @@
-"""Right panel — alpha generation, inference parameters, and output config.
-
-Sections follow the pipeline order:
-1. Alpha Generation — GVM Auto (automatic) or VideoMaMa (manual masks)
-2. Inference — Color Space, Despill, Despeckle, Refiner, Live Preview
-3. Output — FG/Matte/Comp/Processed format selectors
-"""
+"""Right panel — alpha generation, tracking, and output config."""
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
@@ -23,7 +17,7 @@ class ParameterPanel(QWidget):
     params_changed = Signal()  # emitted when any parameter changes
     gvm_requested = Signal()      # GVM AUTO button clicked
     videomama_requested = Signal() # VIDEOMAMA button clicked
-    export_masks_requested = Signal()  # Export annotation masks clicked
+    track_masks_requested = Signal()  # Track annotation prompts into dense masks
     import_alpha_requested = Signal()  # Import own AlphaHint folder
 
     def __init__(self, parent=None):
@@ -76,25 +70,22 @@ class ParameterPanel(QWidget):
         self._videomama_btn = QPushButton("VIDEOMAMA")
         self._videomama_btn.setEnabled(False)
         self._videomama_btn.setToolTip(
-            "Generate alpha from painted annotations via VideoMaMa.\n\n"
-            "1. Paint masks on frames with hotkey 1 (green/foreground)\n"
-            "   or 2 (red/background)\n"
-            "2. Click Export Masks to save annotations\n"
-            "3. Click VIDEOMAMA to generate alpha\n\n"
-            "Tip: Annotate keyframes where the subject changes shape\n"
-            "or overlaps complex backgrounds — more frames = better results."
+            "Generate alpha hints from a dense VideoMaMa mask track.\n\n"
+            "1. Paint sparse foreground/background prompts\n"
+            "2. Click Track Mask to generate dense masks with SAM2\n"
+            "3. Click VIDEOMAMA to generate AlphaHint"
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
         alpha_layout.addWidget(self._videomama_btn)
 
-        self._export_masks_btn = QPushButton("EXPORT MASKS")
-        self._export_masks_btn.setEnabled(False)
-        self._export_masks_btn.setToolTip(
-            "Export painted annotations as VideoMamaMaskHint.\n"
-            "Then click VIDEOMAMA to generate alpha from your masks."
+        self._track_masks_btn = QPushButton("TRACK MASK")
+        self._track_masks_btn.setEnabled(False)
+        self._track_masks_btn.setToolTip(
+            "Use SAM2 to turn painted prompts into a dense VideoMaMa mask track.\n"
+            "This is the required step before running VideoMaMa from annotations."
         )
-        self._export_masks_btn.clicked.connect(self.export_masks_requested.emit)
-        alpha_layout.addWidget(self._export_masks_btn)
+        self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
+        alpha_layout.addWidget(self._track_masks_btn)
 
         self._annotation_info = QLabel("")
         self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
@@ -396,7 +387,7 @@ class ParameterPanel(QWidget):
         """Update annotation frame counter."""
         if annotated > 0 and total > 0:
             self._annotation_info.setText(f"Annotated: {annotated} / {total} frames")
-            self._export_masks_btn.setEnabled(True)
+            self._track_masks_btn.setEnabled(True)
         else:
             self._annotation_info.setText("")
-            self._export_masks_btn.setEnabled(False)
+            self._track_masks_btn.setEnabled(False)

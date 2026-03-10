@@ -1,10 +1,10 @@
-"""Annotation overlay — green/red brush strokes for VideoMamaMaskHint creation.
+"""Annotation overlay — green/red brush strokes for prompt authoring.
 
 Provides a stroke-based annotation model and rendering/input mixin for
 SplitViewWidget. Users paint foreground (green, hotkey 1) and background
 (red, hotkey 2) strokes directly on frames. Strokes are stored per-frame
-in image-pixel coordinates and exported as binary mask PNGs for the
-VideoMaMa pipeline.
+in image-pixel coordinates and are primarily consumed as prompts for
+downstream mask tracking.
 
 Strokes are persisted to {clip_root}/annotations.json so they survive
 app restarts.
@@ -40,7 +40,7 @@ class AnnotationStroke:
 
 
 class AnnotationModel:
-    """Per-frame stroke storage with export capability."""
+    """Per-frame stroke storage with optional raster export."""
 
     def __init__(self) -> None:
         # stem_index -> list of completed strokes

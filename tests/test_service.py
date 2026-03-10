@@ -675,6 +675,7 @@ class TestRunGVM:
 
     def test_cancellation_before_gvm(self):
         svc = CorridorKeyService()
+        svc._device = 'cuda'  # skip GPU guard (we're testing cancellation)
         svc._active_model = _ActiveModel.GVM
         svc._gvm_processor = MagicMock()
 

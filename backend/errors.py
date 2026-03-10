@@ -98,6 +98,24 @@ class JobCancelledError(CorridorKeyError):
         super().__init__(msg)
 
 
+class GPURequiredError(CorridorKeyError):
+    """Raised when a pipeline requires GPU but only CPU is available.
+
+    GVM and VideoMaMa load diffusers pipelines in float16 which cannot
+    run on CPU.  This gives the user a clear, immediate error instead of
+    silently hanging at 0 %.
+    """
+
+    def __init__(self, pipeline_name: str):
+        self.pipeline_name = pipeline_name
+        super().__init__(
+            f"{pipeline_name} requires a CUDA GPU but only CPU is available. "
+            f"Install PyTorch with CUDA support: "
+            f"pip install torch torchvision --index-url "
+            f"https://download.pytorch.org/whl/cu128"
+        )
+
+
 class FFmpegNotFoundError(CorridorKeyError):
     """Raised when FFmpeg/FFprobe binaries cannot be located."""
 

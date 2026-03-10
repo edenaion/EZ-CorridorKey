@@ -10,7 +10,7 @@ import torch
 import cv2
 import numpy as np
 from PIL import Image
-from typing import Callable, List, Union, Optional
+from typing import Callable, Iterator, List, Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -101,9 +101,9 @@ def run_inference(
     pipeline: VideoInferencePipeline,
     input_frames: List[np.ndarray],
     mask_frames: List[np.ndarray],
-    chunk_size: int = 24,  # Adjusted default chunk size
+    chunk_size: int = 16,
     on_status: Optional[Callable[[str], None]] = None,
-) -> List[np.ndarray]:
+) -> Iterator[list[np.ndarray]]:
     """
     Run VideoMaMa inference on video frames with mask conditioning.
 
