@@ -18,20 +18,26 @@ import shutil
 import subprocess
 import sys
 import threading
+from dataclasses import dataclass
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
 _METADATA_FILENAME = ".video_metadata.json"
+_MIN_FFMPEG_MAJOR = 7
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_LOCAL_FFMPEG_BIN = os.path.join(_REPO_ROOT, "tools", "ffmpeg", "bin")
 
 # Common install locations per platform
 _FFMPEG_SEARCH_PATHS_WINDOWS = [
+    _LOCAL_FFMPEG_BIN,
     r"C:\Program Files\ffmpeg\bin",
     r"C:\Program Files (x86)\ffmpeg\bin",
     r"C:\ffmpeg\bin",
 ]
 
 _FFMPEG_SEARCH_PATHS_UNIX = [
+    _LOCAL_FFMPEG_BIN,
     "/opt/homebrew/bin",        # macOS Homebrew (Apple Silicon)
     "/usr/local/bin",           # macOS Homebrew (Intel) / Linux manual install
     "/usr/bin",                 # Linux system package
@@ -43,6 +49,35 @@ _FFMPEG_SEARCH_PATHS = (
     _FFMPEG_SEARCH_PATHS_WINDOWS if sys.platform == "win32"
     else _FFMPEG_SEARCH_PATHS_UNIX
 )
+_FFMPEG_RELEASE_RE = re.compile(
+    r"\b(?:ffmpeg|ffprobe)\s+version\s+(?:n)?(?P<major>\d+)(?:\.\d+)*",
+    re.IGNORECASE,
+)
+_FFMPEG_DEV_BUILD_RE = re.compile(
+    r"\b(?:ffmpeg|ffprobe)\s+version\s+(?:n-|git-|master-)",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class FFmpegVersionInfo:
+    """Parsed `ffmpeg -version` or `ffprobe -version` first-line summary."""
+
+    first_line: str
+    major: int | None
+    is_dev_build: bool = False
+
+
+@dataclass(frozen=True)
+class FFmpegValidationResult:
+    """Validation result for the current FFmpeg installation."""
+
+    ok: bool
+    message: str
+    ffmpeg_path: str | None = None
+    ffprobe_path: str | None = None
+    ffmpeg_version: FFmpegVersionInfo | None = None
+    ffprobe_version: FFmpegVersionInfo | None = None
 
 
 def find_ffmpeg() -> str | None:
@@ -69,6 +104,171 @@ def find_ffprobe() -> str | None:
         if os.path.isfile(candidate):
             return candidate
     return None
+
+
+def _read_program_version(binary_path: str, program_name: str) -> FFmpegVersionInfo:
+    """Run `<program> -version` and parse the first output line."""
+    result = subprocess.run(
+        [binary_path, "-version"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        raise RuntimeError(
+            f"{program_name} failed to report its version: {stderr[:300]}"
+        )
+
+    output = result.stdout or result.stderr or ""
+    first_line = next((line.strip() for line in output.splitlines() if line.strip()), "")
+    if not first_line:
+        raise RuntimeError(f"{program_name} did not report a version string")
+
+    match = _FFMPEG_RELEASE_RE.search(first_line)
+    if match:
+        return FFmpegVersionInfo(first_line=first_line, major=int(match.group("major")))
+    if _FFMPEG_DEV_BUILD_RE.search(first_line):
+        return FFmpegVersionInfo(first_line=first_line, major=None, is_dev_build=True)
+
+    raise RuntimeError(
+        f"Could not determine {program_name} version from: {first_line}"
+    )
+
+
+def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResult:
+    """Validate FFmpeg/FFprobe availability, age, and Windows build type."""
+    ffmpeg = find_ffmpeg()
+    if not ffmpeg:
+        return FFmpegValidationResult(
+            ok=False,
+            message=(
+                "FFmpeg not found. CorridorKey requires FFmpeg 7.0+ and FFprobe. "
+                "Install a current FFmpeg build or re-run the installer."
+            ),
+        )
+
+    ffprobe = find_ffprobe()
+    if require_probe and not ffprobe:
+        return FFmpegValidationResult(
+            ok=False,
+            message=(
+                "FFprobe not found. CorridorKey requires both FFmpeg and FFprobe. "
+                "Install a full FFmpeg build or re-run the installer."
+            ),
+            ffmpeg_path=ffmpeg,
+        )
+
+    try:
+        ffmpeg_version = _read_program_version(ffmpeg, "ffmpeg")
+    except RuntimeError as exc:
+        return FFmpegValidationResult(ok=False, message=str(exc), ffmpeg_path=ffmpeg)
+
+    if ffmpeg_version.major is not None and ffmpeg_version.major < _MIN_FFMPEG_MAJOR:
+        return FFmpegValidationResult(
+            ok=False,
+            message=(
+                f"FFmpeg 7.0 or newer is required. Detected {ffmpeg_version.first_line}."
+            ),
+            ffmpeg_path=ffmpeg,
+            ffprobe_path=ffprobe,
+            ffmpeg_version=ffmpeg_version,
+        )
+
+    if sys.platform == "win32" and "essentials_build" in ffmpeg_version.first_line.lower():
+        return FFmpegValidationResult(
+            ok=False,
+            message=(
+                "CorridorKey requires a full FFmpeg build on Windows. "
+                "Detected a Gyan essentials build."
+            ),
+            ffmpeg_path=ffmpeg,
+            ffprobe_path=ffprobe,
+            ffmpeg_version=ffmpeg_version,
+        )
+
+    ffprobe_version: FFmpegVersionInfo | None = None
+    if require_probe and ffprobe:
+        try:
+            ffprobe_version = _read_program_version(ffprobe, "ffprobe")
+        except RuntimeError as exc:
+            return FFmpegValidationResult(
+                ok=False,
+                message=str(exc),
+                ffmpeg_path=ffmpeg,
+                ffprobe_path=ffprobe,
+                ffmpeg_version=ffmpeg_version,
+            )
+
+        if ffprobe_version.major is not None and ffprobe_version.major < _MIN_FFMPEG_MAJOR:
+            return FFmpegValidationResult(
+                ok=False,
+                message=(
+                    f"FFprobe 7.0 or newer is required. Detected {ffprobe_version.first_line}."
+                ),
+                ffmpeg_path=ffmpeg,
+                ffprobe_path=ffprobe,
+                ffmpeg_version=ffmpeg_version,
+                ffprobe_version=ffprobe_version,
+            )
+
+        if (
+            ffmpeg_version.major is not None
+            and ffprobe_version.major is not None
+            and ffmpeg_version.major != ffprobe_version.major
+        ):
+            return FFmpegValidationResult(
+                ok=False,
+                message=(
+                    "FFmpeg and FFprobe major versions do not match. "
+                    f"Detected ffmpeg {ffmpeg_version.major} and ffprobe {ffprobe_version.major}."
+                ),
+                ffmpeg_path=ffmpeg,
+                ffprobe_path=ffprobe,
+                ffmpeg_version=ffmpeg_version,
+                ffprobe_version=ffprobe_version,
+            )
+
+        if (
+            sys.platform == "win32"
+            and "essentials_build" in ffprobe_version.first_line.lower()
+        ):
+            return FFmpegValidationResult(
+                ok=False,
+                message=(
+                    "CorridorKey requires a full FFmpeg build on Windows. "
+                    "Detected a Gyan essentials build."
+                ),
+                ffmpeg_path=ffmpeg,
+                ffprobe_path=ffprobe,
+                ffmpeg_version=ffmpeg_version,
+                ffprobe_version=ffprobe_version,
+            )
+
+    if ffprobe_version is not None:
+        summary = (
+            f"FFmpeg OK: {ffmpeg_version.first_line} | {ffprobe_version.first_line}"
+        )
+    else:
+        summary = f"FFmpeg OK: {ffmpeg_version.first_line}"
+
+    return FFmpegValidationResult(
+        ok=True,
+        message=summary,
+        ffmpeg_path=ffmpeg,
+        ffprobe_path=ffprobe,
+        ffmpeg_version=ffmpeg_version,
+        ffprobe_version=ffprobe_version,
+    )
+
+
+def require_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResult:
+    """Return the validated FFmpeg install or raise RuntimeError with detail."""
+    result = validate_ffmpeg_install(require_probe=require_probe)
+    if not result.ok:
+        raise RuntimeError(result.message)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -148,9 +348,10 @@ def probe_video(path: str) -> dict:
     color_transfer (str), chroma_location (str), bits_per_raw_sample (int).
     Raises RuntimeError if ffprobe fails.
     """
-    ffprobe = find_ffprobe()
+    validation = require_ffmpeg_install(require_probe=True)
+    ffprobe = validation.ffprobe_path
     if not ffprobe:
-        raise RuntimeError("ffprobe not found")
+        raise RuntimeError("FFprobe not found")
 
     cmd = [
         ffprobe,
@@ -227,6 +428,11 @@ def _recompress_to_dwab(
     cancel_event: Optional[threading.Event] = None,
 ) -> None:
     """Recompress FFmpeg ZIP16 EXR files to DWAB in-place.
+
+    NOTE: This always uses DWAB intentionally — it's an internal storage
+    optimization for extracted video frames, not user output.  The user's
+    EXR compression preference (PIZ/ZIP/etc.) applies only to inference
+    output written by service.py._write_image().
 
     Launches a standalone subprocess to do the heavy lifting so the
     parent process (and its GIL / Qt event loop) stay completely free.
@@ -628,9 +834,10 @@ def extract_frames(
     Raises:
         RuntimeError if ffmpeg is not found or extraction fails.
     """
-    ffmpeg = find_ffmpeg()
+    validation = require_ffmpeg_install(require_probe=True)
+    ffmpeg = validation.ffmpeg_path
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found")
+        raise RuntimeError("FFmpeg not found")
 
     os.makedirs(out_dir, exist_ok=True)
 
@@ -853,9 +1060,10 @@ def stitch_video(
     Raises:
         RuntimeError if ffmpeg is not found or stitching fails.
     """
-    ffmpeg = find_ffmpeg()
+    validation = require_ffmpeg_install(require_probe=True)
+    ffmpeg = validation.ffmpeg_path
     if not ffmpeg:
-        raise RuntimeError("ffmpeg not found")
+        raise RuntimeError("FFmpeg not found")
 
     # Count total frames
     total_frames = len([f for f in os.listdir(in_dir)

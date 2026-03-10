@@ -93,6 +93,35 @@ _DIAGNOSTICS: list[Diagnostic] = [
     ),
     # ── FFmpeg ────────────────────────────────────────────────────
     Diagnostic(
+        id="ffmpeg-invalid",
+        title="FFmpeg Install Unsupported",
+        pattern=re.compile(
+            r"FFmpeg 7\.0 or newer is required|"
+            r"FFprobe 7\.0 or newer is required|"
+            r"FFmpeg and FFprobe major versions do not match|"
+            r"Could not determine ffmpeg version|"
+            r"Could not determine ffprobe version|"
+            r"CorridorKey requires a full FFmpeg build",
+            re.IGNORECASE,
+        ),
+        explanation=(
+            "CorridorKey found FFmpeg, but the install is too old, incomplete, "
+            "or using a stripped Windows build. Video import/export requires "
+            "FFmpeg 7.0+ plus FFprobe."
+        ),
+        steps=[
+            "Windows: re-run 1-install.bat. CorridorKey will download a full FFmpeg build into tools\\ffmpeg.",
+            "macOS: install a current build with Homebrew:\n"
+            "    brew install ffmpeg",
+            "Linux: install both ffmpeg and ffprobe from your package manager, then verify the version is 7.0+.",
+            "Verify both commands work:\n"
+            "    ffmpeg -version\n"
+            "    ffprobe -version",
+            "On Windows, avoid Gyan 'essentials' builds. CorridorKey expects a full build.",
+        ],
+        tags=["ffmpeg", "ffprobe", "video", "version"],
+    ),
+    Diagnostic(
         id="ffmpeg-missing",
         title="FFmpeg Not Found",
         pattern=re.compile(
@@ -102,12 +131,12 @@ _DIAGNOSTICS: list[Diagnostic] = [
             re.IGNORECASE,
         ),
         explanation=(
-            "FFmpeg is required for video import/export but was not found "
-            "on your system PATH."
+            "FFmpeg and FFprobe are required for video import/export but were "
+            "not found on your system PATH."
         ),
         steps=[
             "Download FFmpeg from https://ffmpeg.org/download.html",
-            "Extract and place ffmpeg.exe in one of:\n"
+            "Extract and place ffmpeg.exe and ffprobe.exe in one of:\n"
             "    • C:\\Program Files\\ffmpeg\\bin\\\n"
             "    • Or any folder on your system PATH",
             "Restart EZ-CorridorKey.",

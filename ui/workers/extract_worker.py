@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from PySide6.QtCore import QThread, Signal
 
 from backend.ffmpeg_tools import (
-    find_ffmpeg, probe_video, extract_frames,
+    require_ffmpeg_install, probe_video, extract_frames,
     write_video_metadata, build_exr_vf,
 )
 
@@ -131,9 +131,10 @@ class ExtractWorker(QThread):
         """Extract a single video to image sequence."""
         try:
             # Check FFmpeg availability
-            if not find_ffmpeg():
-                self.error.emit(job.clip_name,
-                                "FFmpeg not found. Install FFmpeg and add to PATH.")
+            try:
+                require_ffmpeg_install(require_probe=True)
+            except RuntimeError as exc:
+                self.error.emit(job.clip_name, str(exc))
                 return
 
             # Probe video for metadata

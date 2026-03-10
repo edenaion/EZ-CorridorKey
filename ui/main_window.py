@@ -2006,9 +2006,9 @@ class MainWindow(QMainWindow):
         if QMessageBox.question(self, "Import Alpha", msg) != QMessageBox.Yes:
             return
 
-        # Copy + rename stems to match input frames, preserving original format
-        # so EXR/16-bit files keep full precision (no lossy 8-bit conversion).
+        # Copy + rename to match input frame stems
         import shutil
+        import cv2
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
             shutil.rmtree(alpha_dir)
@@ -2016,13 +2016,23 @@ class MainWindow(QMainWindow):
 
         for i in range(n_paired):
             src_path = src_files[i]
-            src_ext = os.path.splitext(src_path)[1]  # preserve original extension
+            # Use the input frame's stem with .png extension
             input_stem = os.path.splitext(input_files[i])[0]
-            dst_path = os.path.join(alpha_dir, f"{input_stem}{src_ext}")
-            shutil.copy2(src_path, dst_path)
+            dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
+
+            src_ext = os.path.splitext(src_path)[1].lower()
+            if src_ext == '.png':
+                shutil.copy2(src_path, dst_path)
+            else:
+                # Convert non-PNG to PNG (grayscale)
+                img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    cv2.imwrite(dst_path, img)
+                else:
+                    logger.warning(f"Failed to read alpha image: {src_path}")
 
         logger.info(f"Imported {n_paired} alpha hints into {alpha_dir} "
-                     f"(renamed to match input stems, original formats preserved)")
+                     f"(renamed to match input stems)")
 
         # Refresh clip state
         clip.find_assets()
@@ -2615,12 +2625,13 @@ class MainWindow(QMainWindow):
                 return
 
         # Read video metadata for fps
-        from backend.ffmpeg_tools import read_video_metadata, stitch_video, find_ffmpeg
-        if not find_ffmpeg():
+        from backend.ffmpeg_tools import read_video_metadata, stitch_video, require_ffmpeg_install
+        try:
+            require_ffmpeg_install(require_probe=True)
+        except RuntimeError as exc:
             QMessageBox.critical(
-                self, "FFmpeg Not Found",
-                "FFmpeg is required for video export.\n"
-                "Install FFmpeg and add it to your PATH.",
+                self, "FFmpeg Unavailable",
+                str(exc),
             )
             return
 

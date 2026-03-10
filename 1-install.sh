@@ -185,10 +185,10 @@ fi
 
 # ── Step 5: Check FFmpeg ──
 echo "[4/6] Checking FFmpeg..."
-if command -v ffmpeg &>/dev/null; then
-    echo "  [OK] FFmpeg found"
+if .venv/bin/python scripts/check_ffmpeg.py; then
+    :
 else
-    echo "  [WARN] FFmpeg not found. Video import requires FFmpeg."
+    echo "  [WARN] Video import/export requires FFmpeg 7.0+ and FFprobe."
     case "$OS_TYPE" in
         macos)
             echo "  Install via: brew install ffmpeg" ;;
@@ -203,6 +203,9 @@ else
                 echo "  Install via your package manager or https://ffmpeg.org/download.html"
             fi ;;
     esac
+    echo "  Verify both commands afterward:"
+    echo "    ffmpeg -version"
+    echo "    ffprobe -version"
     echo ""
 fi
 

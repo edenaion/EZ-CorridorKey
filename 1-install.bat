@@ -354,24 +354,15 @@ if /i "!INSTALL_SAM2!"=="y" (
 
 REM ── Step 5: Check/Install FFmpeg ──
 echo [4/7] Checking FFmpeg...
-where ffmpeg >nul 2>&1
-if %errorlevel%==0 (
-    echo   [OK] FFmpeg found
-    goto :ffmpeg_done
-)
-
-REM Check if we already downloaded it locally
-if exist "%~dp0tools\ffmpeg\bin\ffmpeg.exe" (
-    set "PATH=%~dp0tools\ffmpeg\bin;%PATH%"
-    echo   [OK] FFmpeg found (local tools\ffmpeg)
-    goto :ffmpeg_done
-)
-
-echo   FFmpeg not found. Downloading...
-set "FFMPEG_URL=https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-set "FFMPEG_ZIP=%TEMP%\ffmpeg-release-essentials.zip"
-set "FFMPEG_EXTRACT=%TEMP%\ffmpeg-extract"
 set "FFMPEG_DEST=%~dp0tools\ffmpeg"
+.venv\Scripts\python.exe scripts\check_ffmpeg.py
+if %errorlevel%==0 goto :ffmpeg_done
+
+echo   Existing FFmpeg install is missing FFprobe, older than 7, or not a full Windows build.
+echo   Downloading a full FFmpeg build...
+set "FFMPEG_URL=https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"
+set "FFMPEG_ZIP=%TEMP%\ffmpeg-master-latest-win64-gpl.zip"
+set "FFMPEG_EXTRACT=%TEMP%\ffmpeg-extract"
 
 REM Prefer curl to avoid PowerShell download heuristics
 echo   Downloading ffmpeg (this may take a minute)...
@@ -385,7 +376,8 @@ if not exist "%FFMPEG_ZIP%" (
     echo   [WARN] FFmpeg download failed. Install manually:
     echo     winget install ffmpeg
     echo     choco install ffmpeg
-    echo     https://ffmpeg.org/download.html (add to PATH)
+    echo     Ensure both ffmpeg and ffprobe are available, version 7+.
+    echo     https://ffmpeg.org/download.html
     goto :ffmpeg_done
 )
 
@@ -400,7 +392,8 @@ if %errorlevel%==0 (
     powershell -NoProfile -Command "Expand-Archive -Path '%FFMPEG_ZIP%' -DestinationPath '%FFMPEG_EXTRACT%' -Force" >nul 2>&1
 )
 
-REM The zip contains a top-level folder like ffmpeg-7.1-essentials_build — find it and move contents
+REM The zip contains a top-level folder like ffmpeg-master-latest-win64-gpl
+set "FFMPEG_INNER="
 for /d %%d in ("%FFMPEG_EXTRACT%\ffmpeg-*") do set "FFMPEG_INNER=%%d"
 if not defined FFMPEG_INNER (
     echo   [WARN] FFmpeg extraction failed — unexpected archive structure.
@@ -413,12 +406,18 @@ move "!FFMPEG_INNER!" "%FFMPEG_DEST%" >nul 2>&1
 
 if exist "%FFMPEG_DEST%\bin\ffmpeg.exe" (
     set "PATH=%FFMPEG_DEST%\bin;%PATH%"
-    echo   [OK] FFmpeg installed to tools\ffmpeg
+    .venv\Scripts\python.exe scripts\check_ffmpeg.py
+    if !errorlevel! equ 0 (
+        echo   [OK] FFmpeg installed to tools\ffmpeg
+    ) else (
+        echo   [WARN] Downloaded FFmpeg still failed validation.
+    )
 ) else (
     echo   [WARN] FFmpeg install failed. Install manually:
     echo     winget install ffmpeg
     echo     choco install ffmpeg
-    echo     https://ffmpeg.org/download.html (add to PATH)
+    echo     Ensure both ffmpeg and ffprobe are available, version 7+.
+    echo     https://ffmpeg.org/download.html
 )
 
 :ffmpeg_cleanup

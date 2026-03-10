@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -10,6 +11,7 @@ _MODULE_PATH = Path(__file__).resolve().parents[1] / "backend" / "ffmpeg_tools.p
 _SPEC = importlib.util.spec_from_file_location("test_ffmpeg_tools_module", _MODULE_PATH)
 ffmpeg_tools = importlib.util.module_from_spec(_SPEC)
 assert _SPEC.loader is not None
+sys.modules[_SPEC.name] = ffmpeg_tools
 _SPEC.loader.exec_module(ffmpeg_tools)
 
 
@@ -33,7 +35,16 @@ class TestProbeVideo:
         }
         payload = json.dumps({"streams": [stream], "format": {"duration": "4.0"}})
 
-        monkeypatch.setattr(ffmpeg_tools, "find_ffprobe", lambda: "ffprobe")
+        monkeypatch.setattr(
+            ffmpeg_tools,
+            "require_ffmpeg_install",
+            lambda require_probe=True: ffmpeg_tools.FFmpegValidationResult(
+                ok=True,
+                message="ok",
+                ffmpeg_path="ffmpeg",
+                ffprobe_path="ffprobe",
+            ),
+        )
         monkeypatch.setattr(
             ffmpeg_tools.subprocess,
             "run",
@@ -139,7 +150,16 @@ class TestExtractFrames:
             commands.append(cmd)
             return _FakeProc(cmd)
 
-        monkeypatch.setattr(ffmpeg_tools, "find_ffmpeg", lambda: "ffmpeg")
+        monkeypatch.setattr(
+            ffmpeg_tools,
+            "require_ffmpeg_install",
+            lambda require_probe=True: ffmpeg_tools.FFmpegValidationResult(
+                ok=True,
+                message="ok",
+                ffmpeg_path="ffmpeg",
+                ffprobe_path="ffprobe",
+            ),
+        )
         monkeypatch.setattr(ffmpeg_tools, "detect_hwaccel", lambda ffmpeg=None: [])
         monkeypatch.setattr(ffmpeg_tools, "_recompress_to_dwab", lambda *args, **kwargs: None)
         monkeypatch.setattr(ffmpeg_tools, "probe_video", lambda path: {
@@ -201,3 +221,65 @@ class TestVideoMetadata:
         loaded = ffmpeg_tools.read_video_metadata(str(clip_root))
 
         assert loaded == metadata
+
+
+class TestValidateFFmpegInstall:
+    def test_missing_ffprobe_is_rejected(self, monkeypatch):
+        monkeypatch.setattr(ffmpeg_tools, "find_ffmpeg", lambda: "ffmpeg")
+        monkeypatch.setattr(ffmpeg_tools, "find_ffprobe", lambda: None)
+
+        result = ffmpeg_tools.validate_ffmpeg_install()
+
+        assert not result.ok
+        assert "FFprobe not found" in result.message
+
+    def test_old_ffmpeg_is_rejected(self, monkeypatch):
+        monkeypatch.setattr(ffmpeg_tools, "find_ffmpeg", lambda: "ffmpeg")
+        monkeypatch.setattr(ffmpeg_tools, "find_ffprobe", lambda: "ffprobe")
+
+        def fake_run(cmd, **kwargs):
+            program = Path(cmd[0]).name
+            first_line = f"{program} version 6.1.1"
+            return subprocess.CompletedProcess(cmd, 0, stdout=f"{first_line}\n", stderr="")
+
+        monkeypatch.setattr(ffmpeg_tools.subprocess, "run", fake_run)
+
+        result = ffmpeg_tools.validate_ffmpeg_install()
+
+        assert not result.ok
+        assert "FFmpeg 7.0 or newer is required" in result.message
+
+    def test_windows_essentials_build_is_rejected(self, monkeypatch):
+        monkeypatch.setattr(ffmpeg_tools, "find_ffmpeg", lambda: "ffmpeg.exe")
+        monkeypatch.setattr(ffmpeg_tools, "find_ffprobe", lambda: "ffprobe.exe")
+        monkeypatch.setattr(ffmpeg_tools.sys, "platform", "win32")
+
+        def fake_run(cmd, **kwargs):
+            program = Path(cmd[0]).name
+            first_line = (
+                f"{program} version 7.1.1-essentials_build-www.gyan.dev"
+            )
+            return subprocess.CompletedProcess(cmd, 0, stdout=f"{first_line}\n", stderr="")
+
+        monkeypatch.setattr(ffmpeg_tools.subprocess, "run", fake_run)
+
+        result = ffmpeg_tools.validate_ffmpeg_install()
+
+        assert not result.ok
+        assert "full FFmpeg build" in result.message
+
+    def test_dev_build_is_accepted(self, monkeypatch):
+        monkeypatch.setattr(ffmpeg_tools, "find_ffmpeg", lambda: "ffmpeg")
+        monkeypatch.setattr(ffmpeg_tools, "find_ffprobe", lambda: "ffprobe")
+
+        def fake_run(cmd, **kwargs):
+            program = Path(cmd[0]).name
+            first_line = f"{program} version N-120000-gabcdef1234"
+            return subprocess.CompletedProcess(cmd, 0, stdout=f"{first_line}\n", stderr="")
+
+        monkeypatch.setattr(ffmpeg_tools.subprocess, "run", fake_run)
+
+        result = ffmpeg_tools.validate_ffmpeg_install()
+
+        assert result.ok
+        assert "FFmpeg OK" in result.message
