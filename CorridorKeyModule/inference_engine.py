@@ -198,6 +198,8 @@ class CorridorKeyEngine:
             'asynccompile',
             'compileworker',
             'inductor',
+            'compiler: cl is not found',
+            'compiler: cl.exe is not found',
         )
         for err in self._iter_exception_chain(exc):
             text = f"{type(err).__module__} {type(err).__name__} {err}".lower()

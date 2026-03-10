@@ -138,6 +138,84 @@ _DIAGNOSTICS: list[Diagnostic] = [
         ],
         tags=["triton", "compile"],
     ),
+    Diagnostic(
+        id="msvc-compiler-missing",
+        title="MSVC Compiler Not Found (torch.compile Disabled)",
+        pattern=re.compile(
+            r"Compiler: cl is not found|"
+            r"Compiler: cl\.exe is not found",
+            re.IGNORECASE,
+        ),
+        explanation=(
+            "torch.compile requires the MSVC C++ compiler (cl.exe) on Windows. "
+            "Without it, inference still works but falls back to slower eager mode."
+        ),
+        steps=[
+            "Install Visual Studio Build Tools from:\n"
+            "    https://visualstudio.microsoft.com/visual-cpp-build-tools/",
+            'Select "Desktop development with C++" workload.',
+            "Restart your computer, then restart EZ-CorridorKey.",
+            "Alternatively, this is safe to ignore — inference just runs a bit slower.",
+        ],
+        tags=["compile", "msvc"],
+    ),
+    # ── CPU-only PyTorch installed (wrong wheel) ─────────────────
+    Diagnostic(
+        id="pytorch-cpu-wheel",
+        title="CPU-Only PyTorch Installed (Missing CUDA Support)",
+        pattern=re.compile(
+            r"torch.*\+cpu|"
+            r"PyTorch.*\+cpu",
+            re.IGNORECASE,
+        ),
+        explanation=(
+            "You have the CPU-only build of PyTorch installed even though "
+            "an NVIDIA GPU is present. This means none of the GPU-accelerated "
+            "models (CorridorKey, GVM, VideoMaMa) can use your GPU. "
+            "This usually happens when PyTorch was installed without the "
+            "CUDA index URL."
+        ),
+        steps=[
+            "Open a terminal in the EZ-CorridorKey folder.",
+            "Activate the virtual environment:\n"
+            "    .venv\\Scripts\\activate  (or venv\\Scripts\\activate)",
+            "Uninstall the CPU-only build:\n"
+            "    pip uninstall torch torchvision -y",
+            "Reinstall with CUDA support:\n"
+            "    pip install torch torchvision --index-url\n"
+            "    https://download.pytorch.org/whl/cu128",
+            "Restart EZ-CorridorKey.",
+            "Tip: re-running 1-install.bat will also fix this automatically.",
+        ],
+        tags=["gpu", "cuda", "cpu", "wheel"],
+    ),
+    # ── six / protobuf import error (GVM) ──────────────────────
+    Diagnostic(
+        id="six-metapath-importer",
+        title="GVM Import Error (_SixMetaPathImporter)",
+        pattern=re.compile(
+            r"_SixMetaPathImporter.*object has no attribute|"
+            r"SixMetaPathImporter",
+            re.IGNORECASE,
+        ),
+        explanation=(
+            "The GVM pipeline hit a compatibility error in the 'six' library, "
+            "which is used by protobuf/grpc. This typically occurs when "
+            "PyTorch is CPU-only (+cpu) or there is a version conflict between "
+            "protobuf and other packages."
+        ),
+        steps=[
+            "First, check if you have CPU-only PyTorch:\n"
+            "    python -c \"import torch; print(torch.__version__)\"",
+            "If the version ends in '+cpu', reinstall with CUDA:\n"
+            "    pip install torch torchvision --index-url\n"
+            "    https://download.pytorch.org/whl/cu128",
+            "If the version already has '+cu...', update protobuf:\n"
+            "    pip install -U protobuf grpcio",
+            "Restart EZ-CorridorKey.",
+        ],
+        tags=["gvm", "six", "protobuf", "import"],
+    ),
     # ── GVM weights ───────────────────────────────────────────────
     Diagnostic(
         id="gvm-weights-missing",
@@ -242,6 +320,32 @@ def run_startup_diagnostics(device: str) -> list[StartupIssue]:
         if diag:
             detail = _get_torch_detail()
             issues.append(StartupIssue(diag, detail))
+
+    # 1b. GPU present but PyTorch is CPU-only wheel (+cpu)
+    if device == "cpu":
+        try:
+            import torch
+            if "+cpu" in torch.__version__:
+                has_nvidia = False
+                try:
+                    import pynvml
+                    pynvml.nvmlInit()
+                    has_nvidia = pynvml.nvmlDeviceGetCount() > 0
+                    pynvml.nvmlShutdown()
+                except Exception:
+                    pass
+                if has_nvidia:
+                    diag = next(
+                        (d for d in _DIAGNOSTICS if d.id == "pytorch-cpu-wheel"),
+                        None,
+                    )
+                    if diag:
+                        issues.append(StartupIssue(
+                            diag,
+                            f"PyTorch {torch.__version__} (CPU-only) with NVIDIA GPU detected",
+                        ))
+        except ImportError:
+            pass
 
     # 2. Python version outside supported range
     import sys
