@@ -9,9 +9,12 @@ and every QPushButton automatically gets a click sound on press.
 
 from __future__ import annotations
 
+import array
 import os
 import random
+import tempfile
 import time
+import wave
 
 from PySide6.QtCore import QUrl, QObject, QEvent
 from PySide6.QtMultimedia import QSoundEffect
@@ -23,13 +26,85 @@ _SOUNDS_DIR = os.path.dirname(__file__)
 _BASE_VOLUME = 0.35
 _VARIANCE = 0.08
 
+# Fade duration applied to all UI sounds to prevent clicks/pops
+_FADE_MS = 50
+
+# Keep refs to temp files so they aren't garbage-collected while QSoundEffect uses them
+_temp_files: list[tempfile.NamedTemporaryFile] = []
+
+
+def _apply_fade(path: str) -> str:
+    """Apply a short linear fade-in/out to a WAV file, return path to faded copy.
+
+    Writes a temp .wav file with the faded audio.  The temp file is kept alive
+    for the process lifetime via ``_temp_files``.
+    """
+    with wave.open(path, "rb") as wf:
+        n_channels = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+        framerate = wf.getframerate()
+        n_frames = wf.getnframes()
+        raw = wf.readframes(n_frames)
+
+    total_samples = n_frames * n_channels
+    fade_samples = int(framerate * _FADE_MS / 1000) * n_channels
+
+    if sampwidth == 2:
+        # 16-bit signed
+        samples = array.array("h")
+        samples.frombytes(raw)
+        for i in range(min(fade_samples, total_samples)):
+            samples[i] = int(samples[i] * (i / fade_samples))
+        for i in range(min(fade_samples, total_samples)):
+            idx = total_samples - 1 - i
+            samples[idx] = int(samples[idx] * (i / fade_samples))
+        out_raw = samples.tobytes()
+    elif sampwidth == 3:
+        # 24-bit signed (packed as 3 bytes per sample, little-endian)
+        buf = bytearray(raw)
+        for i in range(min(fade_samples, total_samples)):
+            off = i * 3
+            val = int.from_bytes(buf[off:off + 3], "little", signed=True)
+            val = int(val * (i / fade_samples))
+            buf[off:off + 3] = val.to_bytes(3, "little", signed=True)
+        for i in range(min(fade_samples, total_samples)):
+            idx = total_samples - 1 - i
+            off = idx * 3
+            val = int.from_bytes(buf[off:off + 3], "little", signed=True)
+            val = int(val * (i / fade_samples))
+            buf[off:off + 3] = val.to_bytes(3, "little", signed=True)
+        out_raw = bytes(buf)
+    elif sampwidth == 1:
+        # 8-bit unsigned (WAV convention)
+        samples = array.array("B")
+        samples.frombytes(raw)
+        for i in range(min(fade_samples, total_samples)):
+            samples[i] = int(128 + (samples[i] - 128) * (i / fade_samples))
+        for i in range(min(fade_samples, total_samples)):
+            idx = total_samples - 1 - i
+            samples[idx] = int(128 + (samples[idx] - 128) * (i / fade_samples))
+        out_raw = samples.tobytes()
+    else:
+        return path
+
+    tf = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    _temp_files.append(tf)
+    with wave.open(tf.name, "wb") as out:
+        out.setnchannels(n_channels)
+        out.setsampwidth(sampwidth)
+        out.setframerate(framerate)
+        out.writeframes(out_raw)
+    tf.close()
+    return tf.name
+
 
 def _load_sfx(filename: str) -> QSoundEffect | None:
     path = os.path.join(_SOUNDS_DIR, filename)
     if not os.path.isfile(path):
         return None
+    faded_path = _apply_fade(path)
     sfx = QSoundEffect()
-    sfx.setSource(QUrl.fromLocalFile(path))
+    sfx.setSource(QUrl.fromLocalFile(faded_path))
     sfx.setVolume(_BASE_VOLUME)
     return sfx
 
