@@ -311,6 +311,39 @@ if %errorlevel%==0 (
     echo     .venv\Scripts\python.exe -m pip install -U "triton-windows^>=3.5,^<3.6"
 )
 
+echo [3c/7] Optional SAM2 tracker...
+set INSTALL_SAM2=y
+set /p INSTALL_SAM2_INPUT="  Install SAM2 tracking support? [Y/n]: "
+if /i "!INSTALL_SAM2_INPUT!"=="n" set INSTALL_SAM2=n
+
+if /i "!INSTALL_SAM2!"=="y" (
+    set SAM2_OK=0
+    echo   Installing SAM2 tracker package...
+    if !UV_AVAILABLE!==1 (
+        uv pip install --python .venv\Scripts\python.exe --torch-backend=auto -e ".[tracker]" 2>&1
+        if !errorlevel! equ 0 set SAM2_OK=1
+    ) else (
+        if defined INDEX_URL (
+            pip install --extra-index-url !INDEX_URL! -e ".[tracker]" 2>&1
+        ) else (
+            pip install -e ".[tracker]" 2>&1
+        )
+        if !errorlevel! equ 0 set SAM2_OK=1
+    )
+
+    if !SAM2_OK!==1 (
+        echo   [OK] SAM2 tracker support installed
+        set /p DOWNLOAD_SAM2="  Pre-download default SAM2 Base+ model? (324MB) [Y/n]: "
+        if /i not "!DOWNLOAD_SAM2!"=="n" (
+            .venv\Scripts\python.exe scripts\setup_models.py --sam2
+        )
+    ) else (
+        echo   [WARN] SAM2 tracker install failed. CorridorKey will still run without Track Mask.
+        echo   [WARN] You can retry later with:
+        echo     .venv\Scripts\python.exe -m pip install -e ".[tracker]"
+    )
+)
+
 REM ── Step 5: Check/Install FFmpeg ──
 echo [4/7] Checking FFmpeg...
 where ffmpeg >nul 2>&1

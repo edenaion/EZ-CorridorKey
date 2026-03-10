@@ -45,6 +45,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 - Auto-detects your GPU and installs the correct PyTorch variant (CUDA on NVIDIA, MPS on Apple Silicon, CPU fallback)
 - Downloads and installs [FFmpeg](https://ffmpeg.org/) locally if not found on PATH (used for video import)
 - Downloads the CorridorKey model checkpoint (383 MB, required)
+- Optionally installs SAM2 tracking support and pre-downloads the default Base+ checkpoint (324 MB)
 - Optionally downloads GVM (~6 GB) and VideoMaMa (~37 GB) alpha hint generators
 - Creates a desktop shortcut (optional)
 
@@ -117,13 +118,14 @@ Your clip starts in **RAW** state (gray badge). You need an alpha hint before ru
 **Option A — GVM Auto (one-click):**
 Click **GVM AUTO** in the parameter panel. Works great for most green screen footage with people.
 
-**Option B — VideoMaMa (manual masking):**
-For difficult shots, use the annotation brush:
+**Option B — Track Mask + VideoMaMa:**
+For difficult shots, use the annotation brush as a prompt tool:
 1. Press **1** to activate foreground mode (green)
 2. Paint over the subject on a few key frames
 3. Press **2** to switch to background mode (red)
 4. Paint over background areas
-5. Click **VIDEOMAMA** in the parameter panel
+5. Click **TRACK MASK** to generate a dense SAM2 mask track
+6. Click **VIDEOMAMA** in the parameter panel
 
 **Option C — Import Alpha (bring your own):**
 If you already have alpha mattes from another tool (Rotobrush, Silhouette, etc.), click **IMPORT ALPHA** in the parameter panel and select the folder containing your images.
@@ -145,7 +147,7 @@ Your clip is now **READY** (yellow badge). Adjust parameters as needed, then cli
 Select multiple clips in the I/O tray (Ctrl+click or Shift+click), then click **RUN PIPELINE** in the status bar. The system automatically:
 
 1. Detects each clip's state and annotations
-2. Exports masks and runs **VideoMaMa** for annotated clips
+2. Runs **TRACK MASK** and then **VideoMaMa** for annotated clips
 3. Runs **GVM Auto** for unannotated RAW clips
 4. Chains **inference** after each alpha generation completes
 

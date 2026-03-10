@@ -54,7 +54,7 @@ from .validators import (
     ensure_output_dirs,
 )
 from .frame_io import (
-    write_exr_dwab,
+    write_exr,
     read_image_frame,
     read_mask_frame,
     read_video_frame_at,
@@ -111,6 +111,7 @@ class OutputConfig:
     comp_format: str = "png"
     processed_enabled: bool = True
     processed_format: str = "exr"
+    exr_compression: str = "dwab"  # "dwab", "piz", "zip", or "none"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -457,7 +458,12 @@ class CorridorKeyService:
         logger.info(f"GVM loaded in {time.monotonic() - t0:.1f}s")
         return self._gvm_processor
 
-    def _get_sam2_tracker(self):
+    def _get_sam2_tracker(
+        self,
+        *,
+        on_progress: Callable[[int, int], None] | None = None,
+        on_status: Callable[[str], None] | None = None,
+    ):
         """Lazy-load the optional SAM2 tracker."""
         self._ensure_model(_ActiveModel.SAM2)
 
@@ -478,6 +484,8 @@ class CorridorKeyService:
             offload_video_to_cpu=self._device.startswith("cuda"),
             offload_state_to_cpu=False,
         )
+        if self._sam2_tracker is not None:
+            self._sam2_tracker.prepare(on_progress=on_progress, on_status=on_status)
         logger.info(f"SAM2 tracker ready in {time.monotonic() - t0:.1f}s")
         return self._sam2_tracker
 
@@ -585,6 +593,7 @@ class CorridorKeyService:
 
     def _write_image(
         self, img: np.ndarray, path: str, fmt: str, clip_name: str, frame_index: int,
+        exr_compression: str = "dwab",
     ) -> None:
         """Write a single image in the requested format."""
         if fmt == "exr":
@@ -593,7 +602,10 @@ class CorridorKeyService:
                 img = img.astype(np.float32) / 255.0
             elif img.dtype != np.float32:
                 img = img.astype(np.float32)
-            validate_write(write_exr_dwab(path, img), clip_name, frame_index, path)
+            validate_write(
+                write_exr(path, img, compression=exr_compression),
+                clip_name, frame_index, path,
+            )
         else:
             # PNG 8-bit
             if img.dtype != np.uint8:
@@ -652,7 +664,8 @@ class CorridorKeyService:
         if cfg.fg_enabled:
             fg_bgr = cv2.cvtColor(pred_fg, cv2.COLOR_RGB2BGR)
             fg_path = os.path.join(dirs['fg'], f"{input_stem}.{cfg.fg_format}")
-            self._write_image(fg_bgr, fg_path, cfg.fg_format, clip_name, frame_index)
+            self._write_image(fg_bgr, fg_path, cfg.fg_format, clip_name, frame_index,
+                              exr_compression=cfg.exr_compression)
 
         # Matte
         if cfg.matte_enabled:
@@ -660,7 +673,8 @@ class CorridorKeyService:
             if alpha.ndim == 3:
                 alpha = alpha[:, :, 0]
             matte_path = os.path.join(dirs['matte'], f"{input_stem}.{cfg.matte_format}")
-            self._write_image(alpha, matte_path, cfg.matte_format, clip_name, frame_index)
+            self._write_image(alpha, matte_path, cfg.matte_format, clip_name, frame_index,
+                              exr_compression=cfg.exr_compression)
 
         # Comp
         if cfg.comp_enabled:
@@ -670,14 +684,16 @@ class CorridorKeyService:
                 cv2.COLOR_RGB2BGR,
             )
             comp_path = os.path.join(dirs['comp'], f"{input_stem}.{cfg.comp_format}")
-            self._write_image(comp_bgr, comp_path, cfg.comp_format, clip_name, frame_index)
+            self._write_image(comp_bgr, comp_path, cfg.comp_format, clip_name, frame_index,
+                              exr_compression=cfg.exr_compression)
 
         # Processed (RGBA premultiplied)
         if cfg.processed_enabled and 'processed' in res:
             proc_rgba = res['processed']
             proc_bgra = cv2.cvtColor(proc_rgba, cv2.COLOR_RGBA2BGRA)
             proc_path = os.path.join(dirs['processed'], f"{input_stem}.{cfg.processed_format}")
-            self._write_image(proc_bgra, proc_path, cfg.processed_format, clip_name, frame_index)
+            self._write_image(proc_bgra, proc_path, cfg.processed_format, clip_name, frame_index,
+                              exr_compression=cfg.exr_compression)
 
     # --- Processing ---
 
@@ -1170,8 +1186,16 @@ class CorridorKeyService:
             if job and job.is_cancelled:
                 raise JobCancelledError(clip.name, 0)
 
+        _status("Loading model...")
         with self._gpu_lock:
-            tracker = self._get_sam2_tracker()
+            tracker = self._get_sam2_tracker(
+                on_progress=(
+                    None
+                    if on_progress is None
+                    else lambda current, total: on_progress(clip.name, current, total)
+                ),
+                on_status=on_status,
+            )
         _check_cancel()
 
         _status("Loading frames...")

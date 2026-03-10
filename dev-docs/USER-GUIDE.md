@@ -56,7 +56,7 @@ Because GVM and VideoMaMa have huge model file sizes and extreme hardware requir
 3.  Run the installer for your platform:
     *   **Windows:** Double-click `1-install.bat`
     *   **macOS / Linux:** Open a terminal and run `chmod +x 1-install.sh && ./1-install.sh`
-4.  The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), and model downloads. It will prompt you about optional models (GVM, VideoMaMa).
+4.  The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), optional SAM2 tracker support, and model downloads.
 5.  To launch: double-click `2-start.bat` (Windows) or run `./2-start.sh` (macOS/Linux).
 
 **What the installer does:**
@@ -64,6 +64,7 @@ Because GVM and VideoMaMa have huge model file sizes and extreme hardware requir
 *   Creates a `.venv` virtual environment in the project folder
 *   Auto-detects your GPU and installs the correct PyTorch variant (CUDA on NVIDIA, MPS on Apple Silicon, CPU fallback)
 *   Downloads the CorridorKey model checkpoint (383MB, required)
+*   Optionally installs SAM2 tracking support and pre-downloads the default Base+ checkpoint (324MB)
 *   Optionally downloads GVM (~6GB) and VideoMaMa (~37GB) alpha hint generators
 *   Checks for FFmpeg and suggests install methods if missing
 
@@ -75,12 +76,15 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
 pip install -e .
+python -m pip install -e ".[tracker]"         # Optional: SAM2 Track Mask support
 python scripts/setup_models.py --corridorkey    # Download required model
+python scripts/setup_models.py --sam2           # Optional: SAM2 Base+ checkpoint (324MB)
 python scripts/setup_models.py --check          # See what's installed
 ```
 
 **Download optional models later:**
 ```bash
+python scripts/setup_models.py --sam2 large     # SAM2 Large (898MB)
 python scripts/setup_models.py --gvm            # GVM alpha generator (~6GB)
 python scripts/setup_models.py --videomama      # VideoMaMa alpha generator (~37GB)
 ```
@@ -101,7 +105,7 @@ CorridorKey requires two inputs to process a frame:
 I've had the best results using GVM or VideoMaMa to create the AlphaHint, so I've repackaged those projects and integrated them here as optional modules inside `clip_manager.py`. Here is how they compare:
 
 *   **GVM:** Completely automatic and requires no additional input. It works exceptionally well for people, but can struggle with inanimate objects.
-*   **VideoMaMa:** Requires you to provide a rough VideoMamaMaskHint (often drawn by hand or AI) telling it what you want to key. If you choose to use this, place your mask hint in the `VideoMamaMaskHint/` folder that the wizard creates for your shot. VideoMaMa results are spectacular and can be controlled more easily than GVM due to this mask hint.
+*   **VideoMaMa:** For annotated clips, CorridorKey now turns your sparse foreground/background prompts into a dense `VideoMamaMaskHint/` track with SAM2 before running VideoMaMa. You can also still import your own dense masks manually.
 
 Perhaps in the future, I will implement other generators for the AlphaHint! In the meantime, the better your Alpha Hint, the better CorridorKey's final result will be. Experiment with different amounts of mask erosion or feathering. The model was trained on coarse, blurry, eroded masks, and is exceptional at filling in details from the hint. However, it is generally less effective at subtracting unwanted mask details if your Alpha Hint is expanded too far.
 

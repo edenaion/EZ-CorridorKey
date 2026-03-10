@@ -71,6 +71,7 @@ if exist "%~dp0tools\ffmpeg\bin\ffmpeg.exe" set "PATH=%~dp0tools\ffmpeg\bin;%PAT
 echo [2/3] Updating dependencies...
 
 set UV_AVAILABLE=0
+set "INSTALL_TARGET=-e ."
 where uv >nul 2>&1
 if %errorlevel%==0 (
     set UV_AVAILABLE=1
@@ -84,8 +85,16 @@ if %errorlevel%==0 (
     )
 )
 
+if exist ".venv\Scripts\python.exe" (
+    .venv\Scripts\python.exe -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('sam2') else 1)" >nul 2>&1
+    if !errorlevel! == 0 (
+        set "INSTALL_TARGET=-e .[tracker]"
+        echo   SAM2 tracker detected - updating tracker extras too
+    )
+)
+
 if !UV_AVAILABLE!==1 (
-    uv pip install --python .venv\Scripts\python.exe --torch-backend=auto -e . 2>&1
+    uv pip install --python .venv\Scripts\python.exe --torch-backend=auto !INSTALL_TARGET! 2>&1
     if %errorlevel%==0 (
         echo   [OK] Dependencies updated via uv
     ) else (
@@ -97,7 +106,7 @@ if !UV_AVAILABLE!==1 (
 if !UV_AVAILABLE!==0 (
     if exist ".venv\Scripts\activate.bat" (
         call .venv\Scripts\activate.bat
-        pip install -e . 2>&1
+        pip install !INSTALL_TARGET! 2>&1
         echo   [OK] Dependencies updated via pip
     ) else (
         echo   [ERROR] No .venv found. Run 1-install.bat first.

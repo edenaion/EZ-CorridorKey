@@ -5,6 +5,8 @@ progress bars, and idempotent behavior (skips existing files).
 
 Usage:
     python scripts/setup_models.py --corridorkey       # Required (383MB)
+    python scripts/setup_models.py --sam2             # SAM2 Base+ (324MB)
+    python scripts/setup_models.py --sam2 large       # SAM2 Large (898MB)
     python scripts/setup_models.py --gvm               # Optional (~6GB)
     python scripts/setup_models.py --videomama          # Optional (~37GB)
     python scripts/setup_models.py --all                # Everything
@@ -21,6 +23,7 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+HF_CACHE_DIR = Path.home() / ".cache" / "huggingface" / "hub"
 
 MODELS = {
     "corridorkey": {
@@ -55,6 +58,39 @@ MODELS = {
     },
 }
 
+SAM2_MODELS = {
+    "small": {
+        "repo_id": "facebook/sam2.1-hiera-small",
+        "filename": "sam2.1_hiera_small.pt",
+        "size_human": "184 MB",
+        "size_bytes": 184_000_000,
+        "default": False,
+    },
+    "base-plus": {
+        "repo_id": "facebook/sam2.1-hiera-base-plus",
+        "filename": "sam2.1_hiera_base_plus.pt",
+        "size_human": "324 MB",
+        "size_bytes": 324_000_000,
+        "default": True,
+    },
+    "large": {
+        "repo_id": "facebook/sam2.1-hiera-large",
+        "filename": "sam2.1_hiera_large.pt",
+        "size_human": "898 MB",
+        "size_bytes": 898_000_000,
+        "default": False,
+    },
+}
+
+
+def tracker_dependency_installed() -> bool:
+    """Check whether the optional SAM2 Python package is installed."""
+    try:
+        import sam2  # noqa: F401
+    except Exception:
+        return False
+    return True
+
 
 def is_installed(name: str) -> bool:
     """Check if a model's weights are already downloaded."""
@@ -74,6 +110,20 @@ def is_installed(name: str) -> bool:
     if "check_glob" not in cfg and "check_file" not in cfg:
         return False
     return True
+
+
+def is_sam2_installed(name: str) -> bool:
+    """Check whether a SAM2 checkpoint is present in the HF cache."""
+    from huggingface_hub import try_to_load_from_cache
+    from huggingface_hub.file_download import _CACHED_NO_EXIST
+
+    cfg = SAM2_MODELS[name]
+    cached = try_to_load_from_cache(
+        repo_id=cfg["repo_id"],
+        filename=cfg["filename"],
+        cache_dir=HF_CACHE_DIR,
+    )
+    return isinstance(cached, str) and cached != _CACHED_NO_EXIST and os.path.isfile(cached)
 
 
 def check_disk_space(needed_bytes: int, path: Path) -> bool:
@@ -102,6 +152,28 @@ def download_corridorkey() -> bool:
         # huggingface_hub downloads to local_dir/filename
         # The backend globs for *.pth, so the exact name doesn't matter
         print(f"  Saved to: {downloaded}")
+        return True
+    except Exception as e:
+        print(f"  [ERROR] Download failed: {e}")
+        print(f"  Manual download: https://huggingface.co/{cfg['repo_id']}")
+        return False
+
+
+def download_sam2(name: str) -> bool:
+    """Download a SAM2 checkpoint into the shared Hugging Face cache."""
+    from huggingface_hub import hf_hub_download
+
+    cfg = SAM2_MODELS[name]
+    HF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    print(f"  Downloading SAM2 {name} checkpoint ({cfg['size_human']})...")
+    try:
+        downloaded = hf_hub_download(
+            repo_id=cfg["repo_id"],
+            filename=cfg["filename"],
+            cache_dir=HF_CACHE_DIR,
+        )
+        print(f"  Saved to cache: {downloaded}")
         return True
     except Exception as e:
         print(f"  [ERROR] Download failed: {e}")
@@ -182,6 +254,24 @@ def download_model(name: str) -> bool:
         return download_repo(name)
 
 
+def download_sam2_model(name: str) -> bool:
+    """Download one SAM2 checkpoint, skipping if already cached."""
+    cfg = SAM2_MODELS[name]
+
+    if is_sam2_installed(name):
+        print(f"  [OK] sam2-{name} checkpoint already cached")
+        return True
+
+    if not check_disk_space(cfg["size_bytes"], HF_CACHE_DIR):
+        usage = shutil.disk_usage(HF_CACHE_DIR)
+        free_gb = usage.free / (1024**3)
+        print(f"  [ERROR] Not enough disk space for SAM2 {name} ({cfg['size_human']})")
+        print(f"  Available: {free_gb:.1f} GB")
+        return False
+
+    return download_sam2(name)
+
+
 def check_all():
     """Print status of all models."""
     print("\nModel Status:")
@@ -198,12 +288,33 @@ def check_all():
             for f in files:
                 size_mb = os.path.getsize(f) / (1024**2)
                 print(f"       -> {os.path.basename(f)} ({size_mb:.0f} MB)")
+
+    tracker_installed = tracker_dependency_installed()
+    tracker_mark = "[OK]" if tracker_installed else "[--]"
+    tracker_status = "INSTALLED" if tracker_installed else "NOT INSTALLED"
+    print(f"  {tracker_mark} sam2-tracker  python pkg   {tracker_status} (optional)")
+    print(f"       -> cache: {HF_CACHE_DIR}")
+    for name, cfg in SAM2_MODELS.items():
+        installed = is_sam2_installed(name)
+        status = "CACHED" if installed else "NOT CACHED"
+        mark = "[OK]" if installed else "[--]"
+        label = f"sam2-{name}"
+        if cfg.get("default"):
+            label += " (default)"
+        print(f"  {mark} {label:18s} {cfg['size_human']:>8s}  {status}")
     print()
 
 
 def main():
     parser = argparse.ArgumentParser(description="Download model weights for EZ-CorridorKey")
     parser.add_argument("--corridorkey", action="store_true", help="Download CorridorKey checkpoint (383MB, required)")
+    parser.add_argument(
+        "--sam2",
+        nargs="?",
+        const="base-plus",
+        choices=["small", "base-plus", "large", "all"],
+        help="Download SAM2 checkpoint(s): small, base-plus, large, or all (default: base-plus)",
+    )
     parser.add_argument("--gvm", action="store_true", help="Download GVM weights (~6GB, optional)")
     parser.add_argument("--videomama", action="store_true", help="Download VideoMaMa weights (~37GB, optional)")
     parser.add_argument("--all", action="store_true", help="Download all models")
@@ -211,33 +322,46 @@ def main():
     args = parser.parse_args()
 
     # Default to --check if no flags
-    if not any([args.corridorkey, args.gvm, args.videomama, args.all, args.check]):
+    if not any([args.corridorkey, args.sam2, args.gvm, args.videomama, args.all, args.check]):
         args.check = True
 
     if args.check:
         check_all()
-        if not any([args.corridorkey, args.gvm, args.videomama, args.all]):
+        if not any([args.corridorkey, args.sam2, args.gvm, args.videomama, args.all]):
             return
 
     targets = []
+    sam2_targets: list[str] = []
     if args.all:
         targets = list(MODELS.keys())
+        sam2_targets = list(SAM2_MODELS.keys())
     else:
         if args.corridorkey:
             targets.append("corridorkey")
+        if args.sam2:
+            if args.sam2 == "all":
+                sam2_targets = list(SAM2_MODELS.keys())
+            else:
+                sam2_targets = [args.sam2]
         if args.gvm:
             targets.append("gvm")
         if args.videomama:
             targets.append("videomama")
 
-    if not targets:
+    if not targets and not sam2_targets:
         return
 
-    print(f"\nDownloading {len(targets)} model(s)...\n")
+    total_targets = len(targets) + len(sam2_targets)
+    print(f"\nDownloading {total_targets} model(s)...\n")
     results = {}
     for name in targets:
         print(f"[{name}]")
         results[name] = download_model(name)
+        print()
+    for name in sam2_targets:
+        result_key = f"sam2-{name}"
+        print(f"[{result_key}]")
+        results[result_key] = download_sam2_model(name)
         print()
 
     # Summary

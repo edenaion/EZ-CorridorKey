@@ -4,11 +4,14 @@ Provides user-configurable settings that persist across sessions via QSettings.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
     QComboBox, QGroupBox,
 )
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, Qt, QUrl
 
 
 # QSettings keys
@@ -17,6 +20,7 @@ KEY_UI_SOUNDS = "ui/sounds_enabled"
 KEY_COPY_SOURCE = "project/copy_source_videos"
 KEY_LOOP_PLAYBACK = "playback/loop"
 KEY_COPY_SEQUENCES = "project/copy_image_sequences"
+KEY_EXR_COMPRESSION = "output/exr_compression"
 KEY_TRACKER_MODEL = "tracking/sam2_model"
 
 # Defaults
@@ -25,12 +29,20 @@ DEFAULT_UI_SOUNDS = True
 DEFAULT_COPY_SOURCE = True
 DEFAULT_COPY_SEQUENCES = False
 DEFAULT_LOOP_PLAYBACK = True
+DEFAULT_EXR_COMPRESSION = "dwab"
 DEFAULT_TRACKER_MODEL = "facebook/sam2.1-hiera-base-plus"
 
+EXR_COMPRESSION_OPTIONS = [
+    ("DWAB — Lossy, Smallest Files", "dwab"),
+    ("PIZ — Lossless, VFX Standard", "piz"),
+    ("ZIP — Lossless, Scanline", "zip"),
+    ("None — Uncompressed", "none"),
+]
+
 TRACKER_MODEL_OPTIONS = [
-    ("Fast", "facebook/sam2.1-hiera-small"),
-    ("Base+ (Default)", "facebook/sam2.1-hiera-base-plus"),
-    ("Highest Quality", "facebook/sam2.1-hiera-large"),
+    ("Fast", "184 MB", "facebook/sam2.1-hiera-small"),
+    ("Base+ (Default)", "324 MB", "facebook/sam2.1-hiera-base-plus"),
+    ("Highest Quality", "898 MB", "facebook/sam2.1-hiera-large"),
 ]
 
 
@@ -47,6 +59,16 @@ def get_setting_str(key: str, default: str) -> str:
     return value or default
 
 
+def get_tracker_model_cache_dir() -> Path:
+    """Return the local Hugging Face cache directory used for SAM2 models."""
+    try:
+        from huggingface_hub.constants import HF_HUB_CACHE
+
+        return Path(HF_HUB_CACHE)
+    except Exception:
+        return Path.home() / ".cache" / "huggingface" / "hub"
+
+
 class PreferencesDialog(QDialog):
     """Application preferences dialog.
 
@@ -57,7 +79,7 @@ class PreferencesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Preferences")
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(460)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -110,6 +132,30 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(proj_group)
 
+        # Output section
+        output_group = QGroupBox("Output")
+        output_layout = QVBoxLayout(output_group)
+
+        exr_label = QLabel("EXR compression")
+        output_layout.addWidget(exr_label)
+
+        self._exr_compression_combo = QComboBox()
+        saved_compression = get_setting_str(KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION)
+        for label, value in EXR_COMPRESSION_OPTIONS:
+            self._exr_compression_combo.addItem(label, value)
+        idx = self._exr_compression_combo.findData(saved_compression)
+        self._exr_compression_combo.setCurrentIndex(max(0, idx))
+        self._exr_compression_combo.setToolTip(
+            "Compression used when writing EXR output files.\n\n"
+            "DWAB: Lossy wavelet, smallest files. Default.\n"
+            "PIZ: Lossless wavelet, preferred by compositors.\n"
+            "ZIP: Lossless deflate, good for clean renders.\n"
+            "None: No compression, fastest write, largest files."
+        )
+        output_layout.addWidget(self._exr_compression_combo)
+
+        layout.addWidget(output_group)
+
         # Playback section
         play_group = QGroupBox("Playback")
         play_layout = QVBoxLayout(play_group)
@@ -135,8 +181,8 @@ class PreferencesDialog(QDialog):
 
         self._tracker_model_combo = QComboBox()
         saved_model = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
-        for label, model_id in TRACKER_MODEL_OPTIONS:
-            self._tracker_model_combo.addItem(label, model_id)
+        for label, size, model_id in TRACKER_MODEL_OPTIONS:
+            self._tracker_model_combo.addItem(f"{label}  ({size})", model_id)
         idx = self._tracker_model_combo.findData(saved_model)
         self._tracker_model_combo.setCurrentIndex(max(0, idx))
         self._tracker_model_combo.setToolTip(
@@ -145,6 +191,31 @@ class PreferencesDialog(QDialog):
             "Highest Quality: slowest, heaviest tracker."
         )
         tracking_layout.addWidget(self._tracker_model_combo)
+
+        tracking_info = QLabel(
+            "Models download automatically on first use. "
+            "Download progress appears in the status bar."
+        )
+        tracking_info.setWordWrap(True)
+        tracking_info.setStyleSheet("color: #999980; font-size: 11px;")
+        tracking_layout.addWidget(tracking_info)
+
+        manage_label = QLabel("Manage models")
+        tracking_layout.addWidget(manage_label)
+
+        self._tracker_cache_dir = get_tracker_model_cache_dir()
+        cache_row = QHBoxLayout()
+        cache_row.setSpacing(8)
+        self._cache_path_label = QLabel(str(self._tracker_cache_dir))
+        self._cache_path_label.setWordWrap(True)
+        self._cache_path_label.setStyleSheet("color: #999980; font-size: 11px;")
+        self._cache_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        cache_row.addWidget(self._cache_path_label, 1)
+
+        open_cache_btn = QPushButton("Open Cache Folder")
+        open_cache_btn.clicked.connect(self._open_tracker_cache_dir)
+        cache_row.addWidget(open_cache_btn)
+        tracking_layout.addLayout(cache_row)
 
         layout.addWidget(tracking_group)
         layout.addStretch(1)
@@ -172,11 +243,17 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_COPY_SOURCE, self._copy_source_cb.isChecked())
         s.setValue(KEY_COPY_SEQUENCES, self._copy_sequences_cb.isChecked())
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
+        s.setValue(KEY_EXR_COMPRESSION, self._exr_compression_combo.currentData())
         s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
         self.accept()
+
+    def _open_tracker_cache_dir(self) -> None:
+        """Open the local cache folder where SAM2 checkpoints are stored."""
+        self._tracker_cache_dir.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._tracker_cache_dir)))
 
     @property
     def show_tooltips(self) -> bool:

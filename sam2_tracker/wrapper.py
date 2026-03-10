@@ -88,12 +88,63 @@ class SAM2Tracker:
             except Exception:
                 logger.debug("SAM2 predictor CPU offload skipped", exc_info=True)
 
-    def _get_predictor(self):
+    def prepare(
+        self,
+        *,
+        on_progress: Callable[[int, int], None] | None = None,
+        on_status: Callable[[str], None] | None = None,
+    ) -> None:
+        """Ensure the predictor is loaded and the checkpoint is present locally."""
+        self._get_predictor(on_progress=on_progress, on_status=on_status)
+
+    def _make_download_progress_class(
+        self,
+        *,
+        on_progress: Callable[[int, int], None] | None = None,
+        on_status: Callable[[str], None] | None = None,
+    ):
+        class _DownloadProgress:
+            def __init__(self, *args, total=None, initial=0, desc="", disable=False, **kwargs):
+                self.total = int(total or 0)
+                self.n = int(initial or 0)
+                self.desc = desc or "SAM2 model"
+                if on_status:
+                    on_status(f"Downloading {self.desc}")
+                if on_progress and self.total > 0:
+                    on_progress(self.n, self.total)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                self.close()
+                return False
+
+            def update(self, n=1):
+                self.n += int(n or 0)
+                if on_progress and self.total > 0:
+                    on_progress(min(self.n, self.total), self.total)
+
+            def close(self):
+                if on_progress and self.total > 0:
+                    on_progress(self.total, self.total)
+                if on_status:
+                    on_status(f"Downloaded {self.desc}")
+
+        return _DownloadProgress
+
+    def _get_predictor(
+        self,
+        *,
+        on_progress: Callable[[int, int], None] | None = None,
+        on_status: Callable[[str], None] | None = None,
+    ):
         if self._predictor is not None:
             return self._predictor
 
         try:
-            from sam2.sam2_video_predictor import SAM2VideoPredictor
+            from huggingface_hub import hf_hub_download
+            from sam2.build_sam import HF_MODEL_ID_TO_FILENAMES, build_sam2_video_predictor
         except ImportError as exc:
             raise SAM2NotInstalledError(
                 "SAM2 is not installed. Install the optional tracker dependency "
@@ -111,8 +162,20 @@ class SAM2Tracker:
             self.model_id,
             self.vos_optimized,
         )
-        self._predictor = SAM2VideoPredictor.from_pretrained(
-            self.model_id,
+        config_name, checkpoint_name = HF_MODEL_ID_TO_FILENAMES[self.model_id]
+        if on_status:
+            on_status("Checking model cache")
+        ckpt_path = hf_hub_download(
+            repo_id=self.model_id,
+            filename=checkpoint_name,
+            tqdm_class=self._make_download_progress_class(
+                on_progress=on_progress,
+                on_status=on_status,
+            ),
+        )
+        self._predictor = build_sam2_video_predictor(
+            config_file=config_name,
+            ckpt_path=ckpt_path,
             device=self.device,
             vos_optimized=self.vos_optimized,
         )
@@ -135,7 +198,7 @@ class SAM2Tracker:
         if not any(p.positive_points for p in prompt_frames):
             raise ValueError("SAM2 tracking requires at least one foreground prompt")
 
-        predictor = self._get_predictor()
+        predictor = self._get_predictor(on_progress=on_progress, on_status=on_status)
 
         try:
             import torch

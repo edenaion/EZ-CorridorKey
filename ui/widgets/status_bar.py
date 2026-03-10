@@ -29,6 +29,18 @@ def _fmt_duration(seconds: float) -> str:
     return f"{s // 3600}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
 
+def _fmt_bytes(num_bytes: int) -> str:
+    """Format bytes in a compact human-readable form."""
+    value = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024.0 or unit == "GB":
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024.0
+    return f"{value:.1f} GB"
+
+
 class StatusBar(QWidget):
     """Bottom bar with progress, elapsed timer, and run/resume/stop CTAs."""
 
@@ -260,8 +272,14 @@ class StatusBar(QWidget):
 
             elapsed_str = _fmt_duration(elapsed)
             label = f"{self._job_label}  " if self._job_label else ""
+            if total >= 1_000_000:
+                current_text = _fmt_bytes(current)
+                total_text = _fmt_bytes(total)
+            else:
+                current_text = str(current)
+                total_text = str(total)
             self._frame_label.setText(
-                f"{label}{current}/{total}  {pct}%  {elapsed_str}{eta_str}"
+                f"{label}{current_text}/{total_text}  {pct}%  {elapsed_str}{eta_str}"
             )
         else:
             self._progress.setValue(0)

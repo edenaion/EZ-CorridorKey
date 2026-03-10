@@ -26,6 +26,7 @@ fi
 echo "[2/3] Updating dependencies..."
 
 UV_AVAILABLE=0
+INSTALL_TARGET="-e ."
 if command -v uv &>/dev/null; then
     UV_AVAILABLE=1
 elif [ -f "$HOME/.local/bin/uv" ]; then
@@ -36,8 +37,13 @@ elif [ -f "$HOME/.cargo/bin/uv" ]; then
     UV_AVAILABLE=1
 fi
 
+if [ -f ".venv/bin/python" ] && .venv/bin/python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('sam2') else 1)" >/dev/null 2>&1; then
+    INSTALL_TARGET="-e .[tracker]"
+    echo "  SAM2 tracker detected — updating tracker extras too"
+fi
+
 if [ "$UV_AVAILABLE" = "1" ]; then
-    if uv pip install --python .venv/bin/python --torch-backend=auto -e . 2>&1; then
+    if uv pip install --python .venv/bin/python --torch-backend=auto $INSTALL_TARGET 2>&1; then
         echo "  [OK] Dependencies updated via uv"
     else
         echo "  [WARN] uv update failed, trying pip..."
@@ -48,7 +54,7 @@ fi
 if [ "$UV_AVAILABLE" = "0" ]; then
     if [ -f ".venv/bin/activate" ]; then
         source .venv/bin/activate
-        pip install -e . 2>&1
+        pip install $INSTALL_TARGET 2>&1
         echo "  [OK] Dependencies updated via pip"
     else
         echo "  [ERROR] No .venv found. Run 1-install.sh first."

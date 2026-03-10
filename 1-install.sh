@@ -135,6 +135,48 @@ if [ "$UV_AVAILABLE" -eq 0 ]; then
     echo "  [OK] Dependencies installed via pip"
 fi
 
+echo "[3b/6] Optional SAM2 tracker..."
+INSTALL_SAM2="y"
+if [ "$OS_TYPE" = "macos" ]; then
+    echo "  [NOTE] SAM2 tracking on macOS is experimental in CorridorKey."
+fi
+read -rp "  Install SAM2 tracking support? [Y/n]: " INSTALL_SAM2_INPUT
+if [[ "$(echo "${INSTALL_SAM2_INPUT:-y}" | tr '[:upper:]' '[:lower:]')" == "n" ]]; then
+    INSTALL_SAM2="n"
+fi
+
+if [ "$INSTALL_SAM2" = "y" ]; then
+    SAM2_OK=0
+    echo "  Installing SAM2 tracker package..."
+    if [ "$UV_AVAILABLE" -eq 1 ]; then
+        if uv pip install --python .venv/bin/python --torch-backend=auto -e ".[tracker]" 2>&1; then
+            SAM2_OK=1
+        fi
+    else
+        if [ -n "${INDEX_URL:-}" ]; then
+            if pip install --extra-index-url "$INDEX_URL" -e ".[tracker]" 2>&1; then
+                SAM2_OK=1
+            fi
+        else
+            if pip install -e ".[tracker]" 2>&1; then
+                SAM2_OK=1
+            fi
+        fi
+    fi
+
+    if [ "$SAM2_OK" -eq 1 ]; then
+        echo "  [OK] SAM2 tracker support installed"
+        read -rp "  Pre-download default SAM2 Base+ model? (324MB) [Y/n]: " DOWNLOAD_SAM2
+        if [[ "$(echo "${DOWNLOAD_SAM2:-y}" | tr '[:upper:]' '[:lower:]')" != "n" ]]; then
+            .venv/bin/python scripts/setup_models.py --sam2
+        fi
+    else
+        echo "  [WARN] SAM2 tracker install failed. CorridorKey will still run without Track Mask."
+        echo "  You can retry later with:"
+        echo "    .venv/bin/python -m pip install -e '.[tracker]'"
+    fi
+fi
+
 # ── Step 5: Check FFmpeg ──
 echo "[4/6] Checking FFmpeg..."
 if command -v ffmpeg &>/dev/null; then
