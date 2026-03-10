@@ -25,18 +25,27 @@ os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
 logger = logging.getLogger(__name__)
 
 # EXR write flags for cv2.imwrite — PXR24 half-float (fallback only;
-# prefer write_exr_dwab() for DWAB output since OpenCV's DWAB writer is broken)
+# prefer write_exr() for output since OpenCV's DWAB writer is broken)
 EXR_WRITE_FLAGS = [
     cv2.IMWRITE_EXR_TYPE, cv2.IMWRITE_EXR_TYPE_HALF,
     cv2.IMWRITE_EXR_COMPRESSION, cv2.IMWRITE_EXR_COMPRESSION_PXR24,
 ]
 
 
-def write_exr_dwab(path: str, img: np.ndarray) -> bool:
-    """Write an image as EXR DWAB half-float using the OpenEXR library.
+def _exr_compression_constant(name: str):
+    """Map a compression name to the Imath compression enum value."""
+    import Imath
+    _MAP = {
+        "dwab": Imath.Compression.DWAB_COMPRESSION,
+        "piz": Imath.Compression.PIZ_COMPRESSION,
+        "zip": Imath.Compression.ZIPS_COMPRESSION,
+        "none": Imath.Compression.NO_COMPRESSION,
+    }
+    return Imath.Compression(_MAP.get(name.lower(), Imath.Compression.DWAB_COMPRESSION))
 
-    OpenCV's DWAB writer is broken (produces corrupt files). This function
-    uses the OpenEXR library which handles DWAB correctly.
+
+def write_exr(path: str, img: np.ndarray, compression: str = "dwab") -> bool:
+    """Write an image as EXR half-float using the OpenEXR library.
 
     Args:
         path: Output file path.
@@ -44,6 +53,7 @@ def write_exr_dwab(path: str, img: np.ndarray) -> bool:
             - BGR float32 [H, W, 3] (from cv2.imread, service.py output)
             - BGRA float32 [H, W, 4] (premultiplied RGBA from inference)
             - Grayscale float32 [H, W] (single-channel matte)
+        compression: EXR compression — "dwab", "piz", "zip", or "none".
 
     Returns:
         True on success, False on failure.
@@ -53,12 +63,13 @@ def write_exr_dwab(path: str, img: np.ndarray) -> bool:
 
     try:
         HALF = Imath.Channel(Imath.PixelType(Imath.PixelType.HALF))
+        comp = _exr_compression_constant(compression)
 
         if img.ndim == 2:
             # Grayscale — single Y channel
             h, w = img.shape
             header = OpenEXR.Header(w, h)
-            header['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+            header['compression'] = comp
             header['channels'] = {'Y': HALF}
             y = img.astype(np.float16)
             out = OpenEXR.OutputFile(path, header)
@@ -68,7 +79,7 @@ def write_exr_dwab(path: str, img: np.ndarray) -> bool:
             # BGR → R, G, B channels
             h, w = img.shape[:2]
             header = OpenEXR.Header(w, h)
-            header['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+            header['compression'] = comp
             header['channels'] = {'R': HALF, 'G': HALF, 'B': HALF}
             b = img[:, :, 0].astype(np.float16)
             g = img[:, :, 1].astype(np.float16)
@@ -80,7 +91,7 @@ def write_exr_dwab(path: str, img: np.ndarray) -> bool:
             # BGRA → R, G, B, A channels
             h, w = img.shape[:2]
             header = OpenEXR.Header(w, h)
-            header['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+            header['compression'] = comp
             header['channels'] = {'R': HALF, 'G': HALF, 'B': HALF, 'A': HALF}
             b = img[:, :, 0].astype(np.float16)
             g = img[:, :, 1].astype(np.float16)
@@ -97,19 +108,26 @@ def write_exr_dwab(path: str, img: np.ndarray) -> bool:
             return False
         return True
     except Exception as e:
-        logger.warning(f"Failed to write EXR DWAB {path}: {e}")
+        logger.warning(f"Failed to write EXR ({compression}) {path}: {e}")
         return False
 
 
-def recompress_exr_to_dwab(src_path: str, dst_path: str) -> bool:
-    """Recompress an EXR file to DWAB half-float.
+# Backwards-compatible aliases
+def write_exr_dwab(path: str, img: np.ndarray) -> bool:
+    """Write EXR with DWAB compression (legacy alias for write_exr)."""
+    return write_exr(path, img, compression="dwab")
+
+
+def recompress_exr(src_path: str, dst_path: str, compression: str = "dwab") -> bool:
+    """Recompress an EXR file to the specified compression.
 
     Reads the source EXR (any compression) via OpenCV and writes to
-    dst_path with DWAB compression via OpenEXR library.
+    dst_path with the requested compression via OpenEXR library.
 
     Args:
         src_path: Path to source EXR file.
-        dst_path: Path to write DWAB-compressed EXR.
+        dst_path: Path to write recompressed EXR.
+        compression: Target compression — "dwab", "piz", "zip", or "none".
 
     Returns:
         True on success, False on failure.
@@ -118,7 +136,8 @@ def recompress_exr_to_dwab(src_path: str, dst_path: str) -> bool:
     if img is None:
         logger.warning(f"Failed to read EXR for recompression: {src_path}")
         return False
-    return write_exr_dwab(dst_path, img)
+    return write_exr(dst_path, img, compression=compression)
+
 
 
 def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np.ndarray]:
