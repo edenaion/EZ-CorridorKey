@@ -435,6 +435,62 @@ QGroupBox::title {
     letter-spacing: 1px;
 }
 
+/* === Dialogs (all types) === */
+QDialog,
+QInputDialog,
+QFileDialog {
+    background-color: #141300;
+    color: #E0E0E0;
+}
+
+QMessageBox {
+    background-color: #141300;
+    color: #E0E0E0;
+}
+
+QMessageBox QLabel,
+QInputDialog QLabel {
+    color: #E0E0E0;
+    font-size: 13px;
+}
+
+QMessageBox QPushButton,
+QInputDialog QPushButton {
+    padding: 6px 16px;
+}
+
+QInputDialog QLineEdit {
+    background-color: #1A1900;
+    border: 1px solid #454430;
+    color: #E0E0E0;
+    padding: 4px 6px;
+}
+
+QInputDialog QLineEdit:focus {
+    border-color: #FFF203;
+}
+
+/* File dialog sidebar & file list */
+QFileDialog QListView,
+QFileDialog QTreeView {
+    background-color: #1A1900;
+    color: #E0E0E0;
+    border: 1px solid #454430;
+    selection-background-color: #FFF203;
+    selection-color: #000000;
+}
+
+QFileDialog QToolButton {
+    background-color: #2A2910;
+    border: 1px solid #454430;
+    color: #E0E0E0;
+}
+
+QFileDialog QToolButton:hover {
+    background-color: #3A3920;
+    border-color: #FFF203;
+}
+
 /* === ToolTip === */
 QToolTip {
     background-color: #1A1900;

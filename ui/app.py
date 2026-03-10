@@ -10,13 +10,23 @@ import sys
 import os
 import logging
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox, QDialogButtonBox
 from PySide6.QtGui import QFontDatabase, QFont, QIcon
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject, QEvent
 
 from ui.theme import load_stylesheet
 
 logger = logging.getLogger(__name__)
+
+
+class _MessageBoxFilter(QObject):
+    """Auto-center buttons on every QMessageBox in the app."""
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Show and isinstance(obj, QMessageBox):
+            for bb in obj.findChildren(QDialogButtonBox):
+                bb.setCenterButtons(True)
+        return False
 
 
 def create_app(argv: list[str] | None = None) -> QApplication:
@@ -103,5 +113,9 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     # Install unified click sound — every QPushButton gets click sound automatically
     from ui.sounds.audio_manager import install_global_click_sound
     install_global_click_sound(app)
+
+    # Center buttons on all QMessageBox dialogs globally
+    app._msgbox_filter = _MessageBoxFilter(app)
+    app.installEventFilter(app._msgbox_filter)
 
     return app
