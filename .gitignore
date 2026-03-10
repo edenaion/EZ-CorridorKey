@@ -61,4 +61,8 @@ CLAUDE.md
 *.lnk
 research-tests.md
 scripts/utils/
+scripts/make_zip.py
+bench_vram.py
+bench_vram_report.json
+.tmp/
 Projects/
