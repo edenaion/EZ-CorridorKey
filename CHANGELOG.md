@@ -59,7 +59,7 @@ All notable changes to EZ-CorridorKey are documented here.
 ### Installer & Scripts
 - **`2-start.bat`** — adds local `tools/ffmpeg/bin` to PATH before launch
 - **`3-update.bat` / `3-update.sh`** — migrates older git installs from local `master` checkouts to `main`, repoints `main` checkouts still tracking `origin/master`, and still preserves ZIP fallback for non-git installs
-- **Temporary `master` compatibility mirror** — `origin/master` remains a compatibility branch for two post-1.4.0 update rounds so older installs can keep using their existing updater before being bridged onto `main`. Planned retirement: after `1.4.2`
+- **Temporary `master` compatibility mirror** — `origin/master` remains a compatibility branch for the next two releases so older installs can keep using their existing updater before being bridged onto `main`. Planned retirement: after `1.5.1`
 - **`pyproject.toml`** — `requires-python` updated to `">=3.10,<3.14"`
 - **`.gitignore`** — added `tools/` to prevent ffmpeg binary from being committed
 
