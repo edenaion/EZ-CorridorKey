@@ -18,6 +18,8 @@ import shutil
 import subprocess
 import sys
 import threading
+import urllib.request
+import zipfile
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -27,6 +29,10 @@ _METADATA_FILENAME = ".video_metadata.json"
 _MIN_FFMPEG_MAJOR = 7
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOCAL_FFMPEG_BIN = os.path.join(_REPO_ROOT, "tools", "ffmpeg", "bin")
+_WINDOWS_FFMPEG_BUNDLE_URL = (
+    "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/"
+    "ffmpeg-master-latest-win64-gpl.zip"
+)
 
 # Common install locations per platform
 _FFMPEG_SEARCH_PATHS_WINDOWS = [
@@ -80,8 +86,18 @@ class FFmpegValidationResult:
     ffprobe_version: FFmpegVersionInfo | None = None
 
 
+def _local_ffmpeg_binary(name: str) -> str | None:
+    """Return the bundled repo-local FFmpeg binary if present."""
+    ext = ".exe" if sys.platform == "win32" else ""
+    candidate = os.path.join(_LOCAL_FFMPEG_BIN, f"{name}{ext}")
+    return candidate if os.path.isfile(candidate) else None
+
+
 def find_ffmpeg() -> str | None:
-    """Locate ffmpeg binary. Checks PATH then common install dirs."""
+    """Locate ffmpeg binary. Prefer the bundled local build when present."""
+    local = _local_ffmpeg_binary("ffmpeg")
+    if local:
+        return local
     found = shutil.which("ffmpeg")
     if found:
         return found
@@ -94,7 +110,10 @@ def find_ffmpeg() -> str | None:
 
 
 def find_ffprobe() -> str | None:
-    """Locate ffprobe binary. Checks PATH then common install dirs."""
+    """Locate ffprobe binary. Prefer the bundled local build when present."""
+    local = _local_ffmpeg_binary("ffprobe")
+    if local:
+        return local
     found = shutil.which("ffprobe")
     if found:
         return found
@@ -266,6 +285,102 @@ def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResul
 def require_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResult:
     """Return the validated FFmpeg install or raise RuntimeError with detail."""
     result = validate_ffmpeg_install(require_probe=require_probe)
+    if not result.ok:
+        raise RuntimeError(result.message)
+    return result
+
+
+def get_ffmpeg_install_help() -> str:
+    """Return concise install guidance for the current platform."""
+    if sys.platform == "win32":
+        return (
+            "Use the CorridorKey Repair FFmpeg action or re-run 1-install.bat.\n"
+            "CorridorKey will install a full bundled FFmpeg build into tools\\ffmpeg."
+        )
+    if sys.platform == "darwin":
+        return (
+            "Install a current FFmpeg build with Homebrew:\n"
+            "    brew install ffmpeg\n\n"
+            "Then verify:\n"
+            "    ffmpeg -version\n"
+            "    ffprobe -version"
+        )
+    if os.path.isfile("/etc/debian_version"):
+        install_cmd = "sudo apt install ffmpeg"
+    elif os.path.isfile("/etc/fedora-release"):
+        install_cmd = "sudo dnf install ffmpeg"
+    elif os.path.isfile("/etc/arch-release"):
+        install_cmd = "sudo pacman -S ffmpeg"
+    else:
+        install_cmd = "Install ffmpeg with your package manager"
+    return (
+        f"{install_cmd}\n\n"
+        "Then verify:\n"
+        "    ffmpeg -version\n"
+        "    ffprobe -version"
+    )
+
+
+def repair_ffmpeg_install(
+    progress_callback: Optional[Callable[[str, int, int], None]] = None,
+) -> FFmpegValidationResult:
+    """Repair FFmpeg for the current platform.
+
+    On Windows, downloads and installs a bundled full build into tools/ffmpeg.
+    Other platforms return install guidance instead of mutating the system.
+    """
+    if sys.platform != "win32":
+        raise RuntimeError(get_ffmpeg_install_help())
+
+    def _emit(phase: str, current: int = 0, total: int = 0) -> None:
+        if progress_callback:
+            progress_callback(phase, current, total)
+
+    tools_dir = os.path.join(_REPO_ROOT, "tools")
+    dest_dir = os.path.join(tools_dir, "ffmpeg")
+    temp_dir = os.path.join(_REPO_ROOT, ".tmp", "ffmpeg-repair")
+    zip_path = os.path.join(temp_dir, "ffmpeg-master-latest-win64-gpl.zip")
+    extract_dir = os.path.join(temp_dir, "extract")
+
+    os.makedirs(temp_dir, exist_ok=True)
+    os.makedirs(tools_dir, exist_ok=True)
+
+    _emit("Downloading FFmpeg", 0, 0)
+    with urllib.request.urlopen(_WINDOWS_FFMPEG_BUNDLE_URL, timeout=60) as response:
+        total_header = response.headers.get("Content-Length", "")
+        total_bytes = int(total_header) if total_header.isdigit() else 0
+        downloaded = 0
+        with open(zip_path, "wb") as handle:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                downloaded += len(chunk)
+                _emit("Downloading FFmpeg", downloaded, total_bytes)
+
+    _emit("Extracting FFmpeg", 0, 0)
+    if os.path.isdir(extract_dir):
+        shutil.rmtree(extract_dir, ignore_errors=True)
+    os.makedirs(extract_dir, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as archive:
+        archive.extractall(extract_dir)
+
+    inner_dir = None
+    for name in os.listdir(extract_dir):
+        candidate = os.path.join(extract_dir, name)
+        if os.path.isdir(candidate) and name.lower().startswith("ffmpeg-"):
+            inner_dir = candidate
+            break
+    if inner_dir is None:
+        raise RuntimeError("Downloaded FFmpeg archive had an unexpected folder layout.")
+
+    if os.path.isdir(dest_dir):
+        shutil.rmtree(dest_dir, ignore_errors=True)
+    shutil.move(inner_dir, dest_dir)
+
+    _emit("Validating FFmpeg", 0, 0)
+    result = validate_ffmpeg_install(require_probe=True)
     if not result.ok:
         raise RuntimeError(result.message)
     return result

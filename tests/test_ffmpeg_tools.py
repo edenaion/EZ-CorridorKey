@@ -224,6 +224,13 @@ class TestVideoMetadata:
 
 
 class TestValidateFFmpegInstall:
+    def test_local_ffmpeg_is_preferred_over_path(self, monkeypatch):
+        monkeypatch.setattr(ffmpeg_tools, "_local_ffmpeg_binary", lambda name: f"/local/{name}")
+        monkeypatch.setattr(ffmpeg_tools.shutil, "which", lambda name: f"/path/{name}")
+
+        assert ffmpeg_tools.find_ffmpeg() == "/local/ffmpeg"
+        assert ffmpeg_tools.find_ffprobe() == "/local/ffprobe"
+
     def test_missing_ffprobe_is_rejected(self, monkeypatch):
         monkeypatch.setattr(ffmpeg_tools, "find_ffmpeg", lambda: "ffmpeg")
         monkeypatch.setattr(ffmpeg_tools, "find_ffprobe", lambda: None)
@@ -283,3 +290,11 @@ class TestValidateFFmpegInstall:
 
         assert result.ok
         assert "FFmpeg OK" in result.message
+
+    def test_install_help_mentions_local_windows_repair(self, monkeypatch):
+        monkeypatch.setattr(ffmpeg_tools.sys, "platform", "win32")
+
+        help_text = ffmpeg_tools.get_ffmpeg_install_help()
+
+        assert "Repair FFmpeg" in help_text
+        assert "tools\\ffmpeg" in help_text

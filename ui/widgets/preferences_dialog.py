@@ -9,9 +9,9 @@ from pathlib import Path
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
-    QComboBox, QGroupBox,
+    QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication,
 )
-from PySide6.QtCore import QSettings, Qt, QUrl
+from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal
 
 
 # QSettings keys
@@ -69,6 +69,33 @@ def get_tracker_model_cache_dir() -> Path:
         return Path.home() / ".cache" / "huggingface" / "hub"
 
 
+def get_local_ffmpeg_dir() -> Path:
+    """Return the repo-local bundled FFmpeg folder."""
+    return Path(__file__).resolve().parents[2] / "tools" / "ffmpeg"
+
+
+class _FFmpegRepairWorker(QThread):
+    """Background repair worker so the Preferences dialog stays responsive."""
+
+    progress = Signal(str, int, int)
+    succeeded = Signal(str)
+    failed = Signal(str)
+
+    def run(self) -> None:
+        from backend.ffmpeg_tools import repair_ffmpeg_install
+
+        try:
+            result = repair_ffmpeg_install(
+                progress_callback=lambda phase, current, total: self.progress.emit(
+                    phase, current, total
+                )
+            )
+        except Exception as exc:
+            self.failed.emit(str(exc))
+            return
+        self.succeeded.emit(result.message)
+
+
 class PreferencesDialog(QDialog):
     """Application preferences dialog.
 
@@ -79,8 +106,10 @@ class PreferencesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Preferences")
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(520)
         self.setModal(True)
+        self._ffmpeg_repair_worker: _FFmpegRepairWorker | None = None
+        self._local_ffmpeg_dir = get_local_ffmpeg_dir()
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
@@ -218,22 +247,85 @@ class PreferencesDialog(QDialog):
         tracking_layout.addLayout(cache_row)
 
         layout.addWidget(tracking_group)
+
+        ffmpeg_group = QGroupBox("Video Tools")
+        ffmpeg_layout = QVBoxLayout(ffmpeg_group)
+
+        ffmpeg_label = QLabel("FFmpeg status")
+        ffmpeg_layout.addWidget(ffmpeg_label)
+
+        self._ffmpeg_status_label = QLabel("")
+        self._ffmpeg_status_label.setWordWrap(True)
+        self._ffmpeg_status_label.setStyleSheet("font-size: 11px;")
+        self._ffmpeg_status_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        ffmpeg_layout.addWidget(self._ffmpeg_status_label)
+
+        ffmpeg_info = QLabel(
+            "Windows: Repair downloads a bundled full FFmpeg build into tools/ffmpeg "
+            "without changing your system install.\n"
+            "macOS/Linux: Repair shows the exact install commands instead of mutating "
+            "system packages from the app."
+        )
+        ffmpeg_info.setWordWrap(True)
+        ffmpeg_info.setStyleSheet("color: #999980; font-size: 11px;")
+        ffmpeg_layout.addWidget(ffmpeg_info)
+
+        self._ffmpeg_progress = QProgressBar()
+        self._ffmpeg_progress.setTextVisible(True)
+        self._ffmpeg_progress.hide()
+        ffmpeg_layout.addWidget(self._ffmpeg_progress)
+
+        ffmpeg_btn_row = QHBoxLayout()
+        ffmpeg_btn_row.setSpacing(8)
+
+        self._repair_ffmpeg_btn = QPushButton("Repair FFmpeg")
+        self._repair_ffmpeg_btn.setToolTip(
+            "Windows: download and install a full bundled FFmpeg build into "
+            "tools/ffmpeg, validate ffmpeg + ffprobe 7+, and switch CorridorKey "
+            "to that local copy immediately.\n\n"
+            "macOS/Linux: do not change system packages. CorridorKey shows the "
+            "exact install commands and copies them to your clipboard instead."
+        )
+        self._repair_ffmpeg_btn.clicked.connect(self._on_repair_ffmpeg)
+        ffmpeg_btn_row.addWidget(self._repair_ffmpeg_btn)
+
+        self._open_ffmpeg_btn = QPushButton("Open FFmpeg Folder")
+        self._open_ffmpeg_btn.setToolTip(
+            "Open CorridorKey's bundled FFmpeg folder.\n"
+            "If Repair FFmpeg has been run on Windows, this is where the local "
+            "full build is stored."
+        )
+        self._open_ffmpeg_btn.clicked.connect(self._open_local_ffmpeg_dir)
+        ffmpeg_btn_row.addWidget(self._open_ffmpeg_btn)
+        ffmpeg_btn_row.addStretch(1)
+
+        ffmpeg_layout.addLayout(ffmpeg_btn_row)
+
+        layout.addWidget(ffmpeg_group)
         layout.addStretch(1)
 
         # Buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch(1)
 
-        cancel_btn = QPushButton("Cancel")
-        cancel_btn.clicked.connect(self.reject)
-        btn_layout.addWidget(cancel_btn)
+        self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(self._cancel_btn)
 
-        ok_btn = QPushButton("OK")
-        ok_btn.setDefault(True)
-        ok_btn.clicked.connect(self._save_and_accept)
-        btn_layout.addWidget(ok_btn)
+        self._ok_btn = QPushButton("OK")
+        self._ok_btn.setDefault(True)
+        self._ok_btn.clicked.connect(self._save_and_accept)
+        btn_layout.addWidget(self._ok_btn)
 
         layout.addLayout(btn_layout)
+        self._refresh_ffmpeg_status()
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        """Prevent closing the dialog while FFmpeg repair is active."""
+        if self._ffmpeg_repair_worker is not None and self._ffmpeg_repair_worker.isRunning():
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def _save_and_accept(self) -> None:
         """Persist settings and close."""
@@ -254,6 +346,118 @@ class PreferencesDialog(QDialog):
         """Open the local cache folder where SAM2 checkpoints are stored."""
         self._tracker_cache_dir.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._tracker_cache_dir)))
+
+    def _open_local_ffmpeg_dir(self) -> None:
+        """Open the bundled FFmpeg folder if it exists."""
+        self._local_ffmpeg_dir.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._local_ffmpeg_dir)))
+
+    def _refresh_ffmpeg_status(self) -> None:
+        """Refresh the FFmpeg health label and button state."""
+        from backend.ffmpeg_tools import validate_ffmpeg_install
+
+        result = validate_ffmpeg_install(require_probe=True)
+        self._ffmpeg_status_label.setText(result.message)
+        if result.ok:
+            self._ffmpeg_status_label.setStyleSheet("color: #22C55E; font-size: 11px;")
+        else:
+            self._ffmpeg_status_label.setStyleSheet("color: #FFA500; font-size: 11px;")
+        self._open_ffmpeg_btn.setEnabled(self._local_ffmpeg_dir.exists())
+
+    def _set_ffmpeg_repair_busy(self, busy: bool) -> None:
+        """Disable controls while a repair is running."""
+        self._repair_ffmpeg_btn.setEnabled(not busy)
+        self._open_ffmpeg_btn.setEnabled(not busy and self._local_ffmpeg_dir.exists())
+        self._cancel_btn.setEnabled(not busy)
+        self._ok_btn.setEnabled(not busy)
+
+    def _set_parent_status_message(self, message: str) -> None:
+        """Mirror long-running repair status to the main window status bar when available."""
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_status_bar"):
+            parent._status_bar.set_message(message)
+
+    def _on_repair_ffmpeg(self) -> None:
+        """Repair FFmpeg on Windows or show manual install guidance elsewhere."""
+        from backend.ffmpeg_tools import get_ffmpeg_install_help, validate_ffmpeg_install
+        import sys
+
+        current = validate_ffmpeg_install(require_probe=True)
+        if current.ok:
+            QMessageBox.information(
+                self,
+                "FFmpeg OK",
+                f"{current.message}\n\nNo repair is needed.",
+            )
+            return
+
+        if sys.platform != "win32":
+            help_text = get_ffmpeg_install_help()
+            QApplication.clipboard().setText(help_text)
+            QMessageBox.information(
+                self,
+                "Repair FFmpeg",
+                help_text + "\n\nThe install commands were copied to your clipboard.",
+            )
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Repair FFmpeg",
+            "CorridorKey will download and install a full bundled FFmpeg build into:\n\n"
+            f"{self._local_ffmpeg_dir}\n\n"
+            "This does not modify your system-wide FFmpeg.\n\nContinue?",
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        self._ffmpeg_progress.setRange(0, 0)
+        self._ffmpeg_progress.setFormat("Preparing repair...")
+        self._ffmpeg_progress.show()
+        self._set_ffmpeg_repair_busy(True)
+        self._set_parent_status_message("Repairing FFmpeg...")
+
+        self._ffmpeg_repair_worker = _FFmpegRepairWorker(self)
+        self._ffmpeg_repair_worker.progress.connect(self._on_ffmpeg_repair_progress)
+        self._ffmpeg_repair_worker.succeeded.connect(self._on_ffmpeg_repair_succeeded)
+        self._ffmpeg_repair_worker.failed.connect(self._on_ffmpeg_repair_failed)
+        self._ffmpeg_repair_worker.start()
+
+    def _on_ffmpeg_repair_progress(self, phase: str, current: int, total: int) -> None:
+        """Update progress text while a repair download/extract is running."""
+        self._ffmpeg_status_label.setText(phase)
+        self._set_parent_status_message(phase)
+        if total > 0:
+            self._ffmpeg_progress.setRange(0, total)
+            self._ffmpeg_progress.setValue(min(current, total))
+        else:
+            self._ffmpeg_progress.setRange(0, 0)
+        self._ffmpeg_progress.setFormat(phase)
+
+    def _finish_ffmpeg_repair(self) -> None:
+        """Clear worker/progress state after repair completes."""
+        self._ffmpeg_progress.hide()
+        self._set_ffmpeg_repair_busy(False)
+        self._set_parent_status_message("")
+        if self._ffmpeg_repair_worker is not None:
+            self._ffmpeg_repair_worker.deleteLater()
+            self._ffmpeg_repair_worker = None
+
+    def _on_ffmpeg_repair_succeeded(self, message: str) -> None:
+        """Handle a successful FFmpeg repair."""
+        self._finish_ffmpeg_repair()
+        self._refresh_ffmpeg_status()
+        QMessageBox.information(
+            self,
+            "FFmpeg Repaired",
+            message + "\n\nCorridorKey will use the bundled local FFmpeg immediately.",
+        )
+
+    def _on_ffmpeg_repair_failed(self, message: str) -> None:
+        """Handle a failed FFmpeg repair."""
+        self._finish_ffmpeg_repair()
+        self._refresh_ffmpeg_status()
+        QMessageBox.critical(self, "FFmpeg Repair Failed", message)
 
     @property
     def show_tooltips(self) -> bool:
