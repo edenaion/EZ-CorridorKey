@@ -6,12 +6,9 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [1.4.0] - 2026-03-09 — Full Pipeline, Model Handoff, Force-Stop, Installer Overhaul
 
-### Full Pipeline Routing
-- **Automatic clip classification** — `PipelineRoute` classifies each clip and auto-chains the correct job sequence: GVM → inference, VideoMaMa → inference, or inference-only
-- **GVM auto-alpha pipeline** — one-click GVM diffusion-based alpha generation for RAW clips without annotations, automatically chains inference on completion
-- **VideoMaMa guided pipeline** — annotation-based alpha generation: exports masks (CPU), runs VideoMaMa, then auto-chains inference
-- **Batch processing** — "Run All" queues every selected clip through its classified pipeline route (GVM, VideoMaMa, or inference-only)
+### Workflow Improvements
 - **Alpha hint re-import** — importing alpha hints on a clip that already has them now asks to overwrite (previously showed "Already Imported")
+- **Import Images as sequence or folders** — images are now able to be imported! PNG, JPG/JPEG, EXR, TIF/TIFF, BMP, DPX
 
 ### Model Residency & GPU Handoff
 - **`torch._dynamo.reset()` after model switch** — clears stale Triton compilation cache when switching between GVM/VideoMaMa/inference models, fixing the hang where `torch.compile` would deadlock on cached CUDA state from the previous diffusion pipeline
@@ -673,3 +670,4 @@ All notable changes to EZ-CorridorKey are documented here.
 ### 2026-02-22
 - `4f1dad6` Add luminance-preserving despill, configurable auto-despeckling garbage matte, checkerboard composite
 - `d5559bc` Initial commit: Smart Wizard, VideoMaMa Integration, Optional GVM
+
