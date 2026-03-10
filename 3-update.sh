@@ -15,6 +15,37 @@ if ! command -v git &>/dev/null; then
     exit 1
 fi
 
+CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+CURRENT_UPSTREAM="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+
+if [ "$CURRENT_BRANCH" = "master" ]; then
+    echo "  [MIGRATE] Moving local branch from master to main..."
+    git fetch origin main --recurse-submodules >/dev/null 2>&1 || true
+    if git show-ref --verify --quiet refs/heads/main; then
+        if git checkout main >/dev/null 2>&1; then
+            :
+        else
+            echo "  [WARN] Could not switch to local main branch automatically."
+            echo "  Finish this update, then run: git fetch origin && git checkout main"
+        fi
+    elif git branch -m master main >/dev/null 2>&1 || git checkout -b main origin/main >/dev/null 2>&1; then
+        :
+    else
+        echo "  [WARN] Could not auto-migrate this checkout to main."
+        echo "  Finish this update, then run: git fetch origin && git checkout main"
+    fi
+    if [ "$(git branch --show-current 2>/dev/null || true)" = "main" ]; then
+        git branch --set-upstream-to=origin/main main >/dev/null 2>&1 || true
+        echo "  [OK] Now tracking origin/main"
+    fi
+elif [ "$CURRENT_BRANCH" = "main" ] && [ "$CURRENT_UPSTREAM" = "origin/master" ]; then
+    echo "  [MIGRATE] Repointing main to track origin/main..."
+    git fetch origin main --recurse-submodules >/dev/null 2>&1 || true
+    if git branch --set-upstream-to=origin/main main >/dev/null 2>&1; then
+        echo "  [OK] Now tracking origin/main"
+    fi
+fi
+
 if git pull --recurse-submodules 2>&1; then
     echo "  [OK] Code updated"
 else
