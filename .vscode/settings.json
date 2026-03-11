@@ -1,0 +1,16 @@
+{
+  "[markdown]": {
+    "editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
+  },
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    },
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "markdownlint.configFile": ".markdownlint.yaml",
+  "python.languageServer": "None",
+  "ruff.lint.enable": true,
+  "ruff.nativeServer": true
+}
