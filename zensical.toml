@@ -1,10 +1,25 @@
 [project]
 site_name = "EZ-CorridorKey"
 site_description = "AI Green Screen Keyer by Corridor Digital"
-repo_name = "edenaion/EZ-CorridorKey"
-repo_url = "https://github.com/edenaion/EZ-CorridorKey"
+repo_name = "nikopueringer/CorridorKey"
+repo_url = "https://github.com/nikopueringer/CorridorKey"
 
-nav = [{ Home = "index.md" }]
+nav = [
+  { Home = "index.md" },
+  { Development = [
+    { "Developer Setup" = "dev/developer-setup.md" },
+    { "Authoring Documentation" = "dev/authoring-documentation.md" },
+    { "Documentation Principles" = [
+      { "Overview" = "dev/documentation-principles/index.md" },
+      { "Principle 1" = "dev/documentation-principles/principle-1-no-fiction.md" },
+      { "Principle 2" = "dev/documentation-principles/principle-2-single-responsibility.md" },
+      { "Principle 3" = "dev/documentation-principles/principle-3-scale-by-folders.md" },
+      { "Principle 4" = "dev/documentation-principles/principle-4-link-to-code.md" },
+      { "Principle 5" = "dev/documentation-principles/principle-5-format-style.md" },
+      { "Principle 6" = "dev/documentation-principles/principle-6-structure-uniformity.md" },
+    ] },
+  ] },
+]
 
 [project.theme]
 language = "en"
@@ -34,16 +49,25 @@ features = [
 scheme = "default"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
+accent = "deep orange"
+primary = "orange"
 
 [[project.theme.palette]]
 scheme = "slate"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to light mode"
+accent = "deep orange"
+primary = "orange"
 
 [project.theme.icon]
 logo = "lucide/drama"
-previous = "lucide/arrow-left"
 next = "lucide/arrow-right"
+previous = "lucide/arrow-left"
+repo = "lucide/github"
+search = "lucide/search"
+top = "lucide/arrow-up"
+edit = "lucide/file-pen-line"
+view = "lucide/file-braces-corner"
 
 [project.markdown_extensions.admonition]
 [project.markdown_extensions.pymdownx.details]
