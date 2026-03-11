@@ -96,7 +96,7 @@ jobs:
       - name: Set up git branch for updater test
         shell: bash
         run: |
-          git checkout -b main
+          git checkout -B main
           git branch --set-upstream-to=origin/main main 2>/dev/null || true
 
       - name: Run updater (Windows)
