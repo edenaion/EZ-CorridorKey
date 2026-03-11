@@ -110,14 +110,15 @@ _DIAGNOSTICS: list[Diagnostic] = [
             "FFmpeg 7.0+ plus FFprobe."
         ),
         steps=[
-            "Windows: re-run 1-install.bat. CorridorKey will download a full FFmpeg build into tools\\ffmpeg.",
+            "Windows: go to Edit > Preferences > Repair FFmpeg.\n"
+            "This will automatically download a compatible FFmpeg build.",
+            "Alternatively, re-run 1-install.bat.",
             "macOS: install a current build with Homebrew:\n"
             "    brew install ffmpeg",
             "Linux: install both ffmpeg and ffprobe from your package manager, then verify the version is 7.0+.",
             "Verify both commands work:\n"
             "    ffmpeg -version\n"
             "    ffprobe -version",
-            "On Windows, avoid Gyan 'essentials' builds. CorridorKey expects a full build.",
         ],
         tags=["ffmpeg", "ffprobe", "video", "version"],
     ),
@@ -132,13 +133,14 @@ _DIAGNOSTICS: list[Diagnostic] = [
         ),
         explanation=(
             "FFmpeg and FFprobe are required for video import/export but were "
-            "not found on your system PATH."
+            "not found on your system."
         ),
         steps=[
-            "Download FFmpeg from https://ffmpeg.org/download.html",
-            "Extract and place ffmpeg.exe and ffprobe.exe in one of:\n"
-            "    • C:\\Program Files\\ffmpeg\\bin\\\n"
-            "    • Or any folder on your system PATH",
+            "Windows: go to Edit > Preferences > Repair FFmpeg.\n"
+            "This will automatically download and install FFmpeg for you.",
+            "Alternatively, re-run 1-install.bat.",
+            "macOS: brew install ffmpeg",
+            "Linux: install ffmpeg from your package manager.",
             "Restart EZ-CorridorKey.",
         ],
         tags=["ffmpeg", "video"],
@@ -386,6 +388,21 @@ def run_startup_diagnostics(device: str) -> list[StartupIssue]:
                 diag,
                 f"Detected Python {vi.major}.{vi.minor}.{vi.micro}",
             ))
+
+    # 3. FFmpeg missing, too old, or invalid build
+    try:
+        from backend.ffmpeg_tools import validate_ffmpeg_install
+        result = validate_ffmpeg_install()
+        if not result.ok:
+            # Pick the right diagnostic based on whether FFmpeg was found at all
+            diag_id = "ffmpeg-missing"
+            if result.ffmpeg_path:
+                diag_id = "ffmpeg-invalid"
+            diag = next((d for d in _DIAGNOSTICS if d.id == diag_id), None)
+            if diag:
+                issues.append(StartupIssue(diag, result.message))
+    except Exception as exc:
+        logger.warning("FFmpeg startup check failed: %s", exc)
 
     return issues
 

@@ -83,8 +83,7 @@ class TestBuildExrVf:
 
         assert (
             vf ==
-            "scale=in_color_matrix=bt709:in_primaries=bt709:"
-            "in_transfer=bt709:in_range=tv,format=gbrpf32le"
+            "scale=in_color_matrix=bt709:in_range=tv,format=gbrpf32le"
         )
 
     def test_complete_yuv_metadata_is_preserved(self):
@@ -101,8 +100,7 @@ class TestBuildExrVf:
 
         assert (
             vf ==
-            "scale=in_color_matrix=bt2020nc:in_primaries=bt2020:"
-            "in_transfer=smpte2084:in_range=tv,format=gbrpf32le"
+            "scale=in_color_matrix=bt2020nc:in_range=tv,format=gbrpf32le"
         )
 
     def test_sd_missing_transfer_uses_sd_fallback(self):
@@ -117,12 +115,11 @@ class TestBuildExrVf:
             "bits_per_raw_sample": 8,
         })
 
-        # bt470bg is remapped: matrix→bt601, transfer→gamma28
+        # bt470bg is remapped: matrix→bt601
         # (FFmpeg's scale filter doesn't accept 'bt470bg' as in_color_matrix)
         assert (
             vf ==
-            "scale=in_color_matrix=bt601:in_primaries=bt470bg:"
-            "in_transfer=gamma28:in_range=tv,format=gbrpf32le"
+            "scale=in_color_matrix=bt601:in_range=tv,format=gbrpf32le"
         )
 
 
@@ -202,8 +199,7 @@ class TestVideoMetadata:
             "codec": "prores",
             "duration": 4.0,
             "exr_vf": (
-                "scale=in_color_matrix=bt709:in_primaries=bt709:"
-                "in_transfer=bt709:in_range=tv,format=gbrpf32le"
+                "scale=in_color_matrix=bt709:in_range=tv,format=gbrpf32le"
             ),
             "source_probe": {
                 "frame_count": 100,

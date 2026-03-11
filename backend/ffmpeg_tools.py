@@ -903,19 +903,18 @@ def build_exr_vf(video_info: dict) -> str:
         cr = _default_range(pix_fmt)
 
     # Map ffprobe identifiers → scale-filter-safe names.
-    # Warns on unknown values so we catch new edge cases in logs.
     cs = _safe_scale_value(cs, _SCALE_MATRIX_MAP, _KNOWN_MATRICES, "matrix")
-    cp = _safe_scale_value(cp, _SCALE_PRIMARIES_MAP, _KNOWN_PRIMARIES, "primaries")
-    ct = _safe_scale_value(ct, _SCALE_TRANSFER_MAP, _KNOWN_TRANSFERS, "transfer")
 
     logger.info(
-        "EXR colour conversion: pix_fmt=%s matrix=%s primaries=%s transfer=%s range=%s",
-        pix_fmt, cs, cp, ct, cr,
+        "EXR colour conversion: pix_fmt=%s matrix=%s range=%s",
+        pix_fmt, cs, cr,
     )
 
+    # Only in_color_matrix and in_range are standard swscale options.
+    # in_primaries / in_transfer are NOT supported by FFmpeg's scale filter
+    # and cause "Option not found" on standard builds.
     return (
-        f"scale=in_color_matrix={cs}:in_primaries={cp}:"
-        f"in_transfer={ct}:in_range={cr},format=gbrpf32le"
+        f"scale=in_color_matrix={cs}:in_range={cr},format=gbrpf32le"
     )
 
 
