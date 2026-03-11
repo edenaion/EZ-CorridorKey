@@ -1,8 +1,8 @@
 [project]
 site_name = "EZ-CorridorKey"
 site_description = "AI Green Screen Keyer by Corridor Digital"
-repo_name = "nikopueringer/CorridorKey"
-repo_url = "https://github.com/nikopueringer/CorridorKey"
+repo_name = "edenaion/EZ-CorridorKey"
+repo_url = "https://github.com/edenaion/EZ-CorridorKey"
 
 nav = [
   { Home = "index.md" },
