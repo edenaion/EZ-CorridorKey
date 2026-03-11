@@ -58,6 +58,19 @@ jobs:
             libxkbcommon-x11-0 \
             libxcb-cursor0
 
+      - name: Ensure CRLF in batch files (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($f in Get-ChildItem -Filter *.bat) {
+            $text = [IO.File]::ReadAllText($f.FullName)
+            if ($text -match "`n" -and $text -notmatch "`r`n") {
+              $text = $text -replace "`n", "`r`n"
+              [IO.File]::WriteAllText($f.FullName, $text)
+              Write-Host "Fixed CRLF: $($f.Name)"
+            }
+          }
+
       - name: Run Windows installer
         if: runner.os == 'Windows'
         shell: cmd
@@ -89,7 +102,7 @@ jobs:
       - name: Run updater (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: cmd /V:ON /E:ON /C 3-update.bat
+        run: 3-update.bat
 
       - name: Run updater (Unix)
         if: runner.os != 'Windows'
