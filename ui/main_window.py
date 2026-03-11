@@ -3063,13 +3063,21 @@ class MainWindow(QMainWindow):
             return
         # Save session before closing
         self._auto_save_session()
-        # Launch 3-update.bat --relaunch detached, then quit
+        # Launch update script --relaunch detached, then quit
         import subprocess
-        bat = os.path.join(os.path.dirname(os.path.dirname(__file__)), "3-update.bat")
-        subprocess.Popen(
-            ["cmd", "/c", "start", "", bat, "--relaunch"],
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-        )
+        root = os.path.dirname(os.path.dirname(__file__))
+        if os.name == "nt":
+            bat = os.path.join(root, "3-update.bat")
+            subprocess.Popen(
+                ["cmd", "/c", "start", "", bat, "--relaunch"],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+        else:
+            sh = os.path.join(root, "3-update.sh")
+            subprocess.Popen(
+                [sh, "--relaunch"],
+                start_new_session=True,
+            )
         from PySide6.QtWidgets import QApplication
         QApplication.instance().quit()
 

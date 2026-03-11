@@ -125,6 +125,12 @@ jobs:
           test -f 2-start.sh || exit 1
           echo "[OK] 2-start.sh present"
 
+      - name: Cross-platform update launcher test
+        shell: bash
+        run: |
+          pip install pytest
+          python -m pytest tests/test_run_update_xplat.py -v --noconftest
+
       - name: Headless startup smoke (Windows)
         if: runner.os == 'Windows'
         shell: cmd
