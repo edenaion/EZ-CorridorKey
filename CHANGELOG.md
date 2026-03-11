@@ -28,8 +28,8 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Node 24 compatible** — uses actions/checkout@v6 and actions/setup-python@v6
 
 ### Quality Verification
-- **End-to-end upstream comparison** — same frame run through upstream CorridorKey and our fork produces 94.1 dB PSNR (below float32 noise floor)
-- **Branded visual report** — `scripts/compare_upstream.py` generates a dated, versioned comparison PNG
+- **Multi-metric upstream comparison** — same frame run through upstream CorridorKey and our fork, verified across PSNR (80–90 dB), SSIM (0.999996+), MS-SSIM (0.999999+), LPIPS (0.000001), and DeltaE 2000 (0.015 mean on skin) — all below float32 noise floor
+- **Branded HTML report** — `scripts/compare_upstream_d2.py` generates a dated, versioned comparison PNG via Playwright with side-by-side composite and alpha matte panels
 
 ### Updater Bridge (master → main)
 - **`3-update.bat` / `3-update.sh`** — automatically migrates local `master` checkouts to `main`, repoints tracking if needed
@@ -40,6 +40,9 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Fixed
 - **UI sound clicks** — 50ms fade-in/out applied to all UI sound effects to eliminate playback pops
+- **Windows updater crash** — `3-update.bat` restructured to avoid cmd.exe label-inside-parenthesized-block bug; replaced `::` comments with `REM`, removed UTF-8 em dashes
+- **FFmpeg version regex on Windows** — `ffmpeg.exe version ...` now parsed correctly (was failing on `.exe` suffix)
+- **VirusTotal security link** — README now links independent 0-detection scan for `1-install.bat`
 
 ---
 

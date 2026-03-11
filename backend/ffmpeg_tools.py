@@ -56,7 +56,7 @@ _FFMPEG_SEARCH_PATHS = (
     else _FFMPEG_SEARCH_PATHS_UNIX
 )
 _FFMPEG_RELEASE_RE = re.compile(
-    r"\b(?:ffmpeg|ffprobe)\s+version\s+(?:n)?(?P<major>\d+)(?:\.\d+)*",
+    r"\b(?:ffmpeg|ffprobe)(?:\.exe)?\s+version\s+(?:n)?(?P<major>\d+)(?:\.\d+)*",
     re.IGNORECASE,
 )
 _FFMPEG_DEV_BUILD_RE = re.compile(

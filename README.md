@@ -21,12 +21,6 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Session persistence | None | Recent projects, auto-save |
 | Annotation / masking | Manual external tool | Built-in brush tool for VideoMaMa masks |
 
-### Quality Verification
-
-Our optimizations (FlashAttention, TF32, torch.compile) produce mathematically identical output to upstream CorridorKey — 94.1 dB PSNR, well below the float32 noise floor.
-
-![Upstream Comparison](dev-docs/guides/screenshots/upstream_comparison_v1.5.0.png)
-
 ---
 
 ## Installation
@@ -349,6 +343,22 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 | **Low-VRAM** (<12 GB) | ~2.5 GB | ~1.6s/frame | 512×512 tiled refiner, selective compile |
 
 Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=speed|lowvram|auto`.
+
+---
+
+## Quality Verification
+
+EZ-CorridorKey's optimizations (Hiera FlashAttention, TF32 tensor cores, torch.compile, tiled refiner) produce output identical to upstream CorridorKey within float32 noise floor — verified across PSNR, SSIM, MS-SSIM, LPIPS, and DeltaE 2000.
+
+![Quality Comparison](dev-docs/guides/screenshots/quality_comparison_v1.5.0.png)
+
+---
+
+## Security
+
+All installer scripts are open-source and readable in this repository. Independent VirusTotal scan for the current release:
+
+- [**1-install.bat** (v1.5.0) — 0 detections](https://www.virustotal.com/gui/file/c4b789f36fea3a2519c0d08b27e7988871497b8e6f33029b6b84d81e7a2c9494)
 
 ---
 

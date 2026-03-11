@@ -329,6 +329,9 @@ class ParameterPanel(QWidget):
 
     def get_output_config(self) -> OutputConfig:
         """Snapshot current output format configuration."""
+        from ui.widgets.preferences_dialog import (
+            KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION, get_setting_str,
+        )
         return OutputConfig(
             fg_enabled=self._fg_check.isChecked(),
             fg_format=self._fg_format.currentText(),
@@ -338,6 +341,7 @@ class ParameterPanel(QWidget):
             comp_format=self._comp_format.currentText(),
             processed_enabled=self._proc_check.isChecked(),
             processed_format=self._proc_format.currentText(),
+            exr_compression=get_setting_str(KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION),
         )
 
     def set_params(self, params: InferenceParams) -> None:

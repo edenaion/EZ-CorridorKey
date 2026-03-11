@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 
 import numpy as np
 from PySide6.QtWidgets import (
@@ -2118,7 +2119,10 @@ class MainWindow(QMainWindow):
             self._active_job_id = first_job_id
 
         if not self._gpu_worker.isRunning():
-            self._gpu_worker.start()
+            if sys.platform == "win32":
+                self._gpu_worker.start(QThread.LowPriority)
+            else:
+                self._gpu_worker.start()
         else:
             self._gpu_worker.wake()
 
@@ -2431,7 +2435,10 @@ class MainWindow(QMainWindow):
             return
 
         if not self._extract_worker.isRunning():
-            self._extract_worker.start()
+            if sys.platform == "win32":
+                self._extract_worker.start(QThread.LowPriority)
+            else:
+                self._extract_worker.start()
 
         for clip in extracting:
             if not (clip.input_asset and clip.input_asset.asset_type == "video"):
@@ -2473,7 +2480,10 @@ class MainWindow(QMainWindow):
         if not clips:
             return
         if not self._extract_worker.isRunning():
-            self._extract_worker.start()
+            if sys.platform == "win32":
+                self._extract_worker.start(QThread.LowPriority)
+            else:
+                self._extract_worker.start()
         count = 0
         for clip in clips:
             if clip.input_asset and clip.input_asset.asset_type == "video":

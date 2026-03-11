@@ -29,6 +29,27 @@ class _MessageBoxFilter(QObject):
         return False
 
 
+def _configure_runtime_backends() -> None:
+    """Apply lightweight runtime tuning before QApplication is created.
+
+    The UI is QWidget-based, so Qt Quick shouldn't be involved, but leaving the
+    software backend enabled avoids accidental GPU work if a Qt Quick control is
+    introduced later. On Windows, cap OpenCV's internal thread fan-out so
+    background preview/thumbnail decode work does not monopolize the desktop.
+    """
+    os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+    os.environ["QT_QUICK_BACKEND"] = "software"
+
+    if sys.platform != "win32":
+        return
+
+    try:
+        import cv2
+        cv2.setNumThreads(1)
+    except Exception as exc:
+        logger.debug(f"OpenCV thread tuning skipped: {exc}")
+
+
 def create_app(argv: list[str] | None = None) -> QApplication:
     """Create and configure the QApplication with brand theming.
 
@@ -37,8 +58,7 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     if argv is None:
         argv = sys.argv
 
-    # Force software rendering — zero GPU overhead for UI
-    os.environ["QT_QUICK_BACKEND"] = "software"
+    _configure_runtime_backends()
 
     app = QApplication(argv)
     app.setApplicationName("CorridorKey")
