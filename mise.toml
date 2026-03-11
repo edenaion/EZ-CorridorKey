@@ -1,0 +1,24 @@
+[tools]
+python = "3.14"
+uv = "latest"
+git-cliff = "latest"
+markdownlint-cli2 = "latest"
+
+[settings]
+experimental = true
+idiomatic_version_file_enable_tools = ["python"]
+
+[hooks]
+enter = "bash ./scripts/enter-project-hook.sh"
+
+[env]
+_.file = '.env'       # for sensitive data
+UV_LINK_MODE = "copy"
+
+[tasks.docs]
+run = "uv run zensical serve"
+description = "Serve the documentation locally"
+
+[tasks.sync]
+run = "uv sync --all-extras --all-groups"
+description = "Run uv sync for devs"

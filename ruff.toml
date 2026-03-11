@@ -1,0 +1,40 @@
+line-length = 120
+respect-gitignore = true
+
+[format]
+docstring-code-format = true
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+skip-magic-trailing-comma = false
+preview = true
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "C",    # flake8-comprehensions
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "PERF", # perflint (performance issues)
+    "N",    # pep8-naming
+]
+ignore = [
+    "E501", # line too long
+    "C901", # too complex
+]
+
+[lint.isort]
+order-by-type = true
+relative-imports-order = "closest-to-furthest"
+extra-standard-library = ["typing"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]

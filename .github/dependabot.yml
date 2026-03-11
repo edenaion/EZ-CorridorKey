@@ -1,0 +1,24 @@
+# Dependabot configuration for automated dependency updates
+# See https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:00"
+    open-pull-requests-limit: 5
+    rebase-strategy: auto
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      dependencies:
+        patterns:
+          - "*"
+    assignees:
+      - HYP3R00T

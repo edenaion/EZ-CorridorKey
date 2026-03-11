@@ -1,0 +1,86 @@
+name: 🐛 Bug Report
+description: Report a reproducible issue or unexpected behavior in the project.
+title: "[Bug]: "
+labels: [bug]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Detailed bug reports help us fix issues faster.
+
+        **Before submitting:**
+        - Search existing issues to avoid duplicates
+        - Verify the issue is reproducible with the latest version
+        - Isolate the problem (provide minimal steps to reproduce)
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Information about your system. List the affected versions/configurations.
+      placeholder: "OS: Windows 11, Python 3.11.5, Project version: v1.2.3"
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Provide clear, numbered steps to reproduce the issue. Be as specific as possible.
+      placeholder: |
+        1. Start the application with `python main.py`
+        2. Navigate to Settings > Advanced
+        3. Change the timeout value to 0
+        4. Click "Apply"
+        5. Error appears in the console
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen instead? Be clear and concise.
+      placeholder: "The application should display a settings panel without errors."
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What happened instead? Describe the bug clearly and concisely.
+      placeholder: "The application crashes with a TypeError and exits without saving changes."
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs or Error Messages
+      description: Paste complete error logs, full stack traces, or screenshots. Use code blocks for readability.
+      placeholder: |
+        ```
+        Traceback (most recent call last):
+          File "main.py", line 45, in <module>
+            process(config)
+        TypeError: unsupported operand type(s) for +: 'int' and 'NoneType'
+        ```
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround (if available)
+      description: If you've found a way to work around this issue, please describe it.
+      placeholder: "As a workaround, I can set the timeout environment variable before starting the app."
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Verification Checklist
+      options:
+        - label: I've verified this bug hasn't been reported before
+          required: true
+        - label: I can reproduce this issue consistently
+          required: true
+        - label: I've included all relevant logs, screenshots, and error messages
+          required: false
+        - label: I've tested with the latest version of the project
+          required: false
