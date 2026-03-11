@@ -80,6 +80,12 @@ jobs:
         shell: bash
         run: .venv/bin/python scripts/setup_models.py --check
 
+      - name: Set up git branch for updater test
+        shell: bash
+        run: |
+          git checkout -b main
+          git branch --set-upstream-to=origin/main main 2>/dev/null || true
+
       - name: Run updater (Windows)
         if: runner.os == 'Windows'
         shell: cmd
