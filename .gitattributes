@@ -1,5 +1,0 @@
-# Force LF line endings for shell scripts (prevents CRLF on Windows checkout)
-*.sh text eol=lf
-
-# Keep Windows batch files as CRLF
-*.bat text eol=crlf

@@ -1,9 +1,0 @@
-torch
-torchvision
-diffusers
-transformers
-accelerate
-opencv-python
-pillow
-numpy
-einops
