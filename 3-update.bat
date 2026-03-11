@@ -5,21 +5,17 @@ cd /d "%~dp0"
 
 echo.
 echo  ========================================
-echo   EZ-CorridorKey — Update
+echo   EZ-CorridorKey - Update
 echo  ========================================
 echo.
 
-:: ── Step 1: Pull latest code ──
+REM ── Step 1: Pull latest code ──
 echo [1/3] Pulling latest changes...
 
-:: Check if this is a git repo AND git is available
+REM Check if this is a git repo AND git is available
 set USE_GIT=0
 git --version >nul 2>&1
-if %errorlevel%==0 (
-    if exist ".git" (
-        set USE_GIT=1
-    )
-)
+if %errorlevel%==0 if exist ".git" set USE_GIT=1
 
 if !USE_GIT!==1 (
     call :migrate_git_branch
@@ -31,44 +27,50 @@ if !USE_GIT!==1 (
         echo   [OK] Code updated via git
     )
 ) else (
-    echo   No git repo detected — downloading latest release as ZIP...
-    set "UPDATE_URL=https://github.com/edenaion/EZ-CorridorKey/archive/refs/heads/main.zip"
-    set "UPDATE_ZIP=%TEMP%\corridorkey-update.zip"
-    set "UPDATE_EXTRACT=%TEMP%\corridorkey-update"
+    goto :zip_update
+)
+goto :after_update
 
-    powershell -ExecutionPolicy ByPass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '!UPDATE_URL!' -OutFile '!UPDATE_ZIP!'" >nul 2>&1
-    if not exist "!UPDATE_ZIP!" (
-        echo   [ERROR] Download failed. Check your internet connection.
-        goto :fail
-    )
+:zip_update
+echo   No git repo detected - downloading latest release as ZIP...
+set "UPDATE_URL=https://github.com/edenaion/EZ-CorridorKey/archive/refs/heads/main.zip"
+set "UPDATE_ZIP=%TEMP%\corridorkey-update.zip"
+set "UPDATE_EXTRACT=%TEMP%\corridorkey-update"
 
-    echo   Extracting update...
-    if exist "!UPDATE_EXTRACT!" rmdir /s /q "!UPDATE_EXTRACT!"
-    powershell -ExecutionPolicy ByPass -Command "Expand-Archive -Path '!UPDATE_ZIP!' -DestinationPath '!UPDATE_EXTRACT!' -Force" >nul 2>&1
-
-    :: The zip contains a top-level folder like EZ-CorridorKey-main
-    set "UPDATE_INNER="
-    for /d %%d in ("!UPDATE_EXTRACT!\EZ-CorridorKey-*") do set "UPDATE_INNER=%%d"
-    if not defined UPDATE_INNER (
-        echo   [ERROR] Unexpected archive structure.
-        goto :update_cleanup
-    )
-
-    :: Copy new files over existing, skip user data dirs
-    echo   Applying update (preserving .venv, tools, Projects)...
-    robocopy "!UPDATE_INNER!" "%~dp0." /e /xd .venv venv tools Projects _BACKUPS __pycache__ .mypy_cache /xf *.pyc /njh /njs /ndl /nc /ns >nul 2>&1
-
-    echo   [OK] Code updated via ZIP download
-
-    :update_cleanup
-    if exist "!UPDATE_ZIP!" del "!UPDATE_ZIP!" >nul 2>&1
-    if exist "!UPDATE_EXTRACT!" rmdir /s /q "!UPDATE_EXTRACT!" >nul 2>&1
+powershell -ExecutionPolicy ByPass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '!UPDATE_URL!' -OutFile '!UPDATE_ZIP!'" >nul 2>&1
+if not exist "!UPDATE_ZIP!" (
+    echo   [ERROR] Download failed. Check your internet connection.
+    goto :fail
 )
 
-:: ── Step 1b: Ensure local tools are on PATH ──
+echo   Extracting update...
+if exist "!UPDATE_EXTRACT!" rmdir /s /q "!UPDATE_EXTRACT!"
+powershell -ExecutionPolicy ByPass -Command "Expand-Archive -Path '!UPDATE_ZIP!' -DestinationPath '!UPDATE_EXTRACT!' -Force" >nul 2>&1
+
+REM The zip contains a top-level folder like EZ-CorridorKey-main
+set "UPDATE_INNER="
+for /d %%d in ("!UPDATE_EXTRACT!\EZ-CorridorKey-*") do set "UPDATE_INNER=%%d"
+if not defined UPDATE_INNER (
+    echo   [ERROR] Unexpected archive structure.
+    goto :update_cleanup
+)
+
+REM Copy new files over existing, skip user data dirs
+echo   Applying update (preserving .venv, tools, Projects)...
+robocopy "!UPDATE_INNER!" "%~dp0." /e /xd .venv venv tools Projects _BACKUPS __pycache__ .mypy_cache /xf *.pyc /njh /njs /ndl /nc /ns >nul 2>&1
+
+echo   [OK] Code updated via ZIP download
+
+:update_cleanup
+if exist "!UPDATE_ZIP!" del "!UPDATE_ZIP!" >nul 2>&1
+if exist "!UPDATE_EXTRACT!" rmdir /s /q "!UPDATE_EXTRACT!" >nul 2>&1
+
+:after_update
+
+REM ── Step 1b: Ensure local tools are on PATH ──
 if exist "%~dp0tools\ffmpeg\bin\ffmpeg.exe" set "PATH=%~dp0tools\ffmpeg\bin;%PATH%"
 
-:: ── Step 2: Update dependencies ──
+REM ── Step 2: Update dependencies ──
 echo [2/3] Updating dependencies...
 
 set UV_AVAILABLE=0
@@ -115,18 +117,18 @@ if !UV_AVAILABLE!==0 (
     )
 )
 
-:: ── Step 3: Check for new model weights ──
+REM ── Step 3: Check for new model weights ──
 echo [3/3] Checking model weights...
 .venv\Scripts\python.exe scripts\setup_models.py --check
 
-:: ── Done ──
+REM ── Done ──
 echo.
 echo  ========================================
 echo   Update complete!
 echo  ========================================
 echo.
 
-:: Auto-relaunch if called with --relaunch flag
+REM Auto-relaunch if called with --relaunch flag
 if "%~1"=="--relaunch" (
     echo   Relaunching CorridorKey...
     call "%~dp02-start.bat"
