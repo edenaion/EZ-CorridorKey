@@ -89,7 +89,7 @@ jobs:
       - name: Run updater (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: 3-update.bat
+        run: cmd /V:ON /E:ON /C 3-update.bat
 
       - name: Run updater (Unix)
         if: runner.os != 'Windows'
