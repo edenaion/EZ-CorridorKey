@@ -27,7 +27,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 **One-Click Install (Windows / macOS / Linux):**
 1. Clone or download this repository.
-2. Ensure you have [Python 3.10–3.13](https://python.org) installed (check "Add to PATH" on Windows). Python 3.14 is **not yet supported** (PyTorch/dependencies lack wheels).
+2. Ensure you have [Python 3.10–3.12](https://python.org) installed (check "Add to PATH" on Windows). Python 3.13 (low data), 3.14 is **not yet supported** (PyTorch/dependencies lack wheels).
 3. Run the installer for your platform:
    - **Windows:** Double-click `1-install.bat`
    - **macOS / Linux:** `chmod +x 1-install.sh && ./1-install.sh`
@@ -378,3 +378,4 @@ Optional modules:
 - **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License
 
 Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
+
