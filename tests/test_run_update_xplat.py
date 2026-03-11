@@ -118,9 +118,11 @@ class TestRunUpdateCrossPlatform:
 
     def test_actual_main_window_source_matches(self):
         """Verify main_window.py _run_update has the os.name guard."""
-        import inspect
-        from ui.main_window import MainWindow
-        source = inspect.getsource(MainWindow._run_update)
+        src_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "ui", "main_window.py"
+        )
+        with open(src_path, "r", encoding="utf-8") as f:
+            source = f.read()
         assert 'os.name == "nt"' in source or "os.name == 'nt'" in source, (
             "_run_update must guard platform-specific subprocess flags with os.name check"
         )

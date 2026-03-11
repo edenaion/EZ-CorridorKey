@@ -128,12 +128,16 @@ jobs:
       - name: Cross-platform update launcher test (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: .venv\Scripts\python.exe -m pytest tests\test_run_update_xplat.py -v
+        run: |
+          .venv\Scripts\pip.exe install pytest
+          .venv\Scripts\python.exe -m pytest tests\test_run_update_xplat.py -v
 
       - name: Cross-platform update launcher test (Unix)
         if: runner.os != 'Windows'
         shell: bash
-        run: .venv/bin/python -m pytest tests/test_run_update_xplat.py -v
+        run: |
+          .venv/bin/pip install pytest
+          .venv/bin/python -m pytest tests/test_run_update_xplat.py -v
 
       - name: Headless startup smoke (Windows)
         if: runner.os == 'Windows'
