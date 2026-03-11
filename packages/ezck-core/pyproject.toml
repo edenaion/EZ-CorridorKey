@@ -1,0 +1,16 @@
+[project]
+name = "ezck-core"
+version = "0.1.0"
+description = "The core library for AI Green Screen Keyer by Corridor Digital"
+readme = "README.md"
+authors = [{ name = "Corridor Digital" }]
+maintainers = [{ name = "Rajesh Das", email = "rajesh@hyperoot.dev" }]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+ezck-core = "ezck_core:main"
+
+[build-system]
+requires = ["uv_build>=0.10.7,<0.11.0"]
+build-backend = "uv_build"

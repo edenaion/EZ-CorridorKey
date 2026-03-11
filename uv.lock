@@ -2,6 +2,12 @@ version = 1
 revision = 3
 requires-python = ">=3.13"
 
+[manifest]
+members = [
+    "corridorkey",
+    "ezck-core",
+]
+
 [[package]]
 name = "click"
 version = "8.3.1"
@@ -131,6 +137,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/a8/3a/b0ba594708f1ad0bc
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2d/82/e5d2c1c67d19841e9edc74954c827444ae826978499bde3dfc1d007c8c11/deepmerge-2.0-py3-none-any.whl", hash = "sha256:6de9ce507115cff0bed95ff0ce9ecc31088ef50cbdf09bc90a09349a318b3d00", size = 13475, upload-time = "2024-08-30T05:31:48.659Z" },
 ]
+
+[[package]]
+name = "ezck-core"
+version = "0.1.0"
+source = { editable = "packages/ezck-core" }
 
 [[package]]
 name = "git-cliff"

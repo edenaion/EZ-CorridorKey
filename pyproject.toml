@@ -5,6 +5,8 @@ description = "AI Green Screen Keyer by Corridor Digital"
 license = { text = "CC-BY-NC-SA-4.0" }
 requires-python = ">=3.13"
 readme = "README.md"
+authors = [{ name = "Corridor Digital" }]
+maintainers = [{ name = "Rajesh Das", email = "rajesh@hyperoot.dev" }]
 dependencies = []
 
 [dependency-groups]
@@ -17,3 +19,10 @@ dev = [
   "ty>=0.0.21",
 ]
 docs = ["zensical>=0.0.26"]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+voicepad = { workspace = true }
+voicepad-core = { workspace = true }
