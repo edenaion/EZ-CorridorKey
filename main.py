@@ -195,11 +195,22 @@ def main() -> int:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level (default: INFO)",
     )
+    parser.add_argument(
+        "--opt-mode",
+        default=None,
+        choices=["auto", "speed", "lowvram"],
+        help="GPU optimization mode: auto (detect VRAM), speed (torch.compile), "
+             "lowvram (tiled refiner for 8GB cards). Overrides CORRIDORKEY_OPT_MODE env var.",
+    )
 
     # parse_known_args so CLI-mode flags (--action, --win_path, etc.)
     # pass through to clip_manager.py without error.
     args, _unknown = parser.parse_known_args()
     setup_logging(args.log_level)
+
+    # CLI flag takes priority over env var for optimization mode
+    if args.opt_mode:
+        os.environ['CORRIDORKEY_OPT_MODE'] = args.opt_mode
 
     # Configure backend with the application directory
     from backend.project import set_app_dir
