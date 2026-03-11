@@ -261,24 +261,24 @@ set INDEX_URL=
 nvidia-smi >nul 2>&1
 if !errorlevel! neq 0 goto :no_nvidia
 
-for /f "tokens=*" %%i in ('nvidia-smi --query-gpu=driver_version --format=csv,noheader 2^>nul') do set DRIVER=%%i
+for /f "tokens=*" %%i in ('nvidia-smi --query-gpu=driver_version --format=csv^,noheader 2^>nul') do set DRIVER=%%i
 echo   NVIDIA driver detected: !DRIVER!
 for /f "tokens=*" %%i in ('nvidia-smi 2^>nul ^| findstr "CUDA Version"') do set CUDA_LINE=%%i
 echo   !CUDA_LINE!
 
-echo !CUDA_LINE! | findstr "12.8 12.7 12.6 12.5 12.4" >nul
+<nul set /p "=!CUDA_LINE!" | findstr /r "13\.0 12\.8 12\.7 12\.6 12\.5 12\.4"
 if !errorlevel!==0 (
     set INDEX_URL=https://download.pytorch.org/whl/cu128
     echo   Using PyTorch CUDA 12.8 wheels
     goto :pip_install
 )
-echo !CUDA_LINE! | findstr "12.1 12.2 12.3" >nul
+<nul set /p "=!CUDA_LINE!" | findstr /r "12\.1 12\.2 12\.3"
 if !errorlevel!==0 (
     set INDEX_URL=https://download.pytorch.org/whl/cu121
     echo   Using PyTorch CUDA 12.1 wheels
     goto :pip_install
 )
-echo !CUDA_LINE! | findstr "11.8 11.7" >nul
+<nul set /p "=!CUDA_LINE!" | findstr /r "11\.8 11\.7"
 if !errorlevel!==0 (
     set INDEX_URL=https://download.pytorch.org/whl/cu118
     echo   Using PyTorch CUDA 11.8 wheels
