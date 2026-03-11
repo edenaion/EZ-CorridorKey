@@ -191,6 +191,21 @@ def add_clips_to_project(
     return new_paths
 
 
+def _copy_companion_alphahint(video_path: str, source_dir: str) -> None:
+    """Copy a companion ``{stem}_alphahint.*`` video into *source_dir* if found."""
+    stem = os.path.splitext(os.path.basename(video_path))[0]
+    parent = os.path.dirname(video_path)
+    for f in os.listdir(parent):
+        f_stem, f_ext = os.path.splitext(f.lower())
+        if f_ext in {e.lower() for e in _VIDEO_EXTS} and f_stem == f"{stem.lower()}_alphahint":
+            src = os.path.join(parent, f)
+            dst = os.path.join(source_dir, f)
+            if not os.path.isfile(dst):
+                shutil.copy2(src, dst)
+                logger.info("Copied companion alpha hint: %s -> %s", src, dst)
+            return
+
+
 def _create_clip_folder(
     clips_dir: str,
     video_path: str,
@@ -222,6 +237,10 @@ def _create_clip_folder(
         if not os.path.isfile(target):
             shutil.copy2(video_path, target)
             logger.info(f"Copied source video: {video_path} -> {target}")
+
+        # Auto-copy companion alpha hint video if present
+        # Convention: {stem}_alphahint.{ext} next to the source video
+        _copy_companion_alphahint(video_path, source_dir)
     else:
         logger.info(f"Referencing source video in place: {video_path}")
 

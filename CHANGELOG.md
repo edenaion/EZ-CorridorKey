@@ -4,6 +4,20 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.5.1] - 2026-03-11 — Hotfix: FFmpeg Filter, Alpha Video Import
+
+### Fixed
+- **FFmpeg extraction broken on standard builds** — `in_primaries` and `in_transfer` are not valid FFmpeg scale filter options; removed them (only `in_color_matrix` and `in_range` are needed for YUV→RGB conversion)
+- **FFmpeg startup check** — app now validates FFmpeg availability at launch and shows a clear diagnostic dialog if missing or outdated (v6.x users see fix instructions instead of cryptic extraction errors)
+- **Reverted broken v1.4.0 updater auto-patch** that was shipped by mistake
+
+### Added
+- **Alpha hint video import** — users can now import ProRes MOV, MP4, and other video files as alpha hints (previously only image sequences were accepted)
+- **Auto-detect companion alpha hint** — place `input_alphahint.mov` next to `input.mov` and it's automatically extracted to `AlphaHint/` as grayscale PNGs during source extraction — zero extra clicks
+- **`--opt-mode` CLI flag** — override GPU optimization mode (`speed`, `lowvram`, `auto`) from the command line
+
+---
+
 ## [1.5.0] - 2026-03-10 — SAM2 Tracking, FFmpeg Hardening, Quality Verification
 
 ### SAM2 Tracking Integration

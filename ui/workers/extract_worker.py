@@ -215,8 +215,121 @@ class ExtractWorker(QThread):
             write_video_metadata(job.clip_root, metadata)
 
             logger.info(f"Extraction complete: {job.clip_name} ({extracted} frames)")
+
+            # Auto-detect companion alpha hint video
+            if not job.cancel_event.is_set():
+                self._try_extract_alphahint(job, extracted)
+
             self.finished.emit(job.clip_name, extracted)
 
         except Exception as e:
             logger.error(f"Extraction failed for {job.clip_name}: {e}")
             self.error.emit(job.clip_name, str(e))
+
+    # ------------------------------------------------------------------
+    # Alpha-hint auto-detection
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _find_alphahint_video(video_path: str) -> str | None:
+        """Look for a companion ``*_alphahint.*`` video next to *video_path*.
+
+        Naming convention:  ``input_alphahint.mov`` alongside ``input.mov``.
+        Also checks the Source/ folder if the video lives there.
+        """
+        import glob as _glob
+
+        stem = os.path.splitext(os.path.basename(video_path))[0]
+        parent = os.path.dirname(video_path)
+        video_exts = (".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v")
+
+        # Pattern: {stem}_alphahint.{ext}  (case-insensitive match)
+        for f in os.listdir(parent):
+            name_lower = f.lower()
+            f_stem, f_ext = os.path.splitext(name_lower)
+            if f_ext in video_exts and f_stem == f"{stem.lower()}_alphahint":
+                return os.path.join(parent, f)
+
+        # Also check clip.json for original_path and look there
+        clip_root = os.path.dirname(parent)  # Source/ -> clip_root
+        clip_json = os.path.join(clip_root, "clip.json")
+        if os.path.isfile(clip_json):
+            import json
+            try:
+                with open(clip_json, "r") as fh:
+                    data = json.load(fh)
+                orig = data.get("source", {}).get("original_path", "")
+                if orig and os.path.isfile(orig):
+                    orig_stem = os.path.splitext(os.path.basename(orig))[0]
+                    orig_dir = os.path.dirname(orig)
+                    for f in os.listdir(orig_dir):
+                        name_lower = f.lower()
+                        f_stem, f_ext = os.path.splitext(name_lower)
+                        if f_ext in video_exts and f_stem == f"{orig_stem.lower()}_alphahint":
+                            return os.path.join(orig_dir, f)
+            except Exception:
+                pass
+
+        return None
+
+    def _try_extract_alphahint(self, job: _ExtractJob, frame_count: int) -> None:
+        """If a companion alpha-hint video exists, extract it as grayscale PNGs."""
+        alpha_video = self._find_alphahint_video(job.video_path)
+        if alpha_video is None:
+            return
+
+        alpha_dir = os.path.join(job.clip_root, "AlphaHint")
+        if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
+            logger.info("AlphaHint/ already populated, skipping auto-extract")
+            return
+
+        logger.info("Auto-detected alpha hint video: %s", alpha_video)
+        try:
+            validation = require_ffmpeg_install()
+            ffmpeg = validation.ffmpeg_path
+            if not ffmpeg:
+                logger.warning("FFmpeg not available for alpha hint extraction")
+                return
+
+            os.makedirs(alpha_dir, exist_ok=True)
+            out_pattern = os.path.join(alpha_dir, "frame%06d.png")
+
+            import subprocess
+            cmd = [
+                ffmpeg, "-y",
+                "-i", alpha_video,
+                "-vf", "format=gray",
+                "-pix_fmt", "gray",
+                out_pattern,
+            ]
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=600,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+            if result.returncode != 0:
+                logger.error("Alpha hint extraction failed: %s",
+                             result.stderr[-500:])
+                # Clean up partial output
+                if os.path.isdir(alpha_dir):
+                    shutil.rmtree(alpha_dir)
+                return
+
+            # Count extracted frames
+            alpha_frames = len([
+                f for f in os.listdir(alpha_dir)
+                if f.lower().endswith(".png")
+            ])
+            logger.info("Auto-extracted %d alpha hint frames into %s",
+                         alpha_frames, alpha_dir)
+
+            if alpha_frames != frame_count:
+                logger.warning(
+                    "Alpha hint frame count (%d) != source frame count (%d)",
+                    alpha_frames, frame_count,
+                )
+
+        except Exception as exc:
+            logger.error("Alpha hint auto-extraction failed: %s", exc)
+            # Don't fail the main extraction over this
+            if os.path.isdir(alpha_dir):
+                shutil.rmtree(alpha_dir, ignore_errors=True)

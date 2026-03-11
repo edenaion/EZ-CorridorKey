@@ -99,7 +99,8 @@ class ParameterPanel(QWidget):
         self._import_alpha_btn = QPushButton("IMPORT ALPHA")
         self._import_alpha_btn.setEnabled(False)
         self._import_alpha_btn.setToolTip(
-            "Import your own alpha hint images (grayscale PNGs).\n"
+            "Import alpha hints from an image folder or video file.\n"
+            "Supports: PNG/JPG/TIF/EXR sequences, or MOV/MP4/ProRes video.\n"
             "White = foreground, black = background.\n"
             "Files are copied into the clip's AlphaHint/ folder\n"
             "and the clip advances to READY state for inference."
