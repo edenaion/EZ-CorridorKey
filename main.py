@@ -172,6 +172,33 @@ def run_cli() -> int:
     return subprocess.call(cmd)
 
 
+def _patch_updater_script() -> None:
+    """Self-heal broken 3-update.bat shipped in v1.4.0.
+
+    The v1.4.0 updater had a cmd.exe label-inside-parenthesized-block bug
+    that crashes before it can pull the fix.  Detect the broken pattern and
+    download the corrected file from GitHub so users don't have to act.
+    """
+    bat = os.path.join(get_app_dir(), "3-update.bat")
+    if not os.path.isfile(bat):
+        return
+    try:
+        raw = open(bat, "rb").read()
+        # Broken marker: UTF-8 em dash bytes (0xE2 0x80 0x94) in the file,
+        # which cmd.exe on code page 1252 misparses as containing a double
+        # quote (0x94 -> right double quote), causing "... was unexpected".
+        if b"\xe2\x80\x94" not in raw:
+            return  # already patched or different version
+        logger = logging.getLogger(__name__)
+        logger.info("Detected broken 3-update.bat (v1.4.0) — downloading fix...")
+        import urllib.request
+        url = "https://raw.githubusercontent.com/edenaion/EZ-CorridorKey/main/3-update.bat"
+        urllib.request.urlretrieve(url, bat)
+        logger.info("3-update.bat patched successfully")
+    except Exception as exc:
+        logging.getLogger(__name__).debug("Updater patch skipped: %s", exc)
+
+
 def main() -> int:
     ensure_standard_streams()
     parser = argparse.ArgumentParser(
@@ -200,6 +227,9 @@ def main() -> int:
     # pass through to clip_manager.py without error.
     args, _unknown = parser.parse_known_args()
     setup_logging(args.log_level)
+
+    # Self-heal broken updater from v1.4.0 (silent, one-time)
+    _patch_updater_script()
 
     # Configure backend with the application directory
     from backend.project import set_app_dir
