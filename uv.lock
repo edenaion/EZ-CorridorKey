@@ -36,9 +36,6 @@ wheels = [
 name = "corridorkey"
 version = "2.0.0"
 source = { virtual = "." }
-dependencies = [
-    { name = "zensical" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -49,9 +46,11 @@ dev = [
     { name = "ruff" },
     { name = "ty" },
 ]
+docs = [
+    { name = "zensical" },
+]
 
 [package.metadata]
-requires-dist = [{ name = "zensical", specifier = ">=0.0.26" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -62,6 +61,7 @@ dev = [
     { name = "ruff", specifier = ">=0.15.5" },
     { name = "ty", specifier = ">=0.0.21" },
 ]
+docs = [{ name = "zensical", specifier = ">=0.0.26" }]
 
 [[package]]
 name = "coverage"
