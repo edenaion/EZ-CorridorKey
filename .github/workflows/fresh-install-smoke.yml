@@ -7,6 +7,8 @@ on:
       - ".github/workflows/fresh-install-smoke.yml"
       - "1-install.bat"
       - "1-install.sh"
+      - "2-start.bat"
+      - "2-start.sh"
       - "3-update.bat"
       - "3-update.sh"
       - "pyproject.toml"
@@ -77,6 +79,32 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: .venv/bin/python scripts/setup_models.py --check
+
+      - name: Run updater (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: 3-update.bat
+
+      - name: Run updater (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chmod +x 3-update.sh
+          ./3-update.sh
+
+      - name: Verify start script exists (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          if not exist "2-start.bat" exit /b 1
+          echo [OK] 2-start.bat present
+
+      - name: Verify start script exists (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          test -f 2-start.sh || exit 1
+          echo "[OK] 2-start.sh present"
 
       - name: Headless startup smoke (Windows)
         if: runner.os == 'Windows'
