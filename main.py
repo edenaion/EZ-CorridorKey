@@ -136,29 +136,40 @@ def run_gui() -> int:
 
 
 def run_cli() -> int:
-    """Run the original CLI wizard from clip_manager.py.
+    """Run the original CLI wizard from clip_manager.py as a subprocess.
 
-    Falls back gracefully if the CLI wizard isn't available.
+    Forwards all extra CLI arguments (e.g. --action wizard --win_path ...)
+    directly to the upstream script, preserving 100% original behaviour.
     """
-    try:
-        import clip_manager
-        if hasattr(clip_manager, 'main'):
-            clip_manager.main()
-        elif hasattr(clip_manager, 'run'):
-            clip_manager.run()
-        else:
-            logging.error("clip_manager module found but has no main() or run() function")
-            return 1
-        return 0
-    except ImportError:
+    script = os.path.join(get_base_dir(), "clip_manager.py")
+    if not os.path.isfile(script):
         logging.error(
             "CLI mode requires clip_manager.py in the project root. "
             "Use --gui (default) for the graphical interface."
         )
         return 1
-    except Exception as e:
-        logging.error(f"CLI error: {e}")
-        return 1
+
+    import subprocess
+
+    # Forward everything after --cli to clip_manager.py.
+    # sys.argv looks like: ['main.py', '--cli', '--action', 'wizard', ...]
+    # We strip our own flags (--cli, --gui, --log-level <val>) and pass the rest.
+    forwarded: list[str] = []
+    skip_next = False
+    for arg in sys.argv[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in ("--cli", "--gui"):
+            continue
+        if arg == "--log-level":
+            skip_next = True  # skip the value that follows
+            continue
+        forwarded.append(arg)
+
+    cmd = [sys.executable, script] + forwarded
+    logging.info("CLI passthrough: %s", " ".join(cmd))
+    return subprocess.call(cmd)
 
 
 def main() -> int:
@@ -185,7 +196,9 @@ def main() -> int:
         help="Logging level (default: INFO)",
     )
 
-    args = parser.parse_args()
+    # parse_known_args so CLI-mode flags (--action, --win_path, etc.)
+    # pass through to clip_manager.py without error.
+    args, _unknown = parser.parse_known_args()
     setup_logging(args.log_level)
 
     # Configure backend with the application directory

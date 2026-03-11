@@ -36,6 +36,11 @@ if [ "$PYMAJOR" -lt 3 ] || ([ "$PYMAJOR" -eq 3 ] && [ "$PYMINOR" -lt 10 ]); then
     echo "  [ERROR] Python 3.10+ required, found $PYVER"
     exit 1
 fi
+if [ "$PYMAJOR" -eq 3 ] && [ "$PYMINOR" -ge 14 ]; then
+    echo "  [ERROR] Python $PYVER is not yet supported."
+    echo "  Please install Python 3.10-3.13 from https://python.org"
+    exit 1
+fi
 echo "  [OK] Python $PYVER ($PYTHON)"
 
 # ── Step 2: Check for old venv ──

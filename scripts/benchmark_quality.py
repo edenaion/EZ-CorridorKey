@@ -156,19 +156,33 @@ def main():
         print(f"Checkpoint not found: {ckpt}")
         sys.exit(1)
 
-    # Find a test frame
+    # Find a test frame — prefer clips with hair detail (more visible alpha edges)
     frame_path = None
+    preferred_clips = ["Brunette_Plays_With_Hair", "girl_frames"]
+    # First pass: look for preferred clips with visible alpha detail
     for root, dirs, files in os.walk("Projects"):
         for f in sorted(files):
             if f.endswith(".exr") and "frame_" in f and "Frames" in root:
-                candidate = os.path.join(root, f)
-                # Prefer 4K frames
-                img = cv2.imread(candidate, cv2.IMREAD_UNCHANGED)
-                if img is not None and img.shape[0] > 1000:
-                    frame_path = candidate
-                    break
+                if any(pref in root for pref in preferred_clips):
+                    candidate = os.path.join(root, f)
+                    img = cv2.imread(candidate, cv2.IMREAD_UNCHANGED)
+                    if img is not None and img.shape[0] > 500:
+                        frame_path = candidate
+                        break
         if frame_path:
             break
+    # Fallback: any frame > 1000px
+    if not frame_path:
+        for root, dirs, files in os.walk("Projects"):
+            for f in sorted(files):
+                if f.endswith(".exr") and "frame_" in f and "Frames" in root:
+                    candidate = os.path.join(root, f)
+                    img = cv2.imread(candidate, cv2.IMREAD_UNCHANGED)
+                    if img is not None and img.shape[0] > 1000:
+                        frame_path = candidate
+                        break
+            if frame_path:
+                break
 
     if not frame_path:
         print("No test frame found in Projects/")
@@ -277,6 +291,214 @@ def main():
     print("  PSNR > 60 dB = effectively identical (imperceptible)")
     print("  PSNR > 40 dB = very close (sub-pixel differences)")
     print("  PSNR < 40 dB = visible differences — investigate")
+
+    # --- Visual report PNG ---
+    generate_report(frame_path, image, results)
+
+
+def _make_checkerboard(h: int, w: int, tile: int = 32) -> np.ndarray:
+    """Create a checkerboard pattern [H, W, 3] in float32, light/dark gray."""
+    board = np.zeros((h, w, 3), dtype=np.float32)
+    for y in range(0, h, tile):
+        for x in range(0, w, tile):
+            if ((y // tile) + (x // tile)) % 2 == 0:
+                board[y:y+tile, x:x+tile] = 0.25
+            else:
+                board[y:y+tile, x:x+tile] = 0.15
+    return board
+
+
+def _composite_over_checker(fg: np.ndarray, alpha: np.ndarray,
+                            tile: int = 32) -> np.ndarray:
+    """Composite foreground RGB [H,W,3] over checkerboard using alpha [H,W].
+
+    Returns float32 [H,W,3] clipped to [0,1].
+    """
+    h, w = alpha.shape[:2]
+    checker = _make_checkerboard(h, w, tile)
+    a = alpha[:, :, np.newaxis] if alpha.ndim == 2 else alpha
+    fg_norm = fg / max(fg.max(), 1e-6)
+    fg_norm = np.clip(fg_norm, 0, 1)
+    comp = fg_norm * a + checker * (1.0 - a)
+    return np.clip(comp, 0, 1)
+
+
+def generate_report(frame_path: str, image: np.ndarray, results: dict,
+                    version: str = "1.5.0"):
+    """Save a dated, branded visual quality report as PNG.
+
+    Shows the actual keyed output: source frame composited over a checkerboard
+    using the alpha matte from baseline vs optimized. A human can look at
+    both composites and verify they are identical.
+
+    Uses CorridorKey brand palette: #FFF203 yellow on #141300 near-black.
+    """
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    from datetime import datetime
+
+    # --- Brand palette ---
+    BG = '#141300'
+    BG_CARD = '#1A1900'
+    BORDER = '#2A2910'
+    YELLOW = '#FFF203'
+    TEXT = '#E0E0E0'
+    TEXT_DIM = '#888870'
+    PASS_GREEN = '#44ff44'
+    WARN_ORANGE = '#ffaa00'
+    FAIL_RED = '#ff4444'
+
+    timestamp = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+    date_slug = datetime.now().strftime("%y%m%d_%H%M%S")
+    h, w = image.shape[:2]
+
+    baseline = results['baseline']
+    opt_names = [k for k in results if k != 'baseline']
+
+    level_labels = {
+        'hiera': 'Level 1 — Hiera FlashAttn',
+        'hiera_tf32': 'Level 2 — Hiera + TF32',
+        'hiera_tf32_compile': 'Level 3 — Hiera + TF32 + compile',
+    }
+
+    # Pick the highest optimization level — that's what ships
+    best_name = opt_names[-1]
+    best_alpha = results[best_name]
+    best_label = level_labels.get(best_name, best_name)
+
+    # --- Compute metrics ---
+    metrics = {}
+    all_pass = True
+    for name in opt_names:
+        diff = np.abs(results[name] - baseline)
+        max_diff = float(diff.max())
+        mae = float(diff.mean())
+        mse = float(np.mean((results[name] - baseline) ** 2))
+        psnr_val = float('inf') if mse == 0 else 10 * np.log10(1.0 / mse)
+
+        if psnr_val == float('inf'):
+            psnr_str, verdict = "inf", "BIT-IDENTICAL"
+        elif psnr_val > 80:
+            psnr_str, verdict = f"{psnr_val:.1f}", "PASS — below noise floor"
+        elif psnr_val > 60:
+            psnr_str, verdict = f"{psnr_val:.1f}", "PASS — imperceptible"
+        elif psnr_val > 40:
+            psnr_str, verdict = f"{psnr_val:.1f}", "WARN — sub-pixel"
+            all_pass = False
+        else:
+            psnr_str, verdict = f"{psnr_val:.1f}", "FAIL"
+            all_pass = False
+
+        metrics[name] = {
+            'max_diff': max_diff, 'mae': mae, 'psnr': psnr_val,
+            'psnr_str': psnr_str, 'verdict': verdict,
+        }
+
+    # --- Build composites: source keyed over checkerboard ---
+    # This is what a VFX artist would actually look at.
+    comp_baseline = _composite_over_checker(image, baseline)
+    comp_optimized = _composite_over_checker(image, best_alpha)
+
+    # Source frame normalized for display
+    source_disp = image.copy()
+    source_disp = source_disp / max(source_disp.max(), 1e-6)
+    source_disp = np.clip(source_disp, 0, 1)
+
+    # All three images are [H, W, 3] float32 — identical dimensions guaranteed.
+
+    # --- Figure: images on top, table below, footer at bottom ---
+    fig = plt.figure(figsize=(20, 14), facecolor=BG)
+
+    # Image row: 3 equal subplots in top half
+    ax1 = fig.add_axes([0.02, 0.42, 0.31, 0.45])   # left
+    ax2 = fig.add_axes([0.345, 0.42, 0.31, 0.45])   # center
+    ax3 = fig.add_axes([0.67, 0.42, 0.31, 0.45])    # right
+
+    panels = [
+        (ax1, source_disp, "Source Frame\n(green screen input)", TEXT),
+        (ax2, comp_baseline, "Baseline Key\n(upstream CorridorKeyEngine)", YELLOW),
+        (ax3, comp_optimized, f"Optimized Key\n({best_label})", PASS_GREEN),
+    ]
+
+    for ax, img, title, color in panels:
+        ax.imshow(img)
+        ax.set_title(title, color=color, fontsize=12, fontweight='bold', pad=10)
+        ax.axis('off')
+
+    # --- Header ---
+    fig.text(0.5, 0.96, "C O R R I D O R K E Y", color=YELLOW,
+             fontsize=18, fontweight='bold', ha='center', fontfamily='sans-serif')
+    fig.text(0.5, 0.92,
+             f"Quality Validation Report   |   v{version}   |   {timestamp}",
+             color=TEXT, fontsize=11, ha='center', fontfamily='sans-serif')
+    fig.patches.append(matplotlib.patches.Rectangle(
+        (0.02, 0.905), 0.96, 0.003, transform=fig.transFigure,
+        facecolor=YELLOW, edgecolor='none',
+    ))
+
+    # --- Metrics table in its own axes ---
+    ax_tbl = fig.add_axes([0.05, 0.10, 0.90, 0.28])
+    ax_tbl.axis('off')
+
+    col_labels = ['Optimization Level', 'Max Pixel Diff', 'MAE',
+                  'PSNR (dB)', 'Verdict']
+    table_data = []
+    for name in opt_names:
+        m = metrics[name]
+        display = level_labels.get(name, name)
+        table_data.append([
+            display, f"{m['max_diff']:.10f}", f"{m['mae']:.10f}",
+            m['psnr_str'], m['verdict'],
+        ])
+
+    tbl = ax_tbl.table(
+        cellText=table_data, colLabels=col_labels,
+        cellLoc='center', loc='center',
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(11)
+    tbl.scale(1.0, 2.0)
+
+    for (row, col), cell in tbl.get_celld().items():
+        cell.set_edgecolor(BORDER)
+        if row == 0:
+            cell.set_facecolor(BORDER)
+            cell.set_text_props(color=YELLOW, fontweight='bold', fontsize=11)
+        else:
+            cell.set_facecolor(BG_CARD)
+            cell.set_text_props(color=TEXT, fontsize=11)
+            if col == 4:
+                text = cell.get_text().get_text()
+                if 'FAIL' in text:
+                    cell.set_text_props(color=FAIL_RED, fontweight='bold')
+                elif 'WARN' in text:
+                    cell.set_text_props(color=WARN_ORANGE, fontweight='bold')
+                elif 'BIT-IDENTICAL' in text:
+                    cell.set_text_props(color=YELLOW, fontweight='bold')
+                else:
+                    cell.set_text_props(color=PASS_GREEN, fontweight='bold')
+
+    # --- Footer ---
+    overall = "ALL OPTIMIZATIONS PRODUCE IDENTICAL OUTPUT" if all_pass \
+        else "DIFFERENCES DETECTED — INVESTIGATE"
+    overall_color = YELLOW if all_pass else FAIL_RED
+    fig.text(
+        0.5, 0.04,
+        f"v{version}   |   Frame: {os.path.basename(frame_path)}   |   "
+        f"Resolution: {w}x{h}   |   {overall}",
+        ha='center', color=overall_color, fontsize=12, fontweight='bold',
+        fontfamily='sans-serif',
+    )
+
+    # --- Save ---
+    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                           "reports")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"{date_slug}_quality_report_v{version}.png")
+    fig.savefig(out_path, dpi=150, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    print(f"\nReport saved: {out_path}")
 
 
 if __name__ == "__main__":

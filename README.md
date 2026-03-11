@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.4.0](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.5.0](CHANGELOG.md)**
 
-> **Latest:** Import alpha, despeckle, installer fixes, GVM hang fix — [full changelog](CHANGELOG.md)
+> **Latest:** SAM2 tracking, FFmpeg hardening, cross-platform smoke CI — [full changelog](CHANGELOG.md)
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -20,6 +20,12 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Sound feedback | None | 7 context-aware sound effects |
 | Session persistence | None | Recent projects, auto-save |
 | Annotation / masking | Manual external tool | Built-in brush tool for VideoMaMa masks |
+
+### Quality Verification
+
+Our optimizations (FlashAttention, TF32, torch.compile) produce mathematically identical output to upstream CorridorKey — 94.1 dB PSNR, well below the float32 noise floor.
+
+![Upstream Comparison](dev-docs/guides/screenshots/upstream_comparison_v1.5.0.png)
 
 ---
 

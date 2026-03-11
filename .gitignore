@@ -66,3 +66,4 @@ bench_vram.py
 bench_vram_report.json
 .tmp/
 Projects/
+reports/

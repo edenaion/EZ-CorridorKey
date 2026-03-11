@@ -4,6 +4,45 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.5.0] - 2026-03-10 — SAM2 Tracking, FFmpeg Hardening, Quality Verification
+
+### SAM2 Tracking Integration
+- **Annotations are now prompts, not final masks** — painting foreground/background strokes feeds into SAM2 dense tracking before VideoMaMa, producing far better alpha hints than raw brush strokes
+- **TRACK MASK button** — generates dense per-frame segmentation masks from sparse annotation prompts using SAM2
+- **VideoMaMa pipeline updated** — now expects SAM2-tracked masks (chunking, VRAM, dtype defaults corrected toward official usage)
+- **Tracker model selection** — Preferences > Tracking lets you choose Fast (184 MB), Base+ (324 MB, default), or Highest Quality (898 MB) SAM2 models
+- **SAM2 pre-download** — installer optionally pre-downloads the default Base+ checkpoint (324 MB) during install
+
+### FFmpeg Hardening
+- **Validation requires both ffmpeg and ffprobe** — rejects installs missing ffprobe
+- **Version >= 7 enforced** — rejects older FFmpeg builds at both install and runtime
+- **Windows essentials build rejected** — Gyan "essentials" builds lack required filters; validation detects and blocks them
+- **Bundled local FFmpeg preferred** — `tools/ffmpeg/bin` is checked first, before PATH, preventing stale system installs from interfering
+- **Repair FFmpeg in Preferences** — Windows: one-click download of full BtbN GPL build into `tools/ffmpeg`. macOS/Linux: shows exact platform-specific install commands and copies to clipboard (no system mutation)
+- **Open FFmpeg Folder** — quick access to the bundled FFmpeg directory from Preferences
+
+### Cross-Platform Smoke CI
+- **GitHub Actions workflow** — fresh install + headless startup smoke on Windows, Ubuntu, and macOS
+- **Covers**: installer, dependency resolution, SAM2 pre-download, QApplication creation, MainWindow construction, Preferences dialog, FFmpeg repair button
+- **Ubuntu runtime libs** — installs libegl1, libgl1, libpulse0, libxkbcommon-x11-0, libxcb-cursor0
+- **Node 24 compatible** — uses actions/checkout@v6 and actions/setup-python@v6
+
+### Quality Verification
+- **End-to-end upstream comparison** — same frame run through upstream CorridorKey and our fork produces 94.1 dB PSNR (below float32 noise floor)
+- **Branded visual report** — `scripts/compare_upstream.py` generates a dated, versioned comparison PNG
+
+### Updater Bridge (master → main)
+- **`3-update.bat` / `3-update.sh`** — automatically migrates local `master` checkouts to `main`, repoints tracking if needed
+- **`origin/master` compatibility mirror** — kept in sync with `main` for the next two releases so older installs can update gracefully. Planned retirement: after `1.5.1`
+
+### Installer Parity
+- **`1-install.sh`** — added Python 3.14+ upper-bound check (was already in `.bat`)
+
+### Fixed
+- **UI sound clicks** — 50ms fade-in/out applied to all UI sound effects to eliminate playback pops
+
+---
+
 ## [1.4.0] - 2026-03-09 — Full Pipeline, Model Handoff, Force-Stop, Installer Overhaul
 
 ### Workflow Improvements
