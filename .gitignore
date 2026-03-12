@@ -42,6 +42,7 @@ screenshot*.png
 *.onnx
 
 # Checkpoint Directories
+models/              # Unified model storage (new convention, starting with MatAnyone2)
 CorridorKeyModule/checkpoints/*
 !CorridorKeyModule/checkpoints/.gitkeep
 CorridorKeyModule/IgnoredCheckpoints/*

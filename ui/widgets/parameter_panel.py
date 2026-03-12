@@ -17,6 +17,7 @@ class ParameterPanel(QWidget):
     params_changed = Signal()  # emitted when any parameter changes
     gvm_requested = Signal()      # GVM AUTO button clicked
     videomama_requested = Signal() # VIDEOMAMA button clicked
+    matanyone2_requested = Signal()  # MatAnyone2 button clicked
     track_masks_requested = Signal()  # Track annotation prompts into dense masks
     import_alpha_requested = Signal()  # Import own AlphaHint folder
 
@@ -51,6 +52,23 @@ class ParameterPanel(QWidget):
         alpha_group = QGroupBox("ALPHA GENERATION")
         alpha_layout = QVBoxLayout(alpha_group)
         alpha_layout.setSpacing(8)
+
+        self._matanyone2_btn = QPushButton("MATANYONE2")
+        self._matanyone2_btn.setEnabled(False)
+        self._matanyone2_btn.setToolTip(
+            "Generate alpha hints using MatAnyone2 video matting.\n"
+            "Requires a mask on the first frame (frame 0).\n\n"
+            "1. Paint foreground/background prompts on frame 0\n"
+            "2. Click Track Mask to generate dense masks with SAM2\n"
+            "3. Click MATANYONE2 to generate temporally coherent AlphaHint"
+        )
+        self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
+        alpha_layout.addWidget(self._matanyone2_btn)
+
+        or_label_ma = QLabel("— or —")
+        or_label_ma.setAlignment(Qt.AlignCenter)
+        or_label_ma.setStyleSheet("color: #808070; font-size: 11px;")
+        alpha_layout.addWidget(or_label_ma)
 
         self._gvm_btn = QPushButton("GVM AUTO")
         self._gvm_btn.setEnabled(False)
@@ -345,6 +363,14 @@ class ParameterPanel(QWidget):
             exr_compression=get_setting_str(KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION),
         )
 
+    def auto_detect_color_space(self, is_exr: bool) -> None:
+        """Auto-set color space to Linear for EXR input sequences.
+
+        Only upgrades sRGB→Linear (never downgrades a user's explicit Linear choice).
+        """
+        if is_exr and self._color_space.currentIndex() == 0:
+            self._color_space.setCurrentIndex(1)  # Switch to Linear
+
     def set_params(self, params: InferenceParams) -> None:
         """Load parameter values (e.g. from a saved session).
 
@@ -383,6 +409,10 @@ class ParameterPanel(QWidget):
     def set_videomama_enabled(self, enabled: bool) -> None:
         """Enable/disable VideoMaMa button based on clip state."""
         self._videomama_btn.setEnabled(enabled)
+
+    def set_matanyone2_enabled(self, enabled: bool) -> None:
+        """Enable/disable MatAnyone2 button based on clip state."""
+        self._matanyone2_btn.setEnabled(enabled)
 
     def set_import_alpha_enabled(self, enabled: bool) -> None:
         """Enable/disable Import Alpha button based on clip state."""

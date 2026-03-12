@@ -111,6 +111,8 @@ class GPUJobWorker(QThread):
                 self._run_sam2_track(job)
             elif job.job_type == JobType.VIDEOMAMA_ALPHA:
                 self._run_videomama(job)
+            elif job.job_type == JobType.MATANYONE2_ALPHA:
+                self._run_matanyone2(job)
             elif job.job_type == JobType.PREVIEW_REPROCESS:
                 self._run_preview_reprocess(job)
             else:
@@ -254,6 +256,30 @@ class GPUJobWorker(QThread):
             on_warning=on_warning,
             on_status=on_status,
             chunk_size=chunk_size,
+        )
+
+    def _run_matanyone2(self, job: GPUJob) -> None:
+        """Run MatAnyone2 video matting alpha generation."""
+        clip = job.params.get("_clip_snapshot")
+
+        if clip is None:
+            raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
+
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
+            self.progress.emit(job.id, clip_name, current, total)
+
+        def on_warning(message: str) -> None:
+            self.warning.emit(job.id, message)
+
+        def on_status(message: str) -> None:
+            self.status_update.emit(job.id, message)
+
+        self._service.run_matanyone2(
+            clip=clip,
+            job=job,
+            on_progress=on_progress,
+            on_warning=on_warning,
+            on_status=on_status,
         )
 
     def _run_preview_reprocess(self, job: GPUJob) -> None:

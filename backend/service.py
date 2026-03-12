@@ -78,6 +78,7 @@ class _ActiveModel(Enum):
     GVM = "gvm"
     SAM2 = "sam2"
     VIDEOMAMA = "videomama"
+    MATANYONE2 = "matanyone2"
 
 
 @dataclass
@@ -207,6 +208,7 @@ class CorridorKeyService:
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
+        self._matanyone2_processor = None
         self._active_model = _ActiveModel.NONE
         self._device: str = 'cpu'
         self._job_queue: Optional[GPUJobQueue] = None
@@ -362,6 +364,9 @@ class CorridorKeyService:
             elif self._active_model == _ActiveModel.VIDEOMAMA:
                 self._safe_offload(self._videomama_pipeline)
                 self._videomama_pipeline = None
+            elif self._active_model == _ActiveModel.MATANYONE2:
+                self._safe_offload(self._matanyone2_processor)
+                self._matanyone2_processor = None
             logger.info(f"_safe_offload took {time.monotonic() - t0:.1f}s")
 
             import gc
@@ -504,16 +509,33 @@ class CorridorKeyService:
         logger.info(f"VideoMaMa loaded in {time.monotonic() - t0:.1f}s")
         return self._videomama_pipeline
 
+    def _get_matanyone2(self):
+        """Lazy-load the MatAnyone2 processor."""
+        self._ensure_model(_ActiveModel.MATANYONE2)
+
+        if self._matanyone2_processor is not None:
+            return self._matanyone2_processor
+
+        sys.path.insert(0, os.path.join(BASE_DIR, "MatAnyone2Module"))
+        from MatAnyone2Module.wrapper import MatAnyone2Processor
+        logger.info("Loading MatAnyone2 processor...")
+        t0 = time.monotonic()
+        self._matanyone2_processor = MatAnyone2Processor(device=self._device)
+        logger.info(f"MatAnyone2 loaded in {time.monotonic() - t0:.1f}s")
+        return self._matanyone2_processor
+
     def unload_engines(self) -> None:
         """Free GPU memory by unloading all engines."""
         self._safe_offload(self._engine)
         self._safe_offload(self._gvm_processor)
         self._safe_offload(self._sam2_tracker)
         self._safe_offload(self._videomama_pipeline)
+        self._safe_offload(self._matanyone2_processor)
         self._engine = None
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
+        self._matanyone2_processor = None
         self._active_model = _ActiveModel.NONE
         import gc
         gc.collect()
@@ -553,6 +575,8 @@ class CorridorKeyService:
     ) -> tuple[Optional[np.ndarray], str, bool]:
         """Read a single input frame.
 
+        Auto-detects EXR sequences as linear (overrides user setting).
+
         Returns:
             (image_float32, stem_name, is_linear_override)
         """
@@ -570,7 +594,16 @@ class CorridorKeyService:
             input_stem = os.path.splitext(input_files[frame_index])[0]
             img = read_image_frame(fpath)
             validate_frame_read(img, clip.name, frame_index, fpath)
-            return img, input_stem, input_is_linear
+            # EXR is always linear — auto-detect to prevent sRGB misinterpretation
+            is_linear = input_is_linear
+            if not is_linear and fpath.lower().endswith('.exr'):
+                is_linear = True
+                if frame_index == 0:
+                    logger.info(
+                        f"Clip '{clip.name}': EXR input detected, "
+                        "auto-setting color space to Linear"
+                    )
+            return img, input_stem, is_linear
 
     def _read_alpha_frame(
         self,
@@ -957,13 +990,18 @@ class CorridorKeyService:
             engine = self._get_engine()
 
         # Read the specific input frame
+        is_linear = params.input_is_linear
         if clip.input_asset.asset_type == 'video':
             img = read_video_frame_at(clip.input_asset.path, frame_index)
         else:
             input_files = clip.input_asset.get_frame_files()
             if frame_index >= len(input_files):
                 return None
-            img = read_image_frame(os.path.join(clip.input_asset.path, input_files[frame_index]))
+            fpath = os.path.join(clip.input_asset.path, input_files[frame_index])
+            img = read_image_frame(fpath)
+            # EXR auto-detect linear
+            if not is_linear and fpath.lower().endswith('.exr'):
+                is_linear = True
         if img is None:
             return None
 
@@ -990,7 +1028,7 @@ class CorridorKeyService:
         with self._gpu_lock:
             res = engine.process_frame(
                 img, mask,
-                input_is_linear=params.input_is_linear,
+                input_is_linear=is_linear,
                 fg_is_straight=True,
                 despill_strength=params.despill_strength,
                 auto_despeckle=params.auto_despeckle,
@@ -1455,6 +1493,153 @@ class CorridorKeyService:
                 on_warning(f"State transition after VideoMaMa: {e}")
 
         logger.info(f"VideoMaMa complete for '{clip.name}': {frames_written} alpha frames in {time.monotonic() - t_start:.1f}s")
+
+    def run_matanyone2(
+        self,
+        clip: ClipEntry,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Run MatAnyone2 video matting alpha generation for a clip.
+
+        Transitions clip: MASKED → READY (creates AlphaHint directory).
+        Requires a first-frame (frame 0) segmentation mask.
+
+        Args:
+            clip: Must be in MASKED state with input_asset and mask_asset.
+            job: Optional GPUJob for cancel checking.
+            on_progress: Progress callback (clip_name, current, total).
+            on_warning: Warning callback.
+            on_status: Phase status callback.
+        """
+        # ── Preflight validation ──
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for MatAnyone2")
+        if clip.mask_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing mask asset for MatAnyone2")
+        if self._device == 'cpu':
+            raise GPURequiredError("MatAnyone2")
+        if clip.input_asset.asset_type != "sequence":
+            raise CorridorKeyError("MatAnyone2 requires an extracted image sequence")
+
+        def _status(msg: str) -> None:
+            logger.info(f"MatAnyone2 [{clip.name}]: {msg}")
+            if on_status:
+                on_status(msg)
+
+        def _check_cancel() -> bool:
+            return bool(job and job.is_cancelled)
+
+        t_start = time.monotonic()
+
+        # ── Phase 1: Load model ──
+        _status("Loading MatAnyone2 model...")
+        with self._gpu_lock:
+            processor = self._get_matanyone2()
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 2: Load input frames ──
+        _status("Loading frames...")
+        selected_input_names = self._selected_sequence_files(clip)
+        if not selected_input_names:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for MatAnyone2")
+
+        named_input_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            selected_input_names,
+            clip.name,
+            job=job,
+            on_status=on_status,
+        )
+        input_frames = [frame for _, frame in named_input_frames]
+        input_names = [fname for fname, _ in named_input_frames]
+        frame_stems = [os.path.splitext(fname)[0] for fname in input_names]
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 3: Load first-frame mask ──
+        _status("Loading first-frame mask...")
+        mask_frame = self._load_first_frame_mask(clip, input_frames[0].shape[:2])
+        if mask_frame is None:
+            raise CorridorKeyError(
+                f"Clip '{clip.name}': MatAnyone2 requires a mask for the first frame (frame 0). "
+                f"Please ensure your annotation or mask covers the very first frame."
+            )
+
+        # ── Phase 4: Inference ──
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        try:
+            frames_written = processor.process_frames(
+                input_frames=input_frames,
+                mask_frame=mask_frame,
+                output_dir=alpha_dir,
+                frame_names=frame_stems,
+                progress_callback=on_progress,
+                on_status=on_status,
+                cancel_check=_check_cancel,
+                clip_name=clip.name,
+            )
+        except Exception as e:
+            # On OOM, clean up and re-raise without poisoning service
+            if "CUDA out of memory" in str(e) or "OutOfMemoryError" in type(e).__name__:
+                logger.error(f"MatAnyone2 OOM for '{clip.name}': {e}")
+                self._matanyone2_processor = None
+                self._active_model = _ActiveModel.NONE
+                try:
+                    import torch as _torch
+                    _torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                raise CorridorKeyError(
+                    f"MatAnyone2 ran out of GPU memory processing '{clip.name}'. "
+                    f"Try closing other GPU applications or using a smaller clip."
+                ) from e
+            raise
+
+        # ── Phase 5: Finalize ──
+        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+
+        try:
+            clip.transition_to(ClipState.READY)
+        except Exception as e:
+            if on_warning:
+                on_warning(f"State transition after MatAnyone2: {e}")
+
+        logger.info(
+            f"MatAnyone2 complete for '{clip.name}': "
+            f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )
+
+    def _load_first_frame_mask(
+        self, clip: ClipEntry, frame_shape: tuple[int, int]
+    ) -> Optional[np.ndarray]:
+        """Load the first-frame mask for MatAnyone2.
+
+        Tries mask_asset's first file. Returns grayscale uint8 (H,W) or None.
+        """
+        if clip.mask_asset is None:
+            return None
+
+        if clip.mask_asset.asset_type == 'sequence':
+            mask_files = clip.mask_asset.get_frame_files()
+            if not mask_files:
+                return None
+            first_mask_path = os.path.join(clip.mask_asset.path, mask_files[0])
+            mask = cv2.imread(first_mask_path, cv2.IMREAD_GRAYSCALE)
+            if mask is None:
+                return None
+            # Binarize
+            _, mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
+            # Resize to match input frame if needed
+            target_h, target_w = frame_shape
+            if mask.shape[:2] != (target_h, target_w):
+                mask = cv2.resize(mask, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
+            return mask
+
+        return None
 
     def _load_frames_for_videomama(
         self, asset: ClipAsset, clip_name: str,

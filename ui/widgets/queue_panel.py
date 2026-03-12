@@ -41,6 +41,7 @@ _JOB_TYPE_LABELS = {
     JobType.GVM_ALPHA: "GVM Auto",
     JobType.SAM2_TRACK: "Track Mask",
     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
+    JobType.MATANYONE2_ALPHA: "MatAnyone2",
     JobType.PREVIEW_REPROCESS: "Preview",
 }
 

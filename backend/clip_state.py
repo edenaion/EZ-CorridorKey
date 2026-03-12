@@ -147,6 +147,15 @@ class ClipAsset:
         from .natural_sort import natsorted
         return natsorted([f for f in os.listdir(self.path) if _is_image_file(f)])
 
+    def is_exr_sequence(self) -> bool:
+        """True if this is an image sequence where the first frame is EXR."""
+        if self.asset_type != 'sequence':
+            return False
+        files = self.get_frame_files()
+        if not files:
+            return False
+        return files[0].lower().endswith('.exr')
+
 
 @dataclass
 class InOutRange:

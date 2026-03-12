@@ -681,9 +681,9 @@ class MainWindow(QMainWindow):
             )
             if os.path.isfile(manifest_path):
                 os.remove(manifest_path)
-            self._param_panel.set_videomama_enabled(
-                self._clip_has_videomama_ready_mask(self._current_clip)
-            )
+            _has_mask = self._clip_has_videomama_ready_mask(self._current_clip)
+            self._param_panel.set_videomama_enabled(_has_mask)
+            self._param_panel.set_matanyone2_enabled(_has_mask)
 
     def _clip_has_videomama_ready_mask(self, clip: ClipEntry | None) -> bool:
         """True when the clip has a dense mask track VideoMaMa can consume."""
@@ -791,9 +791,9 @@ class MainWindow(QMainWindow):
                 os.remove(manifest_path)
             clip.mask_asset = None
             clip.find_assets()
-            self._param_panel.set_videomama_enabled(
-                self._clip_has_videomama_ready_mask(clip)
-            )
+            _has_mask = self._clip_has_videomama_ready_mask(clip)
+            self._param_panel.set_videomama_enabled(_has_mask)
+            self._param_panel.set_matanyone2_enabled(_has_mask)
 
     def _update_annotation_info(self) -> None:
         """Update parameter panel with current annotation count and scrubber markers."""
@@ -849,6 +849,7 @@ class MainWindow(QMainWindow):
         # Parameter panel — wire GVM / Track Mask / VideoMaMa
         self._param_panel.gvm_requested.connect(self._on_run_gvm)
         self._param_panel.videomama_requested.connect(self._on_run_videomama)
+        self._param_panel.matanyone2_requested.connect(self._on_run_matanyone2)
         self._param_panel.track_masks_requested.connect(self._on_track_masks)
         self._param_panel.import_alpha_requested.connect(self._on_import_alpha)
 
@@ -968,11 +969,15 @@ class MainWindow(QMainWindow):
             needs_extraction=needs_extraction,
         )
 
-        # Enable GVM/VideoMaMa/Import Alpha buttons based on state
+        # Auto-detect EXR → Linear color space
+        if clip.input_asset is not None:
+            self._param_panel.auto_detect_color_space(clip.input_asset.is_exr_sequence())
+
+        # Enable GVM/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
-        self._param_panel.set_videomama_enabled(
-            self._clip_has_videomama_ready_mask(clip)
-        )
+        has_mask = self._clip_has_videomama_ready_mask(clip)
+        self._param_panel.set_videomama_enabled(has_mask)
+        self._param_panel.set_matanyone2_enabled(has_mask)
         self._param_panel.set_import_alpha_enabled(
             clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
         )
@@ -2109,6 +2114,27 @@ class MainWindow(QMainWindow):
         self._current_clip.set_processing(True)
         self._start_worker_if_needed(job.id, job_label="VideoMaMa")
 
+    @Slot()
+    def _on_run_matanyone2(self) -> None:
+        """Run MatAnyone2 video matting alpha generation on the selected clip."""
+        if self._current_clip is None:
+            return
+        if not self._clip_has_videomama_ready_mask(self._current_clip):
+            QMessageBox.information(
+                self,
+                "Track Mask First",
+                "MatAnyone2 requires a tracked mask on frame 0.\n\n"
+                "Paint prompts and run Track Mask before using MatAnyone2.",
+            )
+            return
+
+        job = create_job_snapshot(self._current_clip, job_type=JobType.MATANYONE2_ALPHA)
+        if not self._service.job_queue.submit(job):
+            return
+
+        self._current_clip.set_processing(True)
+        self._start_worker_if_needed(job.id, job_label="MatAnyone2")
+
     def _start_worker_if_needed(
         self,
         first_job_id: str | None = None,
@@ -2229,7 +2255,8 @@ class MainWindow(QMainWindow):
         # Map job type to correct next state.
         if job_type == JobType.SAM2_TRACK.value:
             target_state = ClipState.MASKED
-        elif job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value):
+        elif job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value,
+                          JobType.MATANYONE2_ALPHA.value):
             target_state = ClipState.READY
         else:
             target_state = ClipState.COMPLETE
@@ -2297,6 +2324,7 @@ class MainWindow(QMainWindow):
                     JobType.GVM_ALPHA: "GVM Auto",
                     JobType.SAM2_TRACK: "Track Mask",
                     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
+                    JobType.MATANYONE2_ALPHA: "MatAnyone2",
                     JobType.INFERENCE: "Inference",
                 }
                 next_label = _label_map.get(next_job.job_type, "Pipeline")
@@ -2310,7 +2338,11 @@ class MainWindow(QMainWindow):
             self._status_bar.set_message(f"Track Mask complete for {clip_name}")
         elif target_state == ClipState.READY:
             UIAudio.mask_done()
-            type_label = "GVM Auto" if job_type == JobType.GVM_ALPHA.value else "VideoMaMa"
+            type_label = {
+                JobType.GVM_ALPHA.value: "GVM Auto",
+                JobType.VIDEOMAMA_ALPHA.value: "VideoMaMa",
+                JobType.MATANYONE2_ALPHA.value: "MatAnyone2",
+            }.get(job_type, "Alpha")
             # Show alpha coverage count
             alpha_info = ""
             for c in self._clip_model.clips:
@@ -2332,9 +2364,9 @@ class MainWindow(QMainWindow):
         if self._current_clip and self._current_clip.name == clip_name:
             self._dual_viewer.set_clip(self._current_clip)
             self._refresh_button_state()
-            self._param_panel.set_videomama_enabled(
-                self._clip_has_videomama_ready_mask(self._current_clip)
-            )
+            _has_mask = self._clip_has_videomama_ready_mask(self._current_clip)
+            self._param_panel.set_videomama_enabled(_has_mask)
+            self._param_panel.set_matanyone2_enabled(_has_mask)
             self._param_panel.set_import_alpha_enabled(
                 self._current_clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
