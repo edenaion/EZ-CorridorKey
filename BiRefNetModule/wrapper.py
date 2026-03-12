@@ -31,12 +31,15 @@ class ImagePreprocessor:
 
 usage_to_weights_file = {
     "General": "BiRefNet",
+    "General-dynamic": "BiRefNet_dynamic",
     "General-HR": "BiRefNet_HR",
     "General-Lite": "BiRefNet_lite",
     "General-Lite-2K": "BiRefNet_lite-2K",
-    "General-reso_512": "BiRefNet-reso_512",
+    "General-reso_512": "BiRefNet_512x512",
     "Matting": "BiRefNet-matting",
+    "Matting-dynamic": "BiRefNet_dynamic-matting",
     "Matting-HR": "BiRefNet_HR-Matting",
+    "Matting-Lite": "BiRefNet_lite-matting",
     "Portrait": "BiRefNet-portrait",
     "DIS": "BiRefNet-DIS5K",
     "HRSOD": "BiRefNet-HRSOD",
@@ -62,7 +65,10 @@ class BiRefNetHandler:
         elif usage in ["General-HR", "Matting-HR"]:
             self.resolution = (2048, 2048)
         else:
-            self.resolution = (1024, 1024)
+            if "-dynamic" in usage:
+                self.resolution = None
+            else:
+                self.resolution = (1024, 1024)
 
         repo_name = usage_to_weights_file[usage]
         repo_id = f"ZhengPeng7/{repo_name}"
@@ -97,15 +103,13 @@ class BiRefNetHandler:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
 
-    def process(self, input_path, alpha_output_dir=None, dilate_radius=0):
+    def process(self, input_path, alpha_output_dir=None, dilate_radius=0, on_frame_complete=None):
         """
         Process a single video or directory of images.
         """
         input_path = Path(input_path)
         file_name = input_path.stem
         is_video = input_path.suffix.lower() in [".mp4", ".mkv", ".gif", ".mov", ".avi"]
-
-        image_preprocessor = ImagePreprocessor(resolution=tuple(self.resolution))
 
         def get_frames():
             """Yields tuples of (image_numpy_array, output_file_name)"""
@@ -142,6 +146,7 @@ class BiRefNetHandler:
                     # Keep original filename for image sequences
                     yield img, f"alphaSeq_{img_path.stem}.png"
 
+        count = 0
         for image, out_name in get_frames():
             # Ensure correct conversion to RGB regardless of input format (EXR/PNG/JPG)
             if len(image.shape) == 2:
@@ -158,6 +163,11 @@ class BiRefNetHandler:
             pil_image = Image.fromarray(image_rgb)
 
             # Preprocess
+            if self.resolution is None:  # Account for dynamic models
+                resolution_div_by_32 = [int(int(reso) // 32 * 32) for reso in pil_image.size]
+                if resolution_div_by_32 != self.resolution:
+                    self.resolution = resolution_div_by_32
+            image_preprocessor = ImagePreprocessor(resolution=tuple(self.resolution))
             image_proc = image_preprocessor.proc(pil_image).unsqueeze(0).to(self.device)
             if half_precision:
                 image_proc = image_proc.half()
@@ -175,10 +185,14 @@ class BiRefNetHandler:
             mask_np = np.array(mask)
 
             # Dilate
-            if dilate_radius > 0:
-                k_size = dilate_radius * 2 + 1
+            if dilate_radius != 0:
+                abs_radius = abs(dilate_radius)
+                k_size = abs_radius * 2 + 1
                 kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k_size, k_size))
-                mask_np = cv2.dilate(mask_np, kernel, iterations=1)
+                if dilate_radius > 0:
+                    mask_np = cv2.dilate(mask_np, kernel, iterations=1)  # Expansion
+                else:
+                    mask_np = cv2.erode(mask_np, kernel, iterations=1)  # Contraction
 
             # Strict Binary Threshold
             _, mask_np = cv2.threshold(mask_np, 10, 255, cv2.THRESH_BINARY)
@@ -187,3 +201,6 @@ class BiRefNetHandler:
             if alpha_output_dir:
                 save_path = os.path.join(alpha_output_dir, out_name)
                 cv2.imwrite(save_path, mask_np)
+
+            if on_frame_complete:
+                on_frame_complete(count, 0)
