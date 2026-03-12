@@ -100,6 +100,7 @@ class GPUJobWorker(QThread):
     def _process_job(self, job: GPUJob) -> None:
         """Execute a single GPU job."""
         job_id = job.id
+        logger.info(f">>> PROCESS_JOB START [{job_id}]: type={job.job_type.value}, clip={job.clip_name}")
         self._queue.start_job(job)
 
         try:

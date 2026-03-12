@@ -282,3 +282,44 @@ class TestSAM2Tracking:
                 manifest = json.load(handle)
             assert manifest["source"] == "sam2"
             assert manifest["frame_stems"] == ["frame_00000", "frame_00001"]
+
+    def test_run_sam2_track_warns_and_errors_when_legacy_prompt_frame_is_unrecoverable(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.SAM2
+        svc._sam2_tracker = DummySAM2Tracker()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "Input")
+            os.makedirs(input_dir)
+
+            for i in range(2):
+                cv2.imwrite(
+                    os.path.join(input_dir, f"frame_{i:05d}.png"),
+                    np.full((4, 4, 3), 64 + i, dtype=np.uint8),
+                )
+
+            with open(os.path.join(tmpdir, "annotations.json"), "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "0": [
+                            {
+                                "points": [[99, 99], [120, 140]],
+                                "brush_type": "fg",
+                                "radius": 15.0,
+                            }
+                        ]
+                    },
+                    handle,
+                )
+
+            clip = ClipEntry(
+                "test", tmpdir, state=ClipState.RAW,
+                input_asset=ClipAsset(input_dir, "sequence"),
+            )
+            warnings: list[str] = []
+
+            with pytest.raises(CorridorKeyError, match="Redo the annotations"):
+                svc.run_sam2_track(clip, on_warning=warnings.append)
+
+            assert warnings
+            assert "Redo the annotations" in warnings[0]
