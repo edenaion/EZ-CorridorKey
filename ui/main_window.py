@@ -3223,6 +3223,8 @@ class MainWindow(QMainWindow):
             f"A new version (v{remote_version}) is available.\n"
             "Click to save your session and run the updater."
         )
+        # Set minimum width from text metrics to prevent Qt corner widget squish
+        self._update_btn.setMinimumWidth(self._update_btn.sizeHint().width())
         self._update_btn.setVisible(True)
 
     def _run_update(self) -> None:
