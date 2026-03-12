@@ -130,6 +130,30 @@ class DualViewerPanel(QWidget):
             if self._clip:
                 self._update_coverage(self._clip, fi)
 
+    def refresh_generated_assets(self) -> None:
+        """Refresh output availability in place while preserving the current frame.
+
+        Used for live progress updates so the scrubber coverage and mode buttons
+        stay current without forcing a full clip reselection.
+        """
+        if self._clip is None:
+            return
+
+        current_frame = self._scrubber.current_frame()
+        self._output_viewer.refresh_available_assets()
+
+        fi = self._output_viewer._frame_index
+        if fi is None:
+            return
+
+        self._scrubber.set_range(fi.frame_count)
+        clamped_frame = min(current_frame, max(0, fi.frame_count - 1))
+        if fi.frame_count > 0:
+            self._scrubber.set_frame(clamped_frame)
+            if self._input_viewer.current_stem_index != clamped_frame:
+                self._input_viewer.navigate_to_frame(clamped_frame)
+        self._update_coverage(self._clip, fi)
+
     def show_placeholder(self, text: str = "No clip selected") -> None:
         """Show placeholder on both viewers."""
         self._input_viewer.show_placeholder(text)

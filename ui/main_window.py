@@ -224,6 +224,14 @@ class MainWindow(QMainWindow):
         self._reprocess_timer.setInterval(200)
         self._reprocess_timer.timeout.connect(self._do_reprocess)
 
+        # Live selected-clip refresh: coalesce worker progress into a cheap UI-only
+        # asset rescan so the scrubber and mode buttons update while frames are written.
+        self._live_asset_refresh_timer = QTimer(self)
+        self._live_asset_refresh_timer.setSingleShot(True)
+        self._live_asset_refresh_timer.setInterval(150)
+        self._live_asset_refresh_timer.timeout.connect(self._refresh_selected_clip_live_assets)
+        self._pending_live_asset_refresh_clip: str | None = None
+
         # Shortcut registry — single source of truth for key bindings
         self._shortcut_registry = ShortcutRegistry()
 
@@ -2313,7 +2321,41 @@ class MainWindow(QMainWindow):
         if job_id == self._active_job_id:
             self._status_bar.update_progress(current, total)
 
+        if self._current_clip and self._current_clip.name == clip_name:
+            self._schedule_live_asset_refresh(clip_name, current, total)
+
         self._queue_panel.refresh()
+
+    def _schedule_live_asset_refresh(self, clip_name: str, current: int, total: int) -> None:
+        """Coalesce progress-driven asset refreshes for the selected clip.
+
+        This keeps the feedback live without rescanning on every frame tick or
+        touching any GPU-side work.
+        """
+        if current <= 0 or total <= 0:
+            return
+
+        step = max(1, total // 50)
+        should_refresh = current <= 3 or current >= total or total <= 30 or current % step == 0
+        if not should_refresh:
+            return
+
+        self._pending_live_asset_refresh_clip = clip_name
+        if not self._live_asset_refresh_timer.isActive():
+            self._live_asset_refresh_timer.start()
+
+    @Slot()
+    def _refresh_selected_clip_live_assets(self) -> None:
+        """Refresh the selected clip's coverage/modes without resetting navigation."""
+        clip_name = self._pending_live_asset_refresh_clip
+        self._pending_live_asset_refresh_clip = None
+
+        if clip_name is None or self._current_clip is None:
+            return
+        if self._current_clip.name != clip_name:
+            return
+
+        self._dual_viewer.refresh_generated_assets()
 
     @Slot(str, str)
     def _on_worker_status(self, job_id: str, message: str) -> None:
@@ -2447,6 +2489,8 @@ class MainWindow(QMainWindow):
             self._status_bar.set_message(f"Inference complete: {clip_name}")
 
         # Refresh views
+        self._pending_live_asset_refresh_clip = None
+        self._live_asset_refresh_timer.stop()
         self._queue_panel.refresh()
         self._io_tray.refresh()
 
@@ -2485,6 +2529,8 @@ class MainWindow(QMainWindow):
             self._status_bar.stop_job_timer()
             self._status_bar.set_running(False)
             self._status_bar.set_message(f"Cancelled: {clip_name}")
+            self._pending_live_asset_refresh_clip = None
+            self._live_asset_refresh_timer.stop()
             self._queue_panel.refresh()
             logger.info(f"Job cancelled: {clip_name}")
         else:
@@ -2500,6 +2546,8 @@ class MainWindow(QMainWindow):
         self._status_bar.set_stop_button_mode(force=False)
         self._status_bar.stop_job_timer()
         self._status_bar.set_running(False)
+        self._pending_live_asset_refresh_clip = None
+        self._live_asset_refresh_timer.stop()
         self._pipeline_steps.pop(clip_name, None)
         self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
         # Clear processing lock
@@ -2541,6 +2589,8 @@ class MainWindow(QMainWindow):
         self._status_bar.set_running(False)
         self._status_bar.stop_job_timer()
         self._active_job_id = None
+        self._pending_live_asset_refresh_clip = None
+        self._live_asset_refresh_timer.stop()
         self._pipeline_steps.clear()
         self._queue_panel.refresh()
         logger.info("All jobs completed")

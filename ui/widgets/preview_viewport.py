@@ -185,13 +185,7 @@ class PreviewViewport(QWidget):
             return
 
         # Build frame index
-        asset_type = clip.input_asset.asset_type if clip.input_asset else "sequence"
-        video_path = clip.input_asset.path if (clip.input_asset and asset_type == "video") else None
-        seq_dir = clip.input_asset.path if (clip.input_asset and asset_type == "sequence") else None
-        self._frame_index = build_frame_index(
-            clip.root_path, asset_type, video_path=video_path,
-            input_sequence_dir=seq_dir,
-        )
+        self._frame_index = self._build_frame_index(clip)
 
         # Configure mode bar (unless locked)
         if self._locked_mode is None:
@@ -213,6 +207,49 @@ class PreviewViewport(QWidget):
         else:
             self._split_view.set_placeholder(f"Selected: {clip.name}\nState: {clip.state.value}")
 
+    def refresh_available_assets(self) -> None:
+        """Refresh mode availability and frame coverage without resetting navigation.
+
+        Used by live progress updates while a job is writing frames. This keeps the
+        current stem stable instead of calling set_clip(), which would jump back to frame 0.
+        """
+        if self._clip is None:
+            return
+
+        old_stem: str | None = None
+        if self._frame_index and 0 <= self._current_stem_idx < self._frame_index.frame_count:
+            old_stem = self._frame_index.stems[self._current_stem_idx]
+
+        self._frame_index = self._build_frame_index(self._clip)
+
+        if self._locked_mode is None:
+            self._mode_bar.set_available_modes(self._frame_index.available_modes())
+            self._current_mode = self._mode_bar.current_mode()
+        else:
+            self._current_mode = self._locked_mode
+
+        if self._scrubber:
+            self._scrubber.set_range(self._frame_index.frame_count)
+
+        self._update_clip_info(self._clip)
+
+        if self._frame_index.frame_count <= 0:
+            self._current_stem_idx = -1
+            self._split_view.set_annotation_stem_index(-1)
+            return
+
+        if old_stem and old_stem in self._frame_index.stems:
+            new_idx = self._frame_index.stems.index(old_stem)
+        elif self._current_stem_idx >= 0:
+            new_idx = min(self._current_stem_idx, self._frame_index.frame_count - 1)
+        else:
+            new_idx = 0
+
+        self._current_stem_idx = new_idx
+        self._split_view.set_annotation_stem_index(new_idx)
+        if self._scrubber:
+            self._scrubber.set_frame(new_idx)
+
     def load_preview_from_file(self, file_path: str, clip_name: str, frame_index: int) -> None:
         """Load a worker preview image.
 
@@ -229,13 +266,7 @@ class PreviewViewport(QWidget):
 
         # Rebuild frame index so newly written outputs are discoverable
         if self._clip:
-            asset_type = self._clip.input_asset.asset_type if self._clip.input_asset else "sequence"
-            video_path = self._clip.input_asset.path if (self._clip.input_asset and asset_type == "video") else None
-            seq_dir = self._clip.input_asset.path if (self._clip.input_asset and asset_type == "sequence") else None
-            self._frame_index = build_frame_index(
-                self._clip.root_path, asset_type, video_path=video_path,
-                input_sequence_dir=seq_dir,
-            )
+            self._frame_index = self._build_frame_index(self._clip)
             # Enable mode buttons as new output types appear during inference
             self._mode_bar.set_available_modes(self._frame_index.available_modes())
 
@@ -259,6 +290,16 @@ class PreviewViewport(QWidget):
                     self._scrubber.set_range(self._frame_index.frame_count)
                     self._scrubber.set_frame(self._frame_index.frame_count - 1)
                 self._current_stem_idx = self._frame_index.frame_count - 1
+
+    def _build_frame_index(self, clip: ClipEntry) -> FrameIndex:
+        """Build a fresh FrameIndex snapshot for the current clip assets."""
+        asset_type = clip.input_asset.asset_type if clip.input_asset else "sequence"
+        video_path = clip.input_asset.path if (clip.input_asset and asset_type == "video") else None
+        seq_dir = clip.input_asset.path if (clip.input_asset and asset_type == "sequence") else None
+        return build_frame_index(
+            clip.root_path, asset_type, video_path=video_path,
+            input_sequence_dir=seq_dir,
+        )
 
     def show_placeholder(self, text: str = "No clip selected") -> None:
         """Show placeholder text."""
