@@ -272,10 +272,17 @@ class InferenceCore:
                                              mode='nearest-exact',
                                              align_corners=False)[0, 0].round().long()
                     else:
+                        # Ensure mask is at least 3D for F.interpolate (N, C, H, W)
+                        _squeeze_back = False
+                        if mask.ndim == 2:
+                            mask = mask.unsqueeze(0)  # (H, W) → (1, H, W)
+                            _squeeze_back = True
                         mask = F.interpolate(mask.unsqueeze(0),
                                              size=(new_h, new_w),
                                              mode='bilinear',
                                              align_corners=False)[0]
+                        if _squeeze_back:
+                            mask = mask.squeeze(0)  # restore (H, W)
 
         self.curr_ti += 1
 

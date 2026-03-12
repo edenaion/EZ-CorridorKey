@@ -81,12 +81,14 @@ class MatAnyone2Processor:
         n_warmup: int = 10,
         r_erode: int = 10,
         r_dilate: int = 10,
+        max_internal_size: int = 1080,
     ):
         self._device = device
         self._ckpt_path = ckpt_path
         self._n_warmup = n_warmup
         self._r_erode = r_erode
         self._r_dilate = r_dilate
+        self._max_internal_size = max_internal_size
         self._processor = None  # InferenceCore, loaded lazily
         self._model = None      # MatAnyone2 nn.Module
 
@@ -108,9 +110,28 @@ class MatAnyone2Processor:
         from matanyone2.utils.get_default_model import get_matanyone2_model
         from matanyone2.inference.inference_core import InferenceCore
 
+        # Enable TF32 for Ampere+ GPUs (RTX 30xx/40xx/50xx) — ~15-30% speedup
+        torch.set_float32_matmul_precision('high')
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+
         t0 = time.monotonic()
         self._model = get_matanyone2_model(ckpt_path, device=self._device)
         self._processor = InferenceCore(self._model, cfg=self._model.cfg)
+
+        # Override max_internal_size so we don't process at full 4K resolution.
+        # Alpha hints are guides — they get resized during CorridorKey inference anyway.
+        # Default 1080 = ~4x fewer pixels than 4K = ~4x faster.
+        self._processor.max_internal_size = self._max_internal_size
+        logger.info(
+            f"MatAnyone2 max_internal_size set to {self._max_internal_size} "
+            f"(InferenceCore will downscale inputs above this shortest-side)"
+        )
+
+        # Clear Hydra global state so it doesn't poison other modules (e.g. SAM2)
+        from hydra.core.global_hydra import GlobalHydra
+        GlobalHydra.instance().clear()
+
         logger.info(f"MatAnyone2 loaded in {time.monotonic() - t0:.1f}s")
 
         if on_status:
@@ -123,6 +144,7 @@ class MatAnyone2Processor:
         self._device = device
 
     @torch.inference_mode()
+    @torch.amp.autocast('cuda')
     def process_frames(
         self,
         input_frames: list[np.ndarray],
@@ -153,6 +175,11 @@ class MatAnyone2Processor:
         Raises:
             RuntimeError: If mask_frame doesn't match first frame dimensions.
         """
+        import traceback
+        logger.info(
+            "MatAnyone2 process_frames CALLED: clip=%s, num_frames=%d\n%s",
+            clip_name, len(input_frames), "".join(traceback.format_stack()[-5:])
+        )
         self._ensure_loaded(on_status=on_status)
 
         # Clear memory from any previous sequence to prevent state bleed
@@ -210,6 +237,7 @@ class MatAnyone2Processor:
 
         objects = [1]
         frames_written = 0
+        _t_frame = time.monotonic()
 
         try:
             for ti in range(total_length):
@@ -252,6 +280,20 @@ class MatAnyone2Processor:
 
                     frames_written += 1
 
+                    # Per-frame timing diagnostic (every 50 frames)
+                    if frames_written % 50 == 0 or frames_written == 1:
+                        _elapsed = time.monotonic() - _t_frame
+                        logger.info(
+                            "MatAnyone2 DIAG: frame %d/%d, ti=%d, "
+                            "last_50_elapsed=%.1fs (%.2fs/frame), "
+                            "curr_ti=%d, last_mem_ti=%d",
+                            frames_written, num_frames, ti,
+                            _elapsed, _elapsed / min(frames_written, 50),
+                            self._processor.curr_ti,
+                            self._processor.last_mem_ti,
+                        )
+                        _t_frame = time.monotonic()
+
                     if progress_callback:
                         progress_callback(clip_name, frames_written, num_frames)
 
@@ -282,7 +324,7 @@ class MatAnyone2Processor:
                 import shutil
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
-        logger.info(f"MatAnyone2: wrote {frames_written} alpha frames to {output_dir}")
+        logger.info(f"MatAnyone2 process_frames COMPLETE: wrote {frames_written} alpha frames to {output_dir}")
         return frames_written
 
     def clear(self):
