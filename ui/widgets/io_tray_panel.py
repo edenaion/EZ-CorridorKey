@@ -686,6 +686,14 @@ class IOTrayPanel(QWidget):
 
         menu.addSeparator()
 
+        # Clear Alpha — only show when there's an AlphaHint to clear
+        any_alpha = any(c.alpha_asset is not None for c in selected)
+        if any_alpha:
+            label_alpha = f"Clear Alpha ({n} clips)" if multi else "Clear Alpha"
+            clear_alpha_action = QAction(label_alpha, self)
+            clear_alpha_action.triggered.connect(lambda: self._clear_alpha_batch(selected))
+            menu.addAction(clear_alpha_action)
+
         # Clear Outputs — only show when there are outputs to clear
         any_outputs = any(c.has_outputs for c in selected)
         if any_outputs:
@@ -765,6 +773,35 @@ class IOTrayPanel(QWidget):
         if os.path.isdir(clip.root_path):
             os.startfile(clip.root_path)
 
+    def _clear_alpha_batch(self, clips: list[ClipEntry]) -> None:
+        """Delete AlphaHint folder from disk for one or more clips."""
+        names = ", ".join(c.name for c in clips[:3])
+        if len(clips) > 3:
+            names += f" (+{len(clips) - 3} more)"
+        confirm = QMessageBox.question(
+            self, "Clear Alpha",
+            f"Delete AlphaHint for {len(clips)} clip(s)?\n{names}\n\n"
+            "This will remove all generated alpha hint frames from disk.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        for clip in clips:
+            alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+            if os.path.isdir(alpha_dir):
+                shutil.rmtree(alpha_dir, ignore_errors=True)
+            clip.alpha_asset = None
+            clip.find_assets()  # re-scan disk, updates alpha_asset and state
+            self._model.update_clip_state(clip.name, clip.state)
+
+        self._model.layoutChanged.emit()
+        # Re-select first affected clip so the viewer rebuilds its FrameIndex
+        # (clears stale ALPHA button + scrubber coverage bar)
+        if clips:
+            self.clip_clicked.emit(clips[0])
+        logger.info(f"Cleared AlphaHint for {len(clips)} clip(s)")
+
     def _clear_outputs_batch(self, clips: list[ClipEntry]) -> None:
         """Clear output files for one or more clips."""
         names = ", ".join(c.name for c in clips[:3])
@@ -801,6 +838,9 @@ class IOTrayPanel(QWidget):
             total_cleared += cleared
 
         self._model.layoutChanged.emit()
+        # Re-select first affected clip so the viewer rebuilds its FrameIndex
+        if clips:
+            self.clip_clicked.emit(clips[0])
         logger.info(f"Cleared {total_cleared} output files across {len(clips)} clip(s)")
 
     def _remove_dialog(self, clips: list[ClipEntry]) -> None:
