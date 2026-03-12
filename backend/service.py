@@ -999,9 +999,6 @@ class CorridorKeyService:
                 return None
             fpath = os.path.join(clip.input_asset.path, input_files[frame_index])
             img = read_image_frame(fpath)
-            # EXR auto-detect linear
-            if not is_linear and fpath.lower().endswith('.exr'):
-                is_linear = True
         if img is None:
             return None
 

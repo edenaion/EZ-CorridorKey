@@ -616,6 +616,53 @@ class TestReprocessSingleFrame:
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 9999)
         assert result is None
 
+    def test_exr_sequence_honors_explicit_srgb_setting(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.INFERENCE
+        mock_engine = MagicMock()
+        mock_engine.process_frame.return_value = {
+            "fg": np.ones((4, 4, 3), dtype=np.float32),
+            "alpha": np.ones((4, 4, 1), dtype=np.float32),
+            "comp": np.ones((4, 4, 3), dtype=np.float32),
+            "processed": np.ones((4, 4, 4), dtype=np.float32),
+        }
+        svc._engine = mock_engine
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(frames_dir)
+            os.makedirs(alpha_dir)
+
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            alpha_path = os.path.join(alpha_dir, "_alphaHint_000000.png")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+            with open(alpha_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+            fake_mask = np.ones((4, 4), dtype=np.float32)
+            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
+                "backend.service.read_mask_frame", return_value=fake_mask
+            ):
+                svc.reprocess_single_frame(
+                    clip,
+                    InferenceParams(input_is_linear=False),
+                    0,
+                )
+
+        assert mock_engine.process_frame.call_args is not None
+        assert mock_engine.process_frame.call_args.kwargs["input_is_linear"] is False
+
 
 # ── TestUnloadEngines ──
 
