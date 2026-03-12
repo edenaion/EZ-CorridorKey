@@ -686,6 +686,14 @@ class IOTrayPanel(QWidget):
 
         menu.addSeparator()
 
+        # Clear Mask — only show when there's a VideoMamaMaskHint to clear
+        any_mask = any(c.mask_asset is not None for c in selected)
+        if any_mask:
+            label_mask = f"Clear Mask ({n} clips)" if multi else "Clear Mask"
+            clear_mask_action = QAction(label_mask, self)
+            clear_mask_action.triggered.connect(lambda: self._clear_mask_batch(selected))
+            menu.addAction(clear_mask_action)
+
         # Clear Alpha — only show when there's an AlphaHint to clear
         any_alpha = any(c.alpha_asset is not None for c in selected)
         if any_alpha:
@@ -701,6 +709,14 @@ class IOTrayPanel(QWidget):
             clear_action = QAction(label_clear, self)
             clear_action.triggered.connect(lambda: self._clear_outputs_batch(selected))
             menu.addAction(clear_action)
+
+        # Clear All — show when there's any generated data to clear
+        if any_mask or any_alpha or any_outputs:
+            menu.addSeparator()
+            label_all = f"Clear All ({n} clips)" if multi else "Clear All"
+            clear_all_action = QAction(label_all, self)
+            clear_all_action.triggered.connect(lambda: self._clear_all_batch(selected))
+            menu.addAction(clear_all_action)
 
         # Remove...
         label_remove = f"Remove ({n} clips)..." if multi else "Remove..."
@@ -772,6 +788,81 @@ class IOTrayPanel(QWidget):
     def _open_in_explorer(self, clip: ClipEntry) -> None:
         if os.path.isdir(clip.root_path):
             os.startfile(clip.root_path)
+
+    def _clear_mask_batch(self, clips: list[ClipEntry]) -> None:
+        """Delete VideoMamaMaskHint folder from disk for one or more clips."""
+        names = ", ".join(c.name for c in clips[:3])
+        if len(clips) > 3:
+            names += f" (+{len(clips) - 3} more)"
+        confirm = QMessageBox.question(
+            self, "Clear Mask",
+            f"Delete tracked masks for {len(clips)} clip(s)?\n{names}\n\n"
+            "This will remove all SAM2 mask frames from disk.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        for clip in clips:
+            mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
+            if os.path.isdir(mask_dir):
+                shutil.rmtree(mask_dir, ignore_errors=True)
+            clip.mask_asset = None
+            clip.find_assets()
+            self._model.update_clip_state(clip.name, clip.state)
+
+        self._model.layoutChanged.emit()
+        if clips:
+            self.clip_clicked.emit(clips[0])
+        logger.info(f"Cleared masks for {len(clips)} clip(s)")
+
+    def _clear_all_batch(self, clips: list[ClipEntry]) -> None:
+        """Delete masks, alpha hints, and outputs for one or more clips."""
+        names = ", ".join(c.name for c in clips[:3])
+        if len(clips) > 3:
+            names += f" (+{len(clips) - 3} more)"
+        confirm = QMessageBox.question(
+            self, "Clear All",
+            f"Remove ALL generated data for {len(clips)} clip(s)?\n{names}\n\n"
+            "This will delete masks, alpha hints, and all output frames.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        for clip in clips:
+            # Masks
+            mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
+            if os.path.isdir(mask_dir):
+                shutil.rmtree(mask_dir, ignore_errors=True)
+            clip.mask_asset = None
+
+            # Alpha
+            alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+            if os.path.isdir(alpha_dir):
+                shutil.rmtree(alpha_dir, ignore_errors=True)
+            clip.alpha_asset = None
+
+            # Outputs
+            output_dir = clip.output_dir
+            for subdir in ("FG", "Matte", "Comp", "Processed"):
+                d = os.path.join(output_dir, subdir)
+                if os.path.isdir(d):
+                    for f in os.listdir(d):
+                        fpath = os.path.join(d, f)
+                        if os.path.isfile(fpath):
+                            os.remove(fpath)
+            manifest = os.path.join(output_dir, ".corridorkey_manifest.json")
+            if os.path.isfile(manifest):
+                os.remove(manifest)
+
+            clip.find_assets()
+            self._model.update_clip_state(clip.name, clip.state)
+
+        self._model.layoutChanged.emit()
+        if clips:
+            self.clip_clicked.emit(clips[0])
+        logger.info(f"Cleared all generated data for {len(clips)} clip(s)")
 
     def _clear_alpha_batch(self, clips: list[ClipEntry]) -> None:
         """Delete AlphaHint folder from disk for one or more clips."""
