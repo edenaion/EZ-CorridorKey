@@ -50,7 +50,8 @@ _MODE_TOOLTIPS: dict[ViewMode, str] = {
     ViewMode.PROCESSED: (
         "Processed — production RGBA (premultiplied, linear).\n"
         "For compositing tools (Nuke, After Effects).\n"
-        "May look washed out — this is normal for premultiplied data."
+        "Preview shows the stored premultiplied image over black.\n"
+        "Final compositing should happen in your compositor of choice."
     ),
 }
 

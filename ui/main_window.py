@@ -23,6 +23,7 @@ import re
 import shutil
 import sys
 
+import cv2
 import numpy as np
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QVBoxLayout, QWidget,
@@ -41,6 +42,8 @@ from backend import (
 from backend.project import VIDEO_FILE_FILTER
 
 from ui.models.clip_model import ClipListModel
+from ui.preview.frame_index import ViewMode
+from ui.preview.display_transform import processed_rgba_to_qimage
 from ui.widgets.dual_viewer import DualViewerPanel
 from ui.widgets.parameter_panel import ParameterPanel
 from ui.widgets.status_bar import StatusBar
@@ -702,7 +705,7 @@ class MainWindow(QMainWindow):
                 self._auto_save_annotations()
 
     def _on_track_masks(self) -> None:
-        """Run SAM2 to convert sparse annotations into dense VideoMaMa masks."""
+        """Preview SAM2 on the annotated frame, then confirm full tracking."""
         clip = self._current_clip
         if clip is None:
             return
@@ -716,8 +719,15 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # If AlphaHint already exists, it must be removed so the clip drops
-        # to MASKED state before a new tracked mask sequence is generated.
+        job = create_job_snapshot(clip, self._param_panel.get_params(), job_type=JobType.SAM2_PREVIEW)
+        job.params["_frame_index"] = max(0, self._dual_viewer.current_stem_index)
+        if not self._service.job_queue.submit(job):
+            return
+
+        self._start_worker_if_needed(job.id, job_label="Track Preview")
+
+    def _submit_sam2_track_job(self, clip: ClipEntry) -> bool:
+        """Queue the full SAM2 tracking job after preview confirmation."""
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
             reply = QMessageBox.question(
@@ -727,19 +737,34 @@ class MainWindow(QMainWindow):
                 "Remove existing AlphaHint and proceed?",
             )
             if reply != QMessageBox.Yes:
-                return
+                return False
             shutil.rmtree(alpha_dir, ignore_errors=True)
             clip.alpha_asset = None
             clip.find_assets()
             self._refresh_button_state()
             logger.info("Removed existing AlphaHint/ before SAM2 tracking")
 
-        job = create_job_snapshot(clip, job_type=JobType.SAM2_TRACK)
+        job = create_job_snapshot(clip, self._param_panel.get_params(), job_type=JobType.SAM2_TRACK)
         if not self._service.job_queue.submit(job):
-            return
+            return False
 
         clip.set_processing(True)
         self._start_worker_if_needed(job.id, job_label="Track Mask")
+        return True
+
+    @staticmethod
+    def _sam2_preview_qimage(frame_rgb: np.ndarray, mask: np.ndarray) -> QImage:
+        """Render a contour-only SAM2 preview for the output viewer."""
+        overlay = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+        contours, _ = cv2.findContours(
+            (mask > 0).astype(np.uint8),
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
+        cv2.drawContours(overlay, contours, -1, (0, 230, 255), 4)
+        rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+        h, w = rgb.shape[:2]
+        return QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
 
     def _confirm_clear_annotations(self) -> None:
         """Ctrl+C: choose to clear annotations on this frame, entire clip, or cancel."""
@@ -862,6 +887,7 @@ class MainWindow(QMainWindow):
 
         # Parameter panel — live reprocess (debounced, Codex: coalesce stale)
         self._param_panel.params_changed.connect(self._on_params_changed)
+        self._param_panel._live_preview.toggled.connect(self._on_live_preview_toggled)
 
         # Sync IO tray divider with dual viewer splitter
         self._dual_viewer._viewer_splitter.splitterMoved.connect(self._sync_io_divider)
@@ -968,12 +994,13 @@ class MainWindow(QMainWindow):
             needs_extraction=needs_extraction,
         )
 
-        # Auto-detect EXR → Linear color space
+        # Default standalone EXR sequences to Linear, but keep extracted video
+        # EXRs in sRGB-range mode because FFmpeg writes video values as-is.
         if clip.input_asset is not None:
-            self._param_panel.auto_detect_color_space(clip.input_asset.is_exr_sequence())
+            self._param_panel.auto_detect_color_space(clip.should_default_input_linear())
 
         # Enable GVM/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
-        self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
+        self._param_panel.set_gvm_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
         has_mask = self._clip_has_videomama_ready_mask(clip)
         self._param_panel.set_videomama_enabled(has_mask)
         self._param_panel.set_matanyone2_enabled(has_mask)
@@ -1665,6 +1692,12 @@ class MainWindow(QMainWindow):
         if self._param_panel.live_preview_enabled and self._service.is_engine_loaded():
             self._reprocess_timer.start()
 
+    @Slot(bool)
+    def _on_live_preview_toggled(self, checked: bool) -> None:
+        """When live preview is re-enabled, immediately reprocess current frame."""
+        if checked and self._service.is_engine_loaded():
+            self._reprocess_timer.start()
+
     def _do_reprocess(self) -> None:
         """Submit a PREVIEW_REPROCESS job through the GPU queue (Codex: no bypass)."""
         if self._current_clip is None:
@@ -1685,11 +1718,68 @@ class MainWindow(QMainWindow):
 
     @Slot(str, object)
     def _on_reprocess_result(self, job_id: str, result: object) -> None:
-        """Handle live reprocess result — display comp preview."""
-        if not isinstance(result, dict) or 'comp' not in result:
+        """Handle live reprocess result — display preview matching current view mode."""
+        if not isinstance(result, dict):
             return
-        comp = result['comp']
-        rgb = (np.clip(comp, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+        if result.get("kind") == "sam2_preview":
+            clip_name = result.get("clip_name")
+            if not isinstance(clip_name, str):
+                return
+            clip = next((c for c in self._clip_model.clips if c.name == clip_name), None)
+            if clip is None or self._current_clip is None or self._current_clip.name != clip_name:
+                return
+
+            frame_rgb = result.get("frame_rgb")
+            mask = result.get("mask")
+            if not isinstance(frame_rgb, np.ndarray) or not isinstance(mask, np.ndarray):
+                return
+
+            qimg = self._sam2_preview_qimage(frame_rgb, mask)
+            self._dual_viewer.show_reprocess_preview(qimg)
+
+            frame_number = int(result.get("frame_index", 0)) + 1
+            fill_pct = float(result.get("fill", 0.0)) * 100.0
+            reply = QMessageBox.question(
+                self,
+                "Track Mask Preview",
+                f"SAM2 preview on frame {frame_number} covers {fill_pct:.1f}% of the frame.\n\n"
+                "If this looks right, continue with full Track Mask.\n"
+                "If not, keep painting corrections on this frame and run Track Mask again.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if reply == QMessageBox.Yes:
+                self._submit_sam2_track_job(clip)
+            else:
+                self._status_bar.set_message("Track preview ready. Refine annotations and run Track Mask again.")
+            return
+
+        if 'comp' not in result:
+            return
+
+        mode = self._dual_viewer._output_viewer._current_mode
+
+        # Pick the array that matches current view mode
+        if mode == ViewMode.MATTE and 'alpha' in result:
+            arr = result['alpha']
+            if arr.ndim == 3:
+                arr = arr[:, :, 0]
+            # Matte display: clamp, light gamma lift, grayscale → RGB
+            display = np.power(np.clip(arr, 0.0, 1.0), 0.85)
+            gray8 = (display * 255.0).astype(np.uint8)
+            rgb = np.stack([gray8, gray8, gray8], axis=2)
+        elif mode == ViewMode.FG and 'fg' in result:
+            # FG is already sRGB float [H,W,3]
+            rgb = (np.clip(result['fg'], 0.0, 1.0) * 255.0).astype(np.uint8)
+        elif mode == ViewMode.PROCESSED and 'processed' in result:
+            qimg = processed_rgba_to_qimage(result['processed'])
+            self._dual_viewer.show_reprocess_preview(qimg)
+            return
+        else:
+            # Default: COMP (also for INPUT/MASK/ALPHA which don't change on reprocess)
+            rgb = (np.clip(result['comp'], 0.0, 1.0) * 255.0).astype(np.uint8)
+
         h, w = rgb.shape[:2]
         qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
         self._dual_viewer.show_reprocess_preview(qimg)
@@ -1891,7 +1981,7 @@ class MainWindow(QMainWindow):
                 job = create_job_snapshot(clip, job_type=JobType.GVM_ALPHA)
                 next_steps = [JobType.INFERENCE]
             elif route == PipelineRoute.VIDEOMAMA_PIPELINE:
-                job = create_job_snapshot(clip, job_type=JobType.SAM2_TRACK)
+                job = create_job_snapshot(clip, params, job_type=JobType.SAM2_TRACK)
                 next_steps = [JobType.VIDEOMAMA_ALPHA, JobType.INFERENCE]
             elif route == PipelineRoute.VIDEOMAMA_INFERENCE:
                 job = create_job_snapshot(clip, job_type=JobType.VIDEOMAMA_ALPHA)
@@ -2055,7 +2145,7 @@ class MainWindow(QMainWindow):
 
     def _on_run_gvm(self) -> None:
         """Run GVM alpha generation on the selected clip."""
-        if self._current_clip is None or self._current_clip.state != ClipState.RAW:
+        if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
             return
 
         # Detect partial alpha from a previous interrupted run
@@ -2321,6 +2411,7 @@ class MainWindow(QMainWindow):
             if next_job:
                 _label_map = {
                     JobType.GVM_ALPHA: "GVM Auto",
+                    JobType.SAM2_PREVIEW: "Track Preview",
                     JobType.SAM2_TRACK: "Track Mask",
                     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
                     JobType.MATANYONE2_ALPHA: "MatAnyone2",
@@ -2442,6 +2533,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_queue_empty(self) -> None:
+        if self._service.job_queue.has_pending:
+            return
         self._cancel_requested_job_id = None
         self._force_stop_armed = False
         self._status_bar.set_stop_button_mode(force=False)

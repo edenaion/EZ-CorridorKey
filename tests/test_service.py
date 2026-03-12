@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 import pytest
 
+from backend.annotation_prompts import AnnotationPromptFrame
 from backend.service import (
     CorridorKeyService,
     InferenceParams,
@@ -229,6 +230,30 @@ class TestReadInputFrame:
         mock_cap.read.return_value = (False, None)
         img, stem, is_linear = svc._read_input_frame(clip, 0, [], mock_cap, False)
         assert img is None
+
+    def test_exr_sequence_honors_explicit_srgb_setting(self):
+        svc = CorridorKeyService()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            os.makedirs(frames_dir)
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(
+                "test", tmpdir, state=ClipState.RAW,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((2, 2, 3), dtype=np.float32)
+            with patch("backend.service.read_image_frame", return_value=fake_img):
+                img, stem, is_linear = svc._read_input_frame(
+                    clip, 0, clip.input_asset.get_frame_files(), None, False,
+                )
+
+            assert img is fake_img
+            assert stem == "frame_000000"
+            assert is_linear is False
 
 
 # ── TestReadAlphaFrame ──
@@ -663,6 +688,53 @@ class TestReprocessSingleFrame:
         assert mock_engine.process_frame.call_args is not None
         assert mock_engine.process_frame.call_args.kwargs["input_is_linear"] is False
 
+    def test_exr_sequence_honors_explicit_linear_setting(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.INFERENCE
+        mock_engine = MagicMock()
+        mock_engine.process_frame.return_value = {
+            "fg": np.ones((4, 4, 3), dtype=np.float32),
+            "alpha": np.ones((4, 4, 1), dtype=np.float32),
+            "comp": np.ones((4, 4, 3), dtype=np.float32),
+            "processed": np.ones((4, 4, 4), dtype=np.float32),
+        }
+        svc._engine = mock_engine
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(frames_dir)
+            os.makedirs(alpha_dir)
+
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            alpha_path = os.path.join(alpha_dir, "_alphaHint_000000.png")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+            with open(alpha_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+            fake_mask = np.ones((4, 4), dtype=np.float32)
+            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
+                "backend.service.read_mask_frame", return_value=fake_mask
+            ):
+                svc.reprocess_single_frame(
+                    clip,
+                    InferenceParams(input_is_linear=True),
+                    0,
+                )
+
+        assert mock_engine.process_frame.call_args is not None
+        assert mock_engine.process_frame.call_args.kwargs["input_is_linear"] is True
+
 
 # ── TestUnloadEngines ──
 
@@ -696,6 +768,92 @@ class TestIsEngineLoaded:
     def test_false_when_not_loaded(self):
         svc = CorridorKeyService()
         assert svc.is_engine_loaded() is False
+
+
+class TestSam2PreviewInputColorSpace:
+    def test_preview_sam2_defaults_video_derived_exr_to_srgb(self):
+        svc = CorridorKeyService()
+        tracker = MagicMock()
+        tracker.track_video.return_value = [np.ones((4, 4), dtype=np.uint8)]
+        svc._get_sam2_tracker = MagicMock(return_value=tracker)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            os.makedirs(frames_dir)
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+            with open(os.path.join(tmpdir, ".video_metadata.json"), "w", encoding="utf-8") as handle:
+                json.dump({"codec": "prores"}, handle)
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+            )
+
+            prompt = AnnotationPromptFrame(
+                frame_index=0,
+                positive_points=[(10.0, 12.0)],
+                negative_points=[],
+            )
+            fake_img = np.full((4, 4, 3), 0.5, dtype=np.float32)
+            with patch(
+                "backend.service.load_annotation_prompt_frames",
+                return_value=[prompt],
+            ), patch(
+                "backend.service.read_image_frame",
+                return_value=fake_img,
+            ) as mock_read:
+                result = svc.preview_sam2_prompt(clip, preferred_frame_index=0)
+
+        assert result is not None
+        assert mock_read.call_args is not None
+        assert mock_read.call_args.kwargs["gamma_correct_exr"] is False
+
+    def test_preview_sam2_honors_explicit_linear_override(self):
+        svc = CorridorKeyService()
+        tracker = MagicMock()
+        tracker.track_video.return_value = [np.ones((4, 4), dtype=np.uint8)]
+        svc._get_sam2_tracker = MagicMock(return_value=tracker)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            os.makedirs(frames_dir)
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+            )
+
+            prompt = AnnotationPromptFrame(
+                frame_index=0,
+                positive_points=[(10.0, 12.0)],
+                negative_points=[],
+            )
+            fake_img = np.full((4, 4, 3), 0.5, dtype=np.float32)
+            with patch(
+                "backend.service.load_annotation_prompt_frames",
+                return_value=[prompt],
+            ), patch(
+                "backend.service.read_image_frame",
+                return_value=fake_img,
+            ) as mock_read:
+                result = svc.preview_sam2_prompt(
+                    clip,
+                    preferred_frame_index=0,
+                    input_is_linear=True,
+                )
+
+        assert result is not None
+        assert mock_read.call_args is not None
+        assert mock_read.call_args.kwargs["gamma_correct_exr"] is True
 
     def test_false_when_different_model(self):
         svc = CorridorKeyService()

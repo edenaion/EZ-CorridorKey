@@ -247,6 +247,40 @@ class TestClipEntryFindAssets:
             assert clip.input_asset.path == frames_dir
             assert clip.input_asset.frame_count == 3
 
+    def test_video_derived_exr_sequence_defaults_to_srgb(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shot_dir = os.path.join(tmpdir, "shot1")
+            frames_dir = os.path.join(shot_dir, "Frames")
+            os.makedirs(frames_dir)
+            with open(os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+            with open(os.path.join(shot_dir, ".video_metadata.json"), "w", encoding="utf-8") as handle:
+                handle.write("{}")
+
+            clip = ClipEntry(name="shot1", root_path=shot_dir)
+            clip.find_assets()
+
+            assert clip.input_asset is not None
+            assert clip.input_asset.is_exr_sequence()
+            assert clip.has_video_metadata()
+            assert not clip.should_default_input_linear()
+
+    def test_standalone_exr_sequence_defaults_to_linear(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shot_dir = os.path.join(tmpdir, "shot1")
+            frames_dir = os.path.join(shot_dir, "Frames")
+            os.makedirs(frames_dir)
+            with open(os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(name="shot1", root_path=shot_dir)
+            clip.find_assets()
+
+            assert clip.input_asset is not None
+            assert clip.input_asset.is_exr_sequence()
+            assert not clip.has_video_metadata()
+            assert clip.should_default_input_linear()
+
     def test_finds_source_video(self):
         """New format: Source/ directory with video file."""
         with tempfile.TemporaryDirectory() as tmpdir:

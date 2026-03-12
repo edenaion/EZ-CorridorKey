@@ -108,6 +108,8 @@ class GPUJobWorker(QThread):
                 self._run_inference(job)
             elif job.job_type == JobType.GVM_ALPHA:
                 self._run_gvm(job)
+            elif job.job_type == JobType.SAM2_PREVIEW:
+                self._run_sam2_preview(job)
             elif job.job_type == JobType.SAM2_TRACK:
                 self._run_sam2_track(job)
             elif job.job_type == JobType.VIDEOMAMA_ALPHA:
@@ -131,7 +133,7 @@ class GPUJobWorker(QThread):
                 return
 
             self._queue.complete_job(job)
-            if job.job_type != JobType.PREVIEW_REPROCESS:
+            if job.job_type not in (JobType.PREVIEW_REPROCESS, JobType.SAM2_PREVIEW):
                 self.clip_finished.emit(job_id, job.clip_name, job.job_type.value)
 
         except JobCancelledError:
@@ -213,6 +215,7 @@ class GPUJobWorker(QThread):
     def _run_sam2_track(self, job: GPUJob) -> None:
         """Run SAM2 prompt-to-mask tracking."""
         clip = job.params.get("_clip_snapshot")
+        params = job.params.get("_inference_params")
         if clip is None:
             raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
 
@@ -227,11 +230,41 @@ class GPUJobWorker(QThread):
 
         self._service.run_sam2_track(
             clip=clip,
+            input_is_linear=(params.input_is_linear if isinstance(params, InferenceParams) else None),
             job=job,
             on_progress=on_progress,
             on_warning=on_warning,
             on_status=on_status,
         )
+
+    def _run_sam2_preview(self, job: GPUJob) -> None:
+        """Run a one-frame SAM2 preview without writing tracked masks."""
+        clip = job.params.get("_clip_snapshot")
+        frame_index = job.params.get("_frame_index")
+        params = job.params.get("_inference_params")
+        if clip is None:
+            raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
+
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
+            self.progress.emit(job.id, clip_name, current, total)
+
+        def on_warning(message: str) -> None:
+            self.warning.emit(job.id, message)
+
+        def on_status(message: str) -> None:
+            self.status_update.emit(job.id, message)
+
+        result = self._service.preview_sam2_prompt(
+            clip=clip,
+            preferred_frame_index=frame_index,
+            input_is_linear=(params.input_is_linear if isinstance(params, InferenceParams) else None),
+            job=job,
+            on_progress=on_progress,
+            on_warning=on_warning,
+            on_status=on_status,
+        )
+        if result is not None:
+            self.reprocess_result.emit(job.id, result)
 
     def _run_videomama(self, job: GPUJob) -> None:
         """Run VideoMaMa guided alpha generation."""
@@ -364,6 +397,9 @@ def create_job_snapshot(
         job_params["_inference_params"] = params
         if resume:
             job_params["_skip_stems"] = clip.completed_stems()
+    elif job_type in (JobType.SAM2_PREVIEW, JobType.SAM2_TRACK):
+        if params is not None:
+            job_params["_inference_params"] = params
     elif job_type == JobType.VIDEOMAMA_ALPHA:
         job_params["_chunk_size"] = chunk_size
     elif job_type == JobType.PREVIEW_REPROCESS:

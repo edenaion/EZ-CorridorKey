@@ -77,7 +77,8 @@ class ParameterPanel(QWidget):
             "1. Press 1 to select the GREEN brush (foreground — subject to keep)\n"
             "2. Press 2 to select the RED brush (background — area to remove)\n"
             "3. Paint strokes on the left viewer over your footage\n"
-            "4. Click TRACK MASK to propagate across all frames"
+            "4. Click TRACK MASK to preview SAM2 on the annotated frame\n"
+            "5. If the preview looks right, confirm to propagate across all frames"
         )
         self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
         alpha_layout.addWidget(self._track_masks_btn)
@@ -363,13 +364,14 @@ class ParameterPanel(QWidget):
             exr_compression=get_setting_str(KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION),
         )
 
-    def auto_detect_color_space(self, is_exr: bool) -> None:
-        """Auto-set color space to Linear for EXR input sequences.
+    def auto_detect_color_space(self, prefer_linear: bool) -> None:
+        """Auto-set color space based on input format.
 
-        Only upgrades sRGB→Linear (never downgrades a user's explicit Linear choice).
+        Standalone linear EXR sequences → Linear, video-derived footage → sRGB.
         """
-        if is_exr and self._color_space.currentIndex() == 0:
-            self._color_space.setCurrentIndex(1)  # Switch to Linear
+        target = 1 if prefer_linear else 0  # 1=Linear, 0=sRGB
+        if self._color_space.currentIndex() != target:
+            self._color_space.setCurrentIndex(target)
 
     def set_params(self, params: InferenceParams) -> None:
         """Load parameter values (e.g. from a saved session).

@@ -232,6 +232,18 @@ class ClipEntry:
     def output_dir(self) -> str:
         return os.path.join(self.root_path, "Output")
 
+    def has_video_metadata(self) -> bool:
+        """True when this clip's Frames/ were extracted from a source video."""
+        return os.path.isfile(os.path.join(self.root_path, ".video_metadata.json"))
+
+    def should_default_input_linear(self) -> bool:
+        """Default Linear only for standalone EXR sequences, not extracted video EXRs."""
+        return bool(
+            self.input_asset is not None
+            and self.input_asset.is_exr_sequence()
+            and not self.has_video_metadata()
+        )
+
     @property
     def has_outputs(self) -> bool:
         """Check if output directory exists with content."""

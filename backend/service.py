@@ -575,10 +575,8 @@ class CorridorKeyService:
     ) -> tuple[Optional[np.ndarray], str, bool]:
         """Read a single input frame.
 
-        Auto-detects EXR sequences as linear (overrides user setting).
-
         Returns:
-            (image_float32, stem_name, is_linear_override)
+            (image_float32, stem_name, is_linear)
         """
         logger.debug(f"Reading input frame {frame_index} for '{clip.name}'")
         input_stem = f"{frame_index:05d}"
@@ -594,16 +592,7 @@ class CorridorKeyService:
             input_stem = os.path.splitext(input_files[frame_index])[0]
             img = read_image_frame(fpath)
             validate_frame_read(img, clip.name, frame_index, fpath)
-            # EXR is always linear — auto-detect to prevent sRGB misinterpretation
-            is_linear = input_is_linear
-            if not is_linear and fpath.lower().endswith('.exr'):
-                is_linear = True
-                if frame_index == 0:
-                    logger.info(
-                        f"Clip '{clip.name}': EXR input detected, "
-                        "auto-setting color space to Linear"
-                    )
-            return img, input_stem, is_linear
+            return img, input_stem, input_is_linear
 
     def _read_alpha_frame(
         self,
@@ -1138,6 +1127,7 @@ class CorridorKeyService:
         file_names: list[str],
         clip_name: str,
         *,
+        gamma_correct_exr: bool = False,
         job: Optional[GPUJob] = None,
         on_status: Optional[Callable[[str], None]] = None,
     ) -> list[tuple[str, np.ndarray]]:
@@ -1148,7 +1138,7 @@ class CorridorKeyService:
             if job and job.is_cancelled:
                 raise JobCancelledError(clip_name, index)
             fpath = os.path.join(asset.path, fname)
-            img = read_image_frame(fpath, gamma_correct_exr=True)
+            img = read_image_frame(fpath, gamma_correct_exr=gamma_correct_exr)
             if img is None:
                 raise FrameReadError(clip_name, index, fpath)
             named_frames.append(
@@ -1157,6 +1147,16 @@ class CorridorKeyService:
             if on_status and index % 20 == 0 and index > 0:
                 on_status(f"Loading frames ({index}/{total})...")
         return named_frames
+
+    @staticmethod
+    def _resolve_sequence_input_is_linear(
+        clip: ClipEntry,
+        input_is_linear: bool | None,
+    ) -> bool:
+        """Honor explicit UI override, otherwise default from clip source type."""
+        if input_is_linear is not None:
+            return input_is_linear
+        return clip.should_default_input_linear()
 
     @staticmethod
     def _write_mask_track_manifest(
@@ -1186,6 +1186,7 @@ class CorridorKeyService:
     def run_sam2_track(
         self,
         clip: ClipEntry,
+        input_is_linear: bool | None = None,
         job: Optional[GPUJob] = None,
         on_progress: Optional[Callable[[str, int, int], None]] = None,
         on_warning: Optional[Callable[[str], None]] = None,
@@ -1200,17 +1201,6 @@ class CorridorKeyService:
         selected_files = self._selected_sequence_files(clip)
         if not selected_files:
             raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for SAM2 tracking")
-
-        start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
-        allowed_indices = list(range(start_index, start_index + len(selected_files)))
-        prompt_frames = load_annotation_prompt_frames(
-            clip.root_path,
-            allowed_indices=allowed_indices,
-        )
-        if not prompt_frames:
-            raise CorridorKeyError(
-                f"Clip '{clip.name}' has no usable annotations for SAM2 tracking"
-            )
 
         def _status(message: str) -> None:
             logger.info(f"SAM2 [{clip.name}]: {message}")
@@ -1234,14 +1224,29 @@ class CorridorKeyService:
         _check_cancel()
 
         _status("Loading frames...")
+        sequence_is_linear = self._resolve_sequence_input_is_linear(clip, input_is_linear)
         named_frames = self._load_named_sequence_frames(
             clip.input_asset,
             selected_files,
             clip.name,
+            gamma_correct_exr=sequence_is_linear,
             job=job,
             on_status=on_status,
         )
         _check_cancel()
+        if not named_frames:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no readable input frames for SAM2 tracking")
+
+        start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
+        allowed_indices = list(range(start_index, start_index + len(selected_files)))
+        prompt_frames = load_annotation_prompt_frames(
+            clip.root_path,
+            allowed_indices=allowed_indices,
+        )
+        if not prompt_frames:
+            raise CorridorKeyError(
+                f"Clip '{clip.name}' has no usable annotations for SAM2 tracking"
+            )
 
         from sam2_tracker import PromptFrame, SAM2NotInstalledError
 
@@ -1254,6 +1259,23 @@ class CorridorKeyService:
             )
             for prompt in prompt_frames
         ]
+        if not any(
+            prompt.positive_points or prompt.box is not None
+            for prompt in local_prompts
+        ):
+            message = "SAM2 tracking requires at least one non-empty foreground prompt"
+            if on_warning:
+                on_warning(message)
+            raise CorridorKeyError(message)
+        total_pos = sum(len(prompt.positive_points) for prompt in local_prompts)
+        total_neg = sum(len(prompt.negative_points) for prompt in local_prompts)
+        logger.info(
+            "SAM2 [%s]: prompt frames=%d, fg points=%d, bg points=%d",
+            clip.name,
+            len(local_prompts),
+            total_pos,
+            total_neg,
+        )
 
         _status("Running SAM2 tracker...")
         try:
@@ -1270,6 +1292,11 @@ class CorridorKeyService:
             )
         except SAM2NotInstalledError as exc:
             raise CorridorKeyError(str(exc)) from exc
+        except ValueError as exc:
+            message = str(exc)
+            if on_warning:
+                on_warning(message)
+            raise CorridorKeyError(message) from exc
         _check_cancel()
 
         mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
@@ -1303,6 +1330,128 @@ class CorridorKeyService:
             clip.name,
             len(stems),
         )
+
+    def preview_sam2_prompt(
+        self,
+        clip: ClipEntry,
+        *,
+        preferred_frame_index: int | None = None,
+        input_is_linear: bool | None = None,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Run a fast SAM2 preview on one annotated frame without writing to disk."""
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for SAM2 tracking")
+        if clip.input_asset.asset_type != "sequence":
+            raise CorridorKeyError("SAM2 tracking currently requires an extracted image sequence")
+
+        selected_files = self._selected_sequence_files(clip)
+        if not selected_files:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for SAM2 tracking")
+
+        def _status(message: str) -> None:
+            logger.info(f"SAM2 Preview [{clip.name}]: {message}")
+            if on_status:
+                on_status(message)
+
+        def _check_cancel() -> None:
+            if job and job.is_cancelled:
+                raise JobCancelledError(clip.name, 0)
+
+        _status("Loading model...")
+        with self._gpu_lock:
+            tracker = self._get_sam2_tracker(
+                on_progress=(
+                    None
+                    if on_progress is None
+                    else lambda current, total: on_progress(clip.name, current, total)
+                ),
+                on_status=on_status,
+            )
+        _check_cancel()
+
+        start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
+        allowed_indices = list(range(start_index, start_index + len(selected_files)))
+        prompt_frames = load_annotation_prompt_frames(
+            clip.root_path,
+            allowed_indices=allowed_indices,
+        )
+        if not prompt_frames:
+            raise CorridorKeyError(
+                f"Clip '{clip.name}' has no usable annotations for SAM2 tracking"
+            )
+
+        prompt = next(
+            (item for item in prompt_frames if item.frame_index == preferred_frame_index),
+            prompt_frames[0],
+        )
+        if preferred_frame_index is not None and prompt.frame_index != preferred_frame_index and on_warning:
+            on_warning(
+                f"No prompts on frame {preferred_frame_index + 1}; previewing annotated frame {prompt.frame_index + 1} instead."
+            )
+
+        local_index = prompt.frame_index - start_index
+        if local_index < 0 or local_index >= len(selected_files):
+            raise CorridorKeyError("Annotated frame is outside the selected in/out range")
+
+        _status("Loading preview frame...")
+        sequence_is_linear = self._resolve_sequence_input_is_linear(clip, input_is_linear)
+        named_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            [selected_files[local_index]],
+            clip.name,
+            gamma_correct_exr=sequence_is_linear,
+            job=job,
+            on_status=on_status,
+        )
+        _check_cancel()
+        if not named_frames:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no readable input frames for SAM2 tracking")
+
+        from sam2_tracker import PromptFrame, SAM2NotInstalledError
+
+        local_prompt = PromptFrame(
+            frame_index=0,
+            positive_points=prompt.positive_points,
+            negative_points=prompt.negative_points,
+            box=prompt.box,
+        )
+
+        _status("Previewing SAM2 on annotated frame...")
+        try:
+            masks = tracker.track_video(
+                [named_frames[0][1]],
+                [local_prompt],
+                on_progress=(
+                    None
+                    if on_progress is None
+                    else lambda current, total: on_progress(clip.name, current, total)
+                ),
+                on_status=on_status,
+                check_cancel=_check_cancel,
+            )
+        except SAM2NotInstalledError as exc:
+            raise CorridorKeyError(str(exc)) from exc
+        except ValueError as exc:
+            message = str(exc)
+            if on_warning:
+                on_warning(message)
+            raise CorridorKeyError(message) from exc
+        _check_cancel()
+
+        mask = masks[0]
+        return {
+            "kind": "sam2_preview",
+            "clip_name": clip.name,
+            "frame_index": prompt.frame_index,
+            "frame_name": named_frames[0][0],
+            "frame_rgb": named_frames[0][1],
+            "mask": mask,
+            "fill": float((mask > 0).mean()),
+        }
 
     # --- VideoMaMa Alpha Generation ---
 

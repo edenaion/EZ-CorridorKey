@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 class JobType(Enum):
     INFERENCE = "inference"
     GVM_ALPHA = "gvm_alpha"
+    SAM2_PREVIEW = "sam2_preview"
     SAM2_TRACK = "sam2_track"
     VIDEOMAMA_ALPHA = "videomama_alpha"
     MATANYONE2_ALPHA = "matanyone2_alpha"
@@ -123,20 +124,25 @@ class GPUJobQueue:
     def submit(self, job: GPUJob) -> bool:
         """Add a job to the queue. Returns False if duplicate detected.
 
-        PREVIEW_REPROCESS uses replacement semantics — any existing preview
+        Preview jobs use replacement semantics — any existing queued preview
         reprocess in the queue is replaced by the new one (latest-only).
         """
         with self._lock:
-            # PREVIEW_REPROCESS: replace existing queued preview jobs (latest-only)
-            if job.job_type == JobType.PREVIEW_REPROCESS:
+            # Preview jobs: replace existing queued jobs of the same preview type.
+            if job.job_type in (JobType.PREVIEW_REPROCESS, JobType.SAM2_PREVIEW):
                 replaced = [
                     j for j in self._queue
-                    if j.job_type == JobType.PREVIEW_REPROCESS
+                    if j.job_type == job.job_type
                 ]
                 for old in replaced:
                     self._queue.remove(old)
                     old.status = JobStatus.CANCELLED
-                    logger.debug(f"Preview reprocess [{old.id}] replaced by [{job.id}]")
+                    logger.debug(
+                        "Preview job [%s] replaced by [%s] (%s)",
+                        old.id,
+                        job.id,
+                        job.job_type.value,
+                    )
             else:
                 # Deduplication: reject if same clip+job_type already queued or running
                 for existing in self._queue:
