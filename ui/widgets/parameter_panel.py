@@ -53,23 +53,6 @@ class ParameterPanel(QWidget):
         alpha_layout = QVBoxLayout(alpha_group)
         alpha_layout.setSpacing(8)
 
-        self._matanyone2_btn = QPushButton("MATANYONE2")
-        self._matanyone2_btn.setEnabled(False)
-        self._matanyone2_btn.setToolTip(
-            "Generate alpha hints using MatAnyone2 video matting.\n"
-            "Requires a mask on the first frame (frame 0).\n\n"
-            "1. Paint foreground/background prompts on frame 0\n"
-            "2. Click Track Mask to generate dense masks with SAM2\n"
-            "3. Click MATANYONE2 to generate temporally coherent AlphaHint"
-        )
-        self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
-        alpha_layout.addWidget(self._matanyone2_btn)
-
-        or_label_ma = QLabel("— or —")
-        or_label_ma.setAlignment(Qt.AlignCenter)
-        or_label_ma.setStyleSheet("color: #808070; font-size: 11px;")
-        alpha_layout.addWidget(or_label_ma)
-
         self._gvm_btn = QPushButton("GVM AUTO")
         self._gvm_btn.setEnabled(False)
         self._gvm_btn.setToolTip(
@@ -85,6 +68,36 @@ class ParameterPanel(QWidget):
         or_label.setStyleSheet("color: #808070; font-size: 11px;")
         alpha_layout.addWidget(or_label)
 
+        self._track_masks_btn = QPushButton("TRACK MASK")
+        self._track_masks_btn.setEnabled(False)
+        self._track_masks_btn.setToolTip(
+            "Use SAM2 to turn painted prompts into a dense mask track.\n"
+            "Required before running MatAnyone2 or VideoMaMa.\n\n"
+            "HOW TO USE:\n"
+            "1. Press 1 to select the GREEN brush (foreground — subject to keep)\n"
+            "2. Press 2 to select the RED brush (background — area to remove)\n"
+            "3. Paint strokes on the left viewer over your footage\n"
+            "4. Click TRACK MASK to propagate across all frames"
+        )
+        self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
+        alpha_layout.addWidget(self._track_masks_btn)
+
+        self._annotation_info = QLabel("")
+        self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
+        alpha_layout.addWidget(self._annotation_info)
+
+        self._matanyone2_btn = QPushButton("MATANYONE2")
+        self._matanyone2_btn.setEnabled(False)
+        self._matanyone2_btn.setToolTip(
+            "Generate alpha hints using MatAnyone2 video matting.\n"
+            "Requires a mask on the first frame (frame 0).\n\n"
+            "1. Paint foreground/background prompts on frame 0\n"
+            "2. Click Track Mask to generate dense masks with SAM2\n"
+            "3. Click MATANYONE2 to generate temporally coherent AlphaHint"
+        )
+        self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
+        alpha_layout.addWidget(self._matanyone2_btn)
+
         self._videomama_btn = QPushButton("VIDEOMAMA")
         self._videomama_btn.setEnabled(False)
         self._videomama_btn.setToolTip(
@@ -95,19 +108,6 @@ class ParameterPanel(QWidget):
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
         alpha_layout.addWidget(self._videomama_btn)
-
-        self._track_masks_btn = QPushButton("TRACK MASK")
-        self._track_masks_btn.setEnabled(False)
-        self._track_masks_btn.setToolTip(
-            "Use SAM2 to turn painted prompts into a dense VideoMaMa mask track.\n"
-            "This is the required step before running VideoMaMa from annotations."
-        )
-        self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
-        alpha_layout.addWidget(self._track_masks_btn)
-
-        self._annotation_info = QLabel("")
-        self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
-        alpha_layout.addWidget(self._annotation_info)
 
         or_label2 = QLabel("— or —")
         or_label2.setAlignment(Qt.AlignCenter)
