@@ -300,20 +300,26 @@ class SplitViewWidget(QWidget):
 
     def _paint_annotations(self, painter: QPainter) -> None:
         """Draw annotation strokes and brush cursor on the viewport."""
-        img = self._single_image or self._left_image
+        img = self._annotation_target_image()
         if img is None or self._annotation_model is None:
             return
 
         dest = self._image_rect(img)
+        paintable_rect = self._annotation_paint_rect(img)
+        if paintable_rect is None:
+            return
         iw, ih = img.width(), img.height()
 
         # Draw existing strokes + in-progress stroke
         strokes = self._annotation_model.get_strokes(self._annotation_stem_idx)
         current = self._annotation_model.current_stroke
+        painter.save()
+        painter.setClipRect(paintable_rect)
         paint_annotations(painter, strokes, current, dest, iw, ih)
+        painter.restore()
 
         # Brush cursor at mouse position
-        if self._annotation_mode and self.underMouse():
+        if self._annotation_mode and self.underMouse() and paintable_rect.contains(self._mouse_pos):
             radius_display = self._brush_radius * dest.width() / iw
             if self._resizing_brush:
                 paint_resize_indicator(
@@ -331,15 +337,31 @@ class SplitViewWidget(QWidget):
 
         Returns None if the position is outside the image bounds.
         """
-        img = self._single_image or self._left_image
+        img = self._annotation_target_image()
         if img is None:
             return None
         dest = self._image_rect(img)
+        paintable_rect = self._annotation_paint_rect(img)
+        if paintable_rect is None or not paintable_rect.contains(display_pos):
+            return None
         iw, ih = img.width(), img.height()
         img_x = (display_pos.x() - dest.x()) * iw / dest.width()
         img_y = (display_pos.y() - dest.y()) * ih / dest.height()
-        # Allow drawing slightly outside bounds (clamp at export)
+        img_x = min(max(float(img_x), 0.0), float(iw - 1))
+        img_y = min(max(float(img_y), 0.0), float(ih - 1))
         return (img_x, img_y)
+
+    def _annotation_target_image(self) -> QImage | None:
+        return self._single_image or self._left_image
+
+    def _annotation_paint_rect(self, img: QImage) -> QRectF | None:
+        rect = self._image_rect(img)
+        if self._split_enabled:
+            divider_x = float(self.width()) * self._divider_pos
+            rect = rect.intersected(QRectF(0.0, 0.0, divider_x, float(self.height())))
+        if rect.isEmpty():
+            return None
+        return rect
 
     def _image_rect(self, img: QImage) -> QRectF:
         """Calculate the destination rect for an image with zoom/pan."""

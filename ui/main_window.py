@@ -686,13 +686,12 @@ class MainWindow(QMainWindow):
             self._param_panel.set_matanyone2_enabled(_has_mask)
 
     def _clip_has_videomama_ready_mask(self, clip: ClipEntry | None) -> bool:
-        """True when the clip has a dense mask track VideoMaMa can consume."""
+        """True when the clip has a dense mask track that alpha generators can consume."""
         if clip is None or clip.mask_asset is None:
             return False
-        if mask_sequence_is_videomama_ready(clip.root_path):
-            return True
-        ann_path = os.path.join(clip.root_path, "annotations.json")
-        return not (os.path.isfile(ann_path) and os.path.getsize(ann_path) > 2)
+        # mask_asset is set only when VideoMamaMaskHint/ has actual frames —
+        # that's sufficient to enable alpha generators regardless of manifest.
+        return True
 
     def _undo_annotation(self) -> None:
         """Ctrl+Z: undo last annotation stroke on current frame."""
