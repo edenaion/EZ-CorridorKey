@@ -21,6 +21,7 @@ from backend.project import is_image_file as _is_image
 class ViewMode(str, Enum):
     """Available preview modes. Each maps to a specific source directory."""
     INPUT = "Input"
+    ALPHA = "Alpha"
     FG = "FG"
     MATTE = "Matte"
     COMP = "Comp"
@@ -30,6 +31,7 @@ class ViewMode(str, Enum):
 # Maps ViewMode to the subdirectory relative to clip root
 _MODE_DIRS: dict[ViewMode, str] = {
     ViewMode.INPUT: "Input",
+    ViewMode.ALPHA: "AlphaHint",
     ViewMode.FG: os.path.join("Output", "FG"),
     ViewMode.MATTE: os.path.join("Output", "Matte"),
     ViewMode.COMP: os.path.join("Output", "Comp"),
@@ -86,8 +88,8 @@ def build_frame_index(
 ) -> FrameIndex:
     """Build a FrameIndex by scanning all relevant directories.
 
-    Scans Input/ and Output/{FG,Matte,Comp,Processed} for image files,
-    extracts stems, and builds a unified timeline.
+    Scans Input/, AlphaHint/, and Output/{FG,Matte,Comp,Processed} for image
+    files, extracts stems, and builds a unified timeline.
 
     Args:
         clip_root: Path to the clip's root directory.

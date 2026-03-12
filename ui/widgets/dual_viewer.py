@@ -16,7 +16,6 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QImage
 
 from backend import ClipEntry
-from backend.project import is_image_file
 from ui.preview.frame_index import FrameIndex, ViewMode
 from ui.widgets.preview_viewport import PreviewViewport
 from ui.widgets.frame_scrubber import FrameScrubber
@@ -170,14 +169,8 @@ class DualViewerPanel(QWidget):
             self._scrubber.set_coverage([], [])
             return
 
-        # Alpha coverage: scan AlphaHint/ directory for matching stems
-        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
-        alpha_stems: set[str] = set()
-        if os.path.isdir(alpha_dir):
-            for fname in os.listdir(alpha_dir):
-                stem, ext = os.path.splitext(fname)
-                if is_image_file(fname):
-                    alpha_stems.add(stem)
+        # Alpha coverage: use frame index availability for ALPHA mode
+        alpha_stems = fi.availability.get(ViewMode.ALPHA, set())
 
         # Inference coverage: any output mode (FG, Matte, Comp, Processed) has this stem
         output_modes = (ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED)

@@ -49,6 +49,7 @@ def decode_frame(path: str, mode: ViewMode) -> QImage | None:
     Applies mode-specific display transforms:
     - COMP: Already 8-bit sRGB PNG, direct load
     - INPUT: May be EXR (linear) or PNG (sRGB)
+    - ALPHA: 8-bit grayscale PNG from AlphaHint, direct load
     - FG: Linear float EXR → sRGB gamma
     - MATTE: 1-channel float → grayscale visualization
     - PROCESSED: Premultiplied RGBA float → unpremultiply → sRGB
