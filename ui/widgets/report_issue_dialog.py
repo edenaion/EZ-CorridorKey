@@ -6,6 +6,7 @@ then opens the default browser to a pre-filled GitHub issue page.
 from __future__ import annotations
 
 import logging
+import os
 import platform
 from urllib.parse import quote
 
@@ -26,8 +27,25 @@ from PySide6.QtWidgets import (
 logger = logging.getLogger(__name__)
 
 _GITHUB_ISSUES_URL = "https://github.com/edenaion/EZ-CorridorKey/issues/new"
-_APP_VERSION = "1.1.2"
 _MAX_URL_LENGTH = 7500  # stay well under 8192 to avoid 414 errors
+
+
+def _get_app_version() -> str:
+    """Read app version from installed metadata or pyproject.toml."""
+    try:
+        from importlib.metadata import version
+        return version("corridorkey")
+    except Exception:
+        try:
+            import tomllib
+            pyproject = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                "pyproject.toml",
+            )
+            with open(pyproject, "rb") as f:
+                return tomllib.load(f)["project"]["version"]
+        except Exception:
+            return "unknown"
 
 
 class ReportIssueDialog(QDialog):
@@ -133,7 +151,7 @@ class ReportIssueDialog(QDialog):
     def _gather_info_pairs(self) -> list[tuple[str, str]]:
         """Collect all system info as (label, value) pairs."""
         pairs: list[tuple[str, str]] = [
-            ("App Version", _APP_VERSION),
+            ("App Version", _get_app_version()),
             ("OS", self._os_string()),
             ("Python", platform.python_version()),
         ]
