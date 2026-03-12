@@ -4,6 +4,15 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.5.2] - 2026-03-12 — Installer & Updater Hardening
+
+### Fixed
+- **CUDA version checks in `1-install.bat`** — fixed CUDA detection logic that was failing for some GPU configurations (community contribution via PR #18 by pineapplemachine)
+- **Cross-platform updater subprocess flags** — guarded Windows-specific `CREATE_NO_WINDOW` flag so `_run_update` doesn't crash on macOS/Linux
+- **CI branch checkout** — `git checkout -B` prevents failures when branch already exists on main
+
+---
+
 ## [1.5.1] - 2026-03-11 — Hotfix: FFmpeg Filter, Alpha Video Import
 
 ### Fixed
