@@ -21,6 +21,7 @@ from backend.project import is_image_file as _is_image
 class ViewMode(str, Enum):
     """Available preview modes. Each maps to a specific source directory."""
     INPUT = "Input"
+    MASK = "Mask"
     ALPHA = "Alpha"
     FG = "FG"
     MATTE = "Matte"
@@ -31,6 +32,7 @@ class ViewMode(str, Enum):
 # Maps ViewMode to the subdirectory relative to clip root
 _MODE_DIRS: dict[ViewMode, str] = {
     ViewMode.INPUT: "Input",
+    ViewMode.MASK: "VideoMamaMaskHint",
     ViewMode.ALPHA: "AlphaHint",
     ViewMode.FG: os.path.join("Output", "FG"),
     ViewMode.MATTE: os.path.join("Output", "Matte"),
