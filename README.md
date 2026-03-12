@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.5.0](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.5.2](CHANGELOG.md)**
 
-> **Latest:** SAM2 tracking, FFmpeg hardening, cross-platform smoke CI — [full changelog](CHANGELOG.md)
+> **Latest:** Installer & updater hardening — [full changelog](CHANGELOG.md)
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
