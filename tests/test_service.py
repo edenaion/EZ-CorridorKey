@@ -277,6 +277,67 @@ class TestReadAlphaFrame:
         mask = svc._read_alpha_frame(clip, 0, [], mock_cap)
         assert mask is None
 
+    def test_sequence_prefers_input_stem_when_available(self):
+        svc = CorridorKeyService()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(alpha_dir)
+            wanted = os.path.join(alpha_dir, "frame_000003.png")
+            fallback = os.path.join(alpha_dir, "_alphaHint_000000.png")
+            cv2.imwrite(wanted, np.ones((4, 4), dtype=np.uint8) * 255)
+            cv2.imwrite(fallback, np.zeros((4, 4), dtype=np.uint8))
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+            alpha_files = clip.alpha_asset.get_frame_files()
+            alpha_lookup = {os.path.splitext(f)[0]: f for f in alpha_files}
+
+            with patch("backend.service.read_mask_frame", return_value=np.ones((4, 4), dtype=np.float32)) as mock_read:
+                svc._read_alpha_frame(
+                    clip,
+                    0,
+                    alpha_files,
+                    None,
+                    input_stem="frame_000003",
+                    alpha_stem_lookup=alpha_lookup,
+                )
+
+            assert mock_read.call_args is not None
+            assert mock_read.call_args.args[0].endswith("frame_000003.png")
+
+    def test_sequence_falls_back_to_index_when_input_stem_missing(self):
+        svc = CorridorKeyService()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(alpha_dir)
+            fallback = os.path.join(alpha_dir, "_alphaHint_000000.png")
+            cv2.imwrite(fallback, np.ones((4, 4), dtype=np.uint8) * 255)
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+            alpha_files = clip.alpha_asset.get_frame_files()
+
+            with patch("backend.service.read_mask_frame", return_value=np.ones((4, 4), dtype=np.float32)) as mock_read:
+                svc._read_alpha_frame(
+                    clip,
+                    0,
+                    alpha_files,
+                    None,
+                    input_stem="frame_000123",
+                    alpha_stem_lookup={},
+                )
+
+            assert mock_read.call_args is not None
+            assert mock_read.call_args.args[0].endswith("_alphaHint_000000.png")
+
 
 # ── TestWriteImage ──
 
@@ -601,6 +662,63 @@ class TestRunInference:
                                                           comp_format="png", processed_format="png"))
         # Test passed — if finally block didn't run, we'd leak captures
 
+    def test_frame_range_uses_stem_matched_partial_alpha_sequence(self):
+        svc, mock_engine = self._setup_service_with_mock_engine()
+        params = InferenceParams()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(frames_dir)
+            os.makedirs(alpha_dir)
+
+            for i in range(5):
+                cv2.imwrite(
+                    os.path.join(frames_dir, f"frame_{i:06d}.png"),
+                    np.zeros((4, 4, 3), dtype=np.uint8),
+                )
+            for i in (3, 4):
+                cv2.imwrite(
+                    os.path.join(alpha_dir, f"frame_{i:06d}.png"),
+                    np.ones((4, 4), dtype=np.uint8) * 255,
+                )
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+            fake_mask = np.ones((4, 4), dtype=np.float32)
+            read_mask_paths: list[str] = []
+
+            def _record_mask(path, clip_name, frame_index):
+                read_mask_paths.append(os.path.basename(path))
+                return fake_mask
+
+            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
+                "backend.service.read_mask_frame", side_effect=_record_mask
+            ):
+                results = svc.run_inference(
+                    clip,
+                    params,
+                    frame_range=(3, 4),
+                    output_config=OutputConfig(
+                        fg_format="png",
+                        matte_format="png",
+                        comp_format="png",
+                        processed_format="png",
+                    ),
+                )
+
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        assert mock_engine.process_frame.call_count == 2
+        assert read_mask_paths == ["frame_000003.png", "frame_000004.png"]
+
 
 # ── TestReprocessSingleFrame ──
 
@@ -734,6 +852,59 @@ class TestReprocessSingleFrame:
 
         assert mock_engine.process_frame.call_args is not None
         assert mock_engine.process_frame.call_args.kwargs["input_is_linear"] is True
+
+    def test_sequence_reprocess_prefers_alpha_with_matching_input_stem(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.INFERENCE
+        mock_engine = MagicMock()
+        mock_engine.process_frame.return_value = {
+            "fg": np.ones((4, 4, 3), dtype=np.float32),
+            "alpha": np.ones((4, 4, 1), dtype=np.float32),
+            "comp": np.ones((4, 4, 3), dtype=np.float32),
+            "processed": np.ones((4, 4, 4), dtype=np.float32),
+        }
+        svc._engine = mock_engine
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(frames_dir)
+            os.makedirs(alpha_dir)
+
+            for i in range(5):
+                with open(os.path.join(frames_dir, f"frame_{i:06d}.png"), "wb") as handle:
+                    handle.write(b"fake")
+            for i in (3, 4):
+                with open(os.path.join(alpha_dir, f"frame_{i:06d}.png"), "wb") as handle:
+                    handle.write(b"fake")
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+            fake_mask = np.ones((4, 4), dtype=np.float32)
+            read_mask_paths: list[str] = []
+
+            def _record_mask(path, clip_name, frame_index):
+                read_mask_paths.append(os.path.basename(path))
+                return fake_mask
+
+            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
+                "backend.service.read_mask_frame", side_effect=_record_mask
+            ):
+                result = svc.reprocess_single_frame(
+                    clip,
+                    InferenceParams(),
+                    3,
+                )
+
+        assert result is not None
+        assert read_mask_paths == ["frame_000003.png"]
 
 
 # ── TestUnloadEngines ──

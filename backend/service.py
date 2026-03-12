@@ -600,6 +600,9 @@ class CorridorKeyService:
         frame_index: int,
         alpha_files: list[str],
         alpha_cap: Optional[Any],
+        *,
+        input_stem: str | None = None,
+        alpha_stem_lookup: Optional[dict[str, str]] = None,
     ) -> Optional[np.ndarray]:
         """Read a single alpha/mask frame and normalize to [H, W] float32."""
         if alpha_cap:
@@ -608,7 +611,14 @@ class CorridorKeyService:
                 return None
             return frame[:, :, 2].astype(np.float32) / 255.0
         else:
-            fpath = os.path.join(clip.alpha_asset.path, alpha_files[frame_index])
+            fname: str | None = None
+            if input_stem is not None and alpha_stem_lookup is not None:
+                fname = alpha_stem_lookup.get(input_stem)
+            if fname is None:
+                if frame_index >= len(alpha_files):
+                    return None
+                fname = alpha_files[frame_index]
+            fpath = os.path.join(clip.alpha_asset.path, fname)
             mask = read_mask_frame(fpath, clip.name, frame_index)
             validate_frame_read(mask, clip.name, frame_index, fpath)
             return mask
@@ -768,11 +778,26 @@ class CorridorKeyService:
         # Write run manifest (Codex: resume must know which outputs were enabled)
         self._write_manifest(dirs['root'], cfg, params)
 
-        num_frames = validate_frame_counts(
-            clip.name,
-            clip.input_asset.frame_count,
-            clip.alpha_asset.frame_count,
-        )
+        # Sequence alpha is stem-addressable, so partial in/out alpha should not
+        # truncate inference to the first N frames. Exact stem matching happens
+        # during reads with legacy index fallback for older `_alphaHint_000000`
+        # style sequences.
+        if clip.input_asset.asset_type == 'sequence' and clip.alpha_asset.asset_type == 'sequence':
+            num_frames = clip.input_asset.frame_count
+            if clip.input_asset.frame_count != clip.alpha_asset.frame_count:
+                logger.warning(
+                    "Clip '%s': sequence alpha count mismatch — input has %d, alpha has %d. "
+                    "Using stem-matched alpha reads across the selected range.",
+                    clip.name,
+                    clip.input_asset.frame_count,
+                    clip.alpha_asset.frame_count,
+                )
+        else:
+            num_frames = validate_frame_counts(
+                clip.name,
+                clip.input_asset.frame_count,
+                clip.alpha_asset.frame_count,
+            )
 
         # Open video captures or get file lists
         input_cap = None
@@ -789,6 +814,10 @@ class CorridorKeyService:
             alpha_cap = cv2.VideoCapture(clip.alpha_asset.path)
         else:
             alpha_files = clip.alpha_asset.get_frame_files()
+        alpha_stem_lookup = (
+            {os.path.splitext(fname)[0]: fname for fname in alpha_files}
+            if alpha_files else None
+        )
 
         results: list[FrameResult] = []
         skipped: list[int] = []
@@ -847,7 +876,14 @@ class CorridorKeyService:
                         continue
 
                     # Read alpha
-                    mask = self._read_alpha_frame(clip, i, alpha_files, alpha_cap)
+                    mask = self._read_alpha_frame(
+                        clip,
+                        i,
+                        alpha_files,
+                        alpha_cap,
+                        input_stem=input_stem,
+                        alpha_stem_lookup=alpha_stem_lookup,
+                    )
                     if mask is None:
                         skipped.append(i)
                         results.append(FrameResult(i, input_stem, False, "alpha read failed"))
@@ -980,6 +1016,7 @@ class CorridorKeyService:
 
         # Read the specific input frame
         is_linear = params.input_is_linear
+        input_stem = f"{frame_index:05d}"
         if clip.input_asset.asset_type == 'video':
             img = read_video_frame_at(clip.input_asset.path, frame_index)
         else:
@@ -987,6 +1024,7 @@ class CorridorKeyService:
             if frame_index >= len(input_files):
                 return None
             fpath = os.path.join(clip.input_asset.path, input_files[frame_index])
+            input_stem = os.path.splitext(input_files[frame_index])[0]
             img = read_image_frame(fpath)
         if img is None:
             return None
@@ -996,11 +1034,14 @@ class CorridorKeyService:
             mask = read_video_mask_at(clip.alpha_asset.path, frame_index)
         else:
             alpha_files = clip.alpha_asset.get_frame_files()
-            if frame_index >= len(alpha_files):
-                return None
-            mask = read_mask_frame(
-                os.path.join(clip.alpha_asset.path, alpha_files[frame_index]),
-                clip.name, frame_index,
+            alpha_stem_lookup = {os.path.splitext(fname)[0]: fname for fname in alpha_files}
+            mask = self._read_alpha_frame(
+                clip,
+                frame_index,
+                alpha_files,
+                None,
+                input_stem=input_stem,
+                alpha_stem_lookup=alpha_stem_lookup,
             )
         if mask is None:
             return None
