@@ -720,6 +720,31 @@ class MainWindow(QMainWindow):
                 iv._split_view.update()
                 self._auto_save_annotations()
 
+    _mps_warning_acknowledged = False
+
+    def _warn_mps_slow(self, feature_name: str) -> bool:
+        """Show a one-time performance warning on MPS. Returns False if user cancels."""
+        if getattr(self._service, '_device', '') != 'mps':
+            return True
+        if MainWindow._mps_warning_acknowledged:
+            return True
+        reply = QMessageBox.warning(
+            self,
+            f"{feature_name} — Mac Performance Warning",
+            "GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) "
+            "are very slow on Mac (Apple Silicon MPS).\n\n"
+            "This may take hours for longer clips and could freeze your system.\n\n"
+            "Recommendation: Import pre-made alpha mattes from After Effects, "
+            "DaVinci Resolve, or Nuke instead.\n\n"
+            "Continue anyway? (This warning won't appear again this session.)",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            MainWindow._mps_warning_acknowledged = True
+            return True
+        return False
+
     def _on_track_masks(self) -> None:
         """Preview SAM2 on the annotated frame, then confirm full tracking."""
         clip = self._current_clip
@@ -733,6 +758,9 @@ class MainWindow(QMainWindow):
                 self, "No Annotations",
                 "Paint green (1) and red (2) strokes on frames first.",
             )
+            return
+
+        if not self._warn_mps_slow("SAM2 Track Mask"):
             return
 
         job = create_job_snapshot(clip, self._param_panel.get_params(), job_type=JobType.SAM2_PREVIEW)
@@ -2167,6 +2195,9 @@ class MainWindow(QMainWindow):
         if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
             return
 
+        if not self._warn_mps_slow("GVM Auto Alpha"):
+            return
+
         # Detect partial alpha from a previous interrupted run
         alpha_dir = os.path.join(self._current_clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
@@ -2215,6 +2246,9 @@ class MainWindow(QMainWindow):
             )
             return
 
+        if not self._warn_mps_slow("VideoMaMa Auto Alpha"):
+            return
+
         job = create_job_snapshot(self._current_clip, job_type=JobType.VIDEOMAMA_ALPHA)
         if not self._service.job_queue.submit(job):
             return
@@ -2234,6 +2268,9 @@ class MainWindow(QMainWindow):
                 "MatAnyone2 requires a tracked mask on frame 0.\n\n"
                 "Paint prompts and run Track Mask before using MatAnyone2.",
             )
+            return
+
+        if not self._warn_mps_slow("MatAnyone2"):
             return
 
         job = create_job_snapshot(self._current_clip, job_type=JobType.MATANYONE2_ALPHA)
