@@ -319,9 +319,11 @@ class ParameterPanel(QWidget):
             "Each extra engine loads a full copy of the model.\n"
             "CUDA: ~6-8 GB VRAM per engine.\n"
             "Apple Silicon: uses unified memory shared with system.\n\n"
-            "Only increase if you have memory headroom during\n"
-            "single-frame inference. Check GPU/memory usage first.\n\n"
-            "Default: 1 (safest). Try 2 first, then increase if stable."
+            "Default: 1 (safest). Try 2 first, then increase if stable.\n\n"
+            "EXPERIMENTAL: Values above 8 are for high-memory systems\n"
+            "(e.g. Apple Silicon with 64GB+ unified RAM, RTX 6000, etc.).\n"
+            "If you run out of memory, the app will automatically scale\n"
+            "back to however many engines fit."
         )
         self._parallel_spin.setFixedWidth(60)
         from ui.widgets.preferences_dialog import get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS
