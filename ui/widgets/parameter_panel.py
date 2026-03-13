@@ -15,6 +15,7 @@ class ParameterPanel(QWidget):
     """Right panel with all inference parameter controls."""
 
     params_changed = Signal()  # emitted when any parameter changes
+    parallel_frames_changed = Signal(int)  # parallel engine count changed
     gvm_requested = Signal()      # GVM AUTO button clicked
     videomama_requested = Signal() # VIDEOMAMA button clicked
     matanyone2_requested = Signal()  # MatAnyone2 button clicked
@@ -290,6 +291,33 @@ class ParameterPanel(QWidget):
 
         layout.addWidget(out_group)
 
+        # ── PERFORMANCE section ──
+        perf_group = QGroupBox("PERFORMANCE")
+        perf_layout = QVBoxLayout(perf_group)
+        perf_layout.setSpacing(6)
+
+        parallel_row = QHBoxLayout()
+        parallel_label = QLabel("Parallel frames")
+        parallel_row.addWidget(parallel_label, 1)
+        self._parallel_spin = QSpinBox()
+        self._parallel_spin.setRange(1, 8)
+        self._parallel_spin.setToolTip(
+            "Process multiple frames simultaneously using parallel engines.\n\n"
+            "WARNING: Each extra engine loads a full copy of the model.\n"
+            "Only increase if you have VRAM headroom during\n"
+            "single-frame inference. Check GPU memory usage first.\n\n"
+            "~1.5 GB extra VRAM per engine.\n"
+            "Default: 1 (safest). Try 2 first, then increase if stable."
+        )
+        self._parallel_spin.setFixedWidth(60)
+        from ui.widgets.preferences_dialog import get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS
+        self._parallel_spin.setValue(get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS))
+        self._parallel_spin.valueChanged.connect(self._on_parallel_changed)
+        parallel_row.addWidget(self._parallel_spin)
+        perf_layout.addLayout(parallel_row)
+
+        layout.addWidget(perf_group)
+
         layout.addStretch(1)
 
         scroll.setWidget(inner)
@@ -330,6 +358,12 @@ class ParameterPanel(QWidget):
         display = value / 10.0
         self._refiner_label.setText(f"Refiner: {display:.1f}")
         self._emit_changed()
+
+    def _on_parallel_changed(self, value: int) -> None:
+        from PySide6.QtCore import QSettings
+        from ui.widgets.preferences_dialog import KEY_PARALLEL_CLIPS
+        QSettings().setValue(KEY_PARALLEL_CLIPS, value)
+        self.parallel_frames_changed.emit(value)
 
     @property
     def live_preview_enabled(self) -> bool:

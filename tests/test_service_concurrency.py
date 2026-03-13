@@ -42,7 +42,7 @@ class TestGPULockSerialization:
     def test_concurrent_reprocess_serialized(self, sample_clip):
         svc = CorridorKeyService()
         engine, call_log = _make_slow_engine(0.05)
-        svc._engine = engine
+        svc._engine_pool = [engine]
         svc._active_model = _ActiveModel.INFERENCE
         params = InferenceParams()
 
@@ -87,7 +87,7 @@ class TestGPULockModelSwitch:
 
     def test_model_residency_consistent_after_concurrent_access(self):
         svc = CorridorKeyService()
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         svc._gvm_processor = MagicMock()
         svc._active_model = _ActiveModel.INFERENCE
 

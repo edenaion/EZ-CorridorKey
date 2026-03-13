@@ -242,7 +242,14 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
 
         # Workers
-        self._gpu_worker = GPUJobWorker(self._service, parent=self)
+        from ui.widgets.preferences_dialog import (
+            get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS,
+        )
+        self._gpu_worker = GPUJobWorker(
+            self._service,
+            max_workers=get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS),
+            parent=self,
+        )
         self._gpu_monitor = GPUMonitor(interval_ms=2000, parent=self)
         self._extract_worker = ExtractWorker(parent=self)
         self._extract_progress: dict[str, tuple[int, int]] = {}  # clip_name -> (current, total)
@@ -895,6 +902,9 @@ class MainWindow(QMainWindow):
 
         # Parameter panel — live reprocess (debounced, Codex: coalesce stale)
         self._param_panel.params_changed.connect(self._on_params_changed)
+        self._param_panel.parallel_frames_changed.connect(
+            lambda n: self._gpu_worker.set_max_workers(n)
+        )
         self._param_panel._live_preview.toggled.connect(self._on_live_preview_toggled)
 
         # Sync IO tray divider with dual viewer splitter
@@ -2306,7 +2316,7 @@ class MainWindow(QMainWindow):
     # ── Worker Signal Handlers ──
 
     @Slot(str, str, int, int)
-    def _on_worker_progress(self, job_id: str, clip_name: str, current: int, total: int) -> None:
+    def _on_worker_progress(self, job_id: str, clip_name: str, current: int, total: int, fps: float = 0.0) -> None:
         if self._cancel_requested_job_id == job_id:
             self._queue_panel.refresh()
             return
@@ -2319,7 +2329,7 @@ class MainWindow(QMainWindow):
                 self._active_job_id = job_id
 
         if job_id == self._active_job_id:
-            self._status_bar.update_progress(current, total)
+            self._status_bar.update_progress(current, total, fps)
 
         if self._current_clip and self._current_clip.name == clip_name:
             self._schedule_live_asset_refresh(clip_name, current, total)
@@ -2593,7 +2603,8 @@ class MainWindow(QMainWindow):
         self._live_asset_refresh_timer.stop()
         self._pipeline_steps.clear()
         self._queue_panel.refresh()
-        logger.info("All jobs completed")
+        self._service.unload_engines()
+        logger.info("All jobs completed, VRAM freed")
 
     # ── Video Extraction ──
 
@@ -3094,6 +3105,7 @@ class MainWindow(QMainWindow):
             self._apply_tooltip_setting()
             self._apply_sound_setting()
             self._apply_tracker_model_setting()
+            self._apply_parallel_clips_setting()
 
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
@@ -3128,6 +3140,14 @@ class MainWindow(QMainWindow):
         """Apply saved SAM2 tracker model preference to the backend service."""
         model_id = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
         self._service.set_sam2_model(model_id)
+
+    def _apply_parallel_clips_setting(self) -> None:
+        """Apply saved parallel clips preference to the GPU worker."""
+        from ui.widgets.preferences_dialog import (
+            get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS,
+        )
+        n = get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS)
+        self._gpu_worker.set_max_workers(n)
 
     def _show_report_issue(self) -> None:
         import logging as _logging

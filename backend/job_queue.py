@@ -112,7 +112,7 @@ class GPUJobQueue:
     def __init__(self):
         self._queue: deque[GPUJob] = deque()
         self._lock = threading.Lock()
-        self._current_job: Optional[GPUJob] = None
+        self._running_jobs: list[GPUJob] = []  # supports multiple concurrent jobs
         self._history: list[GPUJob] = []  # completed/cancelled/failed jobs for UI display
 
         # Callbacks (set by UI or CLI)
@@ -152,13 +152,16 @@ class GPUJobQueue:
                             f"(already queued as {existing.id})"
                         )
                         return False
-                if (self._current_job
-                        and self._current_job.clip_name == job.clip_name
-                        and self._current_job.job_type == job.job_type
-                        and self._current_job.status == JobStatus.RUNNING):
+                running_dup = any(
+                    rj.clip_name == job.clip_name
+                    and rj.job_type == job.job_type
+                    and rj.status == JobStatus.RUNNING
+                    for rj in self._running_jobs
+                )
+                if running_dup:
                     logger.warning(
                         f"Duplicate job rejected: {job.job_type.value} for '{job.clip_name}' "
-                        f"(already running as {self._current_job.id})"
+                        "(already running)"
                     )
                     return False
 
@@ -180,15 +183,17 @@ class GPUJobQueue:
             if job in self._queue:
                 self._queue.remove(job)
             job.status = JobStatus.RUNNING
-            self._current_job = job
+            self._running_jobs.append(job)
             logger.info(f"Job started [{job.id}]: {job.job_type.value} for '{job.clip_name}'")
 
     def complete_job(self, job: GPUJob) -> None:
         """Mark a job as successfully completed."""
         with self._lock:
             job.status = JobStatus.COMPLETED
-            if self._current_job is job:
-                self._current_job = None
+            try:
+                self._running_jobs.remove(job)
+            except ValueError:
+                pass
             self._history.append(job)
             logger.info(f"Job completed [{job.id}]: {job.job_type.value} for '{job.clip_name}'")
         # Emit AFTER lock release (Codex: no deadlock risk)
@@ -200,8 +205,10 @@ class GPUJobQueue:
         with self._lock:
             job.status = JobStatus.FAILED
             job.error_message = error
-            if self._current_job is job:
-                self._current_job = None
+            try:
+                self._running_jobs.remove(job)
+            except ValueError:
+                pass
             self._history.append(job)
             logger.error(f"Job failed [{job.id}]: {job.job_type.value} for '{job.clip_name}': {error}")
         # Emit AFTER lock release
@@ -209,16 +216,18 @@ class GPUJobQueue:
             self.on_error(job.clip_name, error)
 
     def mark_cancelled(self, job: GPUJob) -> None:
-        """Mark a running job as cancelled AND clear _current_job.
+        """Mark a running job as cancelled AND remove from running list.
 
         This is the cancel-safe path that was missing — calling
-        job.request_cancel() alone doesn't clear _current_job, which
+        job.request_cancel() alone doesn't clear running state, which
         poisons queue state for subsequent jobs.
         """
         with self._lock:
             job.status = JobStatus.CANCELLED
-            if self._current_job is job:
-                self._current_job = None
+            try:
+                self._running_jobs.remove(job)
+            except ValueError:
+                pass
             self._history.append(job)
             logger.info(f"Job cancelled [{job.id}]: {job.job_type.value} for '{job.clip_name}'")
 
@@ -237,17 +246,18 @@ class GPUJobQueue:
                 logger.info(f"Job cancel requested [{job.id}]: {job.job_type.value} for '{job.clip_name}'")
 
     def cancel_current(self) -> None:
-        """Cancel the currently running job, if any."""
+        """Cancel all currently running jobs."""
         with self._lock:
-            if self._current_job and self._current_job.status == JobStatus.RUNNING:
-                self._current_job.request_cancel()
+            for job in self._running_jobs:
+                if job.status == JobStatus.RUNNING:
+                    job.request_cancel()
 
     def cancel_all(self) -> None:
-        """Cancel current job and clear the queue."""
+        """Cancel all running jobs and clear the queue."""
         with self._lock:
-            # Cancel current
-            if self._current_job and self._current_job.status == JobStatus.RUNNING:
-                self._current_job.request_cancel()
+            for job in self._running_jobs:
+                if job.status == JobStatus.RUNNING:
+                    job.request_cancel()
             # Clear queue — preserve in history
             for job in self._queue:
                 job.status = JobStatus.CANCELLED
@@ -256,13 +266,17 @@ class GPUJobQueue:
             logger.info("All jobs cancelled")
 
     def report_progress(self, clip_name: str, current: int, total: int, **kwargs: float) -> None:
-        """Report progress for the current job. Called by processing code.
+        """Report progress for a running job. Called by processing code.
 
+        Finds the matching job by clip_name among running jobs.
         Optional kwargs: fps, elapsed, eta_seconds.
         """
-        if self._current_job:
-            self._current_job.current_frame = current
-            self._current_job.total_frames = total
+        with self._lock:
+            for job in self._running_jobs:
+                if job.clip_name == clip_name and job.status == JobStatus.RUNNING:
+                    job.current_frame = current
+                    job.total_frames = total
+                    break
         if self.on_progress:
             self.on_progress(clip_name, current, total, **kwargs)
 
@@ -273,10 +287,11 @@ class GPUJobQueue:
             self.on_warning(message)
 
     def find_job_by_id(self, job_id: str) -> Optional[GPUJob]:
-        """Find a job by ID in queue, current, or history."""
+        """Find a job by ID in running, queue, or history."""
         with self._lock:
-            if self._current_job and self._current_job.id == job_id:
-                return self._current_job
+            for job in self._running_jobs:
+                if job.id == job_id:
+                    return job
             for job in self._queue:
                 if job.id == job_id:
                     return job
@@ -302,8 +317,20 @@ class GPUJobQueue:
 
     @property
     def current_job(self) -> Optional[GPUJob]:
+        """First running job (backward compat) or None."""
         with self._lock:
-            return self._current_job
+            return self._running_jobs[0] if self._running_jobs else None
+
+    @property
+    def running_jobs(self) -> list[GPUJob]:
+        """Snapshot of all currently running jobs."""
+        with self._lock:
+            return list(self._running_jobs)
+
+    @property
+    def running_count(self) -> int:
+        with self._lock:
+            return len(self._running_jobs)
 
     @property
     def pending_count(self) -> int:
@@ -324,11 +351,9 @@ class GPUJobQueue:
 
     @property
     def all_jobs_snapshot(self) -> list[GPUJob]:
-        """Return current + queued + history for full queue panel display."""
+        """Return running + queued + history for full queue panel display."""
         with self._lock:
-            result = []
-            if self._current_job:
-                result.append(self._current_job)
+            result = list(self._running_jobs)
             result.extend(self._queue)
             result.extend(self._history)
             return result

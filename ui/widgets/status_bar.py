@@ -163,6 +163,7 @@ class StatusBar(QWidget):
         self._job_start: float = 0.0
         self._last_current = 0
         self._last_total = 0
+        self._last_fps: float = 0.0
         self._job_label: str = ""
 
         # 1-second tick timer for elapsed display
@@ -257,6 +258,7 @@ class StatusBar(QWidget):
         self._job_start = time.monotonic()
         self._last_current = 0
         self._last_total = 0
+        self._last_fps = 0.0
         self._job_label = label
         self._phase = ""  # phase text shown during loading (e.g. "Loading frames...")
 
@@ -270,10 +272,12 @@ class StatusBar(QWidget):
         """Stop the elapsed timer."""
         self._tick_timer.stop()
 
-    def update_progress(self, current: int, total: int) -> None:
-        """Update progress bar, frame counter, and ETA."""
+    def update_progress(self, current: int, total: int, fps: float = 0.0) -> None:
+        """Update progress bar, frame counter, FPS, and ETA."""
         self._last_current = current
         self._last_total = total
+        if fps > 0:
+            self._last_fps = fps
         # Clear phase text once real frame progress flows
         if total > 0 and current > 0:
             self._phase = ""
@@ -284,10 +288,15 @@ class StatusBar(QWidget):
             pct = int(current / total * 100)
             self._progress.setValue(pct)
 
+            fps_str = ""
             eta_str = ""
             if current > 0 and current < total:
-                rate = elapsed / current
-                remaining = rate * (total - current)
+                if fps > 0:
+                    fps_str = f"  {fps:.2f} fps"
+                    remaining = (total - current) / fps
+                else:
+                    rate = elapsed / current
+                    remaining = rate * (total - current)
                 eta_str = f"  ETA {_fmt_duration(remaining)}"
 
             elapsed_str = _fmt_duration(elapsed)
@@ -299,7 +308,7 @@ class StatusBar(QWidget):
                 current_text = str(current)
                 total_text = str(total)
             self._frame_label.setText(
-                f"{label}{current_text}/{total_text}  {pct}%  {elapsed_str}{eta_str}"
+                f"{label}{current_text}/{total_text}  {pct}%{fps_str}  {elapsed_str}{eta_str}"
             )
         else:
             self._progress.setValue(0)
@@ -352,8 +361,8 @@ class StatusBar(QWidget):
         phase = getattr(self, '_phase', '')
 
         if self._last_total > 0 and self._last_current > 0:
-            # Real frame progress — show frame counter + ETA
-            self.update_progress(self._last_current, self._last_total)
+            # Real frame progress — show frame counter + ETA + FPS
+            self.update_progress(self._last_current, self._last_total, self._last_fps)
         elif phase:
             # Loading phase — show phase text + elapsed timer
             self._frame_label.setText(f"{label}{phase}  {elapsed_str}")

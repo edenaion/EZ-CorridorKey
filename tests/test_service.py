@@ -40,7 +40,7 @@ from backend.job_queue import GPUJob, JobType
 class TestServiceInit:
     def test_constructor_defaults(self):
         svc = CorridorKeyService()
-        assert svc._engine is None
+        assert svc._engine_pool == []
         assert svc._gvm_processor is None
         assert svc._videomama_pipeline is None
         assert svc._active_model == _ActiveModel.NONE
@@ -119,16 +119,16 @@ class TestModelResidency:
     def test_ensure_model_noop_when_same(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         svc._ensure_model(_ActiveModel.INFERENCE)
-        assert svc._engine is not None  # Not unloaded
+        assert len(svc._engine_pool) > 0  # Not unloaded
 
     def test_ensure_model_switch_unloads_inference(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         svc._ensure_model(_ActiveModel.GVM)
-        assert svc._engine is None
+        assert svc._engine_pool == []
         assert svc._active_model == _ActiveModel.GVM
 
     def test_ensure_model_switch_unloads_gvm(self):
@@ -183,14 +183,14 @@ class TestMatAnyone2Import:
 # ── TestGetEngine ──
 
 
-class TestGetEngine:
-    def test_cached_engine_returns_immediately(self):
+class TestGetEnginePool:
+    def test_cached_pool_returns_immediately(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
         mock_engine = MagicMock()
-        svc._engine = mock_engine
-        result = svc._get_engine()
-        assert result is mock_engine
+        svc._engine_pool = [mock_engine]
+        result = svc._get_engine_pool()
+        assert result[0] is mock_engine
 
     @patch("backend.service.glob_module.glob")
     def test_no_checkpoint_raises(self, mock_glob):
@@ -198,14 +198,14 @@ class TestGetEngine:
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.NONE
         with pytest.raises(FileNotFoundError, match="No .pth checkpoint"):
-            svc._get_engine()
+            svc._get_engine_pool()
 
     @patch("backend.service.glob_module.glob")
     def test_multiple_checkpoints_raises(self, mock_glob):
         mock_glob.return_value = ["/a/ckpt1.pth", "/a/ckpt2.pth"]
         svc = CorridorKeyService()
         with pytest.raises(ValueError, match="Multiple checkpoints"):
-            svc._get_engine()
+            svc._get_engine_pool()
 
 
 # ── TestScanAndFilter ──
@@ -526,7 +526,7 @@ class TestRunInference:
             "comp": np.ones((4, 4, 3), dtype=np.float32) * 0.3,
             "processed": np.ones((4, 4, 4), dtype=np.float32) * 0.6,
         }
-        svc._engine = mock_engine
+        svc._engine_pool = [mock_engine]
         return svc, mock_engine
 
     def test_happy_path(self, sample_clip, tmp_clip_dir):
@@ -762,7 +762,7 @@ class TestReprocessSingleFrame:
             "fg": np.ones((4, 4, 3), dtype=np.float32),
             "alpha": np.ones((4, 4, 1), dtype=np.float32),
         }
-        svc._engine = mock_engine
+        svc._engine_pool = [mock_engine]
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 0)
         assert result is not None
         assert "fg" in result
@@ -776,7 +776,7 @@ class TestReprocessSingleFrame:
     def test_cancelled_returns_none(self, sample_clip):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         job = GPUJob(JobType.PREVIEW_REPROCESS, "test")
         job.request_cancel()
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 0, job=job)
@@ -785,7 +785,7 @@ class TestReprocessSingleFrame:
     def test_out_of_range_returns_none(self, sample_clip):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 9999)
         assert result is None
 
@@ -799,7 +799,7 @@ class TestReprocessSingleFrame:
             "comp": np.ones((4, 4, 3), dtype=np.float32),
             "processed": np.ones((4, 4, 4), dtype=np.float32),
         }
-        svc._engine = mock_engine
+        svc._engine_pool = [mock_engine]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             frames_dir = os.path.join(tmpdir, "Frames")
@@ -846,7 +846,7 @@ class TestReprocessSingleFrame:
             "comp": np.ones((4, 4, 3), dtype=np.float32),
             "processed": np.ones((4, 4, 4), dtype=np.float32),
         }
-        svc._engine = mock_engine
+        svc._engine_pool = [mock_engine]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             frames_dir = os.path.join(tmpdir, "Frames")
@@ -893,7 +893,7 @@ class TestReprocessSingleFrame:
             "comp": np.ones((4, 4, 3), dtype=np.float32),
             "processed": np.ones((4, 4, 4), dtype=np.float32),
         }
-        svc._engine = mock_engine
+        svc._engine_pool = [mock_engine]
 
         with tempfile.TemporaryDirectory() as tmpdir:
             frames_dir = os.path.join(tmpdir, "Frames")
@@ -943,14 +943,14 @@ class TestReprocessSingleFrame:
 class TestUnloadEngines:
     def test_clears_all(self):
         svc = CorridorKeyService()
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         svc._gvm_processor = MagicMock()
         svc._videomama_pipeline = MagicMock()
         svc._active_model = _ActiveModel.INFERENCE
 
         svc.unload_engines()
 
-        assert svc._engine is None
+        assert svc._engine_pool == []
         assert svc._gvm_processor is None
         assert svc._videomama_pipeline is None
         assert svc._active_model == _ActiveModel.NONE
@@ -963,7 +963,7 @@ class TestIsEngineLoaded:
     def test_true_when_active(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         assert svc.is_engine_loaded() is True
 
     def test_false_when_not_loaded(self):
@@ -1062,10 +1062,10 @@ class TestSam2PreviewInputColorSpace:
         svc._gvm_processor = MagicMock()
         assert svc.is_engine_loaded() is False
 
-    def test_false_when_active_but_engine_none(self):
+    def test_false_when_active_but_engine_empty(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = None
+        svc._engine_pool = []
         assert svc.is_engine_loaded() is False
 
 

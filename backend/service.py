@@ -18,7 +18,9 @@ import shutil
 import sys
 import glob as glob_module
 import importlib
+import gc
 import logging
+import queue
 import threading
 import time
 from collections import deque
@@ -248,7 +250,8 @@ class CorridorKeyService:
     """
 
     def __init__(self):
-        self._engine = None
+        self._engine_pool: list = []
+        self._pool_size: int = 1
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
@@ -259,6 +262,12 @@ class CorridorKeyService:
         self._sam2_model_id: str = "facebook/sam2.1-hiera-base-plus"
         # GPU mutex — serializes ALL model operations (Codex: thread safety)
         self._gpu_lock = threading.Lock()
+        # Gated model switch (Codex: prevents starvation during model switch)
+        self._inference_active: int = 0
+        self._switch_pending: bool = False
+        self._gate_lock = threading.Lock()
+        self._inference_idle = threading.Event()
+        self._inference_idle.set()
 
     @property
     def job_queue(self) -> GPUJobQueue:
@@ -289,6 +298,52 @@ class CorridorKeyService:
                     torch.cuda.empty_cache()
             except Exception:
                 logger.debug("CUDA cache clear skipped after SAM2 model switch", exc_info=True)
+
+    def set_pool_size(self, n: int) -> None:
+        """Set the number of parallel inference engines (1-8).
+
+        Takes effect on the next _get_engine_pool() call. If shrinking,
+        excess engines are deleted immediately to free VRAM.
+        """
+        n = max(1, min(n, 8))
+        if n != self._pool_size:
+            logger.info("Engine pool size: %d -> %d", self._pool_size, n)
+            old_size = self._pool_size
+            self._pool_size = n
+            # Trim excess engines to free VRAM immediately
+            if n < old_size and len(self._engine_pool) > n:
+                excess = self._engine_pool[n:]
+                self._engine_pool = self._engine_pool[:n]
+                for eng in excess:
+                    del eng
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                logger.info("Trimmed %d excess engine(s), freed VRAM", len(excess))
+
+    def _begin_inference(self) -> None:
+        """Mark an inference session as active (gated model switch)."""
+        with self._gate_lock:
+            if self._switch_pending:
+                # Model switch is waiting — block until it completes
+                pass
+            self._inference_active += 1
+            self._inference_idle.clear()
+        # If switch_pending, wait outside gate_lock to avoid deadlock
+        while self._switch_pending:
+            time.sleep(0.05)
+
+    def _end_inference(self) -> None:
+        """Mark an inference session as finished."""
+        with self._gate_lock:
+            self._inference_active -= 1
+            if self._inference_active <= 0:
+                self._inference_active = 0
+                self._inference_idle.set()
 
     # --- Device & Engine Management ---
 
@@ -369,9 +424,22 @@ class CorridorKeyService:
 
         Only ONE heavy model stays in VRAM at a time. Before loading a
         different model, the previous is moved to CPU and dereferenced.
+
+        Uses gated protocol: sets _switch_pending to block new inference
+        sessions, then waits for active sessions to drain before switching.
         """
         if self._active_model == needed:
             return
+
+        # Gate: block new inference sessions and wait for active ones to drain
+        if self._active_model == _ActiveModel.INFERENCE and needed != _ActiveModel.INFERENCE:
+            with self._gate_lock:
+                self._switch_pending = True
+            # Wait for all active inference sessions to finish
+            if not self._inference_idle.wait(timeout=300):  # 5 min max
+                logger.warning("Timed out waiting for inference sessions to drain")
+            with self._gate_lock:
+                self._switch_pending = False
 
         # Unload whatever is currently loaded
         if self._active_model != _ActiveModel.NONE:
@@ -386,8 +454,9 @@ class CorridorKeyService:
             if on_status:
                 on_status(f"Offloading {self._active_model.value}...")
             if self._active_model == _ActiveModel.INFERENCE:
-                self._safe_offload(self._engine)
-                self._engine = None
+                for eng in self._engine_pool:
+                    self._safe_offload(eng)
+                self._engine_pool.clear()
             elif self._active_model == _ActiveModel.GVM:
                 # GVM has circular refs (pipe ↔ vae ↔ unet) — break them
                 # explicitly so gc can reclaim everything in one pass.
@@ -456,12 +525,18 @@ class CorridorKeyService:
 
         self._active_model = needed
 
-    def _get_engine(self, on_status=None):
-        """Lazy-load the CorridorKey inference engine."""
+    def _get_engine_pool(self, on_status=None) -> list:
+        """Lazy-load the CorridorKey inference engine pool.
+
+        Creates up to _pool_size engines. If the pool already has enough
+        engines, returns immediately. OOM during creation shrinks the pool
+        to however many engines fit in VRAM.
+        """
         self._ensure_model(_ActiveModel.INFERENCE, on_status=on_status)
 
-        if self._engine is not None:
-            return self._engine
+        # Pool already has enough engines
+        if len(self._engine_pool) >= self._pool_size:
+            return self._engine_pool[:self._pool_size]
 
         from CorridorKeyModule.inference_engine import CorridorKeyEngine
 
@@ -477,21 +552,38 @@ class CorridorKeyService:
             )
 
         ckpt_path = ckpt_files[0]
-        logger.info(f"Loading checkpoint: {os.path.basename(ckpt_path)}")
-        t0 = time.monotonic()
-        if on_status:
-            on_status("Initializing inference engine...")
-        logger.info("Constructing CorridorKeyEngine...")
-        self._engine = CorridorKeyEngine(
-            checkpoint_path=ckpt_path,
-            device=self._device,
-            img_size=2048,
-            optimization_mode=os.environ.get('CORRIDORKEY_OPT_MODE', 'auto'),
-            on_status=on_status,
-        )
-        logger.info("CorridorKeyEngine construction complete")
-        logger.info(f"Engine loaded in {time.monotonic() - t0:.1f}s")
-        return self._engine
+        opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
+
+        # Create engines serially (warmup each before creating next)
+        import torch
+        for i in range(len(self._engine_pool), self._pool_size):
+            if on_status:
+                on_status(f"Loading engine {i + 1}/{self._pool_size}...")
+            logger.info(f"Creating engine {i + 1}/{self._pool_size}: {os.path.basename(ckpt_path)}")
+            t0 = time.monotonic()
+            try:
+                engine = CorridorKeyEngine(
+                    checkpoint_path=ckpt_path,
+                    device=self._device,
+                    img_size=2048,
+                    optimization_mode=opt_mode,
+                    on_status=on_status if i == 0 else None,  # status only for first
+                )
+                self._engine_pool.append(engine)
+                logger.info(f"Engine {i + 1} loaded in {time.monotonic() - t0:.1f}s")
+            except (RuntimeError, torch.cuda.OutOfMemoryError):
+                logger.warning(
+                    "OOM creating engine %d/%d, using %d engine(s)",
+                    i + 1, self._pool_size, len(self._engine_pool),
+                )
+                gc.collect()
+                torch.cuda.empty_cache()
+                break
+
+        if not self._engine_pool:
+            raise RuntimeError("Failed to create any inference engine")
+
+        return self._engine_pool
 
     def _get_gvm(self):
         """Lazy-load the GVM processor."""
@@ -569,12 +661,13 @@ class CorridorKeyService:
 
     def unload_engines(self) -> None:
         """Free GPU memory by unloading all engines."""
-        self._safe_offload(self._engine)
+        for eng in self._engine_pool:
+            self._safe_offload(eng)
+        self._engine_pool.clear()
         self._safe_offload(self._gvm_processor)
         self._safe_offload(self._sam2_tracker)
         self._safe_offload(self._videomama_pipeline)
         self._safe_offload(self._matanyone2_processor)
-        self._engine = None
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
@@ -786,6 +879,10 @@ class CorridorKeyService:
     ) -> list[FrameResult]:
         """Run CorridorKey inference on a single clip.
 
+        Uses gated model switch protocol. If pool_size > 1, dispatches
+        to _run_inference_parallel with N engines processing N frames
+        concurrently. Otherwise uses _run_inference_sequential.
+
         Args:
             clip: Must be in READY or COMPLETE state with both input_asset and alpha_asset.
             params: Frozen inference parameters.
@@ -807,24 +904,51 @@ class CorridorKeyService:
         if clip.input_asset is None or clip.alpha_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input or alpha asset")
 
-        t_start = time.monotonic()
+        self._begin_inference()
+        try:
+            if on_status:
+                on_status("Loading model...")
+            logger.info("run_inference: waiting for _gpu_lock")
+            with self._gpu_lock:
+                logger.info("run_inference: acquired _gpu_lock")
+                engines = self._get_engine_pool(on_status=on_status)
 
-        if on_status:
-            on_status("Loading model...")
-        logger.info("run_inference: waiting for _gpu_lock")
-        with self._gpu_lock:
-            logger.info("run_inference: acquired _gpu_lock")
-            engine = self._get_engine(on_status=on_status)
+            if len(engines) == 1:
+                return self._run_inference_sequential(
+                    clip, params, engines[0], job=job,
+                    on_progress=on_progress, on_warning=on_warning,
+                    on_status=on_status, skip_stems=skip_stems,
+                    output_config=output_config, frame_range=frame_range,
+                )
+            return self._run_inference_parallel(
+                clip, params, engines, job=job,
+                on_progress=on_progress, on_warning=on_warning,
+                on_status=on_status, skip_stems=skip_stems,
+                output_config=output_config, frame_range=frame_range,
+            )
+        finally:
+            self._end_inference()
+
+    def _run_inference_sequential(
+        self,
+        clip: ClipEntry,
+        params: InferenceParams,
+        engine,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[..., None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+        skip_stems: Optional[set[str]] = None,
+        output_config: Optional[OutputConfig] = None,
+        frame_range: Optional[tuple[int, int]] = None,
+    ) -> list[FrameResult]:
+        """Sequential frame loop — exact extraction of original run_inference."""
+        t_start = time.monotonic()
         dirs = ensure_output_dirs(clip.root_path)
         cfg = output_config or OutputConfig()
 
-        # Write run manifest (Codex: resume must know which outputs were enabled)
         self._write_manifest(dirs['root'], cfg, params)
 
-        # Sequence alpha is stem-addressable, so partial in/out alpha should not
-        # truncate inference to the first N frames. Exact stem matching happens
-        # during reads with legacy index fallback for older `_alphaHint_000000`
-        # style sequences.
         if clip.input_asset.asset_type == 'sequence' and clip.alpha_asset.asset_type == 'sequence':
             num_frames = clip.input_asset.frame_count
             if clip.input_asset.frame_count != clip.alpha_asset.frame_count:
@@ -842,7 +966,6 @@ class CorridorKeyService:
                 clip.alpha_asset.frame_count,
             )
 
-        # Open video captures or get file lists
         input_cap = None
         alpha_cap = None
         input_files: list[str] = []
@@ -865,10 +988,9 @@ class CorridorKeyService:
         results: list[FrameResult] = []
         skipped: list[int] = []
         skip_stems = skip_stems or set()
-        frame_times: deque[float] = deque(maxlen=10)  # rolling window for avg fps
-        processed_count = 0  # frames actually processed (not skipped/resumed)
+        frame_times: deque[float] = deque(maxlen=10)
+        processed_count = 0
 
-        # Determine frame range (in/out markers or full clip)
         if frame_range is not None:
             range_start = max(0, frame_range[0])
             range_end = min(num_frames - 1, frame_range[1])
@@ -882,15 +1004,12 @@ class CorridorKeyService:
 
         try:
             for progress_i, i in enumerate(frame_indices):
-                # Check cancellation between frames
                 if job and job.is_cancelled:
                     raise JobCancelledError(clip.name, i)
 
-                # Show warmup status on first frame (torch.compile JIT)
                 if not _warmup_done and on_status:
                     on_status("Compiling (first frame may take a minute)...")
 
-                # Report progress with timing data
                 if on_progress:
                     timing_kwargs: dict[str, float] = {}
                     elapsed = time.monotonic() - t_start
@@ -904,7 +1023,6 @@ class CorridorKeyService:
                     on_progress(clip.name, progress_i, range_count, **timing_kwargs)
 
                 try:
-                    # Read input
                     img, input_stem, is_linear = self._read_input_frame(
                         clip, i, input_files, input_cap, params.input_is_linear,
                     )
@@ -913,17 +1031,12 @@ class CorridorKeyService:
                         results.append(FrameResult(i, f"{i:05d}", False, "video read failed"))
                         continue
 
-                    # Resume: skip frames that already have outputs
                     if input_stem in skip_stems:
                         results.append(FrameResult(i, input_stem, True, "resumed (skipped)"))
                         continue
 
-                    # Read alpha
                     mask = self._read_alpha_frame(
-                        clip,
-                        i,
-                        alpha_files,
-                        alpha_cap,
+                        clip, i, alpha_files, alpha_cap,
                         input_stem=input_stem,
                         alpha_stem_lookup=alpha_stem_lookup,
                     )
@@ -932,16 +1045,13 @@ class CorridorKeyService:
                         results.append(FrameResult(i, input_stem, False, "alpha read failed"))
                         continue
 
-                    # Resize mask if dimensions don't match input
                     if mask.shape[:2] != img.shape[:2]:
                         mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
 
-                    # Process (GPU-locked — process_frame mutates model hooks)
                     t_frame = time.monotonic()
                     with self._gpu_lock:
                         res = engine.process_frame(
-                            img,
-                            mask,
+                            img, mask,
                             input_is_linear=is_linear,
                             fg_is_straight=True,
                             despill_strength=params.despill_strength,
@@ -955,7 +1065,6 @@ class CorridorKeyService:
                     frame_times.append(dt)
                     processed_count += 1
 
-                    # Clear warmup status after first successful frame
                     if not _warmup_done:
                         _warmup_done = True
                         if on_status:
@@ -966,7 +1075,6 @@ class CorridorKeyService:
                         f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)"
                     )
 
-                    # Write outputs
                     self._write_outputs(res, dirs, input_stem, clip.name, i, cfg)
                     results.append(FrameResult(i, input_stem, True))
 
@@ -983,7 +1091,6 @@ class CorridorKeyService:
                     if on_warning:
                         on_warning(str(e))
 
-            # Final progress (include final timing)
             if on_progress:
                 final_elapsed = time.monotonic() - t_start
                 final_kwargs: dict[str, float] = {"elapsed": final_elapsed, "eta_seconds": 0.0}
@@ -998,7 +1105,275 @@ class CorridorKeyService:
             if alpha_cap:
                 alpha_cap.release()
 
-        # Summary
+        return self._finalize_inference(
+            clip, results, skipped, processed_count,
+            t_start, frame_range, num_frames,
+            on_warning=on_warning,
+        )
+
+    def _run_inference_parallel(
+        self,
+        clip: ClipEntry,
+        params: InferenceParams,
+        engines: list,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[..., None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+        skip_stems: Optional[set[str]] = None,
+        output_config: Optional[OutputConfig] = None,
+        frame_range: Optional[tuple[int, int]] = None,
+    ) -> list[FrameResult]:
+        """Parallel frame pipeline: reader thread -> N workers -> writer thread.
+
+        Each worker is permanently bound to one engine instance. PyTorch
+        releases the GIL during CUDA ops, so threads naturally overlap GPU work.
+        No explicit CUDA streams needed (they fail on Windows anyway).
+        """
+        N = len(engines)
+        logger.info("Starting parallel inference with %d engines", N)
+
+        t_start = time.monotonic()
+        dirs = ensure_output_dirs(clip.root_path)
+        cfg = output_config or OutputConfig()
+        self._write_manifest(dirs['root'], cfg, params)
+
+        if clip.input_asset.asset_type == 'sequence' and clip.alpha_asset.asset_type == 'sequence':
+            num_frames = clip.input_asset.frame_count
+            if clip.input_asset.frame_count != clip.alpha_asset.frame_count:
+                logger.warning(
+                    "Clip '%s': sequence alpha count mismatch — input has %d, alpha has %d.",
+                    clip.name, clip.input_asset.frame_count, clip.alpha_asset.frame_count,
+                )
+        else:
+            num_frames = validate_frame_counts(
+                clip.name, clip.input_asset.frame_count, clip.alpha_asset.frame_count,
+            )
+
+        if frame_range is not None:
+            range_start = max(0, frame_range[0])
+            range_end = min(num_frames - 1, frame_range[1])
+            frame_indices = list(range(range_start, range_end + 1))
+            range_count = range_end - range_start + 1
+        else:
+            frame_indices = list(range(num_frames))
+            range_count = num_frames
+
+        skip_stems = skip_stems or set()
+
+        # Bounded queues for pipeline stages
+        in_q: queue.Queue = queue.Queue(maxsize=2 * N)
+        out_q: queue.Queue = queue.Queue(maxsize=2 * N)
+        stop = threading.Event()
+        error_box: list = [None]
+
+        if on_status:
+            on_status("Compiling (first frame may take a minute)...")
+        warmup_done = threading.Event()
+
+        # --- Worker threads (each bound to one engine) ---
+        def worker(engine_idx: int) -> None:
+            eng = engines[engine_idx]
+            while not stop.is_set():
+                try:
+                    item = in_q.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+                if item is None:
+                    break  # poison pill
+                frame_idx, img, mask, stem, is_linear = item
+                try:
+                    res = eng.process_frame(
+                        img, mask,
+                        input_is_linear=is_linear,
+                        fg_is_straight=True,
+                        despill_strength=params.despill_strength,
+                        auto_despeckle=params.auto_despeckle,
+                        despeckle_size=params.despeckle_size,
+                        despeckle_dilation=params.despeckle_dilation,
+                        despeckle_blur=params.despeckle_blur,
+                        refiner_scale=params.refiner_scale,
+                    )
+                    out_q.put((frame_idx, stem, res, None))
+                    if not warmup_done.is_set():
+                        warmup_done.set()
+                        if on_status:
+                            on_status("")
+                except Exception as e:
+                    out_q.put((frame_idx, stem, None, e))
+                    stop.set()
+                    break
+
+        # --- Reader thread ---
+        def reader() -> None:
+            input_cap = None
+            alpha_cap = None
+            input_files: list[str] = []
+            alpha_files: list[str] = []
+
+            try:
+                if clip.input_asset.asset_type == 'video':
+                    input_cap = cv2.VideoCapture(clip.input_asset.path)
+                else:
+                    input_files = clip.input_asset.get_frame_files()
+
+                if clip.alpha_asset.asset_type == 'video':
+                    alpha_cap = cv2.VideoCapture(clip.alpha_asset.path)
+                else:
+                    alpha_files = clip.alpha_asset.get_frame_files()
+                alpha_stem_lookup = (
+                    {os.path.splitext(fname)[0]: fname for fname in alpha_files}
+                    if alpha_files else None
+                )
+
+                for i in frame_indices:
+                    if stop.is_set() or (job and job.is_cancelled):
+                        break
+
+                    img, input_stem, is_linear = self._read_input_frame(
+                        clip, i, input_files, input_cap, params.input_is_linear,
+                    )
+                    if img is None:
+                        out_q.put((i, f"{i:05d}", None, FrameReadError(clip.name, i, "video read failed")))
+                        continue
+
+                    if input_stem in skip_stems:
+                        out_q.put((i, input_stem, "SKIP", None))
+                        continue
+
+                    mask = self._read_alpha_frame(
+                        clip, i, alpha_files, alpha_cap,
+                        input_stem=input_stem, alpha_stem_lookup=alpha_stem_lookup,
+                    )
+                    if mask is None:
+                        out_q.put((i, input_stem, None, FrameReadError(clip.name, i, "alpha read failed")))
+                        continue
+
+                    if mask.shape[:2] != img.shape[:2]:
+                        mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+                    in_q.put((i, img, mask, input_stem, is_linear))
+            finally:
+                for _ in range(N):
+                    try:
+                        in_q.put(None, timeout=5)
+                    except queue.Full:
+                        pass
+                if input_cap:
+                    input_cap.release()
+                if alpha_cap:
+                    alpha_cap.release()
+
+        # --- Writer thread ---
+        results: list[FrameResult] = []
+        skipped: list[int] = []
+        processed_count_box = [0]
+
+        def writer() -> None:
+            reorder: dict = {}
+            next_idx = frame_indices[0] if frame_indices else 0
+            written = 0
+            received = 0
+            t_last_progress = time.monotonic()
+
+            while received < range_count:
+                if stop.is_set() and not reorder:
+                    break
+                try:
+                    frame_idx, stem, result, err = out_q.get(timeout=1.0)
+                except queue.Empty:
+                    if stop.is_set():
+                        break
+                    continue
+                received += 1
+
+                if err is not None:
+                    if isinstance(err, (FrameReadError, WriteFailureError)):
+                        skipped.append(frame_idx)
+                        results.append(FrameResult(frame_idx, stem, False, str(err)))
+                        if on_warning:
+                            on_warning(str(err))
+                        next_idx = max(next_idx, frame_idx + 1)
+                        continue
+                    error_box[0] = err
+                    stop.set()
+                    break
+
+                if result == "SKIP":
+                    results.append(FrameResult(frame_idx, stem, True, "resumed (skipped)"))
+                    next_idx = max(next_idx, frame_idx + 1)
+                    continue
+
+                reorder[frame_idx] = (result, stem)
+
+                while next_idx in reorder:
+                    res, s = reorder.pop(next_idx)
+                    self._write_outputs(res, dirs, s, clip.name, next_idx, cfg)
+                    processed_count_box[0] += 1
+                    written += 1
+                    results.append(FrameResult(next_idx, s, True))
+
+                    now = time.monotonic()
+                    if on_progress and (now - t_last_progress > 0.1 or written == range_count):
+                        elapsed = now - t_start
+                        timing_kw: dict[str, float] = {"elapsed": elapsed}
+                        if processed_count_box[0] > 0:
+                            fps = processed_count_box[0] / elapsed
+                            remaining = range_count - written
+                            timing_kw["fps"] = fps
+                            if fps > 0:
+                                timing_kw["eta_seconds"] = remaining / fps
+                        on_progress(clip.name, written, range_count, **timing_kw)
+                        t_last_progress = now
+
+                    next_idx += 1
+
+            if on_progress:
+                final_elapsed = time.monotonic() - t_start
+                final_kw: dict[str, float] = {"elapsed": final_elapsed, "eta_seconds": 0.0}
+                if processed_count_box[0] > 0:
+                    final_kw["fps"] = processed_count_box[0] / final_elapsed
+                on_progress(clip.name, range_count, range_count, **final_kw)
+
+        # Launch all threads
+        threads = (
+            [threading.Thread(target=reader, name="ck-reader")] +
+            [threading.Thread(target=worker, args=(i,), name=f"ck-worker-{i}") for i in range(N)] +
+            [threading.Thread(target=writer, name="ck-writer")]
+        )
+        for t in threads:
+            t.start()
+
+        for t in threads:
+            while t.is_alive():
+                t.join(timeout=0.5)
+                if job and job.is_cancelled and not stop.is_set():
+                    stop.set()
+
+        if error_box[0]:
+            raise error_box[0]
+        if job and job.is_cancelled:
+            raise JobCancelledError(clip.name, 0)
+
+        return self._finalize_inference(
+            clip, results, skipped, processed_count_box[0],
+            t_start, frame_range, num_frames,
+            on_warning=on_warning,
+        )
+
+    def _finalize_inference(
+        self,
+        clip: ClipEntry,
+        results: list[FrameResult],
+        skipped: list[int],
+        processed_count: int,
+        t_start: float,
+        frame_range: Optional[tuple[int, int]],
+        num_frames: int,
+        on_warning: Optional[Callable[[str], None]] = None,
+    ) -> list[FrameResult]:
+        """Shared post-processing for sequential and parallel inference."""
+        range_count = len(results) if results else 0
         processed = sum(1 for r in results if r.success)
         if skipped:
             msg = (
@@ -1017,7 +1392,6 @@ class CorridorKeyService:
             f"in {t_total:.1f}s ({t_total / max(processed, 1):.2f}s/frame, {avg_fps:.1f} fps avg)"
         )
 
-        # State transition — only set COMPLETE if full clip was processed
         is_full_clip = (frame_range is None or
                         (frame_range[0] == 0 and frame_range[1] >= num_frames - 1))
         if processed == range_count and is_full_clip:
@@ -1032,7 +1406,7 @@ class CorridorKeyService:
 
     def is_engine_loaded(self) -> bool:
         """True if the inference engine is already loaded in VRAM."""
-        return self._active_model == _ActiveModel.INFERENCE and self._engine is not None
+        return self._active_model == _ActiveModel.INFERENCE and len(self._engine_pool) > 0
 
     def reprocess_single_frame(
         self,
@@ -1055,7 +1429,8 @@ class CorridorKeyService:
             return None
 
         with self._gpu_lock:
-            engine = self._get_engine()
+            engines = self._get_engine_pool()
+            engine = engines[0]
 
         # Read the specific input frame
         is_linear = params.input_is_linear
