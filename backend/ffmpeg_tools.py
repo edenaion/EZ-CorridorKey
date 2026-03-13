@@ -945,8 +945,14 @@ def build_exr_vf(video_info: dict) -> str:
     # Only in_color_matrix and in_range are standard swscale options.
     # in_primaries / in_transfer are NOT supported by FFmpeg's scale filter
     # and cause "Option not found" on standard builds.
+    #
+    # FFmpeg 8.x swscaler rejects YUV→RGB when TRC is null (bug #11585).
+    # Prepend setparams to tag the missing TRC — metadata only, no pixel math.
+    raw_ct = _clean_color_value(video_info.get("color_transfer"))
+    prefix = f"setparams=color_trc={ct}," if not raw_ct else ""
+
     return (
-        f"scale=in_color_matrix={cs}:in_range={cr},format=gbrpf32le"
+        f"{prefix}scale=in_color_matrix={cs}:in_range={cr},format=gbrpf32le"
     )
 
 
@@ -1057,7 +1063,6 @@ def extract_frames(
         return [
             ffmpeg,
             *hw_flags,
-            *color_fix_flags,
             "-i", video_path,
             "-start_number", "0",
             "-vsync", "passthrough",
