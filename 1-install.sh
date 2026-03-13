@@ -248,11 +248,16 @@ else
             if command -v brew &>/dev/null; then
                 INSTALL_FFMPEG="${CORRIDORKEY_INSTALL_FFMPEG:-}"
                 if [ -z "$INSTALL_FFMPEG" ]; then
-                    read -rp "  FFmpeg not found. Install via Homebrew? [Y/n]: " INSTALL_FFMPEG
+                    if [ -t 0 ]; then
+                        read -rp "  FFmpeg not found. Install via Homebrew? [Y/n]: " INSTALL_FFMPEG
+                    else
+                        INSTALL_FFMPEG="y"
+                        echo "  Non-interactive shell detected — defaulting to Homebrew FFmpeg install."
+                    fi
                 fi
                 if [[ "$(echo "${INSTALL_FFMPEG:-y}" | tr '[:upper:]' '[:lower:]')" != "n" ]]; then
                     echo "  Installing FFmpeg via Homebrew..."
-                    brew install ffmpeg
+                    brew list ffmpeg >/dev/null 2>&1 || brew install ffmpeg
                     if .venv/bin/python scripts/check_ffmpeg.py; then
                         echo "  [OK] FFmpeg installed successfully"
                     else

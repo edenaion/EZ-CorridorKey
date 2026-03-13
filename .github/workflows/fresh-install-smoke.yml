@@ -42,6 +42,7 @@ jobs:
       CORRIDORKEY_INSTALL_GVM: n
       CORRIDORKEY_INSTALL_VIDEOMAMA: n
       CORRIDORKEY_CREATE_SHORTCUT: n
+      CORRIDORKEY_INSTALL_FFMPEG: y
 
     steps:
       - name: Checkout
@@ -87,7 +88,7 @@ jobs:
       - name: CUDA detection locale smoke test (Windows)
         if: runner.os == 'Windows'
         shell: cmd
-        run: scripts\test_cuda_detect.bat
+        run: call scripts\test_cuda_detect.bat
 
       - name: Run Windows installer
         if: runner.os == 'Windows'
