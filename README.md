@@ -392,6 +392,7 @@ Tiling optimization by [MarcelLieb](https://github.com/MarcelLieb).
 If you use or build on this project, please star this repo and credit the contributors <3
 
 Optional modules:
+- **SAM 2.1** ([facebookresearch/sam2](https://github.com/facebookresearch/sam2)) — Apache 2.0
 - **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
 - **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License
 - **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) — Apache 2.0
