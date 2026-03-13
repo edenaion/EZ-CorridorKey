@@ -4,6 +4,34 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.6.6] - 2026-03-13 — Parallel Frames & Apple Silicon UX
+
+### Improvements
+- **Parallel frames raised to 1-64** — for high-memory CUDA systems (RTX 6000, multi-GPU workstations). OOM-safe: if you set more engines than memory can handle, the app automatically scales back. Values above 8 are marked experimental in the tooltip.
+- **Note:** MLX (Apple Silicon) remains capped at 1 engine. Multi-engine parallelization is CUDA-only for now.
+
+### Bug Fixes
+- **Fix MLX crash on older corridorkey_mlx** — `CorridorKeyMLXEngine.__init__()` may not accept `tile_size`/`overlap` kwargs on older versions. Now falls back to full-frame inference gracefully.
+
+---
+
+## [1.6.4] - 2026-03-13 — Apple Silicon Memory Display
+
+### Improvements
+- **Unified memory display on Apple Silicon** — GPU info bar now shows system memory usage instead of "No GPU" on Macs. Label shows "Memory" instead of "VRAM" since Apple Silicon shares RAM between CPU and GPU.
+- Detects Apple chip name (e.g. "Apple M3 Max") via sysctl
+
+---
+
+## [1.6.3] - 2026-03-13 — MLX Auto-Download
+
+### Improvements
+- **Auto-download MLX checkpoint** — Apple Silicon users no longer need to manually download or set environment variables for `.safetensors` weights. Fresh installs and updates handle it automatically.
+- `setup_models.py --corridorkey-mlx` flag for manual download with SHA256 verification
+- `--all` on Apple Silicon auto-includes MLX weights
+
+---
+
 ## [1.6.2] - 2026-03-13 — Live Preview Fix
 
 ### Bug Fixes
