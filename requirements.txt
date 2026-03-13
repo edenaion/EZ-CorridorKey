@@ -18,6 +18,6 @@ tqdm
 accelerate
 transformers
 matplotlib
-pynvml
+nvidia-ml-py
 PySide6>=6.7.0
 triton-windows>=3.5,<3.6; sys_platform == 'win32'

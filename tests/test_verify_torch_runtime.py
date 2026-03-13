@@ -1,3 +1,7 @@
+import sys
+import types
+
+from scripts import verify_torch_runtime
 from scripts.verify_torch_runtime import RuntimeInfo, evaluate_runtime
 
 
@@ -65,3 +69,31 @@ def test_cpu_runtime_passes_when_no_gpu_is_expected():
     )
     assert ok is True
     assert "CPU runtime verified" in message
+
+
+def test_collect_runtime_info_skips_torch_cuda_on_macos(monkeypatch):
+    fake_torch = types.ModuleType("torch")
+    fake_torch.__version__ = "2.9.1"
+    fake_torch.version = types.SimpleNamespace(cuda="")
+    fake_torch.backends = types.SimpleNamespace(
+        mps=types.SimpleNamespace(is_available=lambda: True, is_built=lambda: True)
+    )
+
+    def _module_getattr(name):
+        if name == "cuda":
+            raise AssertionError("torch.cuda should not be touched on macOS verification")
+        raise AttributeError(name)
+
+    fake_torch.__getattr__ = _module_getattr
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.delitem(sys.modules, "torchvision", raising=False)
+    monkeypatch.setattr(verify_torch_runtime.platform, "platform", lambda: "macOS-15.0-arm64-arm-64bit")
+    monkeypatch.setattr(verify_torch_runtime, "find_nvidia_smi", lambda: "")
+
+    info = verify_torch_runtime.collect_runtime_info()
+
+    assert info.platform.startswith("macOS")
+    assert info.cuda_available is False
+    assert info.cuda_device_count == 0
+    assert info.mps_available is True

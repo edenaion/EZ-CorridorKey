@@ -166,7 +166,30 @@ else
     exit 1
 fi
 
-echo "[4c/6] Optional SAM2 tracker..."
+# ── Step 4c: MLX acceleration for Apple Silicon ──
+if [ "$OS_TYPE" = "macos" ] && [ "$(uname -m)" = "arm64" ]; then
+    echo "[4c/6] Installing MLX acceleration for Apple Silicon..."
+    MLX_OK=0
+    if [ "$UV_AVAILABLE" -eq 1 ]; then
+        if uv pip install --python .venv/bin/python -e ".[mlx]" 2>&1; then
+            MLX_OK=1
+        fi
+    else
+        if .venv/bin/python -m pip install -e ".[mlx]" 2>&1; then
+            MLX_OK=1
+        fi
+    fi
+    if [ "$MLX_OK" -eq 1 ]; then
+        echo "  [OK] MLX acceleration installed (1.5-2x faster inference on Apple Silicon)"
+    else
+        echo "  [WARN] MLX install failed. CorridorKey will use PyTorch MPS instead."
+        echo "  You can retry later with: .venv/bin/python -m pip install -e '.[mlx]'"
+    fi
+else
+    echo "[4c/6] MLX acceleration — skipped (Apple Silicon only)"
+fi
+
+echo "[4d/6] Optional SAM2 tracker..."
 INSTALL_SAM2="y"
 if [ "$OS_TYPE" = "macos" ]; then
     echo "  [NOTE] SAM2 tracking on macOS is experimental in CorridorKey."

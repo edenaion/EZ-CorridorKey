@@ -67,6 +67,12 @@ def read_nvidia_smi_summary(path: str) -> str:
     return text.splitlines()[0][:400]
 
 
+def should_probe_cuda(platform_name: str, nvidia_smi_path: str, torch_cuda_version: str) -> bool:
+    if platform_name.lower().startswith("macos") or sys.platform == "darwin":
+        return False
+    return bool(nvidia_smi_path or torch_cuda_version)
+
+
 def collect_runtime_info() -> RuntimeInfo:
     import torch  # Imported lazily so installer can surface import failures cleanly.
 
@@ -78,19 +84,28 @@ def collect_runtime_info() -> RuntimeInfo:
     except Exception:
         torchvision_version = ""
 
-    cuda = _safe_getattr(torch, "cuda", None)
     backends = _safe_getattr(torch, "backends", None)
     mps = _safe_getattr(backends, "mps", None) if backends is not None else None
 
+    platform_name = platform.platform()
     nvidia_smi_path = find_nvidia_smi()
+    torch_cuda_version = getattr(_safe_getattr(torch, "version", None), "cuda", "") or ""
+    cuda = None
+    cuda_available = False
+    cuda_device_count = 0
+    if should_probe_cuda(platform_name, nvidia_smi_path, torch_cuda_version):
+        cuda = _safe_getattr(torch, "cuda", None)
+        cuda_available = bool(cuda and cuda.is_available())
+        cuda_device_count = int(cuda.device_count()) if cuda and cuda_available else 0
+
     return RuntimeInfo(
-        platform=platform.platform(),
+        platform=platform_name,
         python_version=sys.version.split()[0],
         torch_version=getattr(torch, "__version__", "") or "",
         torchvision_version=torchvision_version,
-        torch_cuda_version=getattr(_safe_getattr(torch, "version", None), "cuda", "") or "",
-        cuda_available=bool(cuda and cuda.is_available()),
-        cuda_device_count=int(cuda.device_count()) if cuda and cuda.is_available() else 0,
+        torch_cuda_version=torch_cuda_version,
+        cuda_available=cuda_available,
+        cuda_device_count=cuda_device_count,
         mps_available=bool(mps and mps.is_available()),
         mps_built=bool(mps and mps.is_built()),
         nvidia_smi_path=nvidia_smi_path,

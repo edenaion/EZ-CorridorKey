@@ -16,7 +16,6 @@ import json
 import os
 import shutil
 import sys
-import glob as glob_module
 import importlib
 import gc
 import logging
@@ -531,6 +530,9 @@ class CorridorKeyService:
         Creates up to _pool_size engines. If the pool already has enough
         engines, returns immediately. OOM during creation shrinks the pool
         to however many engines fit in VRAM.
+
+        Uses the backend factory to auto-detect MLX on Apple Silicon.
+        MLX forces pool_size=1 (unified memory, no multi-engine benefit).
         """
         self._ensure_model(_ActiveModel.INFERENCE, on_status=on_status)
 
@@ -538,48 +540,40 @@ class CorridorKeyService:
         if len(self._engine_pool) >= self._pool_size:
             return self._engine_pool[:self._pool_size]
 
-        from CorridorKeyModule.inference_engine import CorridorKeyEngine
+        from CorridorKeyModule.backend import create_engine, resolve_backend
 
-        ckpt_dir = os.path.join(BASE_DIR, "CorridorKeyModule", "checkpoints")
-        ckpt_files = glob_module.glob(os.path.join(ckpt_dir, "*.pth"))
-
-        if len(ckpt_files) == 0:
-            raise FileNotFoundError(f"No .pth checkpoint found in {ckpt_dir}")
-        elif len(ckpt_files) > 1:
-            raise ValueError(
-                f"Multiple checkpoints found in {ckpt_dir}. "
-                f"Please ensure only one exists: {[os.path.basename(f) for f in ckpt_files]}"
-            )
-
-        ckpt_path = ckpt_files[0]
+        backend = resolve_backend()
         opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
+        _img_size = 1024 if self._device == 'mps' else 2048
+
+        # MLX: unified memory, single engine only
+        pool_size = 1 if backend == "mlx" else self._pool_size
 
         # Create engines serially (warmup each before creating next)
         import torch
-        for i in range(len(self._engine_pool), self._pool_size):
+        for i in range(len(self._engine_pool), pool_size):
             if on_status:
-                on_status(f"Loading engine {i + 1}/{self._pool_size}...")
-            logger.info(f"Creating engine {i + 1}/{self._pool_size}: {os.path.basename(ckpt_path)}")
+                on_status(f"Loading engine {i + 1}/{pool_size}...")
+            logger.info("Creating engine %d/%d (backend=%s)", i + 1, pool_size, backend)
             t0 = time.monotonic()
             try:
-                # MPS (Apple Silicon): use 1024 to keep SDPA within unified memory
-                _img_size = 1024 if self._device == 'mps' else 2048
-                engine = CorridorKeyEngine(
-                    checkpoint_path=ckpt_path,
+                engine = create_engine(
+                    backend=backend,
                     device=self._device,
                     img_size=_img_size,
                     optimization_mode=opt_mode,
-                    on_status=on_status if i == 0 else None,  # status only for first
+                    on_status=on_status if i == 0 else None,
                 )
                 self._engine_pool.append(engine)
                 logger.info(f"Engine {i + 1} loaded in {time.monotonic() - t0:.1f}s")
             except (RuntimeError, torch.cuda.OutOfMemoryError):
                 logger.warning(
                     "OOM creating engine %d/%d, using %d engine(s)",
-                    i + 1, self._pool_size, len(self._engine_pool),
+                    i + 1, pool_size, len(self._engine_pool),
                 )
                 gc.collect()
-                torch.cuda.empty_cache()
+                if backend == "torch":
+                    torch.cuda.empty_cache()
                 break
 
         if not self._engine_pool:
