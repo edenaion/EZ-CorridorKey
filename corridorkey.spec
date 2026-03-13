@@ -13,6 +13,7 @@ Notes:
 """
 import os
 import sys
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
@@ -53,6 +54,13 @@ hiddenimports = [
     'ui.preview.display_transform',
     'ui.preview.async_decoder',
 ]
+
+for dynamic_pkg in ('modules.MatAnyone2Module', 'MatAnyone2Module'):
+    try:
+        hiddenimports += collect_submodules(dynamic_pkg)
+        datas += collect_data_files(dynamic_pkg)
+    except Exception:
+        pass
 
 a = Analysis(
     [os.path.join(ROOT, 'main.py')],

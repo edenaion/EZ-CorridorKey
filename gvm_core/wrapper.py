@@ -27,7 +27,8 @@ def seed_all(seed: int = 0):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 def impad_multi(img, multiple=32):
     # img: (N, C, H, W)
@@ -161,28 +162,33 @@ class GVMProcessor:
             else:
                 orig_h, orig_w = 1080, 1920 # Fallback
 
+        # MPS (Apple Silicon): reduce resolution to fit in unified memory.
+        # SDPA on MPS has no FlashAttention, so O(N^2) memory scales fast.
+        is_mps = self.device.type == 'mps'
+        _base_res = 512 if is_mps else 1024
+        _scale_cap = 960 if is_mps else 1920
+
         target_h = orig_h
-        if target_h < 1024:
-            scale_ratio = 1024 / target_h
-            target_h = 1024
-        
+        if target_h < _base_res:
+            scale_ratio = _base_res / target_h
+            target_h = _base_res
+
         # Calculate max resolution / long edge
         if orig_h < orig_w: # Landscape
             ratio = orig_w / orig_h
-            new_long = int(1024 * ratio)
+            new_long = int(_base_res * ratio)
         else:
             ratio = orig_h / orig_w
-            new_long = int(1024 * ratio)
-            
-        scale_cap = 1920
-        if new_long > scale_cap:
-            new_long = scale_cap
-        
-        max_res_param = new_long 
+            new_long = int(_base_res * ratio)
+
+        if new_long > _scale_cap:
+            new_long = _scale_cap
+
+        max_res_param = new_long
 
         transform = Compose([
             ToTensor(),
-            Resize(size=1024, max_size=max_res_param, antialias=True)
+            Resize(size=_base_res, max_size=max_res_param, antialias=True)
         ])
 
         if is_video:

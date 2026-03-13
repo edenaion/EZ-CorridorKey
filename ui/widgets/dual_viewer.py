@@ -16,7 +16,6 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QImage
 
 from backend import ClipEntry
-from backend.project import is_image_file
 from ui.preview.frame_index import FrameIndex, ViewMode
 from ui.widgets.preview_viewport import PreviewViewport
 from ui.widgets.frame_scrubber import FrameScrubber
@@ -131,6 +130,30 @@ class DualViewerPanel(QWidget):
             if self._clip:
                 self._update_coverage(self._clip, fi)
 
+    def refresh_generated_assets(self) -> None:
+        """Refresh output availability in place while preserving the current frame.
+
+        Used for live progress updates so the scrubber coverage and mode buttons
+        stay current without forcing a full clip reselection.
+        """
+        if self._clip is None:
+            return
+
+        current_frame = self._scrubber.current_frame()
+        self._output_viewer.refresh_available_assets()
+
+        fi = self._output_viewer._frame_index
+        if fi is None:
+            return
+
+        self._scrubber.set_range(fi.frame_count)
+        clamped_frame = min(current_frame, max(0, fi.frame_count - 1))
+        if fi.frame_count > 0:
+            self._scrubber.set_frame(clamped_frame)
+            if self._input_viewer.current_stem_index != clamped_frame:
+                self._input_viewer.navigate_to_frame(clamped_frame)
+        self._update_coverage(self._clip, fi)
+
     def show_placeholder(self, text: str = "No clip selected") -> None:
         """Show placeholder on both viewers."""
         self._input_viewer.show_placeholder(text)
@@ -170,14 +193,8 @@ class DualViewerPanel(QWidget):
             self._scrubber.set_coverage([], [])
             return
 
-        # Alpha coverage: scan AlphaHint/ directory for matching stems
-        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
-        alpha_stems: set[str] = set()
-        if os.path.isdir(alpha_dir):
-            for fname in os.listdir(alpha_dir):
-                stem, ext = os.path.splitext(fname)
-                if is_image_file(fname):
-                    alpha_stems.add(stem)
+        # Alpha coverage: use frame index availability for ALPHA mode
+        alpha_stems = fi.availability.get(ViewMode.ALPHA, set())
 
         # Inference coverage: any output mode (FG, Matte, Comp, Processed) has this stem
         output_modes = (ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED)

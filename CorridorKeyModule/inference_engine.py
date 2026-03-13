@@ -104,14 +104,22 @@ class CorridorKeyEngine:
         # context) so it's safe during model handoff (GVM -> inference).
         # The old torch.cuda.get_device_properties() call stalled after
         # GVM teardown — pynvml doesn't have that problem.
+        # MPS (Apple Silicon): always use lowvram mode — unified memory is
+        # shared with the OS, and torch.compile/Triton doesn't support Metal.
+        is_mps = self.device.type == 'mps'
+        if is_mps:
+            optimization_mode = 'lowvram'
+            logger.info("MPS device detected — forcing low-VRAM mode (no torch.compile on Metal)")
+
         if optimization_mode == 'speed':
             self.tile_size = 0
             self._use_compile = True
             logger.info("Optimization: speed mode (torch.compile, no tiling)")
         elif optimization_mode == 'lowvram':
             self.tile_size = 512
-            self._use_compile = True
-            logger.info("Optimization: low-VRAM mode (tiled refiner 512x512 + selective torch.compile)")
+            self._use_compile = not is_mps  # Triton/inductor doesn't support MPS
+            logger.info(f"Optimization: low-VRAM mode (tiled refiner 512x512"
+                        f"{'' if self._use_compile else ', no torch.compile'})")
         else:  # auto
             logger.info("Optimization: auto mode - probing VRAM...")
             vram_gb = self._get_vram_gb()
@@ -389,6 +397,14 @@ class CorridorKeyEngine:
 
             if self._use_compile:
                 try:
+                    # Enable FX graph caching — skips Triton tracing on subsequent runs.
+                    # First launch pays the full compile cost; every launch after is near-instant.
+                    try:
+                        torch._inductor.config.fx_graph_cache = True
+                        logger.info("FX graph cache enabled (subsequent launches will skip recompilation)")
+                    except AttributeError:
+                        logger.debug("FX graph cache config not available in this PyTorch version")
+
                     t0 = _time.monotonic()
                     self._compiled_model = torch.compile(eager_model, fullgraph=False)
                     model = self._compiled_model

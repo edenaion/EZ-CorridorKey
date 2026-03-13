@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 import os
+import ctypes
 import logging
 
 from PySide6.QtWidgets import QApplication, QMessageBox, QDialogButtonBox
@@ -42,6 +43,38 @@ def _configure_runtime_backends() -> None:
 
     if sys.platform != "win32":
         return
+
+    # Disable Windows Efficiency Mode (EcoQoS) for this process.
+    # Without this, Windows 11 aggressively throttles background processes,
+    # starving our GPU worker thread of CPU time and stalling CUDA inference.
+    try:
+        class _POWER_THROTTLING_STATE(ctypes.Structure):
+            _fields_ = [
+                ("Version", ctypes.c_ulong),
+                ("ControlMask", ctypes.c_ulong),
+                ("StateMask", ctypes.c_ulong),
+            ]
+
+        state = _POWER_THROTTLING_STATE()
+        state.Version = 1  # PROCESS_POWER_THROTTLING_CURRENT_VERSION
+        state.ControlMask = 0x1  # PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+        state.StateMask = 0  # 0 = disable throttling
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        handle = kernel32.GetCurrentProcess()
+        ok = kernel32.SetProcessInformation(
+            handle,
+            4,  # ProcessPowerThrottling
+            ctypes.byref(state),
+            ctypes.sizeof(state),
+        )
+        if ok:
+            logger.info("Disabled Windows power throttling (EcoQoS)")
+        else:
+            logger.debug("SetProcessInformation failed: %s",
+                         ctypes.get_last_error())
+    except Exception as exc:
+        logger.debug("Power throttling opt-out skipped: %s", exc)
 
     try:
         import cv2

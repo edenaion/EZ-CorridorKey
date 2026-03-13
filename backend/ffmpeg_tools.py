@@ -327,9 +327,41 @@ def repair_ffmpeg_install(
     """Repair FFmpeg for the current platform.
 
     On Windows, downloads and installs a bundled full build into tools/ffmpeg.
-    Other platforms return install guidance instead of mutating the system.
+    On macOS, installs via Homebrew (no sudo needed).
+    On Linux, raises with install instructions (sudo requires a terminal).
     """
+    if sys.platform == "darwin":
+        def _emit(phase: str, current: int = 0, total: int = 0) -> None:
+            if progress_callback:
+                progress_callback(phase, current, total)
+
+        if not shutil.which("brew"):
+            raise RuntimeError(
+                "Homebrew is not installed.\n\n"
+                "Install it first:\n"
+                '  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"\n\n'
+                "Then retry Repair FFmpeg."
+            )
+
+        _emit("Installing FFmpeg via Homebrew", 0, 0)
+        try:
+            subprocess.run(
+                ["brew", "install", "ffmpeg"],
+                check=True, capture_output=True, text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                f"FFmpeg install failed:\n{exc.stderr or exc.stdout or str(exc)}"
+            ) from exc
+
+        _emit("Validating FFmpeg", 0, 0)
+        result = validate_ffmpeg_install(require_probe=True)
+        if not result.ok:
+            raise RuntimeError(result.message)
+        return result
+
     if sys.platform != "win32":
+        # Linux: needs sudo, can't run from GUI — show instructions instead
         raise RuntimeError(get_ffmpeg_install_help())
 
     def _emit(phase: str, current: int = 0, total: int = 0) -> None:
@@ -913,8 +945,14 @@ def build_exr_vf(video_info: dict) -> str:
     # Only in_color_matrix and in_range are standard swscale options.
     # in_primaries / in_transfer are NOT supported by FFmpeg's scale filter
     # and cause "Option not found" on standard builds.
+    #
+    # FFmpeg 8.x swscaler rejects YUV→RGB when TRC is null (bug #11585).
+    # Prepend setparams to tag the missing TRC — metadata only, no pixel math.
+    raw_ct = video_info.get("color_transfer")
+    prefix = f"setparams=color_trc={ct}," if raw_ct is None else ""
+
     return (
-        f"scale=in_color_matrix={cs}:in_range={cr},format=gbrpf32le"
+        f"{prefix}scale=in_color_matrix={cs}:in_range={cr},format=gbrpf32le"
     )
 
 

@@ -23,6 +23,7 @@ import re
 import shutil
 import sys
 
+import cv2
 import numpy as np
 from PySide6.QtWidgets import (
     QMainWindow, QSplitter, QVBoxLayout, QWidget,
@@ -41,6 +42,8 @@ from backend import (
 from backend.project import VIDEO_FILE_FILTER
 
 from ui.models.clip_model import ClipListModel
+from ui.preview.frame_index import ViewMode
+from ui.preview.display_transform import processed_rgba_to_qimage
 from ui.widgets.dual_viewer import DualViewerPanel
 from ui.widgets.parameter_panel import ParameterPanel
 from ui.widgets.status_bar import StatusBar
@@ -191,6 +194,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("CORRIDORKEY")
         self.setMinimumSize(1100, 650)
         self.resize(1400, 800)
+        self.setAcceptDrops(True)
 
         self._service = service or CorridorKeyService()
         self._recent_store = store or RecentSessionsStore()
@@ -221,6 +225,14 @@ class MainWindow(QMainWindow):
         self._reprocess_timer.setInterval(200)
         self._reprocess_timer.timeout.connect(self._do_reprocess)
 
+        # Live selected-clip refresh: coalesce worker progress into a cheap UI-only
+        # asset rescan so the scrubber and mode buttons update while frames are written.
+        self._live_asset_refresh_timer = QTimer(self)
+        self._live_asset_refresh_timer.setSingleShot(True)
+        self._live_asset_refresh_timer.setInterval(150)
+        self._live_asset_refresh_timer.timeout.connect(self._refresh_selected_clip_live_assets)
+        self._pending_live_asset_refresh_clip: str | None = None
+
         # Shortcut registry — single source of truth for key bindings
         self._shortcut_registry = ShortcutRegistry()
 
@@ -231,7 +243,14 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
 
         # Workers
-        self._gpu_worker = GPUJobWorker(self._service, parent=self)
+        from ui.widgets.preferences_dialog import (
+            get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS,
+        )
+        self._gpu_worker = GPUJobWorker(
+            self._service,
+            max_workers=get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS),
+            parent=self,
+        )
         self._gpu_monitor = GPUMonitor(interval_ms=2000, parent=self)
         self._extract_worker = ExtractWorker(parent=self)
         self._extract_progress: dict[str, tuple[int, int]] = {}  # clip_name -> (current, total)
@@ -295,8 +314,8 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Preferences...", self._show_preferences)
         edit_menu.addAction("Hotkeys...", self._show_hotkeys)
         edit_menu.addSeparator()
-        edit_menu.addAction("Track Annotation Masks", self._on_track_masks)
-        edit_menu.addAction("Clear Annotations", self._on_clear_annotations)
+        edit_menu.addAction("Track Paint Masks", self._on_track_masks)
+        edit_menu.addAction("Clear Paint Strokes", self._on_clear_annotations)
 
         # View menu
         view_menu = menu_bar.addMenu("View")
@@ -681,18 +700,17 @@ class MainWindow(QMainWindow):
             )
             if os.path.isfile(manifest_path):
                 os.remove(manifest_path)
-            self._param_panel.set_videomama_enabled(
-                self._clip_has_videomama_ready_mask(self._current_clip)
-            )
+            _has_mask = self._clip_has_videomama_ready_mask(self._current_clip)
+            self._param_panel.set_videomama_enabled(_has_mask)
+            self._param_panel.set_matanyone2_enabled(_has_mask)
 
     def _clip_has_videomama_ready_mask(self, clip: ClipEntry | None) -> bool:
-        """True when the clip has a dense mask track VideoMaMa can consume."""
+        """True when the clip has a dense mask track that alpha generators can consume."""
         if clip is None or clip.mask_asset is None:
             return False
-        if mask_sequence_is_videomama_ready(clip.root_path):
-            return True
-        ann_path = os.path.join(clip.root_path, "annotations.json")
-        return not (os.path.isfile(ann_path) and os.path.getsize(ann_path) > 2)
+        # mask_asset is set only when VideoMamaMaskHint/ has actual frames —
+        # that's sufficient to enable alpha generators regardless of manifest.
+        return True
 
     def _undo_annotation(self) -> None:
         """Ctrl+Z: undo last annotation stroke on current frame."""
@@ -702,8 +720,33 @@ class MainWindow(QMainWindow):
                 iv._split_view.update()
                 self._auto_save_annotations()
 
+    _mps_warning_acknowledged = False
+
+    def _warn_mps_slow(self, feature_name: str) -> bool:
+        """Show a one-time performance warning on MPS. Returns False if user cancels."""
+        if getattr(self._service, '_device', '') != 'mps':
+            return True
+        if MainWindow._mps_warning_acknowledged:
+            return True
+        reply = QMessageBox.warning(
+            self,
+            f"{feature_name} — Mac Performance Warning",
+            "GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) "
+            "are very slow on Mac (Apple Silicon MPS).\n\n"
+            "This may take hours for longer clips and could freeze your system.\n\n"
+            "Recommendation: Import pre-made alpha mattes from After Effects, "
+            "DaVinci Resolve, or Nuke instead.\n\n"
+            "Continue anyway? (This warning won't appear again this session.)",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            MainWindow._mps_warning_acknowledged = True
+            return True
+        return False
+
     def _on_track_masks(self) -> None:
-        """Run SAM2 to convert sparse annotations into dense VideoMaMa masks."""
+        """Preview SAM2 on the annotated frame, then confirm full tracking."""
         clip = self._current_clip
         if clip is None:
             return
@@ -712,13 +755,23 @@ class MainWindow(QMainWindow):
         model = iv.annotation_model
         if not model.has_annotations():
             QMessageBox.information(
-                self, "No Annotations",
+                self, "No Paint Strokes",
                 "Paint green (1) and red (2) strokes on frames first.",
             )
             return
 
-        # If AlphaHint already exists, it must be removed so the clip drops
-        # to MASKED state before a new tracked mask sequence is generated.
+        if not self._warn_mps_slow("SAM2 Track Mask"):
+            return
+
+        job = create_job_snapshot(clip, self._param_panel.get_params(), job_type=JobType.SAM2_PREVIEW)
+        job.params["_frame_index"] = max(0, self._dual_viewer.current_stem_index)
+        if not self._service.job_queue.submit(job):
+            return
+
+        self._start_worker_if_needed(job.id, job_label="Track Preview")
+
+    def _submit_sam2_track_job(self, clip: ClipEntry) -> bool:
+        """Queue the full SAM2 tracking job after preview confirmation."""
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
             reply = QMessageBox.question(
@@ -728,19 +781,34 @@ class MainWindow(QMainWindow):
                 "Remove existing AlphaHint and proceed?",
             )
             if reply != QMessageBox.Yes:
-                return
+                return False
             shutil.rmtree(alpha_dir, ignore_errors=True)
             clip.alpha_asset = None
             clip.find_assets()
             self._refresh_button_state()
             logger.info("Removed existing AlphaHint/ before SAM2 tracking")
 
-        job = create_job_snapshot(clip, job_type=JobType.SAM2_TRACK)
+        job = create_job_snapshot(clip, self._param_panel.get_params(), job_type=JobType.SAM2_TRACK)
         if not self._service.job_queue.submit(job):
-            return
+            return False
 
         clip.set_processing(True)
         self._start_worker_if_needed(job.id, job_label="Track Mask")
+        return True
+
+    @staticmethod
+    def _sam2_preview_qimage(frame_rgb: np.ndarray, mask: np.ndarray) -> QImage:
+        """Render a contour-only SAM2 preview for the output viewer."""
+        overlay = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+        contours, _ = cv2.findContours(
+            (mask > 0).astype(np.uint8),
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
+        cv2.drawContours(overlay, contours, -1, (0, 230, 255), 4)
+        rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+        h, w = rgb.shape[:2]
+        return QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
 
     def _confirm_clear_annotations(self) -> None:
         """Ctrl+C: choose to clear annotations on this frame, entire clip, or cancel."""
@@ -753,7 +821,7 @@ class MainWindow(QMainWindow):
         has_frame = model.has_annotations(stem_idx)
 
         box = QMessageBox(self)
-        box.setWindowTitle("Clear Annotations")
+        box.setWindowTitle("Clear Paint Strokes")
         box.setText("What would you like to clear?")
         frame_btn = box.addButton("This Frame", QMessageBox.AcceptRole)
         clip_btn = box.addButton("Entire Clip", QMessageBox.DestructiveRole)
@@ -791,9 +859,9 @@ class MainWindow(QMainWindow):
                 os.remove(manifest_path)
             clip.mask_asset = None
             clip.find_assets()
-            self._param_panel.set_videomama_enabled(
-                self._clip_has_videomama_ready_mask(clip)
-            )
+            _has_mask = self._clip_has_videomama_ready_mask(clip)
+            self._param_panel.set_videomama_enabled(_has_mask)
+            self._param_panel.set_matanyone2_enabled(_has_mask)
 
     def _update_annotation_info(self) -> None:
         """Update parameter panel with current annotation count and scrubber markers."""
@@ -849,6 +917,7 @@ class MainWindow(QMainWindow):
         # Parameter panel — wire GVM / Track Mask / VideoMaMa
         self._param_panel.gvm_requested.connect(self._on_run_gvm)
         self._param_panel.videomama_requested.connect(self._on_run_videomama)
+        self._param_panel.matanyone2_requested.connect(self._on_run_matanyone2)
         self._param_panel.track_masks_requested.connect(self._on_track_masks)
         self._param_panel.import_alpha_requested.connect(self._on_import_alpha)
 
@@ -862,6 +931,10 @@ class MainWindow(QMainWindow):
 
         # Parameter panel — live reprocess (debounced, Codex: coalesce stale)
         self._param_panel.params_changed.connect(self._on_params_changed)
+        self._param_panel.parallel_frames_changed.connect(
+            lambda n: self._gpu_worker.set_max_workers(n)
+        )
+        self._param_panel._live_preview.toggled.connect(self._on_live_preview_toggled)
 
         # Sync IO tray divider with dual viewer splitter
         self._dual_viewer._viewer_splitter.splitterMoved.connect(self._sync_io_divider)
@@ -968,11 +1041,16 @@ class MainWindow(QMainWindow):
             needs_extraction=needs_extraction,
         )
 
-        # Enable GVM/VideoMaMa/Import Alpha buttons based on state
-        self._param_panel.set_gvm_enabled(clip.state == ClipState.RAW)
-        self._param_panel.set_videomama_enabled(
-            self._clip_has_videomama_ready_mask(clip)
-        )
+        # Default standalone EXR sequences to Linear, but keep extracted video
+        # EXRs in sRGB-range mode because FFmpeg writes video values as-is.
+        if clip.input_asset is not None:
+            self._param_panel.auto_detect_color_space(clip.should_default_input_linear())
+
+        # Enable GVM/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
+        self._param_panel.set_gvm_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
+        has_mask = self._clip_has_videomama_ready_mask(clip)
+        self._param_panel.set_videomama_enabled(has_mask)
+        self._param_panel.set_matanyone2_enabled(has_mask)
         self._param_panel.set_import_alpha_enabled(
             clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
         )
@@ -1661,6 +1739,12 @@ class MainWindow(QMainWindow):
         if self._param_panel.live_preview_enabled and self._service.is_engine_loaded():
             self._reprocess_timer.start()
 
+    @Slot(bool)
+    def _on_live_preview_toggled(self, checked: bool) -> None:
+        """When live preview is re-enabled, immediately reprocess current frame."""
+        if checked and self._service.is_engine_loaded():
+            self._reprocess_timer.start()
+
     def _do_reprocess(self) -> None:
         """Submit a PREVIEW_REPROCESS job through the GPU queue (Codex: no bypass)."""
         if self._current_clip is None:
@@ -1681,11 +1765,68 @@ class MainWindow(QMainWindow):
 
     @Slot(str, object)
     def _on_reprocess_result(self, job_id: str, result: object) -> None:
-        """Handle live reprocess result — display comp preview."""
-        if not isinstance(result, dict) or 'comp' not in result:
+        """Handle live reprocess result — display preview matching current view mode."""
+        if not isinstance(result, dict):
             return
-        comp = result['comp']
-        rgb = (np.clip(comp, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+        if result.get("kind") == "sam2_preview":
+            clip_name = result.get("clip_name")
+            if not isinstance(clip_name, str):
+                return
+            clip = next((c for c in self._clip_model.clips if c.name == clip_name), None)
+            if clip is None or self._current_clip is None or self._current_clip.name != clip_name:
+                return
+
+            frame_rgb = result.get("frame_rgb")
+            mask = result.get("mask")
+            if not isinstance(frame_rgb, np.ndarray) or not isinstance(mask, np.ndarray):
+                return
+
+            qimg = self._sam2_preview_qimage(frame_rgb, mask)
+            self._dual_viewer.show_reprocess_preview(qimg)
+
+            frame_number = int(result.get("frame_index", 0)) + 1
+            fill_pct = float(result.get("fill", 0.0)) * 100.0
+            reply = QMessageBox.question(
+                self,
+                "Track Mask Preview",
+                f"SAM2 preview on frame {frame_number} covers {fill_pct:.1f}% of the frame.\n\n"
+                "If this looks right, continue with full Track Mask.\n"
+                "If not, keep painting corrections on this frame and run Track Mask again.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if reply == QMessageBox.Yes:
+                self._submit_sam2_track_job(clip)
+            else:
+                self._status_bar.set_message("Track preview ready. Refine paint strokes and run Track Mask again.")
+            return
+
+        if 'comp' not in result:
+            return
+
+        mode = self._dual_viewer._output_viewer._current_mode
+
+        # Pick the array that matches current view mode
+        if mode == ViewMode.MATTE and 'alpha' in result:
+            arr = result['alpha']
+            if arr.ndim == 3:
+                arr = arr[:, :, 0]
+            # Matte display: clamp, light gamma lift, grayscale → RGB
+            display = np.power(np.clip(arr, 0.0, 1.0), 0.85)
+            gray8 = (display * 255.0).astype(np.uint8)
+            rgb = np.stack([gray8, gray8, gray8], axis=2)
+        elif mode == ViewMode.FG and 'fg' in result:
+            # FG is already sRGB float [H,W,3]
+            rgb = (np.clip(result['fg'], 0.0, 1.0) * 255.0).astype(np.uint8)
+        elif mode == ViewMode.PROCESSED and 'processed' in result:
+            qimg = processed_rgba_to_qimage(result['processed'])
+            self._dual_viewer.show_reprocess_preview(qimg)
+            return
+        else:
+            # Default: COMP (also for INPUT/MASK/ALPHA which don't change on reprocess)
+            rgb = (np.clip(result['comp'], 0.0, 1.0) * 255.0).astype(np.uint8)
+
         h, w = rgb.shape[:2]
         qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
         self._dual_viewer.show_reprocess_preview(qimg)
@@ -1887,7 +2028,7 @@ class MainWindow(QMainWindow):
                 job = create_job_snapshot(clip, job_type=JobType.GVM_ALPHA)
                 next_steps = [JobType.INFERENCE]
             elif route == PipelineRoute.VIDEOMAMA_PIPELINE:
-                job = create_job_snapshot(clip, job_type=JobType.SAM2_TRACK)
+                job = create_job_snapshot(clip, params, job_type=JobType.SAM2_TRACK)
                 next_steps = [JobType.VIDEOMAMA_ALPHA, JobType.INFERENCE]
             elif route == PipelineRoute.VIDEOMAMA_INFERENCE:
                 job = create_job_snapshot(clip, job_type=JobType.VIDEOMAMA_ALPHA)
@@ -2051,7 +2192,10 @@ class MainWindow(QMainWindow):
 
     def _on_run_gvm(self) -> None:
         """Run GVM alpha generation on the selected clip."""
-        if self._current_clip is None or self._current_clip.state != ClipState.RAW:
+        if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
+            return
+
+        if not self._warn_mps_slow("GVM Auto Alpha"):
             return
 
         # Detect partial alpha from a previous interrupted run
@@ -2102,12 +2246,39 @@ class MainWindow(QMainWindow):
             )
             return
 
+        if not self._warn_mps_slow("VideoMaMa Auto Alpha"):
+            return
+
         job = create_job_snapshot(self._current_clip, job_type=JobType.VIDEOMAMA_ALPHA)
         if not self._service.job_queue.submit(job):
             return
 
         self._current_clip.set_processing(True)
         self._start_worker_if_needed(job.id, job_label="VideoMaMa")
+
+    @Slot()
+    def _on_run_matanyone2(self) -> None:
+        """Run MatAnyone2 video matting alpha generation on the selected clip."""
+        if self._current_clip is None:
+            return
+        if not self._clip_has_videomama_ready_mask(self._current_clip):
+            QMessageBox.information(
+                self,
+                "Track Mask First",
+                "MatAnyone2 requires a tracked mask on frame 0.\n\n"
+                "Paint prompts and run Track Mask before using MatAnyone2.",
+            )
+            return
+
+        if not self._warn_mps_slow("MatAnyone2"):
+            return
+
+        job = create_job_snapshot(self._current_clip, job_type=JobType.MATANYONE2_ALPHA)
+        if not self._service.job_queue.submit(job):
+            return
+
+        self._current_clip.set_processing(True)
+        self._start_worker_if_needed(job.id, job_label="MatAnyone2")
 
     def _start_worker_if_needed(
         self,
@@ -2183,7 +2354,7 @@ class MainWindow(QMainWindow):
     # ── Worker Signal Handlers ──
 
     @Slot(str, str, int, int)
-    def _on_worker_progress(self, job_id: str, clip_name: str, current: int, total: int) -> None:
+    def _on_worker_progress(self, job_id: str, clip_name: str, current: int, total: int, fps: float = 0.0) -> None:
         if self._cancel_requested_job_id == job_id:
             self._queue_panel.refresh()
             return
@@ -2196,9 +2367,43 @@ class MainWindow(QMainWindow):
                 self._active_job_id = job_id
 
         if job_id == self._active_job_id:
-            self._status_bar.update_progress(current, total)
+            self._status_bar.update_progress(current, total, fps)
+
+        if self._current_clip and self._current_clip.name == clip_name:
+            self._schedule_live_asset_refresh(clip_name, current, total)
 
         self._queue_panel.refresh()
+
+    def _schedule_live_asset_refresh(self, clip_name: str, current: int, total: int) -> None:
+        """Coalesce progress-driven asset refreshes for the selected clip.
+
+        This keeps the feedback live without rescanning on every frame tick or
+        touching any GPU-side work.
+        """
+        if current <= 0 or total <= 0:
+            return
+
+        step = max(1, total // 50)
+        should_refresh = current <= 3 or current >= total or total <= 30 or current % step == 0
+        if not should_refresh:
+            return
+
+        self._pending_live_asset_refresh_clip = clip_name
+        if not self._live_asset_refresh_timer.isActive():
+            self._live_asset_refresh_timer.start()
+
+    @Slot()
+    def _refresh_selected_clip_live_assets(self) -> None:
+        """Refresh the selected clip's coverage/modes without resetting navigation."""
+        clip_name = self._pending_live_asset_refresh_clip
+        self._pending_live_asset_refresh_clip = None
+
+        if clip_name is None or self._current_clip is None:
+            return
+        if self._current_clip.name != clip_name:
+            return
+
+        self._dual_viewer.refresh_generated_assets()
 
     @Slot(str, str)
     def _on_worker_status(self, job_id: str, message: str) -> None:
@@ -2229,7 +2434,8 @@ class MainWindow(QMainWindow):
         # Map job type to correct next state.
         if job_type == JobType.SAM2_TRACK.value:
             target_state = ClipState.MASKED
-        elif job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value):
+        elif job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value,
+                          JobType.MATANYONE2_ALPHA.value):
             target_state = ClipState.READY
         else:
             target_state = ClipState.COMPLETE
@@ -2295,8 +2501,10 @@ class MainWindow(QMainWindow):
             if next_job:
                 _label_map = {
                     JobType.GVM_ALPHA: "GVM Auto",
+                    JobType.SAM2_PREVIEW: "Track Preview",
                     JobType.SAM2_TRACK: "Track Mask",
                     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
+                    JobType.MATANYONE2_ALPHA: "MatAnyone2",
                     JobType.INFERENCE: "Inference",
                 }
                 next_label = _label_map.get(next_job.job_type, "Pipeline")
@@ -2310,7 +2518,11 @@ class MainWindow(QMainWindow):
             self._status_bar.set_message(f"Track Mask complete for {clip_name}")
         elif target_state == ClipState.READY:
             UIAudio.mask_done()
-            type_label = "GVM Auto" if job_type == JobType.GVM_ALPHA.value else "VideoMaMa"
+            type_label = {
+                JobType.GVM_ALPHA.value: "GVM Auto",
+                JobType.VIDEOMAMA_ALPHA.value: "VideoMaMa",
+                JobType.MATANYONE2_ALPHA.value: "MatAnyone2",
+            }.get(job_type, "Alpha")
             # Show alpha coverage count
             alpha_info = ""
             for c in self._clip_model.clips:
@@ -2325,6 +2537,8 @@ class MainWindow(QMainWindow):
             self._status_bar.set_message(f"Inference complete: {clip_name}")
 
         # Refresh views
+        self._pending_live_asset_refresh_clip = None
+        self._live_asset_refresh_timer.stop()
         self._queue_panel.refresh()
         self._io_tray.refresh()
 
@@ -2332,9 +2546,9 @@ class MainWindow(QMainWindow):
         if self._current_clip and self._current_clip.name == clip_name:
             self._dual_viewer.set_clip(self._current_clip)
             self._refresh_button_state()
-            self._param_panel.set_videomama_enabled(
-                self._clip_has_videomama_ready_mask(self._current_clip)
-            )
+            _has_mask = self._clip_has_videomama_ready_mask(self._current_clip)
+            self._param_panel.set_videomama_enabled(_has_mask)
+            self._param_panel.set_matanyone2_enabled(_has_mask)
             self._param_panel.set_import_alpha_enabled(
                 self._current_clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
@@ -2363,6 +2577,8 @@ class MainWindow(QMainWindow):
             self._status_bar.stop_job_timer()
             self._status_bar.set_running(False)
             self._status_bar.set_message(f"Cancelled: {clip_name}")
+            self._pending_live_asset_refresh_clip = None
+            self._live_asset_refresh_timer.stop()
             self._queue_panel.refresh()
             logger.info(f"Job cancelled: {clip_name}")
         else:
@@ -2378,6 +2594,8 @@ class MainWindow(QMainWindow):
         self._status_bar.set_stop_button_mode(force=False)
         self._status_bar.stop_job_timer()
         self._status_bar.set_running(False)
+        self._pending_live_asset_refresh_clip = None
+        self._live_asset_refresh_timer.stop()
         self._pipeline_steps.pop(clip_name, None)
         self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
         # Clear processing lock
@@ -2411,15 +2629,20 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_queue_empty(self) -> None:
+        if self._service.job_queue.has_pending:
+            return
         self._cancel_requested_job_id = None
         self._force_stop_armed = False
         self._status_bar.set_stop_button_mode(force=False)
         self._status_bar.set_running(False)
         self._status_bar.stop_job_timer()
         self._active_job_id = None
+        self._pending_live_asset_refresh_clip = None
+        self._live_asset_refresh_timer.stop()
         self._pipeline_steps.clear()
         self._queue_panel.refresh()
-        logger.info("All jobs completed")
+        self._service.unload_engines()
+        logger.info("All jobs completed, VRAM freed")
 
     # ── Video Extraction ──
 
@@ -2920,6 +3143,7 @@ class MainWindow(QMainWindow):
             self._apply_tooltip_setting()
             self._apply_sound_setting()
             self._apply_tracker_model_setting()
+            self._apply_parallel_clips_setting()
 
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
@@ -2954,6 +3178,14 @@ class MainWindow(QMainWindow):
         """Apply saved SAM2 tracker model preference to the backend service."""
         model_id = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
         self._service.set_sam2_model(model_id)
+
+    def _apply_parallel_clips_setting(self) -> None:
+        """Apply saved parallel clips preference to the GPU worker."""
+        from ui.widgets.preferences_dialog import (
+            get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS,
+        )
+        n = get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS)
+        self._gpu_worker.set_max_workers(n)
 
     def _show_report_issue(self) -> None:
         import logging as _logging
@@ -3012,7 +3244,8 @@ class MainWindow(QMainWindow):
             '<a href="https://www.edzisk.com">Ed Zisk</a> — GUI, workflow, SFX, QA<br>'
             '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo<br>'
             '<a href="https://github.com/Raiden129">Jhe Kim</a> — Hiera optimization<br>'
-            '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization'
+            '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization<br>'
+            '<a href="https://github.com/99oblivius">99oblivius</a> — FX graph cache (<a href="https://github.com/99oblivius/CorridorKey-Engine">CorridorKey-Engine</a>)'
             "</p>"
         )
         # QMessageBox uses an internal QLabel — find it and enable clickable links
@@ -3049,6 +3282,8 @@ class MainWindow(QMainWindow):
             f"A new version (v{remote_version}) is available.\n"
             "Click to save your session and run the updater."
         )
+        # Set minimum width from text metrics to prevent Qt corner widget squish
+        self._update_btn.setMinimumWidth(self._update_btn.sizeHint().width())
         self._update_btn.setVisible(True)
 
     def _run_update(self) -> None:
@@ -3147,6 +3382,45 @@ class MainWindow(QMainWindow):
             self._queue_panel.setFixedHeight(h)
             self._queue_panel.move(0, 0)
             self._queue_panel.raise_()
+
+    # ── Global drag-and-drop (accepts drops anywhere on window) ──
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            from backend.project import is_video_file, is_image_file
+            for url in event.mimeData().urls():
+                path = url.toLocalFile()
+                if os.path.isdir(path) or is_video_file(path) or is_image_file(path):
+                    event.acceptProposedAction()
+                    return
+
+    def dropEvent(self, event) -> None:
+        from backend.project import is_video_file, is_image_file, folder_has_image_sequence
+        folders = []
+        video_files = []
+        image_files = []
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if os.path.isdir(path):
+                folders.append(path)
+            elif os.path.isfile(path):
+                if is_video_file(path):
+                    video_files.append(path)
+                elif is_image_file(path):
+                    image_files.append(path)
+
+        if folders:
+            folder = folders[0]
+            if folder_has_image_sequence(folder):
+                self._on_sequence_folder_imported(folder)
+            else:
+                self._on_tray_folder_imported(folder)
+        elif video_files and not image_files:
+            self._on_tray_files_imported(video_files)
+        elif image_files:
+            self._on_image_files_dropped(image_files)
+        elif video_files:
+            self._on_tray_files_imported(video_files)
 
     def closeEvent(self, event) -> None:
         """Clean shutdown — auto-save session, stop workers, unload engines."""

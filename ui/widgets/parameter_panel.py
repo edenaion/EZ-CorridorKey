@@ -15,8 +15,10 @@ class ParameterPanel(QWidget):
     """Right panel with all inference parameter controls."""
 
     params_changed = Signal()  # emitted when any parameter changes
+    parallel_frames_changed = Signal(int)  # parallel engine count changed
     gvm_requested = Signal()      # GVM AUTO button clicked
     videomama_requested = Signal() # VIDEOMAMA button clicked
+    matanyone2_requested = Signal()  # MatAnyone2 button clicked
     track_masks_requested = Signal()  # Track annotation prompts into dense masks
     import_alpha_requested = Signal()  # Import own AlphaHint folder
 
@@ -67,6 +69,50 @@ class ParameterPanel(QWidget):
         or_label.setStyleSheet("color: #808070; font-size: 11px;")
         alpha_layout.addWidget(or_label)
 
+        annotate_hint = QLabel("Paint subject with 1, background with 2")
+        annotate_hint.setAlignment(Qt.AlignCenter)
+        annotate_hint.setWordWrap(True)
+        annotate_hint.setStyleSheet("color: #A0A090; font-size: 10px; margin: 2px 0;")
+        alpha_layout.addWidget(annotate_hint)
+
+        self._track_masks_btn = QPushButton("TRACK MASK")
+        self._track_masks_btn.setEnabled(False)
+        self._track_masks_btn.setToolTip(
+            "Use SAM2 to turn painted prompts into a dense mask track.\n"
+            "Required before running MatAnyone2 or VideoMaMa.\n\n"
+            "HOW TO USE:\n"
+            "1. Press 1 to select the GREEN brush (foreground — subject to keep)\n"
+            "2. Press 2 to select the RED brush (background — area to remove)\n"
+            "3. Paint strokes on the left viewer over your footage\n"
+            "4. Click TRACK MASK to preview SAM2 on the painted frame\n"
+            "5. If the preview looks right, confirm to propagate across all frames"
+        )
+        self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
+        alpha_layout.addWidget(self._track_masks_btn)
+
+        self._annotation_info = QLabel("")
+        self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
+        alpha_layout.addWidget(self._annotation_info)
+
+        matanyone2_hint = QLabel("Requires paint strokes on frame 1")
+        matanyone2_hint.setAlignment(Qt.AlignCenter)
+        matanyone2_hint.setWordWrap(True)
+        matanyone2_hint.setStyleSheet("color: #A0A090; font-size: 10px; margin: 2px 0;")
+        alpha_layout.addWidget(matanyone2_hint)
+
+        self._matanyone2_btn = QPushButton("MATANYONE2")
+        self._matanyone2_btn.setEnabled(False)
+        self._matanyone2_btn.setToolTip(
+            "Generate alpha hints using MatAnyone2 video matting.\n"
+            "Requires paint strokes on the FIRST FRAME (frame 1).\n\n"
+            "1. Navigate to frame 1 (the very first frame)\n"
+            "2. Paint foreground (hotkey 1) and background (hotkey 2)\n"
+            "3. Click Track Mask to generate dense masks with SAM2\n"
+            "4. Click MATANYONE2 to generate temporally coherent AlphaHint"
+        )
+        self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
+        alpha_layout.addWidget(self._matanyone2_btn)
+
         self._videomama_btn = QPushButton("VIDEOMAMA")
         self._videomama_btn.setEnabled(False)
         self._videomama_btn.setToolTip(
@@ -77,19 +123,6 @@ class ParameterPanel(QWidget):
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
         alpha_layout.addWidget(self._videomama_btn)
-
-        self._track_masks_btn = QPushButton("TRACK MASK")
-        self._track_masks_btn.setEnabled(False)
-        self._track_masks_btn.setToolTip(
-            "Use SAM2 to turn painted prompts into a dense VideoMaMa mask track.\n"
-            "This is the required step before running VideoMaMa from annotations."
-        )
-        self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
-        alpha_layout.addWidget(self._track_masks_btn)
-
-        self._annotation_info = QLabel("")
-        self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
-        alpha_layout.addWidget(self._annotation_info)
 
         or_label2 = QLabel("— or —")
         or_label2.setAlignment(Qt.AlignCenter)
@@ -271,6 +304,33 @@ class ParameterPanel(QWidget):
 
         layout.addWidget(out_group)
 
+        # ── PERFORMANCE section ──
+        perf_group = QGroupBox("PERFORMANCE")
+        perf_layout = QVBoxLayout(perf_group)
+        perf_layout.setSpacing(6)
+
+        parallel_row = QHBoxLayout()
+        parallel_label = QLabel("Parallel frames")
+        parallel_row.addWidget(parallel_label, 1)
+        self._parallel_spin = QSpinBox()
+        self._parallel_spin.setRange(1, 8)
+        self._parallel_spin.setToolTip(
+            "Process multiple frames simultaneously using parallel engines.\n\n"
+            "WARNING: Each extra engine loads a full copy of the model\n"
+            "including compiled kernels (~6-8 GB VRAM per engine).\n"
+            "Only increase if you have VRAM headroom during\n"
+            "single-frame inference. Check GPU memory usage first.\n\n"
+            "Default: 1 (safest). Try 2 first, then increase if stable."
+        )
+        self._parallel_spin.setFixedWidth(60)
+        from ui.widgets.preferences_dialog import get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS
+        self._parallel_spin.setValue(get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS))
+        self._parallel_spin.valueChanged.connect(self._on_parallel_changed)
+        parallel_row.addWidget(self._parallel_spin)
+        perf_layout.addLayout(parallel_row)
+
+        layout.addWidget(perf_group)
+
         layout.addStretch(1)
 
         scroll.setWidget(inner)
@@ -312,6 +372,12 @@ class ParameterPanel(QWidget):
         self._refiner_label.setText(f"Refiner: {display:.1f}")
         self._emit_changed()
 
+    def _on_parallel_changed(self, value: int) -> None:
+        from PySide6.QtCore import QSettings
+        from ui.widgets.preferences_dialog import KEY_PARALLEL_CLIPS
+        QSettings().setValue(KEY_PARALLEL_CLIPS, value)
+        self.parallel_frames_changed.emit(value)
+
     @property
     def live_preview_enabled(self) -> bool:
         return self._live_preview.isChecked()
@@ -344,6 +410,15 @@ class ParameterPanel(QWidget):
             processed_format=self._proc_format.currentText(),
             exr_compression=get_setting_str(KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION),
         )
+
+    def auto_detect_color_space(self, prefer_linear: bool) -> None:
+        """Auto-set color space based on input format.
+
+        Standalone linear EXR sequences → Linear, video-derived footage → sRGB.
+        """
+        target = 1 if prefer_linear else 0  # 1=Linear, 0=sRGB
+        if self._color_space.currentIndex() != target:
+            self._color_space.setCurrentIndex(target)
 
     def set_params(self, params: InferenceParams) -> None:
         """Load parameter values (e.g. from a saved session).
@@ -384,6 +459,10 @@ class ParameterPanel(QWidget):
         """Enable/disable VideoMaMa button based on clip state."""
         self._videomama_btn.setEnabled(enabled)
 
+    def set_matanyone2_enabled(self, enabled: bool) -> None:
+        """Enable/disable MatAnyone2 button based on clip state."""
+        self._matanyone2_btn.setEnabled(enabled)
+
     def set_import_alpha_enabled(self, enabled: bool) -> None:
         """Enable/disable Import Alpha button based on clip state."""
         self._import_alpha_btn.setEnabled(enabled)
@@ -391,7 +470,7 @@ class ParameterPanel(QWidget):
     def set_annotation_info(self, annotated: int, total: int) -> None:
         """Update annotation frame counter."""
         if annotated > 0 and total > 0:
-            self._annotation_info.setText(f"Annotated: {annotated} / {total} frames")
+            self._annotation_info.setText(f"Painted: {annotated} / {total} frames")
             self._track_masks_btn.setEnabled(True)
         else:
             self._annotation_info.setText("")

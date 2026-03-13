@@ -48,16 +48,16 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("clear_in_out",       "Clear In/Out",                 "Timeline",   "Alt+I",        "_clear_in_out"),
     # Playback
     ShortcutDef("play_pause",         "Play / Pause",                 "Playback",   "Space",        "_toggle_playback"),
-    # Annotation
-    ShortcutDef("annotation_fg",      "Foreground Annotation",        "Annotation", "1",            "_toggle_annotation_fg"),
-    ShortcutDef("annotation_bg",      "Background Annotation (Red)",  "Annotation", "2",            "_toggle_annotation_bg"),
-    ShortcutDef("cycle_fg_color",     "Cycle Foreground Color",       "Annotation", "C",            "_cycle_fg_color"),
-    ShortcutDef("undo_annotation",    "Undo Annotation",              "Annotation", "Ctrl+Z",       "_undo_annotation"),
-    ShortcutDef("clear_annotations",  "Clear Annotations",            "Annotation", "Ctrl+C",       "_confirm_clear_annotations"),
+    # Paint
+    ShortcutDef("annotation_fg",      "Foreground Paint",             "Paint",      "1",            "_toggle_annotation_fg"),
+    ShortcutDef("annotation_bg",      "Background Paint (Red)",       "Paint",      "2",            "_toggle_annotation_bg"),
+    ShortcutDef("cycle_fg_color",     "Cycle Foreground Color",       "Paint",      "C",            "_cycle_fg_color"),
+    ShortcutDef("undo_annotation",    "Undo Paint Stroke",            "Paint",      "Ctrl+Z",       "_undo_annotation"),
+    ShortcutDef("clear_annotations",  "Clear Paint Strokes",          "Paint",      "Ctrl+C",       "_confirm_clear_annotations"),
 ]
 
 # Category display order
-CATEGORY_ORDER = ["Global", "Timeline", "Playback", "Annotation"]
+CATEGORY_ORDER = ["Global", "Timeline", "Playback", "Paint"]
 
 
 class ShortcutRegistry:

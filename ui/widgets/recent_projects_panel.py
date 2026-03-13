@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +18,8 @@ from PySide6.QtWidgets import (
     QFrame, QPushButton, QScrollArea, QMessageBox,
     QMenu, QInputDialog,
 )
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QAction, QDesktopServices
 
 from ui.recent_sessions import RecentSessionsStore, RecentSession
 
@@ -53,7 +54,7 @@ class RecentProjectCard(QFrame):
         folder_btn = QPushButton("\uD83D\uDCC2")  # open folder icon
         folder_btn.setObjectName("projectFolderBtn")
         folder_btn.setFixedSize(16, 16)
-        folder_btn.setToolTip("Open in Explorer")
+        folder_btn.setToolTip("Open in Finder" if sys.platform == "darwin" else "Open in Explorer")
         folder_btn.clicked.connect(self._on_open_folder)
         btn_layout.addWidget(folder_btn, 0, Qt.AlignHCenter)
 
@@ -101,9 +102,8 @@ class RecentProjectCard(QFrame):
         self.delete_clicked.emit(self._workspace_path)
 
     def _on_open_folder(self):
-        import subprocess
         if os.path.isdir(self._workspace_path):
-            subprocess.Popen(["explorer", os.path.normpath(self._workspace_path)])
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self._workspace_path))
 
     def _show_context_menu(self, pos):
         menu = QMenu(self)

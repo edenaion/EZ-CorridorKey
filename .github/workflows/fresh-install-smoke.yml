@@ -7,16 +7,23 @@ on:
       - ".github/workflows/fresh-install-smoke.yml"
       - "1-install.bat"
       - "1-install.sh"
+      - "Install_CorridorKey_Windows.bat"
+      - "Install_GVM_Windows.bat"
+      - "Install_VideoMaMa_Windows.bat"
       - "2-start.bat"
       - "2-start.sh"
       - "3-update.bat"
       - "3-update.sh"
+      - ".gitattributes"
       - "pyproject.toml"
       - "requirements.txt"
+      - "scripts/detect_windows_torch_index.py"
       - "scripts/setup_models.py"
       - "scripts/ci_smoke.py"
+      - "scripts/test_cuda_detect.bat"
       - "main.py"
       - "backend/**"
+      - "tests/test_windows_cuda_detect.py"
       - "ui/**"
 
 jobs:
@@ -35,6 +42,7 @@ jobs:
       CORRIDORKEY_INSTALL_GVM: n
       CORRIDORKEY_INSTALL_VIDEOMAMA: n
       CORRIDORKEY_CREATE_SHORTCUT: n
+      CORRIDORKEY_INSTALL_FFMPEG: y
 
     steps:
       - name: Checkout
@@ -62,7 +70,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          foreach ($f in Get-ChildItem -Filter *.bat) {
+          foreach ($f in Get-ChildItem -Recurse -Filter *.bat) {
             $text = [IO.File]::ReadAllText($f.FullName)
             if ($text -match "`n" -and $text -notmatch "`r`n") {
               $text = $text -replace "`n", "`r`n"
@@ -70,6 +78,17 @@ jobs:
               Write-Host "Fixed CRLF: $($f.Name)"
             }
           }
+
+      - name: CUDA detection parser tests
+        shell: bash
+        run: |
+          pip install pytest
+          python -m pytest tests/test_windows_cuda_detect.py -q --noconftest
+
+      - name: CUDA detection locale smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: call scripts\test_cuda_detect.bat
 
       - name: Run Windows installer
         if: runner.os == 'Windows'

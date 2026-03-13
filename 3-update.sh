@@ -68,9 +68,24 @@ elif [ -f "$HOME/.cargo/bin/uv" ]; then
     UV_AVAILABLE=1
 fi
 
+EXTRAS=""
 if [ -f ".venv/bin/python" ] && .venv/bin/python -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('sam2') else 1)" >/dev/null 2>&1; then
-    INSTALL_TARGET="-e .[tracker]"
+    EXTRAS="tracker"
     echo "  SAM2 tracker detected — updating tracker extras too"
+fi
+
+# On Apple Silicon, include MLX extra if corridorkey_mlx is installed or platform matches
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+    if [ -n "$EXTRAS" ]; then
+        EXTRAS="${EXTRAS},mlx"
+    else
+        EXTRAS="mlx"
+    fi
+    echo "  Apple Silicon detected — including MLX acceleration"
+fi
+
+if [ -n "$EXTRAS" ]; then
+    INSTALL_TARGET="-e .[${EXTRAS}]"
 fi
 
 if [ "$UV_AVAILABLE" = "1" ]; then
@@ -91,6 +106,12 @@ if [ "$UV_AVAILABLE" = "0" ]; then
         echo "  [ERROR] No .venv found. Run 1-install.sh first."
         exit 1
     fi
+fi
+
+# Clean up retired distributions that can survive editable upgrades.
+if [ -f ".venv/bin/python" ] && .venv/bin/python -m pip show pynvml >/dev/null 2>&1; then
+    echo "  Removing legacy pynvml package..."
+    .venv/bin/python -m pip uninstall -y pynvml >/dev/null 2>&1 || true
 fi
 
 # ── Step 3: Check for new model weights ──

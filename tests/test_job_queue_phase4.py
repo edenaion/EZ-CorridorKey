@@ -49,3 +49,17 @@ class TestPreviewReprocessQueue:
         assert q.pending_count == 1
         snapshot = q.queue_snapshot
         assert snapshot[0].id == jobs[-1].id
+
+    def test_sam2_preview_replaces_existing(self):
+        """SAM2 preview jobs should also use latest-only semantics."""
+        q = GPUJobQueue()
+        job1 = GPUJob(JobType.SAM2_PREVIEW, "clip1")
+        job2 = GPUJob(JobType.SAM2_PREVIEW, "clip1")
+
+        assert q.submit(job1) is True
+        assert q.submit(job2) is True
+
+        snapshot = q.queue_snapshot
+        assert len(snapshot) == 1
+        assert snapshot[0].id == job2.id
+        assert job1.status == JobStatus.CANCELLED

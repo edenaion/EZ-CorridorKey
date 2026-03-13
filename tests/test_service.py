@@ -8,18 +8,21 @@ Mocking strategy (Codex-informed hybrid):
 import json
 import os
 import tempfile
+import types
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import cv2
 import numpy as np
 import pytest
 
+from backend.annotation_prompts import AnnotationPromptFrame
 from backend.service import (
     CorridorKeyService,
     InferenceParams,
     OutputConfig,
     FrameResult,
     _ActiveModel,
+    _import_matanyone2_processor_class,
 )
 from backend.clip_state import ClipAsset, ClipEntry, ClipState
 from backend.errors import (
@@ -37,7 +40,7 @@ from backend.job_queue import GPUJob, JobType
 class TestServiceInit:
     def test_constructor_defaults(self):
         svc = CorridorKeyService()
-        assert svc._engine is None
+        assert svc._engine_pool == []
         assert svc._gvm_processor is None
         assert svc._videomama_pipeline is None
         assert svc._active_model == _ActiveModel.NONE
@@ -116,16 +119,16 @@ class TestModelResidency:
     def test_ensure_model_noop_when_same(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         svc._ensure_model(_ActiveModel.INFERENCE)
-        assert svc._engine is not None  # Not unloaded
+        assert len(svc._engine_pool) > 0  # Not unloaded
 
     def test_ensure_model_switch_unloads_inference(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         svc._ensure_model(_ActiveModel.GVM)
-        assert svc._engine is None
+        assert svc._engine_pool == []
         assert svc._active_model == _ActiveModel.GVM
 
     def test_ensure_model_switch_unloads_gvm(self):
@@ -149,32 +152,60 @@ class TestModelResidency:
         assert svc._active_model == _ActiveModel.INFERENCE
 
 
+class TestMatAnyone2Import:
+    def test_prefers_modules_namespace_layout(self, monkeypatch):
+        sentinel = object()
+
+        def fake_import(name):
+            if name == "modules.MatAnyone2Module.wrapper":
+                return types.SimpleNamespace(MatAnyone2Processor=sentinel)
+            raise ModuleNotFoundError(name=name)
+
+        monkeypatch.setattr("backend.service.importlib.import_module", fake_import)
+        cls = _import_matanyone2_processor_class()
+        assert cls is sentinel
+
+    def test_falls_back_to_legacy_layout(self, monkeypatch):
+        sentinel = object()
+
+        def fake_import(name):
+            if name == "modules.MatAnyone2Module.wrapper":
+                raise ModuleNotFoundError(name="modules.MatAnyone2Module.wrapper")
+            if name == "MatAnyone2Module.wrapper":
+                return types.SimpleNamespace(MatAnyone2Processor=sentinel)
+            raise AssertionError(name)
+
+        monkeypatch.setattr("backend.service.importlib.import_module", fake_import)
+        cls = _import_matanyone2_processor_class()
+        assert cls is sentinel
+
+
 # ── TestGetEngine ──
 
 
-class TestGetEngine:
-    def test_cached_engine_returns_immediately(self):
+class TestGetEnginePool:
+    def test_cached_pool_returns_immediately(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
         mock_engine = MagicMock()
-        svc._engine = mock_engine
-        result = svc._get_engine()
-        assert result is mock_engine
+        svc._engine_pool = [mock_engine]
+        result = svc._get_engine_pool()
+        assert result[0] is mock_engine
 
-    @patch("backend.service.glob_module.glob")
-    def test_no_checkpoint_raises(self, mock_glob):
-        mock_glob.return_value = []
+    @patch("CorridorKeyModule.backend.create_engine", side_effect=FileNotFoundError("No .pth checkpoint found"))
+    @patch("CorridorKeyModule.backend.resolve_backend", return_value="torch")
+    def test_no_checkpoint_raises(self, _rb, _ce):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.NONE
         with pytest.raises(FileNotFoundError, match="No .pth checkpoint"):
-            svc._get_engine()
+            svc._get_engine_pool()
 
-    @patch("backend.service.glob_module.glob")
-    def test_multiple_checkpoints_raises(self, mock_glob):
-        mock_glob.return_value = ["/a/ckpt1.pth", "/a/ckpt2.pth"]
+    @patch("CorridorKeyModule.backend.create_engine", side_effect=ValueError("Multiple checkpoints"))
+    @patch("CorridorKeyModule.backend.resolve_backend", return_value="torch")
+    def test_multiple_checkpoints_raises(self, _rb, _ce):
         svc = CorridorKeyService()
         with pytest.raises(ValueError, match="Multiple checkpoints"):
-            svc._get_engine()
+            svc._get_engine_pool()
 
 
 # ── TestScanAndFilter ──
@@ -230,6 +261,30 @@ class TestReadInputFrame:
         img, stem, is_linear = svc._read_input_frame(clip, 0, [], mock_cap, False)
         assert img is None
 
+    def test_exr_sequence_honors_explicit_srgb_setting(self):
+        svc = CorridorKeyService()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            os.makedirs(frames_dir)
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(
+                "test", tmpdir, state=ClipState.RAW,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((2, 2, 3), dtype=np.float32)
+            with patch("backend.service.read_image_frame", return_value=fake_img):
+                img, stem, is_linear = svc._read_input_frame(
+                    clip, 0, clip.input_asset.get_frame_files(), None, False,
+                )
+
+            assert img is fake_img
+            assert stem == "frame_000000"
+            assert is_linear is False
+
 
 # ── TestReadAlphaFrame ──
 
@@ -251,6 +306,67 @@ class TestReadAlphaFrame:
         mock_cap.read.return_value = (False, None)
         mask = svc._read_alpha_frame(clip, 0, [], mock_cap)
         assert mask is None
+
+    def test_sequence_prefers_input_stem_when_available(self):
+        svc = CorridorKeyService()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(alpha_dir)
+            wanted = os.path.join(alpha_dir, "frame_000003.png")
+            fallback = os.path.join(alpha_dir, "_alphaHint_000000.png")
+            cv2.imwrite(wanted, np.ones((4, 4), dtype=np.uint8) * 255)
+            cv2.imwrite(fallback, np.zeros((4, 4), dtype=np.uint8))
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+            alpha_files = clip.alpha_asset.get_frame_files()
+            alpha_lookup = {os.path.splitext(f)[0]: f for f in alpha_files}
+
+            with patch("backend.service.read_mask_frame", return_value=np.ones((4, 4), dtype=np.float32)) as mock_read:
+                svc._read_alpha_frame(
+                    clip,
+                    0,
+                    alpha_files,
+                    None,
+                    input_stem="frame_000003",
+                    alpha_stem_lookup=alpha_lookup,
+                )
+
+            assert mock_read.call_args is not None
+            assert mock_read.call_args.args[0].endswith("frame_000003.png")
+
+    def test_sequence_falls_back_to_index_when_input_stem_missing(self):
+        svc = CorridorKeyService()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(alpha_dir)
+            fallback = os.path.join(alpha_dir, "_alphaHint_000000.png")
+            cv2.imwrite(fallback, np.ones((4, 4), dtype=np.uint8) * 255)
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+            alpha_files = clip.alpha_asset.get_frame_files()
+
+            with patch("backend.service.read_mask_frame", return_value=np.ones((4, 4), dtype=np.float32)) as mock_read:
+                svc._read_alpha_frame(
+                    clip,
+                    0,
+                    alpha_files,
+                    None,
+                    input_stem="frame_000123",
+                    alpha_stem_lookup={},
+                )
+
+            assert mock_read.call_args is not None
+            assert mock_read.call_args.args[0].endswith("_alphaHint_000000.png")
 
 
 # ── TestWriteImage ──
@@ -410,7 +526,7 @@ class TestRunInference:
             "comp": np.ones((4, 4, 3), dtype=np.float32) * 0.3,
             "processed": np.ones((4, 4, 4), dtype=np.float32) * 0.6,
         }
-        svc._engine = mock_engine
+        svc._engine_pool = [mock_engine]
         return svc, mock_engine
 
     def test_happy_path(self, sample_clip, tmp_clip_dir):
@@ -576,6 +692,63 @@ class TestRunInference:
                                                           comp_format="png", processed_format="png"))
         # Test passed — if finally block didn't run, we'd leak captures
 
+    def test_frame_range_uses_stem_matched_partial_alpha_sequence(self):
+        svc, mock_engine = self._setup_service_with_mock_engine()
+        params = InferenceParams()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(frames_dir)
+            os.makedirs(alpha_dir)
+
+            for i in range(5):
+                cv2.imwrite(
+                    os.path.join(frames_dir, f"frame_{i:06d}.png"),
+                    np.zeros((4, 4, 3), dtype=np.uint8),
+                )
+            for i in (3, 4):
+                cv2.imwrite(
+                    os.path.join(alpha_dir, f"frame_{i:06d}.png"),
+                    np.ones((4, 4), dtype=np.uint8) * 255,
+                )
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+            fake_mask = np.ones((4, 4), dtype=np.float32)
+            read_mask_paths: list[str] = []
+
+            def _record_mask(path, clip_name, frame_index):
+                read_mask_paths.append(os.path.basename(path))
+                return fake_mask
+
+            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
+                "backend.service.read_mask_frame", side_effect=_record_mask
+            ):
+                results = svc.run_inference(
+                    clip,
+                    params,
+                    frame_range=(3, 4),
+                    output_config=OutputConfig(
+                        fg_format="png",
+                        matte_format="png",
+                        comp_format="png",
+                        processed_format="png",
+                    ),
+                )
+
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        assert mock_engine.process_frame.call_count == 2
+        assert read_mask_paths == ["frame_000003.png", "frame_000004.png"]
+
 
 # ── TestReprocessSingleFrame ──
 
@@ -589,7 +762,7 @@ class TestReprocessSingleFrame:
             "fg": np.ones((4, 4, 3), dtype=np.float32),
             "alpha": np.ones((4, 4, 1), dtype=np.float32),
         }
-        svc._engine = mock_engine
+        svc._engine_pool = [mock_engine]
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 0)
         assert result is not None
         assert "fg" in result
@@ -603,7 +776,7 @@ class TestReprocessSingleFrame:
     def test_cancelled_returns_none(self, sample_clip):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         job = GPUJob(JobType.PREVIEW_REPROCESS, "test")
         job.request_cancel()
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 0, job=job)
@@ -612,9 +785,156 @@ class TestReprocessSingleFrame:
     def test_out_of_range_returns_none(self, sample_clip):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 9999)
         assert result is None
+
+    def test_exr_sequence_honors_explicit_srgb_setting(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.INFERENCE
+        mock_engine = MagicMock()
+        mock_engine.process_frame.return_value = {
+            "fg": np.ones((4, 4, 3), dtype=np.float32),
+            "alpha": np.ones((4, 4, 1), dtype=np.float32),
+            "comp": np.ones((4, 4, 3), dtype=np.float32),
+            "processed": np.ones((4, 4, 4), dtype=np.float32),
+        }
+        svc._engine_pool = [mock_engine]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(frames_dir)
+            os.makedirs(alpha_dir)
+
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            alpha_path = os.path.join(alpha_dir, "_alphaHint_000000.png")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+            with open(alpha_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+            fake_mask = np.ones((4, 4), dtype=np.float32)
+            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
+                "backend.service.read_mask_frame", return_value=fake_mask
+            ):
+                svc.reprocess_single_frame(
+                    clip,
+                    InferenceParams(input_is_linear=False),
+                    0,
+                )
+
+        assert mock_engine.process_frame.call_args is not None
+        assert mock_engine.process_frame.call_args.kwargs["input_is_linear"] is False
+
+    def test_exr_sequence_honors_explicit_linear_setting(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.INFERENCE
+        mock_engine = MagicMock()
+        mock_engine.process_frame.return_value = {
+            "fg": np.ones((4, 4, 3), dtype=np.float32),
+            "alpha": np.ones((4, 4, 1), dtype=np.float32),
+            "comp": np.ones((4, 4, 3), dtype=np.float32),
+            "processed": np.ones((4, 4, 4), dtype=np.float32),
+        }
+        svc._engine_pool = [mock_engine]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(frames_dir)
+            os.makedirs(alpha_dir)
+
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            alpha_path = os.path.join(alpha_dir, "_alphaHint_000000.png")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+            with open(alpha_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+            fake_mask = np.ones((4, 4), dtype=np.float32)
+            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
+                "backend.service.read_mask_frame", return_value=fake_mask
+            ):
+                svc.reprocess_single_frame(
+                    clip,
+                    InferenceParams(input_is_linear=True),
+                    0,
+                )
+
+        assert mock_engine.process_frame.call_args is not None
+        assert mock_engine.process_frame.call_args.kwargs["input_is_linear"] is True
+
+    def test_sequence_reprocess_prefers_alpha_with_matching_input_stem(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.INFERENCE
+        mock_engine = MagicMock()
+        mock_engine.process_frame.return_value = {
+            "fg": np.ones((4, 4, 3), dtype=np.float32),
+            "alpha": np.ones((4, 4, 1), dtype=np.float32),
+            "comp": np.ones((4, 4, 3), dtype=np.float32),
+            "processed": np.ones((4, 4, 4), dtype=np.float32),
+        }
+        svc._engine_pool = [mock_engine]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            alpha_dir = os.path.join(tmpdir, "AlphaHint")
+            os.makedirs(frames_dir)
+            os.makedirs(alpha_dir)
+
+            for i in range(5):
+                with open(os.path.join(frames_dir, f"frame_{i:06d}.png"), "wb") as handle:
+                    handle.write(b"fake")
+            for i in (3, 4):
+                with open(os.path.join(alpha_dir, f"frame_{i:06d}.png"), "wb") as handle:
+                    handle.write(b"fake")
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.READY,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+                alpha_asset=ClipAsset(alpha_dir, "sequence"),
+            )
+
+            fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+            fake_mask = np.ones((4, 4), dtype=np.float32)
+            read_mask_paths: list[str] = []
+
+            def _record_mask(path, clip_name, frame_index):
+                read_mask_paths.append(os.path.basename(path))
+                return fake_mask
+
+            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
+                "backend.service.read_mask_frame", side_effect=_record_mask
+            ):
+                result = svc.reprocess_single_frame(
+                    clip,
+                    InferenceParams(),
+                    3,
+                )
+
+        assert result is not None
+        assert read_mask_paths == ["frame_000003.png"]
 
 
 # ── TestUnloadEngines ──
@@ -623,14 +943,14 @@ class TestReprocessSingleFrame:
 class TestUnloadEngines:
     def test_clears_all(self):
         svc = CorridorKeyService()
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         svc._gvm_processor = MagicMock()
         svc._videomama_pipeline = MagicMock()
         svc._active_model = _ActiveModel.INFERENCE
 
         svc.unload_engines()
 
-        assert svc._engine is None
+        assert svc._engine_pool == []
         assert svc._gvm_processor is None
         assert svc._videomama_pipeline is None
         assert svc._active_model == _ActiveModel.NONE
@@ -643,12 +963,98 @@ class TestIsEngineLoaded:
     def test_true_when_active(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = MagicMock()
+        svc._engine_pool = [MagicMock()]
         assert svc.is_engine_loaded() is True
 
     def test_false_when_not_loaded(self):
         svc = CorridorKeyService()
         assert svc.is_engine_loaded() is False
+
+
+class TestSam2PreviewInputColorSpace:
+    def test_preview_sam2_defaults_video_derived_exr_to_srgb(self):
+        svc = CorridorKeyService()
+        tracker = MagicMock()
+        tracker.track_video.return_value = [np.ones((4, 4), dtype=np.uint8)]
+        svc._get_sam2_tracker = MagicMock(return_value=tracker)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            os.makedirs(frames_dir)
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+            with open(os.path.join(tmpdir, ".video_metadata.json"), "w", encoding="utf-8") as handle:
+                json.dump({"codec": "prores"}, handle)
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+            )
+
+            prompt = AnnotationPromptFrame(
+                frame_index=0,
+                positive_points=[(10.0, 12.0)],
+                negative_points=[],
+            )
+            fake_img = np.full((4, 4, 3), 0.5, dtype=np.float32)
+            with patch(
+                "backend.service.load_annotation_prompt_frames",
+                return_value=[prompt],
+            ), patch(
+                "backend.service.read_image_frame",
+                return_value=fake_img,
+            ) as mock_read:
+                result = svc.preview_sam2_prompt(clip, preferred_frame_index=0)
+
+        assert result is not None
+        assert mock_read.call_args is not None
+        assert mock_read.call_args.kwargs["gamma_correct_exr"] is False
+
+    def test_preview_sam2_honors_explicit_linear_override(self):
+        svc = CorridorKeyService()
+        tracker = MagicMock()
+        tracker.track_video.return_value = [np.ones((4, 4), dtype=np.uint8)]
+        svc._get_sam2_tracker = MagicMock(return_value=tracker)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_dir = os.path.join(tmpdir, "Frames")
+            os.makedirs(frames_dir)
+            frame_path = os.path.join(frames_dir, "frame_000000.exr")
+            with open(frame_path, "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+
+            clip = ClipEntry(
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
+                input_asset=ClipAsset(frames_dir, "sequence"),
+            )
+
+            prompt = AnnotationPromptFrame(
+                frame_index=0,
+                positive_points=[(10.0, 12.0)],
+                negative_points=[],
+            )
+            fake_img = np.full((4, 4, 3), 0.5, dtype=np.float32)
+            with patch(
+                "backend.service.load_annotation_prompt_frames",
+                return_value=[prompt],
+            ), patch(
+                "backend.service.read_image_frame",
+                return_value=fake_img,
+            ) as mock_read:
+                result = svc.preview_sam2_prompt(
+                    clip,
+                    preferred_frame_index=0,
+                    input_is_linear=True,
+                )
+
+        assert result is not None
+        assert mock_read.call_args is not None
+        assert mock_read.call_args.kwargs["gamma_correct_exr"] is True
 
     def test_false_when_different_model(self):
         svc = CorridorKeyService()
@@ -656,10 +1062,10 @@ class TestIsEngineLoaded:
         svc._gvm_processor = MagicMock()
         assert svc.is_engine_loaded() is False
 
-    def test_false_when_active_but_engine_none(self):
+    def test_false_when_active_but_engine_empty(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE
-        svc._engine = None
+        svc._engine_pool = []
         assert svc.is_engine_loaded() is False
 
 

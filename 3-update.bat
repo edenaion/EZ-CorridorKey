@@ -128,6 +128,15 @@ if !UV_AVAILABLE!==0 (
     )
 )
 
+REM Clean up retired distributions that can survive editable upgrades.
+if exist ".venv\Scripts\python.exe" (
+    .venv\Scripts\python.exe -m pip show pynvml >nul 2>&1
+    if !errorlevel! == 0 (
+        echo   Removing legacy pynvml package...
+        .venv\Scripts\python.exe -m pip uninstall -y pynvml >nul 2>&1
+    )
+)
+
 REM ── Step 3: Check for new model weights ──
 echo [3/3] Checking model weights...
 .venv\Scripts\python.exe scripts\setup_models.py --check

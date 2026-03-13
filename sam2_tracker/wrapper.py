@@ -8,7 +8,7 @@ import shutil
 import sys
 import tempfile
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -16,6 +16,9 @@ import numpy as np
 from PIL import Image
 
 logger = logging.getLogger(__name__)
+
+_PROMPT_REFINEMENT_POS_BATCH = 6
+_PROMPT_REFINEMENT_NEG_BATCH = 2
 
 
 def _disable_external_progress_bars() -> None:
@@ -52,9 +55,10 @@ class PromptFrame:
     """Prompt bundle for one frame in clip-local coordinates."""
 
     frame_index: int
-    positive_points: list[tuple[float, float]]
-    negative_points: list[tuple[float, float]]
+    positive_points: list[tuple[float, float]] = field(default_factory=list)
+    negative_points: list[tuple[float, float]] = field(default_factory=list)
     box: tuple[float, float, float, float] | None = None
+    mask: np.ndarray | None = None
 
 
 class SAM2NotInstalledError(RuntimeError):
@@ -195,8 +199,42 @@ class SAM2Tracker:
             return []
         if not prompt_frames:
             raise ValueError("SAM2 tracking requires at least one prompt frame")
-        if not any(p.positive_points for p in prompt_frames):
-            raise ValueError("SAM2 tracking requires at least one foreground prompt")
+
+        frame_shape = frames[0].shape[:2]
+        sanitized_prompts = [
+            self._sanitize_prompt_frame(prompt, frame_shape)
+            for prompt in prompt_frames
+        ]
+        sanitized_prompts = [
+            prompt for prompt in sanitized_prompts
+            if (
+                prompt.mask is not None
+                or prompt.positive_points
+                or prompt.negative_points
+                or prompt.box is not None
+            )
+        ]
+        if logger.isEnabledFor(logging.INFO):
+            total_pos = sum(len(prompt.positive_points) for prompt in sanitized_prompts)
+            total_neg = sum(len(prompt.negative_points) for prompt in sanitized_prompts)
+            total_mask_frames = sum(1 for prompt in sanitized_prompts if prompt.mask is not None)
+            total_mask_pixels = sum(
+                int(np.count_nonzero(prompt.mask))
+                for prompt in sanitized_prompts
+                if prompt.mask is not None
+            )
+            logger.info(
+                "SAM2 prompts after sanitize: frames=%d, fg=%d, bg=%d, mask_frames=%d, fg_pixels=%d",
+                len(sanitized_prompts),
+                total_pos,
+                total_neg,
+                total_mask_frames,
+                total_mask_pixels,
+            )
+        if not sanitized_prompts:
+            raise ValueError("SAM2 tracking requires at least one usable prompt frame")
+        if not any(self._has_foreground_signal(prompt) for prompt in sanitized_prompts):
+            raise ValueError("SAM2 tracking requires at least one non-empty foreground prompt")
 
         predictor = self._get_predictor(on_progress=on_progress, on_status=on_status)
 
@@ -224,7 +262,7 @@ class SAM2Tracker:
 
             masks_by_frame: dict[int, np.ndarray] = {}
             total = len(frames)
-            sorted_prompts = sorted(prompt_frames, key=lambda item: item.frame_index)
+            sorted_prompts = sorted(sanitized_prompts, key=lambda item: item.frame_index)
             earliest_prompt = sorted_prompts[0].frame_index
             latest_prompt = sorted_prompts[-1].frame_index
 
@@ -242,15 +280,36 @@ class SAM2Tracker:
                 for prompt in sorted_prompts:
                     if check_cancel:
                         check_cancel()
-                    points, labels = self._points_and_labels(prompt)
-                    predictor.add_new_points_or_box(
-                        inference_state=inference_state,
-                        frame_idx=prompt.frame_index,
-                        obj_id=1,
-                        points=points if points.size else None,
-                        labels=labels if labels.size else None,
-                        box=prompt.box,
+                    if prompt.mask is not None:
+                        frame_idx, obj_ids, mask_logits = predictor.add_new_mask(
+                            inference_state=inference_state,
+                            frame_idx=prompt.frame_index,
+                            obj_id=1,
+                            mask=(prompt.mask > 0),
+                        )
+                    else:
+                        frame_idx = prompt.frame_index
+                        obj_ids = []
+                        mask_logits = None
+                        for batch_points, batch_labels, batch_box, clear_old_points in self._iter_prompt_refinement_batches(prompt):
+                            if check_cancel:
+                                check_cancel()
+                            frame_idx, obj_ids, mask_logits = predictor.add_new_points_or_box(
+                                inference_state=inference_state,
+                                frame_idx=prompt.frame_index,
+                                obj_id=1,
+                                points=batch_points if batch_points.size else None,
+                                labels=batch_labels if batch_labels.size else None,
+                                clear_old_points=clear_old_points,
+                                box=batch_box,
+                            )
+                    masks_by_frame[frame_idx] = self._extract_object_mask(
+                        obj_ids=obj_ids,
+                        mask_logits=mask_logits,
+                        fallback_shape=frames[0].shape[:2],
                     )
+                    if on_progress:
+                        on_progress(len(masks_by_frame), total)
 
                 if on_status:
                     on_status("SAM2 propagation")
@@ -293,6 +352,121 @@ class SAM2Tracker:
         if not points:
             return np.empty((0, 2), dtype=np.float32), np.empty((0,), dtype=np.int32)
         return np.asarray(points, dtype=np.float32), np.asarray(labels, dtype=np.int32)
+
+    @staticmethod
+    def _iter_prompt_refinement_batches(
+        prompt: PromptFrame,
+        *,
+        positive_batch_size: int = _PROMPT_REFINEMENT_POS_BATCH,
+        negative_batch_size: int = _PROMPT_REFINEMENT_NEG_BATCH,
+    ):
+        """Yield same-frame prompt refinements in SAM-friendly sparse batches."""
+        pos_batch = max(1, int(positive_batch_size))
+        neg_batch = max(1, int(negative_batch_size))
+        pos_cursor = 0
+        neg_cursor = 0
+        step = 0
+
+        if not prompt.positive_points and not prompt.negative_points:
+            yield (
+                np.empty((0, 2), dtype=np.float32),
+                np.empty((0,), dtype=np.int32),
+                prompt.box,
+                True,
+            )
+            return
+
+        while pos_cursor < len(prompt.positive_points) or neg_cursor < len(prompt.negative_points):
+            pos_chunk = prompt.positive_points[pos_cursor:pos_cursor + pos_batch]
+            neg_chunk = prompt.negative_points[neg_cursor:neg_cursor + neg_batch]
+            points: list[tuple[float, float]] = [*pos_chunk, *neg_chunk]
+            labels: list[int] = ([1] * len(pos_chunk)) + ([0] * len(neg_chunk))
+            yield (
+                np.asarray(points, dtype=np.float32),
+                np.asarray(labels, dtype=np.int32),
+                prompt.box if step == 0 else None,
+                step == 0,
+            )
+            pos_cursor += len(pos_chunk)
+            neg_cursor += len(neg_chunk)
+            step += 1
+
+    @staticmethod
+    def _sanitize_prompt_frame(
+        prompt: PromptFrame,
+        frame_shape: tuple[int, int],
+    ) -> PromptFrame:
+        """Clamp prompt geometry to frame bounds and drop non-finite values."""
+        height, width = frame_shape
+        max_x = float(max(0, width - 1))
+        max_y = float(max(0, height - 1))
+
+        def _clamp_points(points: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
+            cleaned: list[tuple[float, float]] = []
+            seen: set[tuple[int, int]] = set()
+            for x, y in points:
+                xf, yf = float(x), float(y)
+                if not np.isfinite(xf) or not np.isfinite(yf):
+                    continue
+                clamped_x = min(max(xf, 0.0), max_x)
+                clamped_y = min(max(yf, 0.0), max_y)
+                key = (int(round(clamped_x)), int(round(clamped_y)))
+                if key in seen:
+                    continue
+                seen.add(key)
+                cleaned.append((float(key[0]), float(key[1])))
+            return cleaned
+
+        def _clamp_box(
+            box: tuple[float, float, float, float] | None,
+        ) -> tuple[float, float, float, float] | None:
+            if box is None:
+                return None
+            x0, y0, x1, y1 = (float(v) for v in box)
+            if not all(np.isfinite(v) for v in (x0, y0, x1, y1)):
+                return None
+            lo_x = min(max(min(x0, x1), 0.0), max_x)
+            hi_x = min(max(max(x0, x1), 0.0), max_x)
+            lo_y = min(max(min(y0, y1), 0.0), max_y)
+            hi_y = min(max(max(y0, y1), 0.0), max_y)
+            if hi_x <= lo_x or hi_y <= lo_y:
+                return None
+            return (lo_x, lo_y, hi_x, hi_y)
+
+        mask = None
+        if prompt.mask is not None:
+            mask = np.asarray(prompt.mask)
+            if mask.ndim == 3 and mask.shape[-1] == 1:
+                mask = np.squeeze(mask, axis=-1)
+            if mask.ndim != 2:
+                raise ValueError("SAM2 mask prompts must be 2D arrays")
+            if mask.shape != frame_shape:
+                raise ValueError(
+                    "SAM2 mask prompt dimensions must match the input frame size"
+                )
+            mask = np.where(mask > 0, 255, 0).astype(np.uint8, copy=False)
+
+        positive_points = _clamp_points(prompt.positive_points)
+        negative_points = _clamp_points(prompt.negative_points)
+        box = _clamp_box(prompt.box)
+        if mask is not None:
+            positive_points = []
+            negative_points = []
+            box = None
+
+        return PromptFrame(
+            frame_index=int(prompt.frame_index),
+            positive_points=positive_points,
+            negative_points=negative_points,
+            box=box,
+            mask=mask,
+        )
+
+    @staticmethod
+    def _has_foreground_signal(prompt: PromptFrame) -> bool:
+        if prompt.mask is not None:
+            return bool(np.any(prompt.mask > 0))
+        return bool(prompt.positive_points or prompt.box is not None)
 
     @staticmethod
     def _extract_object_mask(

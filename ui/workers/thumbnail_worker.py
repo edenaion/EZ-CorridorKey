@@ -13,16 +13,18 @@ import os
 import hashlib
 import logging
 
-import cv2
-import numpy as np
-from PySide6.QtCore import QObject, QRunnable, Signal, QThreadPool, QStandardPaths
+from PySide6.QtCore import QObject, QRunnable, Signal, QThreadPool, QStandardPaths, Qt
 from PySide6.QtGui import QImage
+
+from ui.preview.display_transform import decode_frame, decode_video_frame
+from ui.preview.frame_index import ViewMode
 
 logger = logging.getLogger(__name__)
 
 # Thumbnail dimensions
 THUMB_WIDTH = 60
 THUMB_HEIGHT = 40
+_THUMB_CACHE_VERSION = "v2"
 
 
 def _cache_dir() -> str:
@@ -36,7 +38,7 @@ def _cache_dir() -> str:
 def _cache_path(clip_root: str) -> str:
     """Generate cache file path for a clip, based on root path hash."""
     h = hashlib.md5(clip_root.encode()).hexdigest()[:12]
-    return os.path.join(_cache_dir(), f"{h}.jpg")
+    return os.path.join(_cache_dir(), f"{h}_{_THUMB_CACHE_VERSION}.jpg")
 
 
 class _ThumbSignals(QObject):
@@ -72,50 +74,35 @@ class _ThumbTask(QRunnable):
             cache_mtime = os.path.getmtime(cache)
             source_mtime = self._source_mtime()
             if source_mtime and cache_mtime >= source_mtime:
-                # Load from cache
-                img = cv2.imread(cache)
-                if img is not None:
-                    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    return self._to_qimage(rgb)
+                cached = QImage(cache)
+                if not cached.isNull():
+                    return cached
 
         # Generate fresh
         frame = self._read_first_frame()
-        if frame is None:
+        if frame is None or frame.isNull():
             return None
 
-        # Resize to thumbnail
-        h, w = frame.shape[:2]
-        scale = min(THUMB_WIDTH / w, THUMB_HEIGHT / h)
-        new_w, new_h = int(w * scale), int(h * scale)
-        small = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        small = frame.scaled(
+            THUMB_WIDTH,
+            THUMB_HEIGHT,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
 
-        # Save to cache (BGR for cv2)
+        # Save to cache
         try:
-            cv2.imwrite(cache, small if small.shape[2] == 3 else cv2.cvtColor(small, cv2.COLOR_RGB2BGR))
+            small.save(cache, "JPG")
         except Exception:
             pass  # Cache write is best-effort
 
-        # Convert to RGB for QImage
-        if small.shape[2] == 3:
-            rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
-        else:
-            rgb = small
-        return self._to_qimage(rgb)
+        return small
 
-    def _read_first_frame(self) -> np.ndarray | None:
-        """Read the first frame from input."""
+    def _read_first_frame(self) -> QImage | None:
+        """Read the first frame using the same display transform as the viewer."""
         if self._asset_type == "video":
-            try:
-                cap = cv2.VideoCapture(self._input_path)
-                if not cap.isOpened():
-                    return None
-                ret, frame = cap.read()
-                cap.release()
-                return frame if ret else None
-            except Exception:
-                return None
+            return decode_video_frame(self._input_path, 0)
         else:
-            # Image sequence — get first file
             if not os.path.isdir(self._input_path):
                 return None
             from backend.natural_sort import natsorted
@@ -124,24 +111,7 @@ class _ThumbTask(QRunnable):
             if not files:
                 return None
             path = os.path.join(self._input_path, files[0])
-
-            if path.lower().endswith('.exr'):
-                img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-                if img is None:
-                    return None
-                # Handle float EXR
-                if img.dtype != np.uint8:
-                    # Strip alpha if 4ch
-                    if img.ndim == 3 and img.shape[2] == 4:
-                        img = img[:, :, :3]
-                    elif img.ndim == 2:
-                        img = np.stack([img, img, img], axis=2)
-                    # Clamp and convert
-                    clamped = np.clip(img.astype(np.float32), 0.0, 1.0)
-                    img = (np.power(clamped, 1.0 / 2.2) * 255).astype(np.uint8)
-                return img
-            else:
-                return cv2.imread(path)
+            return decode_frame(path, ViewMode.INPUT)
 
     def _source_mtime(self) -> float | None:
         """Get modification time of the source for cache invalidation."""
@@ -153,15 +123,6 @@ class _ThumbTask(QRunnable):
         except Exception:
             pass
         return None
-
-    @staticmethod
-    def _to_qimage(rgb: np.ndarray) -> QImage:
-        """Convert RGB uint8 numpy array to QImage (deep copy)."""
-        h, w, ch = rgb.shape
-        rgb = np.ascontiguousarray(rgb)
-        qimg = QImage(rgb.data, w, h, w * ch, QImage.Format_RGB888)
-        return qimg.copy()
-
 
 class ThumbnailGenerator(QObject):
     """Manages background thumbnail generation for clips.

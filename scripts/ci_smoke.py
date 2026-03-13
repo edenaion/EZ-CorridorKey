@@ -124,7 +124,7 @@ def _exercise_ffmpeg_repair_button(app, prefs) -> None:
                 break
         app.processEvents()
 
-        if sys.platform == "win32":
+        if sys.platform in ("win32", "darwin"):
             if not state["ok"]:
                 raise RuntimeError("Repair FFmpeg button did not trigger the repair path")
             if "smoke repair complete" not in prefs._ffmpeg_status_label.text():

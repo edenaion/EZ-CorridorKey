@@ -33,35 +33,22 @@ call venv\Scripts\activate.bat
 python -m pip install --upgrade pip >nul 2>&1
 
 set "INDEX_URL="
-where nvidia-smi >nul 2>&1
-if !errorlevel! equ 0 (
-    echo   Detecting NVIDIA GPU...
-    for /f "tokens=*" %%i in ('nvidia-smi 2^>nul ^| findstr "CUDA Version"') do set "CUDA_LINE=%%i"
-    if defined CUDA_LINE (
-        echo   !CUDA_LINE!
-        echo !CUDA_LINE! | findstr "12.8 12.7 12.6 12.5 12.4" >nul
-        if !errorlevel!==0 (
-            set "INDEX_URL=https://download.pytorch.org/whl/cu128"
-            echo   Using PyTorch CUDA 12.8 wheels
-        ) else (
-            echo !CUDA_LINE! | findstr "12.1 12.2 12.3" >nul
-            if !errorlevel!==0 (
-                set "INDEX_URL=https://download.pytorch.org/whl/cu121"
-                echo   Using PyTorch CUDA 12.1 wheels
-            ) else (
-                echo !CUDA_LINE! | findstr "11.8 11.7" >nul
-                if !errorlevel!==0 (
-                    set "INDEX_URL=https://download.pytorch.org/whl/cu118"
-                    echo   Using PyTorch CUDA 11.8 wheels
-                )
-            )
-        )
+set "DRIVER="
+set "CUDA_LINE="
+set "CUDA_WHEEL_LABEL="
+set "CUDA_NOTE="
+for /f "usebackq tokens=1,* delims==" %%A in (`python scripts\detect_windows_torch_index.py --format env`) do set "%%A=%%B"
+if not defined INDEX_URL set "INDEX_URL=https://download.pytorch.org/whl/cpu"
+if not defined CUDA_NOTE set "CUDA_NOTE=Could not run CUDA detection helper; installing CPU-only PyTorch."
+if defined DRIVER echo(  NVIDIA driver detected: !DRIVER!
+if defined CUDA_LINE echo(  !CUDA_LINE!
+if /i "!CUDA_DETECT_MODE!"=="nvidia" (
+    echo(  Using !CUDA_WHEEL_LABEL!
+) else (
+    echo(  [WARN] !CUDA_NOTE!
+    if /i "!CUDA_DETECT_REASON!"=="nvidia_smi_not_found" (
+        echo(  If you have an NVIDIA GPU, ensure drivers are installed and nvidia-smi works.
     )
-)
-
-if not defined INDEX_URL (
-    echo   [WARN] No NVIDIA GPU detected — installing CPU-only PyTorch
-    echo   If you have an NVIDIA GPU, ensure drivers are installed and nvidia-smi works.
 )
 
 if defined INDEX_URL (

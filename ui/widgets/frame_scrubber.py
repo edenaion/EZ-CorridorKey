@@ -13,9 +13,46 @@ positioned exactly over the coverage bar + slider column.
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider, QPushButton, QToolTip
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider, QPushButton, QToolTip, QStyleOptionSlider, QStyle
 from PySide6.QtCore import Qt, Signal, QTimer, QPointF, QEvent, QSettings
 from PySide6.QtGui import QPainter, QColor, QPolygonF
+
+
+class _FatSlider(QSlider):
+    """QSlider with an enlarged clickable groove area.
+
+    Overrides the style sub-control rect so the groove (and its click target)
+    extends to fill the full widget height, making it much easier to click.
+    """
+
+    def __init__(self, orientation, parent=None):
+        super().__init__(orientation, parent)
+        self.setFixedHeight(22)  # taller than default ~16px
+
+    def _groove_rect(self):
+        """Return the expanded groove rect used for hit-testing."""
+        opt = QStyleOptionSlider()
+        self.initStyleOption(opt)
+        base = self.style().subControlRect(
+            QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self
+        )
+        # Expand groove to full widget height
+        base.setTop(0)
+        base.setBottom(self.height())
+        return base
+
+    def mousePressEvent(self, event):
+        """Jump slider to click position anywhere in the expanded groove."""
+        if event.button() == Qt.LeftButton:
+            groove = self._groove_rect()
+            if groove.width() > 0:
+                ratio = (event.position().x() - groove.x()) / groove.width()
+                ratio = max(0.0, min(1.0, ratio))
+                value = self.minimum() + round(ratio * (self.maximum() - self.minimum()))
+                self.setValue(value)
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
 
 class CoverageBar(QWidget):
@@ -327,7 +364,7 @@ class FrameScrubber(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(40)
+        self.setFixedHeight(48)
 
         row = QHBoxLayout(self)
         row.setContentsMargins(8, 0, 8, 0)
@@ -382,18 +419,18 @@ class FrameScrubber(QWidget):
         self._coverage_bar = CoverageBar()
         self._coverage_bar.setToolTip(
             "Coverage bar — shows which frames have been processed.\n"
-            "Green lane: annotated frames (brush strokes).\n"
+            "Green lane: painted frames (brush strokes).\n"
             "White lane: alpha hint coverage.\n"
             "Yellow lane: inference output coverage."
         )
         center_layout.addWidget(self._coverage_bar)
 
-        # Slider (bottom of center column)
-        self._slider = QSlider(Qt.Horizontal)
+        # Slider (bottom of center column) — tall hitbox for easy clicking
+        self._slider = _FatSlider(Qt.Horizontal)
         self._slider.setMinimum(0)
         self._slider.setMaximum(0)
         self._slider.setEnabled(False)
-        self._slider.setToolTip("Scrub through frames. Left/Right arrow keys to step one frame.")
+        self._slider.setToolTip("Scrub through frames. Scroll wheel or Left/Right to step.")
         self._slider.valueChanged.connect(self._on_slider_changed)
         center_layout.addWidget(self._slider)
 
@@ -642,6 +679,21 @@ class FrameScrubber(QWidget):
         self._slider.setValue(next_frame)
         self._suppress_signal = False
         self.frame_changed.emit(next_frame)
+
+    def wheelEvent(self, event) -> None:
+        """Scroll wheel scrubs frames: scroll up = forward, scroll down = back.
+
+        Steps by 2% of total frames per tick (minimum 1 frame).
+        """
+        if self._total <= 0:
+            return
+        step = max(1, self._total * 2 // 100)
+        delta = event.angleDelta().y()
+        if delta > 0:
+            self._slider.setValue(min(self._slider.maximum(), self._slider.value() + step))
+        elif delta < 0:
+            self._slider.setValue(max(0, self._slider.value() - step))
+        event.accept()
 
     def keyPressEvent(self, event) -> None:
         """Space for play/pause, Left/Right for stepping, I/O for markers."""
