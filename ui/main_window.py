@@ -314,8 +314,8 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Preferences...", self._show_preferences)
         edit_menu.addAction("Hotkeys...", self._show_hotkeys)
         edit_menu.addSeparator()
-        edit_menu.addAction("Track Annotation Masks", self._on_track_masks)
-        edit_menu.addAction("Clear Annotations", self._on_clear_annotations)
+        edit_menu.addAction("Track Paint Masks", self._on_track_masks)
+        edit_menu.addAction("Clear Paint Strokes", self._on_clear_annotations)
 
         # View menu
         view_menu = menu_bar.addMenu("View")
@@ -755,7 +755,7 @@ class MainWindow(QMainWindow):
         model = iv.annotation_model
         if not model.has_annotations():
             QMessageBox.information(
-                self, "No Annotations",
+                self, "No Paint Strokes",
                 "Paint green (1) and red (2) strokes on frames first.",
             )
             return
@@ -821,7 +821,7 @@ class MainWindow(QMainWindow):
         has_frame = model.has_annotations(stem_idx)
 
         box = QMessageBox(self)
-        box.setWindowTitle("Clear Annotations")
+        box.setWindowTitle("Clear Paint Strokes")
         box.setText("What would you like to clear?")
         frame_btn = box.addButton("This Frame", QMessageBox.AcceptRole)
         clip_btn = box.addButton("Entire Clip", QMessageBox.DestructiveRole)
@@ -1799,7 +1799,7 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.Yes:
                 self._submit_sam2_track_job(clip)
             else:
-                self._status_bar.set_message("Track preview ready. Refine annotations and run Track Mask again.")
+                self._status_bar.set_message("Track preview ready. Refine paint strokes and run Track Mask again.")
             return
 
         if 'comp' not in result:

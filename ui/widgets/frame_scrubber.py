@@ -419,7 +419,7 @@ class FrameScrubber(QWidget):
         self._coverage_bar = CoverageBar()
         self._coverage_bar.setToolTip(
             "Coverage bar — shows which frames have been processed.\n"
-            "Green lane: annotated frames (brush strokes).\n"
+            "Green lane: painted frames (brush strokes).\n"
             "White lane: alpha hint coverage.\n"
             "Yellow lane: inference output coverage."
         )

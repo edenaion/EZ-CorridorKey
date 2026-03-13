@@ -69,6 +69,12 @@ class ParameterPanel(QWidget):
         or_label.setStyleSheet("color: #808070; font-size: 11px;")
         alpha_layout.addWidget(or_label)
 
+        annotate_hint = QLabel("Paint subject with 1, background with 2")
+        annotate_hint.setAlignment(Qt.AlignCenter)
+        annotate_hint.setWordWrap(True)
+        annotate_hint.setStyleSheet("color: #A0A090; font-size: 10px; margin: 2px 0;")
+        alpha_layout.addWidget(annotate_hint)
+
         self._track_masks_btn = QPushButton("TRACK MASK")
         self._track_masks_btn.setEnabled(False)
         self._track_masks_btn.setToolTip(
@@ -78,7 +84,7 @@ class ParameterPanel(QWidget):
             "1. Press 1 to select the GREEN brush (foreground — subject to keep)\n"
             "2. Press 2 to select the RED brush (background — area to remove)\n"
             "3. Paint strokes on the left viewer over your footage\n"
-            "4. Click TRACK MASK to preview SAM2 on the annotated frame\n"
+            "4. Click TRACK MASK to preview SAM2 on the painted frame\n"
             "5. If the preview looks right, confirm to propagate across all frames"
         )
         self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
@@ -88,14 +94,21 @@ class ParameterPanel(QWidget):
         self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
         alpha_layout.addWidget(self._annotation_info)
 
+        matanyone2_hint = QLabel("Requires paint strokes on frame 1")
+        matanyone2_hint.setAlignment(Qt.AlignCenter)
+        matanyone2_hint.setWordWrap(True)
+        matanyone2_hint.setStyleSheet("color: #A0A090; font-size: 10px; margin: 2px 0;")
+        alpha_layout.addWidget(matanyone2_hint)
+
         self._matanyone2_btn = QPushButton("MATANYONE2")
         self._matanyone2_btn.setEnabled(False)
         self._matanyone2_btn.setToolTip(
             "Generate alpha hints using MatAnyone2 video matting.\n"
-            "Requires a mask on the first frame (frame 0).\n\n"
-            "1. Paint foreground/background prompts on frame 0\n"
-            "2. Click Track Mask to generate dense masks with SAM2\n"
-            "3. Click MATANYONE2 to generate temporally coherent AlphaHint"
+            "Requires paint strokes on the FIRST FRAME (frame 1).\n\n"
+            "1. Navigate to frame 1 (the very first frame)\n"
+            "2. Paint foreground (hotkey 1) and background (hotkey 2)\n"
+            "3. Click Track Mask to generate dense masks with SAM2\n"
+            "4. Click MATANYONE2 to generate temporally coherent AlphaHint"
         )
         self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
         alpha_layout.addWidget(self._matanyone2_btn)
@@ -457,7 +470,7 @@ class ParameterPanel(QWidget):
     def set_annotation_info(self, annotated: int, total: int) -> None:
         """Update annotation frame counter."""
         if annotated > 0 and total > 0:
-            self._annotation_info.setText(f"Annotated: {annotated} / {total} frames")
+            self._annotation_info.setText(f"Painted: {annotated} / {total} frames")
             self._track_masks_btn.setEnabled(True)
         else:
             self._annotation_info.setText("")

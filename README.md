@@ -19,7 +19,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Keyboard shortcuts | None | 20+ hotkeys |
 | Sound feedback | None | 7 context-aware sound effects |
 | Session persistence | None | Recent projects, auto-save |
-| Annotation / masking | Manual external tool | Built-in brush tool for VideoMaMa / MatAnyone2 masks |
+| Paint / masking | Manual external tool | Built-in brush tool for VideoMaMa / MatAnyone2 masks |
 | Alpha generators | None | GVM, VideoMaMa, MatAnyone2 (one-click) |
 | Apple Silicon | MPS only | MLX acceleration (auto-detected) |
 
@@ -124,7 +124,7 @@ Your clip starts in **RAW** state (gray badge). You need an alpha hint before ru
 Click **GVM AUTO** in the parameter panel. Works great for most green screen footage with people.
 
 **Option B — Track Mask + MatAnyone2 / VideoMaMa:**
-For difficult shots, use the annotation brush as a prompt tool:
+For difficult shots, use the paint brush as a prompt tool:
 1. Press **1** to activate foreground mode (green)
 2. Paint over the subject on a few key frames
 3. Press **2** to switch to background mode (red)
@@ -151,9 +151,9 @@ Your clip is now **READY** (yellow badge). Adjust parameters as needed, then cli
 
 Select multiple clips in the I/O tray (Ctrl+click or Shift+click), then click **RUN PIPELINE** in the status bar. The system automatically:
 
-1. Detects each clip's state and annotations
-2. Runs **TRACK MASK** and then **VideoMaMa** for annotated clips
-3. Runs **GVM Auto** for unannotated RAW clips
+1. Detects each clip's state and paint strokes
+2. Runs **TRACK MASK** and then **VideoMaMa** for painted clips
+3. Runs **GVM Auto** for unpainted RAW clips
 4. Chains **inference** after each alpha generation completes
 
 The entire pipeline is cancellable (Esc) and checkpointable — if interrupted, restarting picks up where each clip left off.
@@ -207,17 +207,17 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 | **O** | Set out-point marker |
 | **Alt+I** | Clear in/out range |
 
-### Annotation
+### Paint
 
 | Shortcut | Action |
 |----------|--------|
-| **1** | Foreground annotation brush (green) |
-| **2** | Background annotation brush (red) |
+| **1** | Foreground paint brush (green) |
+| **2** | Background paint brush (red) |
 | **C** | Cycle foreground brush color (green / blue) |
 | **Shift + drag up/down** | Resize brush |
 | **Alt + left-drag** | Draw straight line |
 | **Ctrl+Z** | Undo last stroke on current frame |
-| **Ctrl+C** | Clear all annotations |
+| **Ctrl+C** | Clear all paint strokes |
 
 ---
 
@@ -266,7 +266,7 @@ Each output channel can be individually enabled and set to EXR or PNG:
 |-------|-------|---------|
 | Orange | EXTRACTING | Video being extracted to image sequence |
 | Gray | RAW | Frames loaded, no alpha hint yet |
-| Blue | MASKED | Annotation masks painted (ready for VideoMaMa) |
+| Blue | MASKED | Paint masks created (ready for VideoMaMa) |
 | Yellow | READY | Alpha hint available, ready for inference |
 | Green | COMPLETE | Inference finished, outputs available |
 | Red | ERROR | Processing failed — can retry |
@@ -278,7 +278,7 @@ Each output channel can be individually enabled and set to EXR or PNG:
 The scrubber below the dual viewer provides:
 
 - **Transport buttons:** First frame, step back, play/pause, step forward, last frame
-- **Coverage bar:** Three color-coded lanes showing which frames have annotations (green), alpha hints (white), and inference output (yellow)
+- **Coverage bar:** Three color-coded lanes showing which frames have paint strokes (green), alpha hints (white), and inference output (yellow)
 - **In/Out markers:** Press **I** / **O** to set a sub-range for processing. When set, the RUN button changes to "RUN SELECTED" and playback loops within the range.
 
 ---
@@ -384,7 +384,8 @@ All installer scripts are open-source and readable in this repository. Independe
 
 This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey), licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
-GUI/SFX/Workflow/QA by [Ed Zisk](https://www.edzisk.com).
+GUI/SFX/Workflow/QA/Maintenance by [Ed Zisk](https://www.edzisk.com).
+
 Logo by [Sara Ann Stewart](https://www.instagram.com/sarastewartwork).
 Hiera optimization by [Jhe Kim](https://github.com/Raiden129).
 Tiling optimization by [MarcelLieb](https://github.com/MarcelLieb).
@@ -398,5 +399,6 @@ Optional modules:
 - **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) — Apache 2.0
 - **corridorkey-mlx** ([nikopueringer/corridorkey-mlx](https://github.com/nikopueringer/corridorkey-mlx)) — CC BY-NC-SA 4.0
 
+For specific troubleshooting regarding EZ-CK join: https://discord.gg/2fgZNKyNza
 Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
 
