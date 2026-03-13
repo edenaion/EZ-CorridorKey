@@ -168,6 +168,10 @@ def _wrap_mlx_output(
 class _MLXEngineAdapter:
     """Wraps CorridorKeyMLXEngine to match Torch process_frame() contract."""
 
+    # Enable threaded I/O overlap in the service layer.
+    # Unified memory benefits from pre-loading frames while GPU processes.
+    supports_threaded_io = True
+
     def __init__(self, raw_engine):
         self._engine = raw_engine
         logger.info("MLX adapter: despill/despeckle handled by adapter, not native MLX")

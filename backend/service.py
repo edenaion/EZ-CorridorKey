@@ -594,6 +594,61 @@ class CorridorKeyService:
 
         return self._engine_pool
 
+    def _compute_mlx_prefetch(self, clip: ClipEntry, range_count: int) -> int:
+        """Compute prefetch queue depth for MLX unified memory.
+
+        Uses available system memory to determine how many frames to
+        pre-load. Each frame in the queue holds image + mask arrays.
+        Reserves 15% of total memory as safety margin.
+
+        Falls back to a conservative default if memory detection fails.
+        """
+        env_override = os.environ.get('CORRIDORKEY_MLX_PREFETCH')
+        if env_override is not None:
+            try:
+                val = int(env_override)
+                return max(2, min(val, range_count))
+            except ValueError:
+                logger.warning("Invalid CORRIDORKEY_MLX_PREFETCH=%r, using auto", env_override)
+
+        # Estimate per-frame memory from clip resolution
+        try:
+            sample_files = clip.input_asset.get_frame_files()
+            if sample_files:
+                sample = cv2.imread(
+                    os.path.join(clip.input_asset.path, sample_files[0]),
+                    cv2.IMREAD_UNCHANGED,
+                )
+                if sample is not None:
+                    h, w = sample.shape[:2]
+                else:
+                    h, w = 2160, 3840  # assume 4K
+            else:
+                h, w = 2160, 3840
+        except Exception:
+            h, w = 2160, 3840
+
+        # Per frame: image (H×W×3) + mask (H×W×1) + result copies ≈ 3× raw
+        bytes_per_frame = h * w * 4 * 3  # float32, 3 buffers
+
+        try:
+            import psutil
+            mem = psutil.virtual_memory()
+            available = mem.available
+            total = mem.total
+            # Reserve 15% of total as safety margin
+            budget = available - int(total * 0.15)
+            if budget <= 0:
+                return max(2, min(4, range_count))
+            prefetch = max(2, int(budget / bytes_per_frame))
+        except ImportError:
+            logger.debug("psutil not available, using conservative prefetch")
+            prefetch = 8  # conservative fallback
+
+        # Cap to clip length and reasonable upper bound
+        prefetch = min(prefetch, range_count, 64)
+        return max(2, prefetch)
+
     def _get_gvm(self):
         """Lazy-load the GVM processor."""
         self._ensure_model(_ActiveModel.GVM)
@@ -888,9 +943,9 @@ class CorridorKeyService:
     ) -> list[FrameResult]:
         """Run CorridorKey inference on a single clip.
 
-        Uses gated model switch protocol. If pool_size > 1, dispatches
-        to _run_inference_parallel with N engines processing N frames
-        concurrently. Otherwise uses _run_inference_sequential.
+        Uses gated model switch protocol. Dispatches to threaded pipeline
+        when multi-engine (CUDA) or when engine supports I/O overlap (MLX
+        unified memory). Single-engine Torch uses sequential path.
 
         Args:
             clip: Must be in READY or COMPLETE state with both input_asset and alpha_asset.
@@ -922,15 +977,28 @@ class CorridorKeyService:
                 logger.info("run_inference: acquired _gpu_lock")
                 engines = self._get_engine_pool(on_status=on_status)
 
-            if len(engines) == 1:
-                return self._run_inference_sequential(
-                    clip, params, engines[0], job=job,
+            # Dispatch: multi-engine CUDA always uses threaded pipeline.
+            # Single-engine MLX also uses threaded pipeline for I/O overlap
+            # (unified memory benefits from pre-loading frames while GPU
+            # processes). Single-engine Torch stays sequential (no benefit
+            # from threading overhead without GIL-releasing CUDA overlap).
+            use_threaded = (
+                len(engines) > 1
+                or getattr(engines[0], 'supports_threaded_io', False) is True
+            )
+            if use_threaded:
+                logger.info(
+                    "Using threaded pipeline (%d engine(s), I/O overlap)",
+                    len(engines),
+                )
+                return self._run_inference_parallel(
+                    clip, params, engines, job=job,
                     on_progress=on_progress, on_warning=on_warning,
                     on_status=on_status, skip_stems=skip_stems,
                     output_config=output_config, frame_range=frame_range,
                 )
-            return self._run_inference_parallel(
-                clip, params, engines, job=job,
+            return self._run_inference_sequential(
+                clip, params, engines[0], job=job,
                 on_progress=on_progress, on_warning=on_warning,
                 on_status=on_status, skip_stems=skip_stems,
                 output_config=output_config, frame_range=frame_range,
@@ -1170,9 +1238,17 @@ class CorridorKeyService:
 
         skip_stems = skip_stems or set()
 
-        # Bounded queues for pipeline stages
-        in_q: queue.Queue = queue.Queue(maxsize=2 * N)
-        out_q: queue.Queue = queue.Queue(maxsize=2 * N)
+        # Bounded queues for pipeline stages.
+        # Multi-engine CUDA: 2× engines keeps workers fed without VRAM thrashing.
+        # Single-engine MLX (unified memory): deeper prefetch so reader stays
+        # ahead of GPU — the whole point of I/O overlap on Apple Silicon.
+        if N == 1 and getattr(engines[0], 'supports_threaded_io', False):
+            prefetch = self._compute_mlx_prefetch(clip, range_count)
+            logger.info("MLX I/O-overlap mode: prefetch=%d frames", prefetch)
+        else:
+            prefetch = 2 * N
+        in_q: queue.Queue = queue.Queue(maxsize=prefetch)
+        out_q: queue.Queue = queue.Queue(maxsize=prefetch)
         stop = threading.Event()
         error_box: list = [None]
 
