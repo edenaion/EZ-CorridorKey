@@ -312,12 +312,13 @@ class CorridorKeyService:
                 logger.debug("CUDA cache clear skipped after SAM2 model switch", exc_info=True)
 
     def set_pool_size(self, n: int) -> None:
-        """Set the number of parallel inference engines (1-8).
+        """Set the number of parallel inference engines.
 
         Takes effect on the next _get_engine_pool() call. If shrinking,
-        excess engines are deleted immediately to free VRAM.
+        excess engines are deleted immediately to free memory.
+        OOM during creation gracefully stops at however many engines fit.
         """
-        n = max(1, min(n, 8))
+        n = max(1, n)
         if n != self._pool_size:
             logger.info("Engine pool size: %d -> %d", self._pool_size, n)
             old_size = self._pool_size

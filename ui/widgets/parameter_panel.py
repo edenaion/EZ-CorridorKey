@@ -313,13 +313,14 @@ class ParameterPanel(QWidget):
         parallel_label = QLabel("Parallel frames")
         parallel_row.addWidget(parallel_label, 1)
         self._parallel_spin = QSpinBox()
-        self._parallel_spin.setRange(1, 8)
+        self._parallel_spin.setRange(1, 64)
         self._parallel_spin.setToolTip(
             "Process multiple frames simultaneously using parallel engines.\n\n"
-            "WARNING: Each extra engine loads a full copy of the model\n"
-            "including compiled kernels (~6-8 GB VRAM per engine).\n"
-            "Only increase if you have VRAM headroom during\n"
-            "single-frame inference. Check GPU memory usage first.\n\n"
+            "Each extra engine loads a full copy of the model.\n"
+            "CUDA: ~6-8 GB VRAM per engine.\n"
+            "Apple Silicon: uses unified memory shared with system.\n\n"
+            "Only increase if you have memory headroom during\n"
+            "single-frame inference. Check GPU/memory usage first.\n\n"
             "Default: 1 (safest). Try 2 first, then increase if stable."
         )
         self._parallel_spin.setFixedWidth(60)
