@@ -291,8 +291,9 @@ class PreferencesDialog(QDialog):
             "Windows: download and install a full bundled FFmpeg build into "
             "tools/ffmpeg, validate ffmpeg + ffprobe 7+, and switch CorridorKey "
             "to that local copy immediately.\n\n"
-            "macOS/Linux: do not change system packages. CorridorKey shows the "
-            "exact install commands and copies them to your clipboard instead."
+            "macOS: install FFmpeg via Homebrew and validate ffmpeg + ffprobe 7+.\n\n"
+            "Linux: do not change system packages. CorridorKey shows the exact "
+            "install commands and copies them to your clipboard instead."
         )
         self._repair_ffmpeg_btn.clicked.connect(self._on_repair_ffmpeg)
         ffmpeg_btn_row.addWidget(self._repair_ffmpeg_btn)
