@@ -51,6 +51,8 @@ VideoMaMaInferenceModule/checkpoints/*
 !VideoMaMaInferenceModule/checkpoints/.gitkeep
 gvm_core/weights/*
 !gvm_core/weights/.gitkeep
+BiRefNetModule/checkpoints/*
+!BiRefNetModule/checkpoints/.gitkeep
 
 # Dev tools (local only, not shipped)
 .agent/
