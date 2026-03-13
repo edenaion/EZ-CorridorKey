@@ -249,10 +249,15 @@ def create_engine(
         ckpt = _discover_checkpoint(MLX_EXT)
         from corridorkey_mlx import CorridorKeyMLXEngine  # type: ignore[import-not-found]
 
-        raw_engine = CorridorKeyMLXEngine(
-            str(ckpt), img_size=img_size, tile_size=tile_size, overlap=overlap,
-        )
-        mode = f"tiled (tile={tile_size}, overlap={overlap})" if tile_size else "full-frame"
+        try:
+            raw_engine = CorridorKeyMLXEngine(
+                str(ckpt), img_size=img_size, tile_size=tile_size, overlap=overlap,
+            )
+            mode = f"tiled (tile={tile_size}, overlap={overlap})" if tile_size else "full-frame"
+        except TypeError:
+            # Older corridorkey_mlx without tiled inference support
+            raw_engine = CorridorKeyMLXEngine(str(ckpt), img_size=img_size)
+            mode = "full-frame (tiling not supported by installed corridorkey_mlx)"
         logger.info("MLX engine loaded: %s [%s]", ckpt.name, mode)
         return _MLXEngineAdapter(raw_engine)
     else:
