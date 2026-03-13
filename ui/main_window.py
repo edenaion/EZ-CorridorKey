@@ -3244,7 +3244,8 @@ class MainWindow(QMainWindow):
             '<a href="https://www.edzisk.com">Ed Zisk</a> — GUI, workflow, SFX, QA<br>'
             '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo<br>'
             '<a href="https://github.com/Raiden129">Jhe Kim</a> — Hiera optimization<br>'
-            '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization'
+            '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization<br>'
+            '<a href="https://github.com/99oblivius">99oblivius</a> — FX graph cache (<a href="https://github.com/99oblivius/CorridorKey-Engine">CorridorKey-Engine</a>)'
             "</p>"
         )
         # QMessageBox uses an internal QLabel — find it and enable clickable links

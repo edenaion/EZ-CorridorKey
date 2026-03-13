@@ -948,8 +948,8 @@ def build_exr_vf(video_info: dict) -> str:
     #
     # FFmpeg 8.x swscaler rejects YUV→RGB when TRC is null (bug #11585).
     # Prepend setparams to tag the missing TRC — metadata only, no pixel math.
-    raw_ct = _clean_color_value(video_info.get("color_transfer"))
-    prefix = f"setparams=color_trc={ct}," if not raw_ct else ""
+    raw_ct = video_info.get("color_transfer")
+    prefix = f"setparams=color_trc={ct}," if raw_ct is None else ""
 
     return (
         f"{prefix}scale=in_color_matrix={cs}:in_range={cr},format=gbrpf32le"

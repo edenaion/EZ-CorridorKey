@@ -389,6 +389,7 @@ GUI/SFX/Workflow/QA/Maintenance by [Ed Zisk](https://www.edzisk.com).
 Logo by [Sara Ann Stewart](https://www.instagram.com/sarastewartwork).
 Hiera optimization by [Jhe Kim](https://github.com/Raiden129).
 Tiling optimization by [MarcelLieb](https://github.com/MarcelLieb).
+FX graph cache from [99oblivius](https://github.com/99oblivius) ([CorridorKey-Engine](https://github.com/99oblivius/CorridorKey-Engine)).
 
 If you use or build on this project, please star this repo and credit the contributors <3
 
