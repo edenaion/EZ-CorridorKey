@@ -1,0 +1,91 @@
+set -euxo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+requested_python="__LINUX_PYTHON__"
+requested_python_bin="python${requested_python}"
+install_log=/tmp/corridorkey-install.log
+
+sudo apt-get update
+sudo apt-get install -y \
+  ca-certificates \
+  curl \
+  gzip \
+  libegl1 \
+  libgl1 \
+  libopengl0 \
+  libpulse0 \
+  libxcb-cursor0 \
+  libxkbcommon-x11-0 \
+  software-properties-common \
+  tar
+
+if ! command -v "${requested_python_bin}" >/dev/null 2>&1; then
+  sudo add-apt-repository ppa:deadsnakes/ppa -y
+  sudo apt-get update
+  sudo apt-get install -y "${requested_python_bin}" "${requested_python_bin}-venv"
+fi
+
+sudo ln -sf "$(command -v "${requested_python_bin}")" /usr/local/bin/python
+python --version
+command -v python
+nvidia-smi
+
+workdir=/tmp/corridorkey-src
+archive=/tmp/corridorkey.tar.gz
+rm -rf "$workdir"
+mkdir -p "$workdir"
+curl -L "https://codeload.github.com/__REPO_SLUG__/tar.gz/__REPO_REF__" -o "$archive"
+tar -xzf "$archive" -C "$workdir" --strip-components=1
+cd "$workdir"
+
+export CORRIDORKEY_INSTALL_SAM2=n
+export CORRIDORKEY_PREDOWNLOAD_SAM2=n
+export CORRIDORKEY_INSTALL_GVM=n
+export CORRIDORKEY_INSTALL_VIDEOMAMA=n
+export CORRIDORKEY_CREATE_SHORTCUT=n
+
+if ! bash 1-install.sh >"${install_log}" 2>&1; then
+  cat "${install_log}"
+  echo "Linux installer failed" >&2
+  exit 1
+fi
+cat "${install_log}"
+if [[ ! -x ".venv/bin/python" ]]; then
+  echo ".venv/bin/python missing after installer run" >&2
+  exit 3
+fi
+if grep -q "CPU-only PyTorch" "${install_log}"; then
+  echo "Installer log indicates CPU-only PyTorch selection on a GPU VM" >&2
+  exit 4
+fi
+if grep -q "No NVIDIA GPU detected" "${install_log}"; then
+  echo "Installer log indicates NVIDIA GPU was not detected on a GPU VM" >&2
+  exit 5
+fi
+
+export CORRIDORKEY_SKIP_STARTUP_DIAGNOSTICS=1
+export CORRIDORKEY_SKIP_UPDATE_CHECK=1
+
+.venv/bin/python scripts/ci_smoke.py
+.venv/bin/python -m pip show torch torchvision
+.venv/bin/python - <<'PY'
+import importlib.metadata
+import json
+from backend.service import CorridorKeyService
+import torch
+result = {
+    "torch_version": torch.__version__,
+    "torch_metadata": importlib.metadata.version("torch"),
+    "torch_cuda": torch.version.cuda,
+    "cuda_available": bool(torch.cuda.is_available()),
+    "service_detect_device": CorridorKeyService().detect_device(),
+}
+print("CK_RESULT_JSON=" + json.dumps(result, sort_keys=True))
+if "+cpu" in torch.__version__.lower():
+    raise SystemExit("torch CPU wheel installed inside .venv on GPU VM")
+if not torch.version.cuda:
+    raise SystemExit("torch.version.cuda is empty inside .venv on GPU VM")
+raise SystemExit(0 if torch.cuda.is_available() else 2)
+PY
+
+nvidia-smi

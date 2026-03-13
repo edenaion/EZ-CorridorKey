@@ -1,0 +1,88 @@
+$ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+$pythonVersion = "__WINDOWS_PYTHON__"
+$pythonShort = "__WINDOWS_PY_SHORT__"
+$pythonInstaller = "$env:TEMP\python-$pythonVersion-amd64.exe"
+$repoZip = "$env:TEMP\corridorkey.zip"
+$repoRoot = "$env:TEMP\corridorkey-src"
+$installLog = "$env:TEMP\corridorkey-install.log"
+
+Write-Host "=== Windows GPU smoke start ==="
+
+$python = Get-Command python -ErrorAction SilentlyContinue
+$currentPythonVersion = $null
+if ($python) {
+    $currentPythonVersion = (& python -c "import sys; print('.'.join(map(str, sys.version_info[:3])))").Trim()
+}
+if (($null -eq $currentPythonVersion) -or ($currentPythonVersion -ne $pythonVersion)) {
+    Invoke-WebRequest -Uri "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-amd64.exe" -OutFile $pythonInstaller
+    Start-Process -FilePath $pythonInstaller -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1 Include_test=0" -Wait
+    $env:Path = "C:\Program Files\Python$pythonShort;C:\Program Files\Python$pythonShort\Scripts;$env:Path"
+}
+
+python --version
+Get-Command python | Format-List Source, Version
+
+if (Test-Path $repoRoot) {
+    Remove-Item $repoRoot -Recurse -Force
+}
+New-Item -ItemType Directory -Path $repoRoot | Out-Null
+
+Invoke-WebRequest -Uri "https://codeload.github.com/__REPO_SLUG__/zip/__REPO_REF__" -OutFile $repoZip
+Expand-Archive -Path $repoZip -DestinationPath $repoRoot -Force
+$repoDir = Get-ChildItem $repoRoot | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+Set-Location $repoDir.FullName
+
+$env:CORRIDORKEY_INSTALL_SAM2 = "n"
+$env:CORRIDORKEY_PREDOWNLOAD_SAM2 = "n"
+$env:CORRIDORKEY_INSTALL_GVM = "n"
+$env:CORRIDORKEY_INSTALL_VIDEOMAMA = "n"
+$env:CORRIDORKEY_CREATE_SHORTCUT = "n"
+
+if (Test-Path $installLog) {
+    Remove-Item $installLog -Force
+}
+& cmd.exe /c 1-install.bat 2>&1 | Tee-Object -FilePath $installLog
+Get-Content $installLog
+if (-not (Test-Path ".venv\Scripts\python.exe")) {
+    throw "Windows installer did not produce .venv\\Scripts\\python.exe"
+}
+if (Select-String -Path $installLog -Pattern "CPU-only PyTorch" -Quiet) {
+    throw "Installer log indicates CPU-only PyTorch selection on a GPU VM"
+}
+if (Select-String -Path $installLog -Pattern "No NVIDIA GPU detected" -Quiet) {
+    throw "Installer log indicates NVIDIA GPU was not detected on a GPU VM"
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "Windows installer failed with exit code $LASTEXITCODE"
+}
+
+$env:CORRIDORKEY_SKIP_STARTUP_DIAGNOSTICS = "1"
+$env:CORRIDORKEY_SKIP_UPDATE_CHECK = "1"
+
+& .\.venv\Scripts\python.exe scripts\ci_smoke.py
+if ($LASTEXITCODE -ne 0) {
+    throw "Windows headless smoke failed with exit code $LASTEXITCODE"
+}
+
+& .\.venv\Scripts\python.exe -m pip show torch torchvision
+& .\.venv\Scripts\python.exe -c "import importlib.metadata, json, sys, torch; from backend.service import CorridorKeyService; result={'torch_version': torch.__version__, 'torch_metadata': importlib.metadata.version('torch'), 'torch_cuda': torch.version.cuda, 'cuda_available': bool(torch.cuda.is_available()), 'service_detect_device': CorridorKeyService().detect_device()}; print('CK_RESULT_JSON=' + json.dumps(result, sort_keys=True)); sys.exit('torch CPU wheel installed inside .venv on GPU VM' if '+cpu' in torch.__version__.lower() else 'torch.cuda.is_available() is false inside .venv on GPU VM' if not torch.cuda.is_available() else 'torch.version.cuda is empty inside .venv on GPU VM' if not torch.version.cuda else 0)"
+if ($LASTEXITCODE -ne 0) {
+    throw "Torch CUDA validation failed with exit code $LASTEXITCODE"
+}
+
+$smi = (Get-Command nvidia-smi.exe -ErrorAction SilentlyContinue).Source
+if (-not $smi) {
+    $candidate = "C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"
+    if (Test-Path $candidate) {
+        $smi = $candidate
+    }
+}
+if (-not $smi) {
+    throw "nvidia-smi not found after driver installation"
+}
+
+& $smi
+Write-Host "=== Windows GPU smoke done ==="
