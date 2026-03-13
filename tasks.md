@@ -55,6 +55,18 @@ Goal: Users clone, install, run. No fiddling. Windows/Mac/Linux.
 
 ---
 
+## CRITICAL — Regressions (mat-anyone branch)
+
+### Comp/Proc output washed out (color desaturation)
+- **Priority:** P0
+- **Symptom:** COMP and PROC outputs appear washed out / desaturated compared to v1.5.1. FG is acceptable. Affects both GVM AUTO and MatAnyone2 alpha paths — not alpha-generator specific.
+- **Confirmed:** Regression exists on `mat-anyone` branch. Not present on v1.5.1 tag (`89f94f4`).
+- **Likely cause:** Color space dropdown stuck on "Linear" for non-EXR clips. The `auto_detect_color_space()` call (added in commit `5753855`) only upgrades sRGB→Linear but never resets back. If the dropdown was ever set to Linear (manually or via EXR auto-detect), it persists across clip switches.
+- **Fix approach:** Either reset color space per-clip based on asset type, or store per-clip color space preference. Check if `set_params()` restores it correctly on clip switch.
+- **Files:** `ui/main_window.py:973`, `ui/widgets/parameter_panel.py:366-372`, `backend/service.py` (EXR auto-detect in `_read_input_frame` and `_run_inference_frame`)
+
+---
+
 ## Features In Progress
 
 ### Frame Timing

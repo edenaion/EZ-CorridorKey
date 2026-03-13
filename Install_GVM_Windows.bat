@@ -20,23 +20,15 @@ call venv\Scripts\activate.bat
 if exist "gvm_core\requirements.txt" (
     REM Detect CUDA for correct PyTorch wheel (GVM requirements list torch)
     set "INDEX_URL="
-    where nvidia-smi >nul 2>&1
-    if !errorlevel! equ 0 (
-        for /f "tokens=*" %%i in ('nvidia-smi 2^>nul ^| findstr "CUDA Version"') do set "CUDA_LINE=%%i"
-        if defined CUDA_LINE (
-            echo !CUDA_LINE! | findstr "12.8 12.7 12.6 12.5 12.4" >nul
-            if !errorlevel!==0 (
-                set "INDEX_URL=https://download.pytorch.org/whl/cu128"
-            ) else (
-                echo !CUDA_LINE! | findstr "12.1 12.2 12.3" >nul
-                if !errorlevel!==0 (
-                    set "INDEX_URL=https://download.pytorch.org/whl/cu121"
-                ) else (
-                    echo !CUDA_LINE! | findstr "11.8 11.7" >nul
-                    if !errorlevel!==0 set "INDEX_URL=https://download.pytorch.org/whl/cu118"
-                )
-            )
-        )
+    set "CUDA_NOTE="
+    set "CUDA_WHEEL_LABEL="
+    for /f "usebackq tokens=1,* delims==" %%A in (`python scripts\detect_windows_torch_index.py --format env`) do set "%%A=%%B"
+    if not defined INDEX_URL set "INDEX_URL=https://download.pytorch.org/whl/cpu"
+    if not defined CUDA_NOTE set "CUDA_NOTE=Could not run CUDA detection helper; installing CPU-only PyTorch."
+    if /i "!CUDA_DETECT_MODE!"=="nvidia" (
+        echo(  Using !CUDA_WHEEL_LABEL!
+    ) else (
+        echo(  [WARN] !CUDA_NOTE!
     )
     if defined INDEX_URL (
         pip install --extra-index-url !INDEX_URL! -r gvm_core\requirements.txt

@@ -336,3 +336,25 @@ def paint_resize_indicator(painter: QPainter, pos: QPointF,
     text_rect = QRectF(pos.x() - 30, pos.y() + radius_display + 4, 60, 18)
     painter.drawText(text_rect, Qt.AlignCenter, text)
     painter.restore()
+
+
+def paint_annotation_hud(
+    painter: QPainter,
+    *,
+    image_rect: QRectF,
+    brush_type: str,
+    radius_image: float,
+) -> None:
+    """Draw a persistent HUD describing the exact SAM prompt semantics."""
+    painter.save()
+    font = painter.font()
+    font.setPointSize(10)
+    painter.setFont(font)
+
+    brush_label = "FG" if brush_type == "fg" else "BG"
+    text = f"{brush_label} brush {int(round(radius_image))}px | SAM prompt: sparse points + box"
+    hud_rect = QRectF(image_rect.x() + 12, image_rect.y() + 12, 380, 24)
+    painter.fillRect(hud_rect, QColor(0, 0, 0, 150))
+    painter.setPen(_RESIZE_TEXT)
+    painter.drawText(hud_rect, Qt.AlignCenter, text)
+    painter.restore()

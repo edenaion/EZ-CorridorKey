@@ -257,37 +257,26 @@ if not exist ".venv\Scripts\activate.bat" (
 call .venv\Scripts\activate.bat
 
 REM Detect CUDA version for correct PyTorch wheel
-set INDEX_URL=
-nvidia-smi >nul 2>&1
-if !errorlevel! neq 0 goto :no_nvidia
+set "INDEX_URL="
+set "DRIVER="
+set "CUDA_LINE="
+set "CUDA_VERSION="
+set "CUDA_WHEEL_LABEL="
+set "CUDA_NOTE="
+for /f "usebackq tokens=1,* delims==" %%A in (`python scripts\detect_windows_torch_index.py --format env`) do set "%%A=%%B"
+if not defined INDEX_URL set "INDEX_URL=https://download.pytorch.org/whl/cpu"
+if not defined CUDA_NOTE set "CUDA_NOTE=Could not run CUDA detection helper; installing CPU-only PyTorch."
 
-for /f "tokens=*" %%i in ('nvidia-smi --query-gpu=driver_version --format=csv^,noheader 2^>nul') do set DRIVER=%%i
-echo   NVIDIA driver detected: !DRIVER!
-for /f "tokens=*" %%i in ('nvidia-smi 2^>nul ^| findstr "CUDA Version"') do set CUDA_LINE=%%i
-echo   !CUDA_LINE!
-
-<nul set /p "=!CUDA_LINE!" | findstr /r "13\.0 12\.8 12\.7 12\.6 12\.5 12\.4"
-if !errorlevel!==0 (
-    set INDEX_URL=https://download.pytorch.org/whl/cu128
-    echo   Using PyTorch CUDA 12.8 wheels
-    goto :pip_install
+if defined DRIVER echo(  NVIDIA driver detected: !DRIVER!
+if defined CUDA_LINE echo(  !CUDA_LINE!
+if /i "!CUDA_DETECT_MODE!"=="nvidia" (
+    echo(  Using !CUDA_WHEEL_LABEL!
+) else (
+    echo(  !CUDA_NOTE!
+    if /i "!CUDA_DETECT_REASON!"=="nvidia_smi_not_found" (
+        echo(  If you have an NVIDIA GPU, ensure drivers are installed and nvidia-smi works.
+    )
 )
-<nul set /p "=!CUDA_LINE!" | findstr /r "12\.1 12\.2 12\.3"
-if !errorlevel!==0 (
-    set INDEX_URL=https://download.pytorch.org/whl/cu121
-    echo   Using PyTorch CUDA 12.1 wheels
-    goto :pip_install
-)
-<nul set /p "=!CUDA_LINE!" | findstr /r "11\.8 11\.7"
-if !errorlevel!==0 (
-    set INDEX_URL=https://download.pytorch.org/whl/cu118
-    echo   Using PyTorch CUDA 11.8 wheels
-    goto :pip_install
-)
-
-:no_nvidia
-echo   No NVIDIA GPU detected, installing CPU-only PyTorch
-set INDEX_URL=https://download.pytorch.org/whl/cpu
 
 :pip_install
 echo   Installing packages via pip (this may take a few minutes)...

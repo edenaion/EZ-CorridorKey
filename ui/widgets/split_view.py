@@ -23,7 +23,7 @@ from PySide6.QtGui import (
 
 from ui.widgets.annotation_overlay import (
     AnnotationModel, paint_annotations, paint_brush_cursor,
-    paint_resize_indicator,
+    paint_resize_indicator, paint_annotation_hud,
 )
 
 
@@ -317,6 +317,12 @@ class SplitViewWidget(QWidget):
         painter.setClipRect(paintable_rect)
         paint_annotations(painter, strokes, current, dest, iw, ih)
         painter.restore()
+        paint_annotation_hud(
+            painter,
+            image_rect=paintable_rect,
+            brush_type=self._annotation_mode,
+            radius_image=self._brush_radius,
+        )
 
         # Brush cursor at mouse position
         if self._annotation_mode and self.underMouse() and paintable_rect.contains(self._mouse_pos):

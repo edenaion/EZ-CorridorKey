@@ -4,13 +4,21 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [1.5.2] - 2026-03-12 — Installer & Updater Hardening
+## [Unreleased] - 2026-03-12 — Preview Color Fidelity, Viewer Consistency, SAM2 Prompt-Frame Quality
 
 ### Fixed
-- **CUDA version checks in `1-install.bat`** — fixed CUDA detection logic that was failing for some GPU configurations (community contribution via PR #18 by pineapplemachine)
-- **Cross-platform updater subprocess flags** — guarded Windows-specific `CREATE_NO_WINDOW` flag so `_run_update` doesn't crash on macOS/Linux
-- **CI branch checkout** — `git checkout -B` prevents failures when branch already exists on main
-- **Report Issue dialog version** — was hardcoded to `1.1.2` since initial release; now reads the installed version dynamically via `importlib.metadata`
+- **Live preview EXR color-space override** — `PREVIEW_REPROCESS` no longer silently reinterprets extracted video EXR sequences as Linear on every rerun. When the user leaves the clip in `sRGB`, live preview now stays in `sRGB`; when the user explicitly switches to `Linear`, the preview follows that override. This fixes the washed-out/brightened image jump that appeared while adjusting despill or refiner controls.
+- **`Processed` viewer contract** — `PROC` preview now reflects the premultiplied RGBA data actually written on disk instead of unpremultiplying it in the viewer and making the result appear brighter than `COMP`. The viewer now shows `PROC` over black, while `COMP` remains checkerboard-backed.
+- **Thumbnail decode mismatch** — clip thumbnails in the Input/Exports tray now use the same input decode path as the main viewer. This fixes brightened or washed-out thumbnails that disagreed with the clip shown in the large viewer.
+- **SAM2 preview input color truth** — Track Mask preview and full SAM2 tracking now load EXR sequence frames with the same source-truth color interpretation as the viewer. Extracted video EXRs stay sRGB-range by default unless the user explicitly overrides the color space, so the SAM preview frame no longer brightens before segmentation.
+- **SAM2 prompt-frame quality on annotated frames** — the first displayed SAM2 mask no longer feeds the entire brush-derived point cloud into a single `add_new_points_or_box()` call. Prompt points are now applied as smaller same-frame refinements, which lets SAM2 reuse prior mask logits as intended and eliminates the boxy, hole-ridden prompt-frame masks that made the first preview look broken.
+
+### Verification
+- **Focused preview color tests** — regression coverage added for the EXR live-preview color-space override path.
+- **Focused display tests** — regression coverage added for `PROC` display transform behavior versus saved premultiplied output.
+- **Focused thumbnail tests** — regression coverage added so tray thumbnails must match the main viewer decode path.
+- **Focused SAM2 wrapper tests** — regression coverage added for iterative same-frame prompt refinement batching in the SAM2 wrapper.
+- **Real-clip smoke confirmation** — the 5-frame SAM2 smoke test on `Projects/260312_015727_Input/clips/Input` now passes with stable fills around `0.238` and no holey/fragmented prompt frame.
 
 ---
 

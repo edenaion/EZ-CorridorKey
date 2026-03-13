@@ -8,6 +8,7 @@ Mocking strategy (Codex-informed hybrid):
 import json
 import os
 import tempfile
+import types
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import cv2
@@ -21,6 +22,7 @@ from backend.service import (
     OutputConfig,
     FrameResult,
     _ActiveModel,
+    _import_matanyone2_processor_class,
 )
 from backend.clip_state import ClipAsset, ClipEntry, ClipState
 from backend.errors import (
@@ -148,6 +150,34 @@ class TestModelResidency:
         svc = CorridorKeyService()
         svc._ensure_model(_ActiveModel.INFERENCE)
         assert svc._active_model == _ActiveModel.INFERENCE
+
+
+class TestMatAnyone2Import:
+    def test_prefers_modules_namespace_layout(self, monkeypatch):
+        sentinel = object()
+
+        def fake_import(name):
+            if name == "modules.MatAnyone2Module.wrapper":
+                return types.SimpleNamespace(MatAnyone2Processor=sentinel)
+            raise ModuleNotFoundError(name=name)
+
+        monkeypatch.setattr("backend.service.importlib.import_module", fake_import)
+        cls = _import_matanyone2_processor_class()
+        assert cls is sentinel
+
+    def test_falls_back_to_legacy_layout(self, monkeypatch):
+        sentinel = object()
+
+        def fake_import(name):
+            if name == "modules.MatAnyone2Module.wrapper":
+                raise ModuleNotFoundError(name="modules.MatAnyone2Module.wrapper")
+            if name == "MatAnyone2Module.wrapper":
+                return types.SimpleNamespace(MatAnyone2Processor=sentinel)
+            raise AssertionError(name)
+
+        monkeypatch.setattr("backend.service.importlib.import_module", fake_import)
+        cls = _import_matanyone2_processor_class()
+        assert cls is sentinel
 
 
 # ── TestGetEngine ──

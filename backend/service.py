@@ -17,6 +17,7 @@ import os
 import shutil
 import sys
 import glob as glob_module
+import importlib
 import logging
 import threading
 import time
@@ -70,6 +71,49 @@ if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _import_matanyone2_processor_class():
+    """Import MatAnyone2Processor from either the new or legacy module layout.
+
+    Supported layouts:
+    - modules/MatAnyone2Module/wrapper.py  -> modules.MatAnyone2Module.wrapper
+    - MatAnyone2Module/wrapper.py          -> MatAnyone2Module.wrapper
+    """
+    candidates = (
+        ("modules.MatAnyone2Module.wrapper", BASE_DIR),
+        ("MatAnyone2Module.wrapper", os.path.join(BASE_DIR, "modules")),
+        ("MatAnyone2Module.wrapper", BASE_DIR),
+    )
+    missing_roots = (
+        os.path.join(BASE_DIR, "modules", "MatAnyone2Module"),
+        os.path.join(BASE_DIR, "MatAnyone2Module"),
+    )
+    last_error: ModuleNotFoundError | None = None
+
+    for module_name, path_entry in candidates:
+        if path_entry and path_entry not in sys.path:
+            sys.path.insert(0, path_entry)
+        try:
+            module = importlib.import_module(module_name)
+            return module.MatAnyone2Processor
+        except ModuleNotFoundError as exc:
+            # Only fall through on the layout module itself missing. If an inner
+            # dependency is missing, bubble that error up unchanged.
+            if exc.name not in {
+                "modules",
+                "modules.MatAnyone2Module",
+                "modules.MatAnyone2Module.wrapper",
+                "MatAnyone2Module",
+                "MatAnyone2Module.wrapper",
+            }:
+                raise
+            last_error = exc
+
+    expected = " or ".join(missing_roots)
+    raise ModuleNotFoundError(
+        f"MatAnyone2 module not found. Expected {expected}"
+    ) from last_error
 
 class _ActiveModel(Enum):
     """Tracks which heavy model is currently loaded in VRAM."""
@@ -516,8 +560,7 @@ class CorridorKeyService:
         if self._matanyone2_processor is not None:
             return self._matanyone2_processor
 
-        sys.path.insert(0, os.path.join(BASE_DIR, "MatAnyone2Module"))
-        from MatAnyone2Module.wrapper import MatAnyone2Processor
+        MatAnyone2Processor = _import_matanyone2_processor_class()
         logger.info("Loading MatAnyone2 processor...")
         t0 = time.monotonic()
         self._matanyone2_processor = MatAnyone2Processor(device=self._device)

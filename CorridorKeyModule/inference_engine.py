@@ -389,6 +389,14 @@ class CorridorKeyEngine:
 
             if self._use_compile:
                 try:
+                    # Enable FX graph caching — skips Triton tracing on subsequent runs.
+                    # First launch pays the full compile cost; every launch after is near-instant.
+                    try:
+                        torch._inductor.config.fx_graph_cache = True
+                        logger.info("FX graph cache enabled (subsequent launches will skip recompilation)")
+                    except AttributeError:
+                        logger.debug("FX graph cache config not available in this PyTorch version")
+
                     t0 = _time.monotonic()
                     self._compiled_model = torch.compile(eager_model, fullgraph=False)
                     model = self._compiled_model
