@@ -14,12 +14,13 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import sys
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QSplitter,
     QToolTip, QPushButton, QMenu, QFileDialog, QMessageBox,
 )
-from PySide6.QtCore import Qt, Signal, QRect, QSize, QEvent
-from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent, QAction
+from PySide6.QtCore import Qt, Signal, QRect, QSize, QEvent, QUrl
+from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent, QAction, QDesktopServices
 
 from backend import ClipEntry, ClipState
 from backend.project import VIDEO_FILE_FILTER, is_image_file, is_video_file
@@ -678,8 +679,9 @@ class IOTrayPanel(QWidget):
         rename_action.triggered.connect(lambda: self._rename_clip(clip))
         menu.addAction(rename_action)
 
-        # Open in Explorer — single only
-        explorer_action = QAction("Open in Explorer", self)
+        # Open in file manager — single only
+        _fm = "Finder" if sys.platform == "darwin" else "Explorer"
+        explorer_action = QAction(f"Open in {_fm}", self)
         explorer_action.setEnabled(not multi)
         explorer_action.triggered.connect(lambda: self._open_in_explorer(clip))
         menu.addAction(explorer_action)
@@ -756,7 +758,9 @@ class IOTrayPanel(QWidget):
             output_dir = clip.root_path
 
         open_action = QAction("Open Containing Folder", self)
-        open_action.triggered.connect(lambda: os.startfile(output_dir))
+        open_action.triggered.connect(
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(output_dir))
+        )
         menu.addAction(open_action)
 
         from PySide6.QtGui import QCursor
@@ -768,7 +772,7 @@ class IOTrayPanel(QWidget):
         if not os.path.isdir(output_dir):
             output_dir = clip.root_path
         if os.path.isdir(output_dir):
-            os.startfile(output_dir)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(output_dir))
 
     def _rename_clip(self, clip: ClipEntry) -> None:
         """Prompt user to rename a clip's display name."""
@@ -787,7 +791,7 @@ class IOTrayPanel(QWidget):
 
     def _open_in_explorer(self, clip: ClipEntry) -> None:
         if os.path.isdir(clip.root_path):
-            os.startfile(clip.root_path)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(clip.root_path))
 
     def _clear_mask_batch(self, clips: list[ClipEntry]) -> None:
         """Delete VideoMamaMaskHint folder from disk for one or more clips."""

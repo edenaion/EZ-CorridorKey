@@ -271,8 +271,8 @@ class PreferencesDialog(QDialog):
         ffmpeg_info = QLabel(
             "Windows: Repair downloads a bundled full FFmpeg build into tools/ffmpeg "
             "without changing your system install.\n"
-            "macOS/Linux: Repair shows the exact install commands instead of mutating "
-            "system packages from the app."
+            "macOS: Repair installs FFmpeg via Homebrew.\n"
+            "Linux: Repair copies the install command to your clipboard."
         )
         ffmpeg_info.setWordWrap(True)
         ffmpeg_info.setStyleSheet("color: #999980; font-size: 11px;")
@@ -439,22 +439,35 @@ class PreferencesDialog(QDialog):
             )
             return
 
-        if sys.platform != "win32":
+        # Linux: needs sudo, can't run from GUI — copy instructions to clipboard
+        if sys.platform not in ("win32", "darwin"):
             help_text = get_ffmpeg_install_help()
             QApplication.clipboard().setText(help_text)
             QMessageBox.information(
                 self,
                 "Repair FFmpeg",
-                help_text + "\n\nThe install commands were copied to your clipboard.",
+                help_text + "\n\nThe install command has been copied to your clipboard.\n"
+                "Paste it into a terminal to install.",
             )
             return
+
+        if sys.platform == "win32":
+            confirm_msg = (
+                "CorridorKey will download and install a full bundled FFmpeg build into:\n\n"
+                f"{self._local_ffmpeg_dir}\n\n"
+                "This does not modify your system-wide FFmpeg.\n\nContinue?"
+            )
+        else:
+            confirm_msg = (
+                "CorridorKey will install FFmpeg via Homebrew:\n\n"
+                "    brew install ffmpeg\n\n"
+                "Continue?"
+            )
 
         reply = QMessageBox.question(
             self,
             "Repair FFmpeg",
-            "CorridorKey will download and install a full bundled FFmpeg build into:\n\n"
-            f"{self._local_ffmpeg_dir}\n\n"
-            "This does not modify your system-wide FFmpeg.\n\nContinue?",
+            confirm_msg,
         )
         if reply != QMessageBox.Yes:
             return
@@ -498,7 +511,7 @@ class PreferencesDialog(QDialog):
         QMessageBox.information(
             self,
             "FFmpeg Repaired",
-            message + "\n\nCorridorKey will use the bundled local FFmpeg immediately.",
+            message + "\n\nCorridorKey will use FFmpeg immediately.",
         )
 
     def _on_ffmpeg_repair_failed(self, message: str) -> None:
