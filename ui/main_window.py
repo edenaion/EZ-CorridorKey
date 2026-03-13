@@ -194,6 +194,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("CORRIDORKEY")
         self.setMinimumSize(1100, 650)
         self.resize(1400, 800)
+        self.setAcceptDrops(True)
 
         self._service = service or CorridorKeyService()
         self._recent_store = store or RecentSessionsStore()
@@ -3343,6 +3344,45 @@ class MainWindow(QMainWindow):
             self._queue_panel.setFixedHeight(h)
             self._queue_panel.move(0, 0)
             self._queue_panel.raise_()
+
+    # ── Global drag-and-drop (accepts drops anywhere on window) ──
+
+    def dragEnterEvent(self, event) -> None:
+        if event.mimeData().hasUrls():
+            from backend.project import is_video_file, is_image_file
+            for url in event.mimeData().urls():
+                path = url.toLocalFile()
+                if os.path.isdir(path) or is_video_file(path) or is_image_file(path):
+                    event.acceptProposedAction()
+                    return
+
+    def dropEvent(self, event) -> None:
+        from backend.project import is_video_file, is_image_file, folder_has_image_sequence
+        folders = []
+        video_files = []
+        image_files = []
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if os.path.isdir(path):
+                folders.append(path)
+            elif os.path.isfile(path):
+                if is_video_file(path):
+                    video_files.append(path)
+                elif is_image_file(path):
+                    image_files.append(path)
+
+        if folders:
+            folder = folders[0]
+            if folder_has_image_sequence(folder):
+                self._on_sequence_folder_imported(folder)
+            else:
+                self._on_tray_folder_imported(folder)
+        elif video_files and not image_files:
+            self._on_tray_files_imported(video_files)
+        elif image_files:
+            self._on_image_files_dropped(image_files)
+        elif video_files:
+            self._on_tray_files_imported(video_files)
 
     def closeEvent(self, event) -> None:
         """Clean shutdown — auto-save session, stop workers, unload engines."""
