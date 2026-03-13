@@ -4,6 +4,13 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.6.2] - 2026-03-13 — Live Preview Fix
+
+### Bug Fixes
+- **Fix live preview breaking after first use** — the GPU queue's "all jobs done" handler was unloading the inference engine after every preview reprocess, causing `is_engine_loaded()` to return false on subsequent parameter changes. Preview now keeps the engine resident; model switching is already handled by `_ensure_model()`. Fixes [#20](https://github.com/edenaion/EZ-CorridorKey/issues/20).
+
+---
+
 ## [1.6.1] - 2026-03-13 — MLX Python Version Fix
 
 ### Bug Fixes

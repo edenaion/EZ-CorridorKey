@@ -2641,8 +2641,10 @@ class MainWindow(QMainWindow):
         self._live_asset_refresh_timer.stop()
         self._pipeline_steps.clear()
         self._queue_panel.refresh()
-        self._service.unload_engines()
-        logger.info("All jobs completed, VRAM freed")
+        # NOTE: Do NOT call unload_engines() here — it kills the inference
+        # engine that live preview depends on.  Model switching is already
+        # handled by _ensure_model() when a different model type is needed.
+        logger.info("All jobs completed, queue idle")
 
     # ── Video Extraction ──
 
