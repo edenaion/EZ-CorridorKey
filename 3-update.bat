@@ -56,8 +56,19 @@ if not defined UPDATE_INNER (
 )
 
 REM Copy new files over existing, skip user data dirs
-echo   Applying update (preserving .venv, tools, Projects)...
-robocopy "!UPDATE_INNER!" "%~dp0." /e /xd .venv venv tools Projects _BACKUPS __pycache__ .mypy_cache /xf *.pyc /njh /njs /ndl /nc /ns >nul 2>&1
+echo.
+echo   WARNING: No git detected. Updating via ZIP download.
+echo.
+echo   WILL OVERWRITE: all .py, .bat, .sh, .yaml, and other app files
+echo   WILL NOT TOUCH: Projects folder, model weights, .venv, tools
+echo.
+echo   If you have local code changes, they will be lost.
+echo.
+set /p "CONFIRM=  Continue? [Y/n] "
+if /i "!CONFIRM!"=="n" goto :update_cleanup
+if /i "!CONFIRM!"=="no" goto :update_cleanup
+echo   Applying update (preserving .venv, tools, Projects, model weights)...
+robocopy "!UPDATE_INNER!" "%~dp0." /e /xd .venv venv tools Projects _BACKUPS __pycache__ .mypy_cache checkpoints weights /xf *.pyc *.pth *.safetensors *.bin *.pt /njh /njs /ndl /nc /ns >nul 2>&1
 
 echo   [OK] Code updated via ZIP download
 
