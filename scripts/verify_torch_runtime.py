@@ -13,8 +13,16 @@ import platform
 import shutil
 import subprocess
 import sys
+import warnings
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"The pynvml package is deprecated\..*",
+    category=FutureWarning,
+)
 
 
 @dataclass

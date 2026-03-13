@@ -108,6 +108,12 @@ if [ "$UV_AVAILABLE" = "0" ]; then
     fi
 fi
 
+# Clean up retired distributions that can survive editable upgrades.
+if [ -f ".venv/bin/python" ] && .venv/bin/python -m pip show pynvml >/dev/null 2>&1; then
+    echo "  Removing legacy pynvml package..."
+    .venv/bin/python -m pip uninstall -y pynvml >/dev/null 2>&1 || true
+fi
+
 # ── Step 3: Check for new model weights ──
 echo "[3/3] Checking model weights..."
 .venv/bin/python scripts/setup_models.py --check

@@ -22,6 +22,7 @@ import logging
 import queue
 import threading
 import time
+import warnings
 from collections import deque
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -66,6 +67,18 @@ from .frame_io import (
 from .job_queue import GPUJob, GPUJobQueue
 
 logger = logging.getLogger(__name__)
+
+
+def _configure_runtime_warnings() -> None:
+    """Hide non-actionable NVML deprecation chatter during startup/runtime checks."""
+    warnings.filterwarnings(
+        "ignore",
+        message=r"The pynvml package is deprecated\..*",
+        category=FutureWarning,
+    )
+
+
+_configure_runtime_warnings()
 
 # Project paths — frozen-build aware
 if getattr(sys, 'frozen', False):
