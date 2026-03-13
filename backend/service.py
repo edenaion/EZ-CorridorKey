@@ -546,7 +546,6 @@ class CorridorKeyService:
         to however many engines fit in VRAM.
 
         Uses the backend factory to auto-detect MLX on Apple Silicon.
-        MLX forces pool_size=1 (unified memory, no multi-engine benefit).
         """
         self._ensure_model(_ActiveModel.INFERENCE, on_status=on_status)
 
@@ -560,8 +559,7 @@ class CorridorKeyService:
         opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
         _img_size = 1024 if self._device == 'mps' else 2048
 
-        # MLX: unified memory, single engine only
-        pool_size = 1 if backend == "mlx" else self._pool_size
+        pool_size = self._pool_size
 
         # Create engines serially (warmup each before creating next)
         import torch
