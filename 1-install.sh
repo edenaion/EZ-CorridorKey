@@ -181,6 +181,9 @@ if [ "$OS_TYPE" = "macos" ] && [ "$(uname -m)" = "arm64" ]; then
     fi
     if [ "$MLX_OK" -eq 1 ]; then
         echo "  [OK] MLX acceleration installed (1.5-2x faster inference on Apple Silicon)"
+        echo "  Downloading MLX checkpoint..."
+        .venv/bin/python scripts/setup_models.py --corridorkey-mlx 2>&1 || \
+            echo "  [WARN] MLX checkpoint download failed. You can retry: .venv/bin/python scripts/setup_models.py --corridorkey-mlx"
     else
         echo "  [WARN] MLX install failed. CorridorKey will use PyTorch MPS instead."
         echo "  You can retry later with: .venv/bin/python -m pip install -e '.[mlx]'"

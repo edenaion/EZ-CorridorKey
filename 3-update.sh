@@ -118,6 +118,15 @@ fi
 echo "[3/3] Checking model weights..."
 .venv/bin/python scripts/setup_models.py --check
 
+# Auto-download MLX checkpoint on Apple Silicon if missing
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+    if [ ! -f "CorridorKeyModule/checkpoints/corridorkey_mlx.safetensors" ]; then
+        echo "  MLX checkpoint missing — downloading..."
+        .venv/bin/python scripts/setup_models.py --corridorkey-mlx 2>&1 || \
+            echo "  [WARN] MLX checkpoint download failed. Run: .venv/bin/python scripts/setup_models.py --corridorkey-mlx"
+    fi
+fi
+
 # ── Done ──
 echo ""
 echo "  ========================================"

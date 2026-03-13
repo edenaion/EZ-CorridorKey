@@ -5,6 +5,7 @@ progress bars, and idempotent behavior (skips existing files).
 
 Usage:
     python scripts/setup_models.py --corridorkey       # Required (383MB)
+    python scripts/setup_models.py --corridorkey-mlx   # Apple Silicon MLX weights (380MB)
     python scripts/setup_models.py --sam2             # SAM2 Base+ (324MB)
     python scripts/setup_models.py --sam2 large       # SAM2 Large (898MB)
     python scripts/setup_models.py --gvm               # Optional (~6GB)
@@ -17,13 +18,26 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import os
+import platform
 import shutil
 import sys
+import urllib.request
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HF_CACHE_DIR = Path.home() / ".cache" / "huggingface" / "hub"
+
+# MLX checkpoint served from GitHub Releases (not HuggingFace)
+MLX_CHECKPOINT = {
+    "url": "https://github.com/nikopueringer/corridorkey-mlx/releases/download/v1.0.0/corridorkey_mlx.safetensors",
+    "sha256_url": "https://github.com/nikopueringer/corridorkey-mlx/releases/download/v1.0.0/corridorkey_mlx.safetensors.sha256",
+    "filename": "corridorkey_mlx.safetensors",
+    "local_dir": PROJECT_ROOT / "CorridorKeyModule" / "checkpoints",
+    "size_human": "380 MB",
+    "size_bytes": 398_849_072,
+}
 
 MODELS = {
     "corridorkey": {
@@ -159,6 +173,73 @@ def download_corridorkey() -> bool:
         return False
 
 
+def is_mlx_installed() -> bool:
+    """Check if the MLX .safetensors checkpoint is already present."""
+    return (MLX_CHECKPOINT["local_dir"] / MLX_CHECKPOINT["filename"]).is_file()
+
+
+def download_corridorkey_mlx() -> bool:
+    """Download the MLX .safetensors checkpoint from GitHub Releases.
+
+    Verifies SHA256 after download. Does not require huggingface_hub.
+    """
+    cfg = MLX_CHECKPOINT
+    local_dir = cfg["local_dir"]
+    local_dir.mkdir(parents=True, exist_ok=True)
+    dest = local_dir / cfg["filename"]
+
+    if dest.is_file():
+        print(f"  [OK] MLX checkpoint already installed")
+        return True
+
+    if not check_disk_space(cfg["size_bytes"], local_dir):
+        usage = shutil.disk_usage(local_dir)
+        free_gb = usage.free / (1024**3)
+        print(f"  [ERROR] Not enough disk space for MLX checkpoint ({cfg['size_human']})")
+        print(f"  Available: {free_gb:.1f} GB")
+        return False
+
+    print(f"  Downloading MLX checkpoint ({cfg['size_human']})...")
+    tmp_dest = dest.with_suffix(".safetensors.tmp")
+    try:
+        def _progress(block_num, block_size, total_size):
+            downloaded = block_num * block_size
+            if total_size > 0:
+                pct = min(100, downloaded * 100 // total_size)
+                mb = downloaded / (1024 * 1024)
+                total_mb = total_size / (1024 * 1024)
+                print(f"\r  {mb:.0f}/{total_mb:.0f} MB ({pct}%)", end="", flush=True)
+
+        urllib.request.urlretrieve(cfg["url"], str(tmp_dest), reporthook=_progress)
+        print()  # newline after progress
+
+        # Verify SHA256
+        try:
+            sha256_resp = urllib.request.urlopen(cfg["sha256_url"])
+            expected_hash = sha256_resp.read().decode().strip().split()[0]
+            actual_hash = hashlib.sha256(tmp_dest.read_bytes()).hexdigest()
+            if actual_hash != expected_hash:
+                print(f"  [ERROR] SHA256 mismatch!")
+                print(f"  Expected: {expected_hash}")
+                print(f"  Got:      {actual_hash}")
+                tmp_dest.unlink(missing_ok=True)
+                return False
+            print(f"  [OK] SHA256 verified")
+        except Exception as e:
+            print(f"  [WARN] Could not verify SHA256: {e}")
+            print("  Proceeding anyway (file downloaded successfully)")
+
+        tmp_dest.rename(dest)
+        print(f"  Saved to: {dest}")
+        return True
+    except Exception as e:
+        print(f"\n  [ERROR] Download failed: {e}")
+        print(f"  Manual download: {cfg['url']}")
+        print(f"  Place in: {local_dir}/")
+        tmp_dest.unlink(missing_ok=True)
+        return False
+
+
 def download_sam2(name: str) -> bool:
     """Download a SAM2 checkpoint into the shared Hugging Face cache."""
     from huggingface_hub import hf_hub_download
@@ -289,6 +370,13 @@ def check_all():
                 size_mb = os.path.getsize(f) / (1024**2)
                 print(f"       -> {os.path.basename(f)} ({size_mb:.0f} MB)")
 
+    # MLX checkpoint (Apple Silicon only, but show status on all platforms)
+    mlx_installed = is_mlx_installed()
+    mlx_mark = "[OK]" if mlx_installed else "[--]"
+    mlx_status = "INSTALLED" if mlx_installed else "NOT INSTALLED"
+    mlx_note = " (Apple Silicon)" if sys.platform == "darwin" and platform.machine() == "arm64" else " (Apple Silicon only)"
+    print(f"  {mlx_mark} corridorkey-mlx {MLX_CHECKPOINT['size_human']:>8s}  {mlx_status}{mlx_note}")
+
     tracker_installed = tracker_dependency_installed()
     tracker_mark = "[OK]" if tracker_installed else "[--]"
     tracker_status = "INSTALLED" if tracker_installed else "NOT INSTALLED"
@@ -308,6 +396,7 @@ def check_all():
 def main():
     parser = argparse.ArgumentParser(description="Download model weights for EZ-CorridorKey")
     parser.add_argument("--corridorkey", action="store_true", help="Download CorridorKey checkpoint (383MB, required)")
+    parser.add_argument("--corridorkey-mlx", action="store_true", help="Download MLX checkpoint for Apple Silicon (380MB)")
     parser.add_argument(
         "--sam2",
         nargs="?",
@@ -321,23 +410,31 @@ def main():
     parser.add_argument("--check", action="store_true", help="Check installation status")
     args = parser.parse_args()
 
+    mlx_flag = getattr(args, 'corridorkey_mlx', False)
+
     # Default to --check if no flags
-    if not any([args.corridorkey, args.sam2, args.gvm, args.videomama, args.all, args.check]):
+    if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.all, args.check]):
         args.check = True
 
     if args.check:
         check_all()
-        if not any([args.corridorkey, args.sam2, args.gvm, args.videomama, args.all]):
+        if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.all]):
             return
 
     targets = []
     sam2_targets: list[str] = []
+    download_mlx = False
     if args.all:
         targets = list(MODELS.keys())
         sam2_targets = list(SAM2_MODELS.keys())
+        # --all on Apple Silicon auto-includes MLX weights
+        if sys.platform == "darwin" and platform.machine() == "arm64":
+            download_mlx = True
     else:
         if args.corridorkey:
             targets.append("corridorkey")
+        if mlx_flag:
+            download_mlx = True
         if args.sam2:
             if args.sam2 == "all":
                 sam2_targets = list(SAM2_MODELS.keys())
@@ -348,15 +445,19 @@ def main():
         if args.videomama:
             targets.append("videomama")
 
-    if not targets and not sam2_targets:
+    if not targets and not sam2_targets and not download_mlx:
         return
 
-    total_targets = len(targets) + len(sam2_targets)
+    total_targets = len(targets) + len(sam2_targets) + (1 if download_mlx else 0)
     print(f"\nDownloading {total_targets} model(s)...\n")
     results = {}
     for name in targets:
         print(f"[{name}]")
         results[name] = download_model(name)
+        print()
+    if download_mlx:
+        print("[corridorkey-mlx]")
+        results["corridorkey-mlx"] = download_corridorkey_mlx()
         print()
     for name in sam2_targets:
         result_key = f"sam2-{name}"
