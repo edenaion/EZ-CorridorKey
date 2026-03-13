@@ -367,7 +367,8 @@ All installer scripts are open-source and readable in this repository. Independe
 
 This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey), licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
-GUI/SFX/Workflow/QA by [Ed Zisk](https://www.edzisk.com).
+GUI/SFX/Workflow/QA/Maintenance by [Ed Zisk](https://www.edzisk.com).
+
 Logo by [Sara Ann Stewart](https://www.instagram.com/sarastewartwork).
 Hiera optimization by [Jhe Kim](https://github.com/Raiden129).
 Tiling optimization by [MarcelLieb](https://github.com/MarcelLieb).
@@ -379,7 +380,9 @@ Optional modules:
 - **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License
 
 Join EZSCAPE Discord for EZ-CorridorKey troubleshooting: https://discord.gg/6kgxHUfA
+
 Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
+
 
 
 
