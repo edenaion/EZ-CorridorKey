@@ -4,7 +4,14 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [1.6.0] - 2026-03-13 — Parallel Inference, MatAnyone2, MLX Apple Silicon, macOS Support, 
+## [1.6.1] - 2026-03-13 — MLX Python Version Fix
+
+### Bug Fixes
+- **Fix MLX install on Python 3.10** — `corridorkey-mlx` requires Python ≥3.11 but `pyproject.toml` allowed 3.10, causing uv to fail resolving the `[mlx]` extra on Apple Silicon. Added `python_version >= '3.11'` marker to the mlx optional dependency so the resolver skips it on older Pythons. Windows/Linux users unaffected.
+
+---
+
+## [1.6.0] - 2026-03-13 — Parallel Inference, MatAnyone2, MLX Apple Silicon, macOS Support,
 
 ### Parallel Inference
 - **Multi-engine frame processing!** — inference engine pool processes multiple frames concurrently when VRAM allows, with user-configurable pool sizing based on available memory. 1.8-2x speed increase clocked on 4K footage via RTX 5090 at 4 parallel frames. Experimental up to 8, use at your own discretion if you have VRAM headroom.
