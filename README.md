@@ -278,6 +278,7 @@ Each output channel can be individually enabled and set to EXR or PNG:
 The scrubber below the dual viewer provides:
 
 - **Transport buttons:** First frame, step back, play/pause, step forward, last frame
+- **Playback is CAPPED:** Pressing spacebar will play back footage at a hardcoded rate of 3FPS. This is intentional, the files are large.
 - **Coverage bar:** Three color-coded lanes showing which frames have paint strokes (green), alpha hints (white), and inference output (yellow)
 - **In/Out markers:** Press **I** / **O** to set a sub-range for processing. When set, the RUN button changes to "RUN SELECTED" and playback loops within the range.
 
@@ -400,6 +401,11 @@ Optional modules:
 - **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) — Apache 2.0
 - **corridorkey-mlx** ([nikopueringer/corridorkey-mlx](https://github.com/nikopueringer/corridorkey-mlx)) — CC BY-NC-SA 4.0
 
-For specific troubleshooting regarding EZ-CK join: https://discord.gg/2fgZNKyNza
+Join EZSCAPE Discord for EZ-CorridorKey troubleshooting: https://discord.gg/6kgxHUfA
+
 Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
+
+
+
+
 
