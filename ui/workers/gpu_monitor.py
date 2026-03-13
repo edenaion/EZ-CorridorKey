@@ -3,12 +3,16 @@
 Design decisions (from Codex review):
 - Uses pynvml (NVML) for VRAM display, not torch.cuda calls
 - Falls back to torch.cuda only if NVML unavailable
+- Apple Silicon: reports unified memory via psutil (GPU shares system RAM)
 - Polling interval: 2000ms (not too aggressive on GPU queries)
 - Emits lightweight dict signal, QPixmap/rendering stays on main thread
 """
 from __future__ import annotations
 
 import logging
+import platform
+import subprocess
+import sys
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
@@ -38,6 +42,8 @@ class GPUMonitor(QObject):
         self._nvml_available = False
         self._nvml_handle = None
         self._torch_fallback = False
+        self._apple_silicon = False
+        self._apple_chip_name: str | None = None
         self._name_emitted = False
         self._init_nvml()
 
@@ -57,9 +63,17 @@ class GPUMonitor(QObject):
                 if torch.cuda.is_available():
                     self._torch_fallback = True
                     logger.info("GPU monitor: NVML unavailable, using torch.cuda fallback")
-                else:
-                    logger.info("GPU monitor: no GPU available")
+                    return
             except ImportError:
+                pass
+
+            # Check Apple Silicon — unified memory IS the GPU memory
+            if sys.platform == "darwin" and platform.machine() == "arm64":
+                self._apple_silicon = True
+                self._apple_chip_name = self._detect_apple_chip()
+                logger.info("GPU monitor: Apple Silicon (%s), reporting unified memory",
+                            self._apple_chip_name or "unknown chip")
+            else:
                 logger.info("GPU monitor: no GPU monitoring available")
 
     def start(self) -> None:
@@ -81,11 +95,13 @@ class GPUMonitor(QObject):
             self._name_emitted = True
 
     def _query_gpu(self) -> dict:
-        """Get GPU VRAM info from NVML or torch fallback."""
+        """Get GPU VRAM info from NVML, torch, or Apple Silicon unified memory."""
         if self._nvml_available:
             return self._query_nvml()
         elif self._torch_fallback:
             return self._query_torch()
+        elif self._apple_silicon:
+            return self._query_apple_silicon()
         return {"available": False}
 
     def _query_nvml(self) -> dict:
@@ -132,4 +148,43 @@ class GPUMonitor(QObject):
             }
         except Exception as e:
             logger.debug(f"Torch GPU query failed: {e}")
+            return {"available": False}
+
+    @staticmethod
+    def _detect_apple_chip() -> str | None:
+        """Get Apple chip name (e.g. 'Apple M3 Max') via sysctl."""
+        try:
+            result = subprocess.run(
+                ["sysctl", "-n", "machdep.cpu.brand_string"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return result.stdout.strip() or None
+        except Exception:
+            return None
+
+    def _query_apple_silicon(self) -> dict:
+        """Report unified memory usage on Apple Silicon.
+
+        On Apple Silicon, system RAM IS the GPU memory — there's no
+        separate VRAM. psutil.virtual_memory() reports the shared pool.
+        """
+        try:
+            import psutil
+            mem = psutil.virtual_memory()
+            total_gb = mem.total / (1024 ** 3)
+            used_gb = mem.used / (1024 ** 3)
+            free_gb = mem.available / (1024 ** 3)
+            return {
+                "available": True,
+                "name": self._apple_chip_name or "Apple Silicon",
+                "total_gb": round(total_gb, 1),
+                "used_gb": round(used_gb, 1),
+                "free_gb": round(free_gb, 1),
+                "usage_pct": round(mem.percent, 1),
+            }
+        except ImportError:
+            logger.debug("psutil not available for Apple Silicon memory monitoring")
+            return {"available": False}
+        except Exception as e:
+            logger.debug(f"Apple Silicon memory query failed: {e}")
             return {"available": False}

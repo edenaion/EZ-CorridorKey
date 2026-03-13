@@ -957,12 +957,19 @@ class MainWindow(QMainWindow):
 
     @Slot(dict)
     def _update_vram(self, info: dict) -> None:
-        """Update VRAM meter in the top bar."""
+        """Update VRAM/Memory meter in the top bar."""
         self._last_vram_info = info  # stash for Report Issue dialog
         if not info.get("available"):
             self._vram_text.setText("No GPU")
             self._vram_bar.setValue(0)
             return
+
+        # Apple Silicon uses unified memory, not dedicated VRAM
+        name = info.get("name", "")
+        if name.startswith("Apple"):
+            self._vram_label.setText("Memory")
+            self._vram_bar.setToolTip("Unified memory usage — CPU and GPU share the same pool")
+            self._vram_text.setToolTip("Current unified memory used / total available")
         pct = info.get("usage_pct", 0)
         used = info.get("used_gb", 0)
         total = info.get("total_gb", 0)
