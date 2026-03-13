@@ -111,6 +111,7 @@ fi
 
 if [ "$UV_AVAILABLE" -eq 0 ]; then
     echo "  Creating virtual environment..."
+    rm -rf .venv
     "$INSTALL_PYTHON" -m venv .venv
     source .venv/bin/activate
 
@@ -149,11 +150,19 @@ if [ "$UV_AVAILABLE" -eq 0 ]; then
 fi
 
 echo "[4b/6] Verifying torch runtime..."
-if .venv/bin/python scripts/verify_torch_runtime.py --log ".install-torch-runtime.json"; then
+DIAGNOSTICS_DIR="logs/diagnostics"
+TORCH_RUNTIME_LOG="${DIAGNOSTICS_DIR}/install-torch-runtime.json"
+SUPPORT_REPORT_LOG="${DIAGNOSTICS_DIR}/install-support-report.md"
+mkdir -p "$DIAGNOSTICS_DIR"
+if .venv/bin/python scripts/verify_torch_runtime.py --log "$TORCH_RUNTIME_LOG"; then
     echo "  [OK] Torch runtime verified"
 else
     echo "  [ERROR] Installed torch runtime did not validate."
-    echo "  See .install-torch-runtime.json for details."
+    echo "  Preparing a pre-filled GitHub issue to help you report this."
+    if ! .venv/bin/python scripts/open_installer_issue.py --json "$TORCH_RUNTIME_LOG" --body-out "$SUPPORT_REPORT_LOG" --stage "${OS_TYPE}-installer-runtime-verification"; then
+        echo "  [WARN] Could not open the GitHub issue helper automatically."
+    fi
+    echo "  See $TORCH_RUNTIME_LOG and $SUPPORT_REPORT_LOG for details."
     exit 1
 fi
 

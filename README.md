@@ -27,22 +27,24 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 **One-Click Install (Windows / macOS / Linux):**
 1. Clone or download this repository.
-2. Ensure you have [Python 3.10–3.12](https://python.org) installed (check "Add to PATH" on Windows). Python 3.13 (low data), 3.14 is **not yet supported** (PyTorch/dependencies lack wheels).
+2. The one-click path provisions and uses managed Python 3.11 automatically, so you do not need to pre-install Python just to use `1-install`.
 3. Run the installer for your platform:
    - **Windows:** Double-click `1-install.bat`
    - **macOS / Linux:** `chmod +x 1-install.sh && ./1-install.sh`
-4. The installer handles everything: virtual environment, dependencies (including correct PyTorch for your GPU), and model downloads.
+4. The installer handles everything: managed Python, virtual environment, dependencies (including the correct PyTorch backend for your GPU when available), verification, and model downloads.
 5. To launch: double-click `2-start.bat` (Windows) or `./2-start.sh` (macOS/Linux).
 
 **Prerequisites:**
-- [Python 3.10–3.13](https://python.org) — check "Add to PATH" on Windows (3.10 and 3.11 tested; 3.14 not yet supported)
+- For the one-click installer: no preinstalled Python required
+- For manual installs: [Python 3.10–3.13](https://python.org) (3.14 is not yet supported)
 - NVIDIA GPU with CUDA support (8 GB+ VRAM)
+- For NVIDIA GPU installs, keep your driver current. The installer now verifies the final torch runtime and will stop with diagnostics instead of silently leaving you on the wrong backend.
 
 **What the installer does:**
 - Checks for [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ compiler needed by OpenEXR) — offers to auto-install if missing
-- Installs [uv](https://docs.astral.sh/uv/) (fast Python package manager) — falls back to pip if needed
+- Installs [uv](https://docs.astral.sh/uv/) and provisions managed Python 3.11 for the installer path
 - Creates a `.venv` virtual environment in the project folder
-- Auto-detects your GPU and installs the correct PyTorch variant (CUDA on NVIDIA, MPS on Apple Silicon, CPU fallback)
+- Installs the correct PyTorch backend for your platform/GPU and verifies the resulting torch runtime before reporting success
 - Downloads and installs [FFmpeg](https://ffmpeg.org/) locally if not found on PATH (used for video import)
 - Downloads the CorridorKey model checkpoint (383 MB, required)
 - Optionally installs SAM2 tracking support and pre-downloads the default Base+ checkpoint (324 MB)

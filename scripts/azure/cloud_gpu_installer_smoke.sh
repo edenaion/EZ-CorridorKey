@@ -541,12 +541,12 @@ PY
 
 log "Estimated max spend:"
 if [[ "${RUN_WINDOWS}" -eq 1 ]]; then
-  log "  Windows lane: ~$${WINDOWS_ESTIMATED_USD} max (${WINDOWS_RATE_USD}/hr x ${WINDOWS_MAX_MINUTES} min, incl. 15% buffer)"
+  log "  Windows lane: ~\$${WINDOWS_ESTIMATED_USD} max (${WINDOWS_RATE_USD}/hr x ${WINDOWS_MAX_MINUTES} min, incl. 15% buffer)"
 fi
 if [[ "${RUN_LINUX}" -eq 1 ]]; then
-  log "  Linux lane:   ~$${LINUX_ESTIMATED_USD} max (${LINUX_RATE_USD}/hr x ${LINUX_MAX_MINUTES} min, incl. 15% buffer)"
+  log "  Linux lane:   ~\$${LINUX_ESTIMATED_USD} max (${LINUX_RATE_USD}/hr x ${LINUX_MAX_MINUTES} min, incl. 15% buffer)"
 fi
-log "  Total:        ~$${TOTAL_ESTIMATED_USD} max (budget cap $${MAX_BUDGET_USD})"
+log "  Total:        ~\$${TOTAL_ESTIMATED_USD} max (budget cap \$${MAX_BUDGET_USD})"
 
 python3 - "${TOTAL_ESTIMATED_USD}" "${MAX_BUDGET_USD}" <<'PY'
 import sys

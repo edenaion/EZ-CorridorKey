@@ -1057,6 +1057,7 @@ def extract_frames(
         return [
             ffmpeg,
             *hw_flags,
+            *color_fix_flags,
             "-i", video_path,
             "-start_number", "0",
             "-vsync", "passthrough",

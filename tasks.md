@@ -69,6 +69,38 @@ Goal: Users clone, install, run. No fiddling. Windows/Mac/Linux.
 
 ## Features In Progress
 
+### Multi-Clip GPU Parallelism
+- **Priority:** P2
+- **Goal:** Users with excess VRAM (20+ GB free) can process multiple clips concurrently on the same GPU
+- **Architecture** (Codex-approved):
+  - Engine pool with N workers (default 2, auto-tuned to available VRAM)
+  - Each worker gets its own `CorridorKeyEngine` instance + dedicated CUDA stream
+  - Speed mode only (compile + no tiling baseline)
+  - VRAM budget: ~8.7 GB per engine (with torch.compile), auto-detect how many fit
+  - Job queue dispatches clips to available workers round-robin
+  - Per-clip temporal state is already isolated (KV memory per engine)
+- **Status:** Not started — architecture approved, ready to implement
+- [ ] Engine pool manager (spawn/destroy engine instances based on VRAM)
+- [ ] VRAM auto-detection and worker count calculation
+- [ ] Job queue multi-worker dispatch
+- [ ] UI: concurrent jobs progress (multiple progress bars or combined)
+- [ ] Preferences toggle: "Parallel processing" (on/off, worker count)
+- [ ] Hot-reload: enable/disable without restart
+
+### Turbo Mode Exploration (tiling in speed mode)
+- **Priority:** P3
+- **Goal:** Explore using tiled refiner in speed mode to reduce per-engine VRAM, enabling more concurrent clips
+- **Rationale:** Tiling is lossless (157+ dB PSNR, 128px overlap > 65px receptive field). Currently only used in lowvram mode to save VRAM. In speed mode, tiling would trade ~35% slower per-frame for ~45% less VRAM per engine.
+- **Trade-off math (estimated, needs measurement):**
+  - Speed (no tile): ~1.85s/frame, ~8.7 GB → 2 concurrent clips on 25 GB
+  - Speed (tiled): ~2.5s/frame, ~4-5 GB → 4-5 concurrent clips on 25 GB
+  - Net throughput: 2×0.54 = 1.08 fps vs 4×0.40 = 1.60 fps (tiled wins if estimates hold)
+- **Status:** Needs benchmarking
+- [ ] Measure actual VRAM with tile_size=512 in speed mode (vs tile_size=0)
+- [ ] Benchmark per-frame time with tiling in speed mode
+- [ ] Validate throughput math with real numbers
+- [ ] If beneficial, add as user-selectable option in Preferences
+
 ### Frame Timing
 - [x] Per-frame timing in run_inference() (rolling avg, fps, ETA)
 - [x] Progress callback passes fps, elapsed, eta_seconds as kwargs

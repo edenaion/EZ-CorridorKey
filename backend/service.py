@@ -562,10 +562,12 @@ class CorridorKeyService:
             logger.info(f"Creating engine {i + 1}/{self._pool_size}: {os.path.basename(ckpt_path)}")
             t0 = time.monotonic()
             try:
+                # MPS (Apple Silicon): use 1024 to keep SDPA within unified memory
+                _img_size = 1024 if self._device == 'mps' else 2048
                 engine = CorridorKeyEngine(
                     checkpoint_path=ckpt_path,
                     device=self._device,
-                    img_size=2048,
+                    img_size=_img_size,
                     optimization_mode=opt_mode,
                     on_status=on_status if i == 0 else None,  # status only for first
                 )

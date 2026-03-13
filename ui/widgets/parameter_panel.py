@@ -303,10 +303,10 @@ class ParameterPanel(QWidget):
         self._parallel_spin.setRange(1, 8)
         self._parallel_spin.setToolTip(
             "Process multiple frames simultaneously using parallel engines.\n\n"
-            "WARNING: Each extra engine loads a full copy of the model.\n"
+            "WARNING: Each extra engine loads a full copy of the model\n"
+            "including compiled kernels (~6-8 GB VRAM per engine).\n"
             "Only increase if you have VRAM headroom during\n"
             "single-frame inference. Check GPU memory usage first.\n\n"
-            "~1.5 GB extra VRAM per engine.\n"
             "Default: 1 (safest). Try 2 first, then increase if stable."
         )
         self._parallel_spin.setFixedWidth(60)
