@@ -1,4 +1,4 @@
-# EZ-CorridorKey **[v1.6.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.6.2)**
+# EZ-CorridorKey **[v1.6.4](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.6.4)**
 
 > **Latest:** Parallel inference (1.8-2x speedup), MatAnyone2, MLX Apple Silicon acceleration, macOS support — [full changelog](CHANGELOG.md)
 
