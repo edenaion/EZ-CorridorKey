@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.5.2](CHANGELOG.md)**
+# EZ-CorridorKey **[v1.6.0](CHANGELOG.md)**
 
-> **Latest:** Installer & updater hardening — [full changelog](CHANGELOG.md)
+> **Latest:** MatAnyone2, MLX Apple Silicon acceleration, MPS support — [full changelog](CHANGELOG.md)
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -19,7 +19,9 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Keyboard shortcuts | None | 20+ hotkeys |
 | Sound feedback | None | 7 context-aware sound effects |
 | Session persistence | None | Recent projects, auto-save |
-| Annotation / masking | Manual external tool | Built-in brush tool for VideoMaMa masks |
+| Annotation / masking | Manual external tool | Built-in brush tool for VideoMaMa / MatAnyone2 masks |
+| Alpha generators | None | GVM, VideoMaMa, MatAnyone2 (one-click) |
+| Apple Silicon | MPS only | MLX acceleration (auto-detected) |
 
 ---
 
@@ -37,8 +39,8 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 **Prerequisites:**
 - For the one-click installer: no preinstalled Python required
 - For manual installs: [Python 3.10–3.13](https://python.org) (3.14 is not yet supported)
-- NVIDIA GPU with CUDA support (8 GB+ VRAM)
-- For NVIDIA GPU installs, keep your driver current. The installer now verifies the final torch runtime and will stop with diagnostics instead of silently leaving you on the wrong backend.
+- **Windows/Linux:** NVIDIA GPU with CUDA support (8 GB+ VRAM recommended). Keep your driver current — the installer verifies the torch runtime and will stop with diagnostics instead of silently leaving you on the wrong backend.
+- **macOS:** Apple Silicon (M1+). CorridorKey inference runs natively via MLX (1.5–2x faster than MPS). GPU-intensive alpha generators (SAM2, GVM, VideoMaMa, MatAnyone2) run on MPS but are significantly slower — importing pre-made alpha mattes is recommended on Mac.
 
 **What the installer does:**
 - Checks for [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ compiler needed by OpenEXR) — offers to auto-install if missing
@@ -66,7 +68,8 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 +------+------------------------+---------------------+--------------+
 |      |      241 frames - RAW | IN|FG|MATTE[COMP]PROC| ALPHA GEN    |
 |  Q   |                       |                      |  GVM AUTO    |
-|  U   +-----------------------+----------------------+  VIDEOMAMA   |
+|  U   +-----------------------+----------------------+  MATANYONE2  |
+|      |                       |                      |  VIDEOMAMA   |
 |  E   |                       |                      |  EXPORT MASK |
 |  U   |                       |                      |--------------+
 |  E   |   INPUT viewer        |   OUTPUT viewer      | INFERENCE    |
@@ -120,14 +123,14 @@ Your clip starts in **RAW** state (gray badge). You need an alpha hint before ru
 **Option A — GVM Auto (one-click):**
 Click **GVM AUTO** in the parameter panel. Works great for most green screen footage with people.
 
-**Option B — Track Mask + VideoMaMa:**
+**Option B — Track Mask + MatAnyone2 / VideoMaMa:**
 For difficult shots, use the annotation brush as a prompt tool:
 1. Press **1** to activate foreground mode (green)
 2. Paint over the subject on a few key frames
 3. Press **2** to switch to background mode (red)
 4. Paint over background areas
 5. Click **TRACK MASK** to generate a dense SAM2 mask track
-6. Click **VIDEOMAMA** in the parameter panel
+6. Click **MATANYONE2** or **VIDEOMAMA** in the parameter panel
 
 **Option C — Import Alpha (bring your own):**
 If you already have alpha mattes from another tool (Rotobrush, Silhouette, etc.), click **IMPORT ALPHA** in the parameter panel and select the folder containing your images.
@@ -332,12 +335,14 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 
 ## Hardware Requirements
 
+### Windows / Linux (NVIDIA CUDA)
+
 | | Minimum | Recommended | Comfortable |
 |---|---------|-------------|-------------|
 | **VRAM** | 8 GB | 12 GB | 16 GB+ |
 | **GPU** | NVIDIA (CUDA) | Ampere+ (RTX 30xx) | Ada/Blackwell (RTX 40xx/50xx) |
 
-### VRAM modes
+#### VRAM modes
 
 | Mode | VRAM usage | 4K speed | How it works |
 |------|-----------|----------|--------------|
@@ -345,6 +350,17 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 | **Low-VRAM** (<12 GB) | ~2.5 GB | ~1.6s/frame | 512×512 tiled refiner, selective compile |
 
 Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=speed|lowvram|auto`.
+
+### macOS (Apple Silicon)
+
+| | Minimum | Recommended |
+|---|---------|-------------|
+| **Chip** | M1 (8 GB) | M1 Pro+ (16 GB+) |
+| **Backend** | MPS (PyTorch) | MLX (auto-detected if corridorkey-mlx installed) |
+
+CorridorKey inference auto-selects the fastest available backend: MLX (1.5–2x faster) when `corridorkey-mlx` and a `.safetensors` checkpoint are present, otherwise PyTorch MPS. Override with `CORRIDORKEY_BACKEND=torch|mlx|auto`.
+
+Alpha generators (SAM2, GVM, VideoMaMa, MatAnyone2) always run on PyTorch MPS — no MLX ports exist for these models. For best Mac experience, import pre-made alpha mattes from After Effects, DaVinci Resolve, or Nuke.
 
 ---
 
@@ -358,9 +374,9 @@ EZ-CorridorKey's optimizations (Hiera FlashAttention, TF32 tensor cores, torch.c
 
 ## Security
 
-All installer scripts are open-source and readable in this repository. Independent VirusTotal scan for the current release:
+All installer scripts are open-source and readable in this repository. Independent VirusTotal scans for the current release:
 
-- [**1-install.bat** (v1.5.0) — 0 detections](https://www.virustotal.com/gui/file/c4b789f36fea3a2519c0d08b27e7988871497b8e6f33029b6b84d81e7a2c9494)
+- [**1-install.bat** (v1.6.0) — 0 detections](https://www.virustotal.com/gui/file/c88b68b2fdc429de8bd70a5dde182486c788fcdc34eb508a4a137373d1ddb1bc)
 
 ---
 
@@ -378,6 +394,8 @@ If you use or build on this project, please star this repo and credit the contri
 Optional modules:
 - **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
 - **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License
+- **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) — Apache 2.0
+- **corridorkey-mlx** ([nikopueringer/corridorkey-mlx](https://github.com/nikopueringer/corridorkey-mlx)) — CC BY-NC-SA 4.0
 
 Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
 
