@@ -49,6 +49,7 @@ def decode_frame(path: str, mode: ViewMode) -> QImage | None:
     Applies mode-specific display transforms:
     - COMP: Already 8-bit sRGB PNG, direct load
     - INPUT: May be EXR (linear) or PNG (sRGB)
+    - ALPHA: 8-bit grayscale PNG from AlphaHint, direct load
     - FG: Linear float EXR → sRGB gamma
     - MATTE: 1-channel float → grayscale visualization
     - PROCESSED: Premultiplied RGBA float → unpremultiply → sRGB
@@ -173,40 +174,42 @@ def _transform_linear_rgb(bgr: np.ndarray, mode: ViewMode) -> QImage:
 
 
 def _transform_premultiplied(bgra: np.ndarray) -> QImage:
-    """Premultiplied RGBA float → unpremultiplied sRGB display.
+    """Premultiplied linear BGRA float → display over black.
 
-    Processed output is premultiplied linear RGBA in BGRA order.
-    Unpremultiply, apply gamma, show over mid-gray checkerboard conceptually
-    (but for simplicity, composite over black for now).
+    Processed EXR stores premultiplied linear RGBA on disk. For preview
+    fidelity, display the stored premultiplied RGB channels over black
+    rather than unpremultiplying them into a different image.
     """
     bgra_f = bgra.astype(np.float32)
-    alpha = bgra_f[:, :, 3:4]
-    bgr = bgra_f[:, :, :3]
-
-    # Unpremultiply (avoid divide by zero)
-    safe_alpha = np.where(alpha > 1e-6, alpha, 1.0)
-    unpremult = bgr / safe_alpha
-
-    # Clamp
-    unpremult = np.clip(unpremult, 0.0, None)
-    max_val = unpremult.max()
+    bgr = np.clip(bgra_f[:, :, :3], 0.0, None)
+    max_val = bgr.max()
     if max_val > 1.0:
-        unpremult = unpremult / (1.0 + unpremult)
-
-    # Linear → sRGB
-    srgb = _linear_to_srgb(unpremult)
-
-    # BGR → RGB
+        bgr = bgr / (1.0 + bgr)
+    srgb = _linear_to_srgb(bgr)
     rgb = cv2.cvtColor((srgb * 255.0).astype(np.uint8), cv2.COLOR_BGR2RGB)
     return _numpy_to_qimage(rgb)
 
 
+def processed_rgba_to_qimage(rgba: np.ndarray) -> QImage:
+    """Render in-memory premultiplied linear RGBA preview over black.
+
+    Live preview returns RGBA in RGB channel order, while saved EXRs are
+    decoded as BGRA. This helper keeps the display contract identical.
+    """
+    rgba_f = rgba.astype(np.float32)
+    rgb = np.clip(rgba_f[:, :, :3], 0.0, None)
+    max_val = rgb.max()
+    if max_val > 1.0:
+        rgb = rgb / (1.0 + rgb)
+    srgb = _linear_to_srgb(rgb)
+    return _numpy_to_qimage((srgb * 255.0).astype(np.uint8))
+
+
 def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
     """Apply sRGB gamma curve to linear float data."""
-    # Simplified sRGB gamma: pow(x, 1/2.2)
-    # Full sRGB has a linear segment below 0.0031308 but for preview
-    # the simplified version is visually indistinguishable
-    return np.power(np.clip(linear, 0.0, 1.0), 1.0 / 2.2)
+    linear = np.clip(linear, 0.0, 1.0)
+    mask = linear <= 0.0031308
+    return np.where(mask, linear * 12.92, 1.055 * np.power(linear, 1.0 / 2.4) - 0.055)
 
 
 def _numpy_to_qimage(rgb: np.ndarray) -> QImage:

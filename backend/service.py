@@ -16,10 +16,13 @@ import json
 import os
 import shutil
 import sys
-import glob as glob_module
+import importlib
+import gc
 import logging
+import queue
 import threading
 import time
+import warnings
 from collections import deque
 from dataclasses import dataclass, asdict
 from enum import Enum
@@ -65,11 +68,66 @@ from .job_queue import GPUJob, GPUJobQueue
 
 logger = logging.getLogger(__name__)
 
+
+def _configure_runtime_warnings() -> None:
+    """Hide non-actionable NVML deprecation chatter during startup/runtime checks."""
+    warnings.filterwarnings(
+        "ignore",
+        message=r"The pynvml package is deprecated\..*",
+        category=FutureWarning,
+    )
+
+
+_configure_runtime_warnings()
+
 # Project paths — frozen-build aware
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _import_matanyone2_processor_class():
+    """Import MatAnyone2Processor from either the new or legacy module layout.
+
+    Supported layouts:
+    - modules/MatAnyone2Module/wrapper.py  -> modules.MatAnyone2Module.wrapper
+    - MatAnyone2Module/wrapper.py          -> MatAnyone2Module.wrapper
+    """
+    candidates = (
+        ("modules.MatAnyone2Module.wrapper", BASE_DIR),
+        ("MatAnyone2Module.wrapper", os.path.join(BASE_DIR, "modules")),
+        ("MatAnyone2Module.wrapper", BASE_DIR),
+    )
+    missing_roots = (
+        os.path.join(BASE_DIR, "modules", "MatAnyone2Module"),
+        os.path.join(BASE_DIR, "MatAnyone2Module"),
+    )
+    last_error: ModuleNotFoundError | None = None
+
+    for module_name, path_entry in candidates:
+        if path_entry and path_entry not in sys.path:
+            sys.path.insert(0, path_entry)
+        try:
+            module = importlib.import_module(module_name)
+            return module.MatAnyone2Processor
+        except ModuleNotFoundError as exc:
+            # Only fall through on the layout module itself missing. If an inner
+            # dependency is missing, bubble that error up unchanged.
+            if exc.name not in {
+                "modules",
+                "modules.MatAnyone2Module",
+                "modules.MatAnyone2Module.wrapper",
+                "MatAnyone2Module",
+                "MatAnyone2Module.wrapper",
+            }:
+                raise
+            last_error = exc
+
+    expected = " or ".join(missing_roots)
+    raise ModuleNotFoundError(
+        f"MatAnyone2 module not found. Expected {expected}"
+    ) from last_error
 
 class _ActiveModel(Enum):
     """Tracks which heavy model is currently loaded in VRAM."""
@@ -78,6 +136,7 @@ class _ActiveModel(Enum):
     GVM = "gvm"
     SAM2 = "sam2"
     VIDEOMAMA = "videomama"
+    MATANYONE2 = "matanyone2"
 
 
 @dataclass
@@ -203,16 +262,24 @@ class CorridorKeyService:
     """
 
     def __init__(self):
-        self._engine = None
+        self._engine_pool: list = []
+        self._pool_size: int = 1
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
+        self._matanyone2_processor = None
         self._active_model = _ActiveModel.NONE
         self._device: str = 'cpu'
         self._job_queue: Optional[GPUJobQueue] = None
         self._sam2_model_id: str = "facebook/sam2.1-hiera-base-plus"
         # GPU mutex — serializes ALL model operations (Codex: thread safety)
         self._gpu_lock = threading.Lock()
+        # Gated model switch (Codex: prevents starvation during model switch)
+        self._inference_active: int = 0
+        self._switch_pending: bool = False
+        self._gate_lock = threading.Lock()
+        self._inference_idle = threading.Event()
+        self._inference_idle.set()
 
     @property
     def job_queue(self) -> GPUJobQueue:
@@ -243,6 +310,52 @@ class CorridorKeyService:
                     torch.cuda.empty_cache()
             except Exception:
                 logger.debug("CUDA cache clear skipped after SAM2 model switch", exc_info=True)
+
+    def set_pool_size(self, n: int) -> None:
+        """Set the number of parallel inference engines (1-8).
+
+        Takes effect on the next _get_engine_pool() call. If shrinking,
+        excess engines are deleted immediately to free VRAM.
+        """
+        n = max(1, min(n, 8))
+        if n != self._pool_size:
+            logger.info("Engine pool size: %d -> %d", self._pool_size, n)
+            old_size = self._pool_size
+            self._pool_size = n
+            # Trim excess engines to free VRAM immediately
+            if n < old_size and len(self._engine_pool) > n:
+                excess = self._engine_pool[n:]
+                self._engine_pool = self._engine_pool[:n]
+                for eng in excess:
+                    del eng
+                gc.collect()
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                logger.info("Trimmed %d excess engine(s), freed VRAM", len(excess))
+
+    def _begin_inference(self) -> None:
+        """Mark an inference session as active (gated model switch)."""
+        with self._gate_lock:
+            if self._switch_pending:
+                # Model switch is waiting — block until it completes
+                pass
+            self._inference_active += 1
+            self._inference_idle.clear()
+        # If switch_pending, wait outside gate_lock to avoid deadlock
+        while self._switch_pending:
+            time.sleep(0.05)
+
+    def _end_inference(self) -> None:
+        """Mark an inference session as finished."""
+        with self._gate_lock:
+            self._inference_active -= 1
+            if self._inference_active <= 0:
+                self._inference_active = 0
+                self._inference_idle.set()
 
     # --- Device & Engine Management ---
 
@@ -323,9 +436,22 @@ class CorridorKeyService:
 
         Only ONE heavy model stays in VRAM at a time. Before loading a
         different model, the previous is moved to CPU and dereferenced.
+
+        Uses gated protocol: sets _switch_pending to block new inference
+        sessions, then waits for active sessions to drain before switching.
         """
         if self._active_model == needed:
             return
+
+        # Gate: block new inference sessions and wait for active ones to drain
+        if self._active_model == _ActiveModel.INFERENCE and needed != _ActiveModel.INFERENCE:
+            with self._gate_lock:
+                self._switch_pending = True
+            # Wait for all active inference sessions to finish
+            if not self._inference_idle.wait(timeout=300):  # 5 min max
+                logger.warning("Timed out waiting for inference sessions to drain")
+            with self._gate_lock:
+                self._switch_pending = False
 
         # Unload whatever is currently loaded
         if self._active_model != _ActiveModel.NONE:
@@ -340,8 +466,9 @@ class CorridorKeyService:
             if on_status:
                 on_status(f"Offloading {self._active_model.value}...")
             if self._active_model == _ActiveModel.INFERENCE:
-                self._safe_offload(self._engine)
-                self._engine = None
+                for eng in self._engine_pool:
+                    self._safe_offload(eng)
+                self._engine_pool.clear()
             elif self._active_model == _ActiveModel.GVM:
                 # GVM has circular refs (pipe ↔ vae ↔ unet) — break them
                 # explicitly so gc can reclaim everything in one pass.
@@ -362,6 +489,9 @@ class CorridorKeyService:
             elif self._active_model == _ActiveModel.VIDEOMAMA:
                 self._safe_offload(self._videomama_pipeline)
                 self._videomama_pipeline = None
+            elif self._active_model == _ActiveModel.MATANYONE2:
+                self._safe_offload(self._matanyone2_processor)
+                self._matanyone2_processor = None
             logger.info(f"_safe_offload took {time.monotonic() - t0:.1f}s")
 
             import gc
@@ -407,42 +537,62 @@ class CorridorKeyService:
 
         self._active_model = needed
 
-    def _get_engine(self, on_status=None):
-        """Lazy-load the CorridorKey inference engine."""
+    def _get_engine_pool(self, on_status=None) -> list:
+        """Lazy-load the CorridorKey inference engine pool.
+
+        Creates up to _pool_size engines. If the pool already has enough
+        engines, returns immediately. OOM during creation shrinks the pool
+        to however many engines fit in VRAM.
+
+        Uses the backend factory to auto-detect MLX on Apple Silicon.
+        MLX forces pool_size=1 (unified memory, no multi-engine benefit).
+        """
         self._ensure_model(_ActiveModel.INFERENCE, on_status=on_status)
 
-        if self._engine is not None:
-            return self._engine
+        # Pool already has enough engines
+        if len(self._engine_pool) >= self._pool_size:
+            return self._engine_pool[:self._pool_size]
 
-        from CorridorKeyModule.inference_engine import CorridorKeyEngine
+        from CorridorKeyModule.backend import create_engine, resolve_backend
 
-        ckpt_dir = os.path.join(BASE_DIR, "CorridorKeyModule", "checkpoints")
-        ckpt_files = glob_module.glob(os.path.join(ckpt_dir, "*.pth"))
+        backend = resolve_backend()
+        opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
+        _img_size = 1024 if self._device == 'mps' else 2048
 
-        if len(ckpt_files) == 0:
-            raise FileNotFoundError(f"No .pth checkpoint found in {ckpt_dir}")
-        elif len(ckpt_files) > 1:
-            raise ValueError(
-                f"Multiple checkpoints found in {ckpt_dir}. "
-                f"Please ensure only one exists: {[os.path.basename(f) for f in ckpt_files]}"
-            )
+        # MLX: unified memory, single engine only
+        pool_size = 1 if backend == "mlx" else self._pool_size
 
-        ckpt_path = ckpt_files[0]
-        logger.info(f"Loading checkpoint: {os.path.basename(ckpt_path)}")
-        t0 = time.monotonic()
-        if on_status:
-            on_status("Initializing inference engine...")
-        logger.info("Constructing CorridorKeyEngine...")
-        self._engine = CorridorKeyEngine(
-            checkpoint_path=ckpt_path,
-            device=self._device,
-            img_size=2048,
-            optimization_mode=os.environ.get('CORRIDORKEY_OPT_MODE', 'auto'),
-            on_status=on_status,
-        )
-        logger.info("CorridorKeyEngine construction complete")
-        logger.info(f"Engine loaded in {time.monotonic() - t0:.1f}s")
-        return self._engine
+        # Create engines serially (warmup each before creating next)
+        import torch
+        for i in range(len(self._engine_pool), pool_size):
+            if on_status:
+                on_status(f"Loading engine {i + 1}/{pool_size}...")
+            logger.info("Creating engine %d/%d (backend=%s)", i + 1, pool_size, backend)
+            t0 = time.monotonic()
+            try:
+                engine = create_engine(
+                    backend=backend,
+                    device=self._device,
+                    img_size=_img_size,
+                    optimization_mode=opt_mode,
+                    on_status=on_status if i == 0 else None,
+                )
+                self._engine_pool.append(engine)
+                logger.info(f"Engine {i + 1} loaded in {time.monotonic() - t0:.1f}s")
+            except (RuntimeError, torch.cuda.OutOfMemoryError):
+                logger.warning(
+                    "OOM creating engine %d/%d, using %d engine(s)",
+                    i + 1, pool_size, len(self._engine_pool),
+                )
+                gc.collect()
+                if backend == "torch":
+                    torch.cuda.empty_cache()
+                break
+
+        if not self._engine_pool:
+            raise RuntimeError("Failed to create any inference engine")
+
+        return self._engine_pool
 
     def _get_gvm(self):
         """Lazy-load the GVM processor."""
@@ -504,16 +654,33 @@ class CorridorKeyService:
         logger.info(f"VideoMaMa loaded in {time.monotonic() - t0:.1f}s")
         return self._videomama_pipeline
 
+    def _get_matanyone2(self):
+        """Lazy-load the MatAnyone2 processor."""
+        self._ensure_model(_ActiveModel.MATANYONE2)
+
+        if self._matanyone2_processor is not None:
+            return self._matanyone2_processor
+
+        MatAnyone2Processor = _import_matanyone2_processor_class()
+        logger.info("Loading MatAnyone2 processor...")
+        t0 = time.monotonic()
+        self._matanyone2_processor = MatAnyone2Processor(device=self._device)
+        logger.info(f"MatAnyone2 loaded in {time.monotonic() - t0:.1f}s")
+        return self._matanyone2_processor
+
     def unload_engines(self) -> None:
         """Free GPU memory by unloading all engines."""
-        self._safe_offload(self._engine)
+        for eng in self._engine_pool:
+            self._safe_offload(eng)
+        self._engine_pool.clear()
         self._safe_offload(self._gvm_processor)
         self._safe_offload(self._sam2_tracker)
         self._safe_offload(self._videomama_pipeline)
-        self._engine = None
+        self._safe_offload(self._matanyone2_processor)
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
+        self._matanyone2_processor = None
         self._active_model = _ActiveModel.NONE
         import gc
         gc.collect()
@@ -554,7 +721,7 @@ class CorridorKeyService:
         """Read a single input frame.
 
         Returns:
-            (image_float32, stem_name, is_linear_override)
+            (image_float32, stem_name, is_linear)
         """
         logger.debug(f"Reading input frame {frame_index} for '{clip.name}'")
         input_stem = f"{frame_index:05d}"
@@ -578,6 +745,9 @@ class CorridorKeyService:
         frame_index: int,
         alpha_files: list[str],
         alpha_cap: Optional[Any],
+        *,
+        input_stem: str | None = None,
+        alpha_stem_lookup: Optional[dict[str, str]] = None,
     ) -> Optional[np.ndarray]:
         """Read a single alpha/mask frame and normalize to [H, W] float32."""
         if alpha_cap:
@@ -586,7 +756,14 @@ class CorridorKeyService:
                 return None
             return frame[:, :, 2].astype(np.float32) / 255.0
         else:
-            fpath = os.path.join(clip.alpha_asset.path, alpha_files[frame_index])
+            fname: str | None = None
+            if input_stem is not None and alpha_stem_lookup is not None:
+                fname = alpha_stem_lookup.get(input_stem)
+            if fname is None:
+                if frame_index >= len(alpha_files):
+                    return None
+                fname = alpha_files[frame_index]
+            fpath = os.path.join(clip.alpha_asset.path, fname)
             mask = read_mask_frame(fpath, clip.name, frame_index)
             validate_frame_read(mask, clip.name, frame_index, fpath)
             return mask
@@ -711,6 +888,10 @@ class CorridorKeyService:
     ) -> list[FrameResult]:
         """Run CorridorKey inference on a single clip.
 
+        Uses gated model switch protocol. If pool_size > 1, dispatches
+        to _run_inference_parallel with N engines processing N frames
+        concurrently. Otherwise uses _run_inference_sequential.
+
         Args:
             clip: Must be in READY or COMPLETE state with both input_asset and alpha_asset.
             params: Frozen inference parameters.
@@ -732,27 +913,68 @@ class CorridorKeyService:
         if clip.input_asset is None or clip.alpha_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input or alpha asset")
 
-        t_start = time.monotonic()
+        self._begin_inference()
+        try:
+            if on_status:
+                on_status("Loading model...")
+            logger.info("run_inference: waiting for _gpu_lock")
+            with self._gpu_lock:
+                logger.info("run_inference: acquired _gpu_lock")
+                engines = self._get_engine_pool(on_status=on_status)
 
-        if on_status:
-            on_status("Loading model...")
-        logger.info("run_inference: waiting for _gpu_lock")
-        with self._gpu_lock:
-            logger.info("run_inference: acquired _gpu_lock")
-            engine = self._get_engine(on_status=on_status)
+            if len(engines) == 1:
+                return self._run_inference_sequential(
+                    clip, params, engines[0], job=job,
+                    on_progress=on_progress, on_warning=on_warning,
+                    on_status=on_status, skip_stems=skip_stems,
+                    output_config=output_config, frame_range=frame_range,
+                )
+            return self._run_inference_parallel(
+                clip, params, engines, job=job,
+                on_progress=on_progress, on_warning=on_warning,
+                on_status=on_status, skip_stems=skip_stems,
+                output_config=output_config, frame_range=frame_range,
+            )
+        finally:
+            self._end_inference()
+
+    def _run_inference_sequential(
+        self,
+        clip: ClipEntry,
+        params: InferenceParams,
+        engine,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[..., None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+        skip_stems: Optional[set[str]] = None,
+        output_config: Optional[OutputConfig] = None,
+        frame_range: Optional[tuple[int, int]] = None,
+    ) -> list[FrameResult]:
+        """Sequential frame loop — exact extraction of original run_inference."""
+        t_start = time.monotonic()
         dirs = ensure_output_dirs(clip.root_path)
         cfg = output_config or OutputConfig()
 
-        # Write run manifest (Codex: resume must know which outputs were enabled)
         self._write_manifest(dirs['root'], cfg, params)
 
-        num_frames = validate_frame_counts(
-            clip.name,
-            clip.input_asset.frame_count,
-            clip.alpha_asset.frame_count,
-        )
+        if clip.input_asset.asset_type == 'sequence' and clip.alpha_asset.asset_type == 'sequence':
+            num_frames = clip.input_asset.frame_count
+            if clip.input_asset.frame_count != clip.alpha_asset.frame_count:
+                logger.warning(
+                    "Clip '%s': sequence alpha count mismatch — input has %d, alpha has %d. "
+                    "Using stem-matched alpha reads across the selected range.",
+                    clip.name,
+                    clip.input_asset.frame_count,
+                    clip.alpha_asset.frame_count,
+                )
+        else:
+            num_frames = validate_frame_counts(
+                clip.name,
+                clip.input_asset.frame_count,
+                clip.alpha_asset.frame_count,
+            )
 
-        # Open video captures or get file lists
         input_cap = None
         alpha_cap = None
         input_files: list[str] = []
@@ -767,14 +989,17 @@ class CorridorKeyService:
             alpha_cap = cv2.VideoCapture(clip.alpha_asset.path)
         else:
             alpha_files = clip.alpha_asset.get_frame_files()
+        alpha_stem_lookup = (
+            {os.path.splitext(fname)[0]: fname for fname in alpha_files}
+            if alpha_files else None
+        )
 
         results: list[FrameResult] = []
         skipped: list[int] = []
         skip_stems = skip_stems or set()
-        frame_times: deque[float] = deque(maxlen=10)  # rolling window for avg fps
-        processed_count = 0  # frames actually processed (not skipped/resumed)
+        frame_times: deque[float] = deque(maxlen=10)
+        processed_count = 0
 
-        # Determine frame range (in/out markers or full clip)
         if frame_range is not None:
             range_start = max(0, frame_range[0])
             range_end = min(num_frames - 1, frame_range[1])
@@ -788,15 +1013,12 @@ class CorridorKeyService:
 
         try:
             for progress_i, i in enumerate(frame_indices):
-                # Check cancellation between frames
                 if job and job.is_cancelled:
                     raise JobCancelledError(clip.name, i)
 
-                # Show warmup status on first frame (torch.compile JIT)
                 if not _warmup_done and on_status:
                     on_status("Compiling (first frame may take a minute)...")
 
-                # Report progress with timing data
                 if on_progress:
                     timing_kwargs: dict[str, float] = {}
                     elapsed = time.monotonic() - t_start
@@ -810,7 +1032,6 @@ class CorridorKeyService:
                     on_progress(clip.name, progress_i, range_count, **timing_kwargs)
 
                 try:
-                    # Read input
                     img, input_stem, is_linear = self._read_input_frame(
                         clip, i, input_files, input_cap, params.input_is_linear,
                     )
@@ -819,28 +1040,27 @@ class CorridorKeyService:
                         results.append(FrameResult(i, f"{i:05d}", False, "video read failed"))
                         continue
 
-                    # Resume: skip frames that already have outputs
                     if input_stem in skip_stems:
                         results.append(FrameResult(i, input_stem, True, "resumed (skipped)"))
                         continue
 
-                    # Read alpha
-                    mask = self._read_alpha_frame(clip, i, alpha_files, alpha_cap)
+                    mask = self._read_alpha_frame(
+                        clip, i, alpha_files, alpha_cap,
+                        input_stem=input_stem,
+                        alpha_stem_lookup=alpha_stem_lookup,
+                    )
                     if mask is None:
                         skipped.append(i)
                         results.append(FrameResult(i, input_stem, False, "alpha read failed"))
                         continue
 
-                    # Resize mask if dimensions don't match input
                     if mask.shape[:2] != img.shape[:2]:
                         mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
 
-                    # Process (GPU-locked — process_frame mutates model hooks)
                     t_frame = time.monotonic()
                     with self._gpu_lock:
                         res = engine.process_frame(
-                            img,
-                            mask,
+                            img, mask,
                             input_is_linear=is_linear,
                             fg_is_straight=True,
                             despill_strength=params.despill_strength,
@@ -854,7 +1074,6 @@ class CorridorKeyService:
                     frame_times.append(dt)
                     processed_count += 1
 
-                    # Clear warmup status after first successful frame
                     if not _warmup_done:
                         _warmup_done = True
                         if on_status:
@@ -865,7 +1084,6 @@ class CorridorKeyService:
                         f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)"
                     )
 
-                    # Write outputs
                     self._write_outputs(res, dirs, input_stem, clip.name, i, cfg)
                     results.append(FrameResult(i, input_stem, True))
 
@@ -882,7 +1100,6 @@ class CorridorKeyService:
                     if on_warning:
                         on_warning(str(e))
 
-            # Final progress (include final timing)
             if on_progress:
                 final_elapsed = time.monotonic() - t_start
                 final_kwargs: dict[str, float] = {"elapsed": final_elapsed, "eta_seconds": 0.0}
@@ -897,7 +1114,275 @@ class CorridorKeyService:
             if alpha_cap:
                 alpha_cap.release()
 
-        # Summary
+        return self._finalize_inference(
+            clip, results, skipped, processed_count,
+            t_start, frame_range, num_frames,
+            on_warning=on_warning,
+        )
+
+    def _run_inference_parallel(
+        self,
+        clip: ClipEntry,
+        params: InferenceParams,
+        engines: list,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[..., None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+        skip_stems: Optional[set[str]] = None,
+        output_config: Optional[OutputConfig] = None,
+        frame_range: Optional[tuple[int, int]] = None,
+    ) -> list[FrameResult]:
+        """Parallel frame pipeline: reader thread -> N workers -> writer thread.
+
+        Each worker is permanently bound to one engine instance. PyTorch
+        releases the GIL during CUDA ops, so threads naturally overlap GPU work.
+        No explicit CUDA streams needed (they fail on Windows anyway).
+        """
+        N = len(engines)
+        logger.info("Starting parallel inference with %d engines", N)
+
+        t_start = time.monotonic()
+        dirs = ensure_output_dirs(clip.root_path)
+        cfg = output_config or OutputConfig()
+        self._write_manifest(dirs['root'], cfg, params)
+
+        if clip.input_asset.asset_type == 'sequence' and clip.alpha_asset.asset_type == 'sequence':
+            num_frames = clip.input_asset.frame_count
+            if clip.input_asset.frame_count != clip.alpha_asset.frame_count:
+                logger.warning(
+                    "Clip '%s': sequence alpha count mismatch — input has %d, alpha has %d.",
+                    clip.name, clip.input_asset.frame_count, clip.alpha_asset.frame_count,
+                )
+        else:
+            num_frames = validate_frame_counts(
+                clip.name, clip.input_asset.frame_count, clip.alpha_asset.frame_count,
+            )
+
+        if frame_range is not None:
+            range_start = max(0, frame_range[0])
+            range_end = min(num_frames - 1, frame_range[1])
+            frame_indices = list(range(range_start, range_end + 1))
+            range_count = range_end - range_start + 1
+        else:
+            frame_indices = list(range(num_frames))
+            range_count = num_frames
+
+        skip_stems = skip_stems or set()
+
+        # Bounded queues for pipeline stages
+        in_q: queue.Queue = queue.Queue(maxsize=2 * N)
+        out_q: queue.Queue = queue.Queue(maxsize=2 * N)
+        stop = threading.Event()
+        error_box: list = [None]
+
+        if on_status:
+            on_status("Compiling (first frame may take a minute)...")
+        warmup_done = threading.Event()
+
+        # --- Worker threads (each bound to one engine) ---
+        def worker(engine_idx: int) -> None:
+            eng = engines[engine_idx]
+            while not stop.is_set():
+                try:
+                    item = in_q.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+                if item is None:
+                    break  # poison pill
+                frame_idx, img, mask, stem, is_linear = item
+                try:
+                    res = eng.process_frame(
+                        img, mask,
+                        input_is_linear=is_linear,
+                        fg_is_straight=True,
+                        despill_strength=params.despill_strength,
+                        auto_despeckle=params.auto_despeckle,
+                        despeckle_size=params.despeckle_size,
+                        despeckle_dilation=params.despeckle_dilation,
+                        despeckle_blur=params.despeckle_blur,
+                        refiner_scale=params.refiner_scale,
+                    )
+                    out_q.put((frame_idx, stem, res, None))
+                    if not warmup_done.is_set():
+                        warmup_done.set()
+                        if on_status:
+                            on_status("")
+                except Exception as e:
+                    out_q.put((frame_idx, stem, None, e))
+                    stop.set()
+                    break
+
+        # --- Reader thread ---
+        def reader() -> None:
+            input_cap = None
+            alpha_cap = None
+            input_files: list[str] = []
+            alpha_files: list[str] = []
+
+            try:
+                if clip.input_asset.asset_type == 'video':
+                    input_cap = cv2.VideoCapture(clip.input_asset.path)
+                else:
+                    input_files = clip.input_asset.get_frame_files()
+
+                if clip.alpha_asset.asset_type == 'video':
+                    alpha_cap = cv2.VideoCapture(clip.alpha_asset.path)
+                else:
+                    alpha_files = clip.alpha_asset.get_frame_files()
+                alpha_stem_lookup = (
+                    {os.path.splitext(fname)[0]: fname for fname in alpha_files}
+                    if alpha_files else None
+                )
+
+                for i in frame_indices:
+                    if stop.is_set() or (job and job.is_cancelled):
+                        break
+
+                    img, input_stem, is_linear = self._read_input_frame(
+                        clip, i, input_files, input_cap, params.input_is_linear,
+                    )
+                    if img is None:
+                        out_q.put((i, f"{i:05d}", None, FrameReadError(clip.name, i, "video read failed")))
+                        continue
+
+                    if input_stem in skip_stems:
+                        out_q.put((i, input_stem, "SKIP", None))
+                        continue
+
+                    mask = self._read_alpha_frame(
+                        clip, i, alpha_files, alpha_cap,
+                        input_stem=input_stem, alpha_stem_lookup=alpha_stem_lookup,
+                    )
+                    if mask is None:
+                        out_q.put((i, input_stem, None, FrameReadError(clip.name, i, "alpha read failed")))
+                        continue
+
+                    if mask.shape[:2] != img.shape[:2]:
+                        mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+                    in_q.put((i, img, mask, input_stem, is_linear))
+            finally:
+                for _ in range(N):
+                    try:
+                        in_q.put(None, timeout=5)
+                    except queue.Full:
+                        pass
+                if input_cap:
+                    input_cap.release()
+                if alpha_cap:
+                    alpha_cap.release()
+
+        # --- Writer thread ---
+        results: list[FrameResult] = []
+        skipped: list[int] = []
+        processed_count_box = [0]
+
+        def writer() -> None:
+            reorder: dict = {}
+            next_idx = frame_indices[0] if frame_indices else 0
+            written = 0
+            received = 0
+            t_last_progress = time.monotonic()
+
+            while received < range_count:
+                if stop.is_set() and not reorder:
+                    break
+                try:
+                    frame_idx, stem, result, err = out_q.get(timeout=1.0)
+                except queue.Empty:
+                    if stop.is_set():
+                        break
+                    continue
+                received += 1
+
+                if err is not None:
+                    if isinstance(err, (FrameReadError, WriteFailureError)):
+                        skipped.append(frame_idx)
+                        results.append(FrameResult(frame_idx, stem, False, str(err)))
+                        if on_warning:
+                            on_warning(str(err))
+                        next_idx = max(next_idx, frame_idx + 1)
+                        continue
+                    error_box[0] = err
+                    stop.set()
+                    break
+
+                if result == "SKIP":
+                    results.append(FrameResult(frame_idx, stem, True, "resumed (skipped)"))
+                    next_idx = max(next_idx, frame_idx + 1)
+                    continue
+
+                reorder[frame_idx] = (result, stem)
+
+                while next_idx in reorder:
+                    res, s = reorder.pop(next_idx)
+                    self._write_outputs(res, dirs, s, clip.name, next_idx, cfg)
+                    processed_count_box[0] += 1
+                    written += 1
+                    results.append(FrameResult(next_idx, s, True))
+
+                    now = time.monotonic()
+                    if on_progress and (now - t_last_progress > 0.1 or written == range_count):
+                        elapsed = now - t_start
+                        timing_kw: dict[str, float] = {"elapsed": elapsed}
+                        if processed_count_box[0] > 0:
+                            fps = processed_count_box[0] / elapsed
+                            remaining = range_count - written
+                            timing_kw["fps"] = fps
+                            if fps > 0:
+                                timing_kw["eta_seconds"] = remaining / fps
+                        on_progress(clip.name, written, range_count, **timing_kw)
+                        t_last_progress = now
+
+                    next_idx += 1
+
+            if on_progress:
+                final_elapsed = time.monotonic() - t_start
+                final_kw: dict[str, float] = {"elapsed": final_elapsed, "eta_seconds": 0.0}
+                if processed_count_box[0] > 0:
+                    final_kw["fps"] = processed_count_box[0] / final_elapsed
+                on_progress(clip.name, range_count, range_count, **final_kw)
+
+        # Launch all threads
+        threads = (
+            [threading.Thread(target=reader, name="ck-reader")] +
+            [threading.Thread(target=worker, args=(i,), name=f"ck-worker-{i}") for i in range(N)] +
+            [threading.Thread(target=writer, name="ck-writer")]
+        )
+        for t in threads:
+            t.start()
+
+        for t in threads:
+            while t.is_alive():
+                t.join(timeout=0.5)
+                if job and job.is_cancelled and not stop.is_set():
+                    stop.set()
+
+        if error_box[0]:
+            raise error_box[0]
+        if job and job.is_cancelled:
+            raise JobCancelledError(clip.name, 0)
+
+        return self._finalize_inference(
+            clip, results, skipped, processed_count_box[0],
+            t_start, frame_range, num_frames,
+            on_warning=on_warning,
+        )
+
+    def _finalize_inference(
+        self,
+        clip: ClipEntry,
+        results: list[FrameResult],
+        skipped: list[int],
+        processed_count: int,
+        t_start: float,
+        frame_range: Optional[tuple[int, int]],
+        num_frames: int,
+        on_warning: Optional[Callable[[str], None]] = None,
+    ) -> list[FrameResult]:
+        """Shared post-processing for sequential and parallel inference."""
+        range_count = len(results) if results else 0
         processed = sum(1 for r in results if r.success)
         if skipped:
             msg = (
@@ -916,7 +1401,6 @@ class CorridorKeyService:
             f"in {t_total:.1f}s ({t_total / max(processed, 1):.2f}s/frame, {avg_fps:.1f} fps avg)"
         )
 
-        # State transition — only set COMPLETE if full clip was processed
         is_full_clip = (frame_range is None or
                         (frame_range[0] == 0 and frame_range[1] >= num_frames - 1))
         if processed == range_count and is_full_clip:
@@ -931,7 +1415,7 @@ class CorridorKeyService:
 
     def is_engine_loaded(self) -> bool:
         """True if the inference engine is already loaded in VRAM."""
-        return self._active_model == _ActiveModel.INFERENCE and self._engine is not None
+        return self._active_model == _ActiveModel.INFERENCE and len(self._engine_pool) > 0
 
     def reprocess_single_frame(
         self,
@@ -954,16 +1438,21 @@ class CorridorKeyService:
             return None
 
         with self._gpu_lock:
-            engine = self._get_engine()
+            engines = self._get_engine_pool()
+            engine = engines[0]
 
         # Read the specific input frame
+        is_linear = params.input_is_linear
+        input_stem = f"{frame_index:05d}"
         if clip.input_asset.asset_type == 'video':
             img = read_video_frame_at(clip.input_asset.path, frame_index)
         else:
             input_files = clip.input_asset.get_frame_files()
             if frame_index >= len(input_files):
                 return None
-            img = read_image_frame(os.path.join(clip.input_asset.path, input_files[frame_index]))
+            fpath = os.path.join(clip.input_asset.path, input_files[frame_index])
+            input_stem = os.path.splitext(input_files[frame_index])[0]
+            img = read_image_frame(fpath)
         if img is None:
             return None
 
@@ -972,11 +1461,14 @@ class CorridorKeyService:
             mask = read_video_mask_at(clip.alpha_asset.path, frame_index)
         else:
             alpha_files = clip.alpha_asset.get_frame_files()
-            if frame_index >= len(alpha_files):
-                return None
-            mask = read_mask_frame(
-                os.path.join(clip.alpha_asset.path, alpha_files[frame_index]),
-                clip.name, frame_index,
+            alpha_stem_lookup = {os.path.splitext(fname)[0]: fname for fname in alpha_files}
+            mask = self._read_alpha_frame(
+                clip,
+                frame_index,
+                alpha_files,
+                None,
+                input_stem=input_stem,
+                alpha_stem_lookup=alpha_stem_lookup,
             )
         if mask is None:
             return None
@@ -990,7 +1482,7 @@ class CorridorKeyService:
         with self._gpu_lock:
             res = engine.process_frame(
                 img, mask,
-                input_is_linear=params.input_is_linear,
+                input_is_linear=is_linear,
                 fg_is_straight=True,
                 despill_strength=params.despill_strength,
                 auto_despeckle=params.auto_despeckle,
@@ -1103,6 +1595,7 @@ class CorridorKeyService:
         file_names: list[str],
         clip_name: str,
         *,
+        gamma_correct_exr: bool = False,
         job: Optional[GPUJob] = None,
         on_status: Optional[Callable[[str], None]] = None,
     ) -> list[tuple[str, np.ndarray]]:
@@ -1113,7 +1606,7 @@ class CorridorKeyService:
             if job and job.is_cancelled:
                 raise JobCancelledError(clip_name, index)
             fpath = os.path.join(asset.path, fname)
-            img = read_image_frame(fpath, gamma_correct_exr=True)
+            img = read_image_frame(fpath, gamma_correct_exr=gamma_correct_exr)
             if img is None:
                 raise FrameReadError(clip_name, index, fpath)
             named_frames.append(
@@ -1122,6 +1615,16 @@ class CorridorKeyService:
             if on_status and index % 20 == 0 and index > 0:
                 on_status(f"Loading frames ({index}/{total})...")
         return named_frames
+
+    @staticmethod
+    def _resolve_sequence_input_is_linear(
+        clip: ClipEntry,
+        input_is_linear: bool | None,
+    ) -> bool:
+        """Honor explicit UI override, otherwise default from clip source type."""
+        if input_is_linear is not None:
+            return input_is_linear
+        return clip.should_default_input_linear()
 
     @staticmethod
     def _write_mask_track_manifest(
@@ -1151,6 +1654,7 @@ class CorridorKeyService:
     def run_sam2_track(
         self,
         clip: ClipEntry,
+        input_is_linear: bool | None = None,
         job: Optional[GPUJob] = None,
         on_progress: Optional[Callable[[str, int, int], None]] = None,
         on_warning: Optional[Callable[[str], None]] = None,
@@ -1165,17 +1669,6 @@ class CorridorKeyService:
         selected_files = self._selected_sequence_files(clip)
         if not selected_files:
             raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for SAM2 tracking")
-
-        start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
-        allowed_indices = list(range(start_index, start_index + len(selected_files)))
-        prompt_frames = load_annotation_prompt_frames(
-            clip.root_path,
-            allowed_indices=allowed_indices,
-        )
-        if not prompt_frames:
-            raise CorridorKeyError(
-                f"Clip '{clip.name}' has no usable annotations for SAM2 tracking"
-            )
 
         def _status(message: str) -> None:
             logger.info(f"SAM2 [{clip.name}]: {message}")
@@ -1199,14 +1692,29 @@ class CorridorKeyService:
         _check_cancel()
 
         _status("Loading frames...")
+        sequence_is_linear = self._resolve_sequence_input_is_linear(clip, input_is_linear)
         named_frames = self._load_named_sequence_frames(
             clip.input_asset,
             selected_files,
             clip.name,
+            gamma_correct_exr=sequence_is_linear,
             job=job,
             on_status=on_status,
         )
         _check_cancel()
+        if not named_frames:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no readable input frames for SAM2 tracking")
+
+        start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
+        allowed_indices = list(range(start_index, start_index + len(selected_files)))
+        prompt_frames = load_annotation_prompt_frames(
+            clip.root_path,
+            allowed_indices=allowed_indices,
+        )
+        if not prompt_frames:
+            raise CorridorKeyError(
+                f"Clip '{clip.name}' has no usable annotations for SAM2 tracking"
+            )
 
         from sam2_tracker import PromptFrame, SAM2NotInstalledError
 
@@ -1219,6 +1727,23 @@ class CorridorKeyService:
             )
             for prompt in prompt_frames
         ]
+        if not any(
+            prompt.positive_points or prompt.box is not None
+            for prompt in local_prompts
+        ):
+            message = "SAM2 tracking requires at least one non-empty foreground prompt"
+            if on_warning:
+                on_warning(message)
+            raise CorridorKeyError(message)
+        total_pos = sum(len(prompt.positive_points) for prompt in local_prompts)
+        total_neg = sum(len(prompt.negative_points) for prompt in local_prompts)
+        logger.info(
+            "SAM2 [%s]: prompt frames=%d, fg points=%d, bg points=%d",
+            clip.name,
+            len(local_prompts),
+            total_pos,
+            total_neg,
+        )
 
         _status("Running SAM2 tracker...")
         try:
@@ -1235,6 +1760,11 @@ class CorridorKeyService:
             )
         except SAM2NotInstalledError as exc:
             raise CorridorKeyError(str(exc)) from exc
+        except ValueError as exc:
+            message = str(exc)
+            if on_warning:
+                on_warning(message)
+            raise CorridorKeyError(message) from exc
         _check_cancel()
 
         mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
@@ -1268,6 +1798,128 @@ class CorridorKeyService:
             clip.name,
             len(stems),
         )
+
+    def preview_sam2_prompt(
+        self,
+        clip: ClipEntry,
+        *,
+        preferred_frame_index: int | None = None,
+        input_is_linear: bool | None = None,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Run a fast SAM2 preview on one annotated frame without writing to disk."""
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for SAM2 tracking")
+        if clip.input_asset.asset_type != "sequence":
+            raise CorridorKeyError("SAM2 tracking currently requires an extracted image sequence")
+
+        selected_files = self._selected_sequence_files(clip)
+        if not selected_files:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for SAM2 tracking")
+
+        def _status(message: str) -> None:
+            logger.info(f"SAM2 Preview [{clip.name}]: {message}")
+            if on_status:
+                on_status(message)
+
+        def _check_cancel() -> None:
+            if job and job.is_cancelled:
+                raise JobCancelledError(clip.name, 0)
+
+        _status("Loading model...")
+        with self._gpu_lock:
+            tracker = self._get_sam2_tracker(
+                on_progress=(
+                    None
+                    if on_progress is None
+                    else lambda current, total: on_progress(clip.name, current, total)
+                ),
+                on_status=on_status,
+            )
+        _check_cancel()
+
+        start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
+        allowed_indices = list(range(start_index, start_index + len(selected_files)))
+        prompt_frames = load_annotation_prompt_frames(
+            clip.root_path,
+            allowed_indices=allowed_indices,
+        )
+        if not prompt_frames:
+            raise CorridorKeyError(
+                f"Clip '{clip.name}' has no usable annotations for SAM2 tracking"
+            )
+
+        prompt = next(
+            (item for item in prompt_frames if item.frame_index == preferred_frame_index),
+            prompt_frames[0],
+        )
+        if preferred_frame_index is not None and prompt.frame_index != preferred_frame_index and on_warning:
+            on_warning(
+                f"No prompts on frame {preferred_frame_index + 1}; previewing annotated frame {prompt.frame_index + 1} instead."
+            )
+
+        local_index = prompt.frame_index - start_index
+        if local_index < 0 or local_index >= len(selected_files):
+            raise CorridorKeyError("Annotated frame is outside the selected in/out range")
+
+        _status("Loading preview frame...")
+        sequence_is_linear = self._resolve_sequence_input_is_linear(clip, input_is_linear)
+        named_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            [selected_files[local_index]],
+            clip.name,
+            gamma_correct_exr=sequence_is_linear,
+            job=job,
+            on_status=on_status,
+        )
+        _check_cancel()
+        if not named_frames:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no readable input frames for SAM2 tracking")
+
+        from sam2_tracker import PromptFrame, SAM2NotInstalledError
+
+        local_prompt = PromptFrame(
+            frame_index=0,
+            positive_points=prompt.positive_points,
+            negative_points=prompt.negative_points,
+            box=prompt.box,
+        )
+
+        _status("Previewing SAM2 on annotated frame...")
+        try:
+            masks = tracker.track_video(
+                [named_frames[0][1]],
+                [local_prompt],
+                on_progress=(
+                    None
+                    if on_progress is None
+                    else lambda current, total: on_progress(clip.name, current, total)
+                ),
+                on_status=on_status,
+                check_cancel=_check_cancel,
+            )
+        except SAM2NotInstalledError as exc:
+            raise CorridorKeyError(str(exc)) from exc
+        except ValueError as exc:
+            message = str(exc)
+            if on_warning:
+                on_warning(message)
+            raise CorridorKeyError(message) from exc
+        _check_cancel()
+
+        mask = masks[0]
+        return {
+            "kind": "sam2_preview",
+            "clip_name": clip.name,
+            "frame_index": prompt.frame_index,
+            "frame_name": named_frames[0][0],
+            "frame_rgb": named_frames[0][1],
+            "mask": mask,
+            "fill": float((mask > 0).mean()),
+        }
 
     # --- VideoMaMa Alpha Generation ---
 
@@ -1455,6 +2107,153 @@ class CorridorKeyService:
                 on_warning(f"State transition after VideoMaMa: {e}")
 
         logger.info(f"VideoMaMa complete for '{clip.name}': {frames_written} alpha frames in {time.monotonic() - t_start:.1f}s")
+
+    def run_matanyone2(
+        self,
+        clip: ClipEntry,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Run MatAnyone2 video matting alpha generation for a clip.
+
+        Transitions clip: MASKED → READY (creates AlphaHint directory).
+        Requires a first-frame (frame 0) segmentation mask.
+
+        Args:
+            clip: Must be in MASKED state with input_asset and mask_asset.
+            job: Optional GPUJob for cancel checking.
+            on_progress: Progress callback (clip_name, current, total).
+            on_warning: Warning callback.
+            on_status: Phase status callback.
+        """
+        # ── Preflight validation ──
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for MatAnyone2")
+        if clip.mask_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing mask asset for MatAnyone2")
+        if self._device == 'cpu':
+            raise GPURequiredError("MatAnyone2")
+        if clip.input_asset.asset_type != "sequence":
+            raise CorridorKeyError("MatAnyone2 requires an extracted image sequence")
+
+        def _status(msg: str) -> None:
+            logger.info(f"MatAnyone2 [{clip.name}]: {msg}")
+            if on_status:
+                on_status(msg)
+
+        def _check_cancel() -> bool:
+            return bool(job and job.is_cancelled)
+
+        t_start = time.monotonic()
+
+        # ── Phase 1: Load model ──
+        _status("Loading MatAnyone2 model...")
+        with self._gpu_lock:
+            processor = self._get_matanyone2()
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 2: Load input frames ──
+        _status("Loading frames...")
+        selected_input_names = self._selected_sequence_files(clip)
+        if not selected_input_names:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for MatAnyone2")
+
+        named_input_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            selected_input_names,
+            clip.name,
+            job=job,
+            on_status=on_status,
+        )
+        input_frames = [frame for _, frame in named_input_frames]
+        input_names = [fname for fname, _ in named_input_frames]
+        frame_stems = [os.path.splitext(fname)[0] for fname in input_names]
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 3: Load first-frame mask ──
+        _status("Loading first-frame mask...")
+        mask_frame = self._load_first_frame_mask(clip, input_frames[0].shape[:2])
+        if mask_frame is None:
+            raise CorridorKeyError(
+                f"Clip '{clip.name}': MatAnyone2 requires a mask for the first frame (frame 0). "
+                f"Please ensure your annotation or mask covers the very first frame."
+            )
+
+        # ── Phase 4: Inference ──
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        try:
+            frames_written = processor.process_frames(
+                input_frames=input_frames,
+                mask_frame=mask_frame,
+                output_dir=alpha_dir,
+                frame_names=frame_stems,
+                progress_callback=on_progress,
+                on_status=on_status,
+                cancel_check=_check_cancel,
+                clip_name=clip.name,
+            )
+        except Exception as e:
+            # On OOM, clean up and re-raise without poisoning service
+            if "CUDA out of memory" in str(e) or "OutOfMemoryError" in type(e).__name__:
+                logger.error(f"MatAnyone2 OOM for '{clip.name}': {e}")
+                self._matanyone2_processor = None
+                self._active_model = _ActiveModel.NONE
+                try:
+                    import torch as _torch
+                    _torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                raise CorridorKeyError(
+                    f"MatAnyone2 ran out of GPU memory processing '{clip.name}'. "
+                    f"Try closing other GPU applications or using a smaller clip."
+                ) from e
+            raise
+
+        # ── Phase 5: Finalize ──
+        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+
+        try:
+            clip.transition_to(ClipState.READY)
+        except Exception as e:
+            if on_warning:
+                on_warning(f"State transition after MatAnyone2: {e}")
+
+        logger.info(
+            f"MatAnyone2 complete for '{clip.name}': "
+            f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )
+
+    def _load_first_frame_mask(
+        self, clip: ClipEntry, frame_shape: tuple[int, int]
+    ) -> Optional[np.ndarray]:
+        """Load the first-frame mask for MatAnyone2.
+
+        Tries mask_asset's first file. Returns grayscale uint8 (H,W) or None.
+        """
+        if clip.mask_asset is None:
+            return None
+
+        if clip.mask_asset.asset_type == 'sequence':
+            mask_files = clip.mask_asset.get_frame_files()
+            if not mask_files:
+                return None
+            first_mask_path = os.path.join(clip.mask_asset.path, mask_files[0])
+            mask = cv2.imread(first_mask_path, cv2.IMREAD_GRAYSCALE)
+            if mask is None:
+                return None
+            # Binarize
+            _, mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
+            # Resize to match input frame if needed
+            target_h, target_w = frame_shape
+            if mask.shape[:2] != (target_h, target_w):
+                mask = cv2.resize(mask, (target_w, target_h), interpolation=cv2.INTER_NEAREST)
+            return mask
+
+        return None
 
     def _load_frames_for_videomama(
         self, asset: ClipAsset, clip_name: str,

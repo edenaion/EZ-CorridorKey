@@ -4,6 +4,65 @@ Running log of all commits for development history.
 
 ---
 
+### 64b1dbd - 2026-03-12 16:28
+**Refine SAM2 prompt frames iteratively**
+
+Key changes:
+- Change SAM2 point prompting from a single all-at-once `add_new_points_or_box()` call to iterative same-frame refinements in sparse batches (`6` foreground / `2` background prompts per step)
+- Keep the prompt box only on the first refinement step and let later calls accumulate against prior `prev_sam_mask_logits`, matching the official SAM2 correction flow more closely
+- Preserve full propagation behavior after the prompt frame; the change is isolated to conditioning-frame prompt application
+- Add focused tests covering prompt refinement batching and wrapper call sequencing
+
+Observed impact on the real failing clip:
+- Frame `0` prompt result improved from `200` foreground components / `342` hole components to `1` foreground component / `0` holes
+- Frame `12` prompt result improved from `114` foreground components / `535` hole components to `1` foreground component / `0` holes
+- 5-frame smoke test now passes with stable fills around `0.238`
+
+---
+
+### 5f87f66 - 2026-03-12 15:46
+**Fix preview display and SAM input color handling**
+
+Key changes:
+- Stop forcing extracted video EXR sequences to `Linear` during preview/live-reprocess when the UI says `sRGB`
+- Make `PROC` display show the saved premultiplied processed image over black instead of a viewer-only unpremultiply path that made it look washed out
+- Align SAM2 preview / Track Mask frame loading with the same input color truth as the viewer, including explicit user overrides
+- Add regression coverage across clip default color-space selection, display transform behavior, and preview service paths
+
+User-visible impact:
+- live despill/refiner adjustments no longer cause the image to jump to a washed-out color interpretation
+- `PROC` no longer looks brighter than the actual processed output contract
+- Track Mask preview no longer brightens the frame before SAM2 runs
+
+---
+
+### b1a0a1b - 2026-03-12 15:06
+**Make thumbnails match viewer decode**
+
+Key changes:
+- Route sequence thumbnails through the same `INPUT` display/decode path as the main viewer instead of a separate EXR gamma path
+- Route video thumbnails through the same video decode helper used by the viewer
+- Bump thumbnail cache version so stale brightened cached thumbnails are replaced automatically
+- Add focused regression coverage for thumbnail decode parity
+
+User-visible impact:
+- Input and Export tray cards now show the same color/brightness the large viewer shows
+
+---
+
+### 426609d - 2026-03-12 14:20
+**Fix live preview EXR color space override**
+
+Key changes:
+- Remove the hidden EXR→Linear override from `reprocess_single_frame()`
+- Preserve the user’s explicit `sRGB` or `Linear` choice through live preview reruns
+- Add a regression test proving EXR preview respects `input_is_linear=False`
+
+User-visible impact:
+- changing despill/refiner with live preview enabled no longer forces extracted-video EXRs into the washed-out Linear interpretation
+
+---
+
 ### 70c51f6 - 2026-03-02 13:19
 **Queue panel: floating overlay, vertical QUEUE tab, splitter alignment**
 

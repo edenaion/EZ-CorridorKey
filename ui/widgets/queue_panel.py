@@ -39,8 +39,10 @@ _STATUS_TEXT = {
 _JOB_TYPE_LABELS = {
     JobType.INFERENCE: "Inference",
     JobType.GVM_ALPHA: "GVM Auto",
+    JobType.SAM2_PREVIEW: "Track Preview",
     JobType.SAM2_TRACK: "Track Mask",
     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
+    JobType.MATANYONE2_ALPHA: "MatAnyone2",
     JobType.PREVIEW_REPROCESS: "Preview",
 }
 

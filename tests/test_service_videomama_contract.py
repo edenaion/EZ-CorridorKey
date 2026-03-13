@@ -217,11 +217,19 @@ class DummySAM2Tracker:
     model_id = "facebook/sam2.1-hiera-small"
 
     def track_video(self, frames, prompt_frames, on_progress=None, on_status=None, check_cancel=None):
-        assert len(frames) == 2
         assert len(prompt_frames) == 1
         assert prompt_frames[0].frame_index == 0
+        assert prompt_frames[0].mask is None
+        assert prompt_frames[0].positive_points
+        assert prompt_frames[0].negative_points == []
+        assert prompt_frames[0].box is not None
         if on_status:
             on_status("SAM2 propagation")
+        if len(frames) == 1:
+            if on_progress:
+                on_progress(1, 1)
+            return [np.full(frames[0].shape[:2], 255, dtype=np.uint8)]
+        assert len(frames) == 2
         if on_progress:
             on_progress(1, 2)
             on_progress(2, 2)
@@ -282,3 +290,88 @@ class TestSAM2Tracking:
                 manifest = json.load(handle)
             assert manifest["source"] == "sam2"
             assert manifest["frame_stems"] == ["frame_00000", "frame_00001"]
+
+    def test_preview_sam2_prompt_returns_in_memory_preview(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.SAM2
+        svc._sam2_tracker = DummySAM2Tracker()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "Input")
+            os.makedirs(input_dir)
+
+            for i in range(2):
+                cv2.imwrite(
+                    os.path.join(input_dir, f"frame_{i:05d}.png"),
+                    np.full((4, 4, 3), 64 + i, dtype=np.uint8),
+                )
+
+            with open(os.path.join(tmpdir, "annotations.json"), "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "0": [
+                            {
+                                "points": [[1, 1], [2, 2], [3, 3]],
+                                "brush_type": "fg",
+                                "radius": 15.0,
+                            }
+                        ]
+                    },
+                    handle,
+                )
+
+            clip = ClipEntry(
+                "test", tmpdir, state=ClipState.RAW,
+                input_asset=ClipAsset(input_dir, "sequence"),
+            )
+
+            result = svc.preview_sam2_prompt(clip, preferred_frame_index=0)
+
+            assert result is not None
+            assert result["kind"] == "sam2_preview"
+            assert result["frame_index"] == 0
+            assert result["frame_name"] == "frame_00000.png"
+            assert result["frame_rgb"].shape == (4, 4, 3)
+            assert result["mask"].shape == (4, 4)
+            assert result["fill"] == 1.0
+
+    def test_run_sam2_track_errors_when_annotations_have_no_foreground_signal(self):
+        svc = CorridorKeyService()
+        svc._active_model = _ActiveModel.SAM2
+        svc._sam2_tracker = DummySAM2Tracker()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "Input")
+            os.makedirs(input_dir)
+
+            for i in range(2):
+                cv2.imwrite(
+                    os.path.join(input_dir, f"frame_{i:05d}.png"),
+                    np.full((4, 4, 3), 64 + i, dtype=np.uint8),
+                )
+
+            with open(os.path.join(tmpdir, "annotations.json"), "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "0": [
+                            {
+                                "points": [[1, 1], [2, 2]],
+                                "brush_type": "bg",
+                                "radius": 15.0,
+                            }
+                        ]
+                    },
+                    handle,
+                )
+
+            clip = ClipEntry(
+                "test", tmpdir, state=ClipState.RAW,
+                input_asset=ClipAsset(input_dir, "sequence"),
+            )
+            warnings: list[str] = []
+
+            with pytest.raises(CorridorKeyError, match="non-empty foreground prompt"):
+                svc.run_sam2_track(clip, on_warning=warnings.append)
+
+            assert warnings
+            assert "non-empty foreground prompt" in warnings[0]

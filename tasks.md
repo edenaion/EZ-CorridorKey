@@ -55,7 +55,51 @@ Goal: Users clone, install, run. No fiddling. Windows/Mac/Linux.
 
 ---
 
+## CRITICAL — Regressions (mat-anyone branch)
+
+### Comp/Proc output washed out (color desaturation)
+- **Priority:** P0
+- **Symptom:** COMP and PROC outputs appear washed out / desaturated compared to v1.5.1. FG is acceptable. Affects both GVM AUTO and MatAnyone2 alpha paths — not alpha-generator specific.
+- **Confirmed:** Regression exists on `mat-anyone` branch. Not present on v1.5.1 tag (`89f94f4`).
+- **Likely cause:** Color space dropdown stuck on "Linear" for non-EXR clips. The `auto_detect_color_space()` call (added in commit `5753855`) only upgrades sRGB→Linear but never resets back. If the dropdown was ever set to Linear (manually or via EXR auto-detect), it persists across clip switches.
+- **Fix approach:** Either reset color space per-clip based on asset type, or store per-clip color space preference. Check if `set_params()` restores it correctly on clip switch.
+- **Files:** `ui/main_window.py:973`, `ui/widgets/parameter_panel.py:366-372`, `backend/service.py` (EXR auto-detect in `_read_input_frame` and `_run_inference_frame`)
+
+---
+
 ## Features In Progress
+
+### Multi-Clip GPU Parallelism
+- **Priority:** P2
+- **Goal:** Users with excess VRAM (20+ GB free) can process multiple clips concurrently on the same GPU
+- **Architecture** (Codex-approved):
+  - Engine pool with N workers (default 2, auto-tuned to available VRAM)
+  - Each worker gets its own `CorridorKeyEngine` instance + dedicated CUDA stream
+  - Speed mode only (compile + no tiling baseline)
+  - VRAM budget: ~8.7 GB per engine (with torch.compile), auto-detect how many fit
+  - Job queue dispatches clips to available workers round-robin
+  - Per-clip temporal state is already isolated (KV memory per engine)
+- **Status:** Not started — architecture approved, ready to implement
+- [ ] Engine pool manager (spawn/destroy engine instances based on VRAM)
+- [ ] VRAM auto-detection and worker count calculation
+- [ ] Job queue multi-worker dispatch
+- [ ] UI: concurrent jobs progress (multiple progress bars or combined)
+- [ ] Preferences toggle: "Parallel processing" (on/off, worker count)
+- [ ] Hot-reload: enable/disable without restart
+
+### Turbo Mode Exploration (tiling in speed mode)
+- **Priority:** P3
+- **Goal:** Explore using tiled refiner in speed mode to reduce per-engine VRAM, enabling more concurrent clips
+- **Rationale:** Tiling is lossless (157+ dB PSNR, 128px overlap > 65px receptive field). Currently only used in lowvram mode to save VRAM. In speed mode, tiling would trade ~35% slower per-frame for ~45% less VRAM per engine.
+- **Trade-off math (estimated, needs measurement):**
+  - Speed (no tile): ~1.85s/frame, ~8.7 GB → 2 concurrent clips on 25 GB
+  - Speed (tiled): ~2.5s/frame, ~4-5 GB → 4-5 concurrent clips on 25 GB
+  - Net throughput: 2×0.54 = 1.08 fps vs 4×0.40 = 1.60 fps (tiled wins if estimates hold)
+- **Status:** Needs benchmarking
+- [ ] Measure actual VRAM with tile_size=512 in speed mode (vs tile_size=0)
+- [ ] Benchmark per-frame time with tiling in speed mode
+- [ ] Validate throughput math with real numbers
+- [ ] If beneficial, add as user-selectable option in Preferences
 
 ### Frame Timing
 - [x] Per-frame timing in run_inference() (rolling avg, fps, ETA)

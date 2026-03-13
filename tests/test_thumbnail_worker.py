@@ -1,0 +1,72 @@
+"""Tests for thumbnail generation using the viewer decode path."""
+import os
+
+import pytest
+
+pyside6 = pytest.importorskip("PySide6", reason="PySide6 not installed")
+from PySide6.QtGui import QImage, QColor
+
+from ui.preview.frame_index import ViewMode
+from ui.workers import thumbnail_worker
+
+
+def _solid_qimage(width: int = 120, height: int = 80, color: str = "#7fb36a") -> QImage:
+    img = QImage(width, height, QImage.Format_RGB888)
+    img.fill(QColor(color))
+    return img
+
+
+class TestThumbTask:
+    def test_sequence_thumbnail_uses_input_decode_transform(self, tmp_path, monkeypatch):
+        input_dir = tmp_path / "Frames"
+        input_dir.mkdir()
+        frame_path = input_dir / "frame_000000.exr"
+        frame_path.write_text("dummy", encoding="utf-8")
+
+        calls: list[tuple[str, ViewMode]] = []
+
+        def fake_decode_frame(path: str, mode: ViewMode) -> QImage:
+            calls.append((path, mode))
+            return _solid_qimage()
+
+        monkeypatch.setattr(thumbnail_worker, "decode_frame", fake_decode_frame)
+
+        task = thumbnail_worker._ThumbTask(
+            clip_name="clip",
+            clip_root=str(tmp_path),
+            input_path=str(input_dir),
+            asset_type="sequence",
+        )
+
+        qimg = task._generate()
+
+        assert qimg is not None
+        assert calls == [(str(frame_path), ViewMode.INPUT)]
+        assert qimg.width() <= thumbnail_worker.THUMB_WIDTH
+        assert qimg.height() <= thumbnail_worker.THUMB_HEIGHT
+
+    def test_video_thumbnail_uses_video_decode_transform(self, tmp_path, monkeypatch):
+        video_path = tmp_path / "clip.mp4"
+        video_path.write_text("dummy", encoding="utf-8")
+
+        calls: list[tuple[str, int]] = []
+
+        def fake_decode_video_frame(path: str, frame_index: int) -> QImage:
+            calls.append((path, frame_index))
+            return _solid_qimage()
+
+        monkeypatch.setattr(thumbnail_worker, "decode_video_frame", fake_decode_video_frame)
+
+        task = thumbnail_worker._ThumbTask(
+            clip_name="clip",
+            clip_root=str(tmp_path),
+            input_path=str(video_path),
+            asset_type="video",
+        )
+
+        qimg = task._generate()
+
+        assert qimg is not None
+        assert calls == [(str(video_path), 0)]
+        assert qimg.width() <= thumbnail_worker.THUMB_WIDTH
+        assert qimg.height() <= thumbnail_worker.THUMB_HEIGHT

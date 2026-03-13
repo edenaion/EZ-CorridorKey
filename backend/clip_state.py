@@ -147,6 +147,15 @@ class ClipAsset:
         from .natural_sort import natsorted
         return natsorted([f for f in os.listdir(self.path) if _is_image_file(f)])
 
+    def is_exr_sequence(self) -> bool:
+        """True if this is an image sequence where the first frame is EXR."""
+        if self.asset_type != 'sequence':
+            return False
+        files = self.get_frame_files()
+        if not files:
+            return False
+        return files[0].lower().endswith('.exr')
+
 
 @dataclass
 class InOutRange:
@@ -222,6 +231,18 @@ class ClipEntry:
     @property
     def output_dir(self) -> str:
         return os.path.join(self.root_path, "Output")
+
+    def has_video_metadata(self) -> bool:
+        """True when this clip's Frames/ were extracted from a source video."""
+        return os.path.isfile(os.path.join(self.root_path, ".video_metadata.json"))
+
+    def should_default_input_linear(self) -> bool:
+        """Default Linear only for standalone EXR sequences, not extracted video EXRs."""
+        return bool(
+            self.input_asset is not None
+            and self.input_asset.is_exr_sequence()
+            and not self.has_video_metadata()
+        )
 
     @property
     def has_outputs(self) -> bool:

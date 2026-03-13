@@ -4,13 +4,64 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [1.5.2] - 2026-03-12 — Installer & Updater Hardening
+## [1.6.0] - 2026-03-13 — Parallel Inference, MatAnyone2, MLX Apple Silicon, macOS Support, 
+
+### Parallel Inference
+- **Multi-engine frame processing!** — inference engine pool processes multiple frames concurrently when VRAM allows, with user-configurable pool sizing based on available memory. 1.8-2x speed increase clocked on 4K footage via RTX 5090 at 4 parallel frames. Experimental up to 8, use at your own discretion if you have VRAM headroom.
+
+### MatAnyone2 Integration
+- **Fourth alpha generator** — MatAnyone2 joins GVM, VideoMaMa, and SAM2 as a one-click alpha hint generator. Make sure to paint a frame using hotkeys 1/2 on frame 1 first. Checkpoint auto-downloads from GitHub releases on first use (~390 MB)
+- **Performance hardening** — robust Hydra config initialization, graceful error handling, and progress reporting during MatAnyone2 inference
+
+### MLX Apple Silicon Acceleration
+- **Native Apple Silicon backend** — on Macs with Apple Silicon and `corridorkey-mlx` installed, CorridorKey inference uses MLX instead of PyTorch MPS for 1.5–2× faster keying
+- **Auto-detection** — backend resolves automatically: Apple Silicon + corridorkey-mlx + `.safetensors` checkpoint → MLX, otherwise Torch. Override with `CORRIDORKEY_BACKEND=torch|mlx|auto`
+- **Output normalization** — adapter converts MLX uint8 output to float32 0–1 matching the Torch engine contract; despill/despeckle post-processing applied identically
+- **Installer support** — `1-install.sh` and `3-update.sh` automatically install `.[mlx]` extras on Apple Silicon Macs
+
+### macOS Support
+- **Cross-platform FFmpeg** — macOS FFmpeg install via Homebrew, file manager opens via `open` instead of `explorer`
+- **MPS performance warning** — one-time-per-session dialog warns Mac users before launching GPU-heavy features (SAM2, GVM, VideoMaMa, MatAnyone2) that may be extremely slow on MPS, recommending imported alpha mattes instead
+
+### Installer Hardening
+- **Managed runtime verification** — install now verifies the actual torch runtime before reporting success, with clearer diagnostics when Python or accelerator selection is wrong
+- **macOS polish** — Apple Silicon installs automatically include MLX extras; macOS torch verification skips unnecessary CUDA probing; Homebrew FFmpeg install path now works cleanly in non-interactive runs
+- **Windows/Linux robustness** — Windows CUDA detection smoke was hardened for locale/codepage issues; fresh installs now resolve the correct torch backend more reliably
+- **Upgrade cleanup** — updater removes lingering legacy `pynvml` installs and suppresses the related non-actionable deprecation warning for older upgraded environments
+
+### Added
+- **ALPHA view mode** — preview the raw AlphaHint input before running inference
+- **MASK view mode** — preview SAM2-tracked masks before feeding them to alpha generators
+- **Clear Mask / Clear All** — right-click context menu on clips to clear tracked masks or all generated data
+- **Global drag-and-drop** — drop video files anywhere on the main window to import them
+- **Frame scrubber improvements** — scroll wheel scrubbing and larger slider hitbox for easier frame navigation
+- **Live clip progress** — selected clip's progress bar updates in real time during inference jobs
 
 ### Fixed
-- **CUDA version checks in `1-install.bat`** — fixed CUDA detection logic that was failing for some GPU configurations (community contribution via PR #18 by pineapplemachine)
-- **Cross-platform updater subprocess flags** — guarded Windows-specific `CREATE_NO_WINDOW` flag so `_run_update` doesn't crash on macOS/Linux
-- **CI branch checkout** — `git checkout -B` prevents failures when branch already exists on main
-- **Report Issue dialog version** — was hardcoded to `1.1.2` since initial release; now reads the installed version dynamically via `importlib.metadata`
+- **Live preview EXR color-space override** — `PREVIEW_REPROCESS` no longer silently reinterprets extracted video EXR sequences as Linear on every rerun. When the user leaves the clip in `sRGB`, live preview now stays in `sRGB`; when the user explicitly switches to `Linear`, the preview follows that override
+- **`Processed` viewer contract** — `PROC` preview now reflects the premultiplied RGBA data actually written on disk instead of unpremultiplying it in the viewer. `PROC` shows over black, `COMP` remains checkerboard-backed
+- **Thumbnail decode mismatch** — clip thumbnails now use the same input decode path as the main viewer
+- **SAM2 preview input color truth** — Track Mask preview and full SAM2 tracking load EXR frames with the same source-truth color interpretation as the viewer
+- **SAM2 prompt-frame quality** — prompt points now applied as smaller same-frame refinements instead of one bulk call, eliminating boxy/hole-ridden prompt-frame masks
+- **SAM2 Hydra reinitialization** — Hydra global state cleared before each tracker build, preventing config collision errors on repeated runs
+- **ProRes 10-bit extraction** — fixed frame extraction failing on FFmpeg 8.x with 10-bit ProRes sources
+- **In-out alpha alignment** — corrected frame alignment between input and alpha hint sequences during inference
+- **Update button text** — fixed garbled button text when window is resized narrow
+- **Clear Alpha state** — clearing alpha now properly refreshes the viewer, disables the ALPHA button and coverage bar
+- **Windows EcoQoS throttling** — disabled Windows EcoQoS power policy that was silently throttling GPU inference in background
+- **UI paint clipping** — fixed paint brush strokes clipping at widget boundaries, tooltip wrapping, and mask-ready state check
+- **Report Issue version** — Report Issue dialog now reads app version dynamically instead of hardcoded string
+
+### Changed
+- **Azure GPU CI** — added installer smoke test matrix on Azure GPU runners
+- **`pynvml` → `nvidia-ml-py`** — switched to canonical PyPI package name for NVIDIA Management Library
+
+### Verification
+- Regression tests for EXR live-preview color-space override, `PROC` display transform, thumbnail decode, and SAM2 prompt refinement batching
+- macOS CUDA-skip test for `verify_torch_runtime.py`
+- Paint prompt tests, split view tests, status bar tests, Windows CUDA detection tests
+- Fresh install smoke passed on Windows, macOS, and Ubuntu
+- Real upgrade smokes passed for `v1.5.0 -> 1.6.0` and `v1.5.2 -> 1.6.0`
 
 ---
 
@@ -737,5 +788,4 @@ All notable changes to EZ-CorridorKey are documented here.
 ### 2026-02-22
 - `4f1dad6` Add luminance-preserving despill, configurable auto-despeckling garbage matte, checkerboard composite
 - `d5559bc` Initial commit: Smart Wizard, VideoMaMa Integration, Optional GVM
-
 

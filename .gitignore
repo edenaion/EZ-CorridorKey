@@ -42,6 +42,7 @@ screenshot*.png
 *.onnx
 
 # Checkpoint Directories
+modules/*/checkpoints/   # Model weights inside module directories
 CorridorKeyModule/checkpoints/*
 !CorridorKeyModule/checkpoints/.gitkeep
 CorridorKeyModule/IgnoredCheckpoints/*
@@ -55,6 +56,7 @@ gvm_core/weights/*
 .agent/
 .claude/
 .playwright-mcp/
+.local-secrets/
 _BACKUPS/
 AGENTS.md
 CLAUDE.md

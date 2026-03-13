@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
-    QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication,
+    QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication, QSpinBox,
 )
 from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal
 
@@ -22,6 +22,7 @@ KEY_LOOP_PLAYBACK = "playback/loop"
 KEY_COPY_SEQUENCES = "project/copy_image_sequences"
 KEY_EXR_COMPRESSION = "output/exr_compression"
 KEY_TRACKER_MODEL = "tracking/sam2_model"
+KEY_PARALLEL_CLIPS = "gpu/parallel_clips"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
@@ -31,6 +32,7 @@ DEFAULT_COPY_SEQUENCES = False
 DEFAULT_LOOP_PLAYBACK = True
 DEFAULT_EXR_COMPRESSION = "dwab"
 DEFAULT_TRACKER_MODEL = "facebook/sam2.1-hiera-base-plus"
+DEFAULT_PARALLEL_CLIPS = 1
 
 EXR_COMPRESSION_OPTIONS = [
     ("DWAB — Lossy, Smallest Files", "dwab"),
@@ -50,6 +52,12 @@ def get_setting_bool(key: str, default: bool) -> bool:
     """Read a boolean setting from QSettings."""
     s = QSettings()
     return s.value(key, default, type=bool)
+
+
+def get_setting_int(key: str, default: int) -> int:
+    """Read an integer setting from QSettings."""
+    s = QSettings()
+    return s.value(key, default, type=int)
 
 
 def get_setting_str(key: str, default: str) -> str:
@@ -263,8 +271,8 @@ class PreferencesDialog(QDialog):
         ffmpeg_info = QLabel(
             "Windows: Repair downloads a bundled full FFmpeg build into tools/ffmpeg "
             "without changing your system install.\n"
-            "macOS/Linux: Repair shows the exact install commands instead of mutating "
-            "system packages from the app."
+            "macOS: Repair installs FFmpeg via Homebrew.\n"
+            "Linux: Repair copies the install command to your clipboard."
         )
         ffmpeg_info.setWordWrap(True)
         ffmpeg_info.setStyleSheet("color: #999980; font-size: 11px;")
@@ -283,8 +291,9 @@ class PreferencesDialog(QDialog):
             "Windows: download and install a full bundled FFmpeg build into "
             "tools/ffmpeg, validate ffmpeg + ffprobe 7+, and switch CorridorKey "
             "to that local copy immediately.\n\n"
-            "macOS/Linux: do not change system packages. CorridorKey shows the "
-            "exact install commands and copies them to your clipboard instead."
+            "macOS: install FFmpeg via Homebrew and validate ffmpeg + ffprobe 7+.\n\n"
+            "Linux: do not change system packages. CorridorKey shows the exact "
+            "install commands and copies them to your clipboard instead."
         )
         self._repair_ffmpeg_btn.clicked.connect(self._on_repair_ffmpeg)
         ffmpeg_btn_row.addWidget(self._repair_ffmpeg_btn)
@@ -302,6 +311,45 @@ class PreferencesDialog(QDialog):
         ffmpeg_layout.addLayout(ffmpeg_btn_row)
 
         layout.addWidget(ffmpeg_group)
+
+        # Performance section
+        perf_group = QGroupBox("Performance")
+        perf_layout = QVBoxLayout(perf_group)
+
+        parallel_row = QHBoxLayout()
+        parallel_label = QLabel("Parallel frames")
+        parallel_row.addWidget(parallel_label)
+
+        self._parallel_clips_spin = QSpinBox()
+        self._parallel_clips_spin.setRange(1, 8)
+        self._parallel_clips_spin.setValue(
+            get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS)
+        )
+        self._parallel_clips_spin.setToolTip(
+            "Number of frames to process simultaneously.\n\n"
+            "Uses multiple inference engine instances to process\n"
+            "N frames at once within a single clip. Higher values\n"
+            "use more GPU memory but increase throughput.\n\n"
+            "1 = Sequential (default, safest)\n"
+            "2 = ~70% faster, uses ~3 GB extra VRAM\n"
+            "3-4 = Diminishing returns, needs 16+ GB VRAM\n\n"
+            "Changes take effect on the next inference run."
+        )
+        self._parallel_clips_spin.setFixedWidth(60)
+        parallel_row.addWidget(self._parallel_clips_spin)
+        parallel_row.addStretch(1)
+        perf_layout.addLayout(parallel_row)
+
+        perf_info = QLabel(
+            "Multiple engine instances process frames concurrently.\n"
+            "Each extra engine adds ~3 GB VRAM but increases throughput."
+        )
+        perf_info.setWordWrap(True)
+        perf_info.setStyleSheet("color: #999980; font-size: 11px;")
+        perf_layout.addWidget(perf_info)
+
+        layout.addWidget(perf_group)
+
         layout.addStretch(1)
 
         # Buttons
@@ -337,6 +385,7 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
         s.setValue(KEY_EXR_COMPRESSION, self._exr_compression_combo.currentData())
         s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
+        s.setValue(KEY_PARALLEL_CLIPS, self._parallel_clips_spin.value())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
@@ -391,22 +440,35 @@ class PreferencesDialog(QDialog):
             )
             return
 
-        if sys.platform != "win32":
+        # Linux: needs sudo, can't run from GUI — copy instructions to clipboard
+        if sys.platform not in ("win32", "darwin"):
             help_text = get_ffmpeg_install_help()
             QApplication.clipboard().setText(help_text)
             QMessageBox.information(
                 self,
                 "Repair FFmpeg",
-                help_text + "\n\nThe install commands were copied to your clipboard.",
+                help_text + "\n\nThe install command has been copied to your clipboard.\n"
+                "Paste it into a terminal to install.",
             )
             return
+
+        if sys.platform == "win32":
+            confirm_msg = (
+                "CorridorKey will download and install a full bundled FFmpeg build into:\n\n"
+                f"{self._local_ffmpeg_dir}\n\n"
+                "This does not modify your system-wide FFmpeg.\n\nContinue?"
+            )
+        else:
+            confirm_msg = (
+                "CorridorKey will install FFmpeg via Homebrew:\n\n"
+                "    brew install ffmpeg\n\n"
+                "Continue?"
+            )
 
         reply = QMessageBox.question(
             self,
             "Repair FFmpeg",
-            "CorridorKey will download and install a full bundled FFmpeg build into:\n\n"
-            f"{self._local_ffmpeg_dir}\n\n"
-            "This does not modify your system-wide FFmpeg.\n\nContinue?",
+            confirm_msg,
         )
         if reply != QMessageBox.Yes:
             return
@@ -450,7 +512,7 @@ class PreferencesDialog(QDialog):
         QMessageBox.information(
             self,
             "FFmpeg Repaired",
-            message + "\n\nCorridorKey will use the bundled local FFmpeg immediately.",
+            message + "\n\nCorridorKey will use FFmpeg immediately.",
         )
 
     def _on_ffmpeg_repair_failed(self, message: str) -> None:

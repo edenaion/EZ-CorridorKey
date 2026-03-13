@@ -14,6 +14,7 @@ from PySide6.QtGui import QImage
 from ui.preview.display_transform import (
     decode_frame, clear_cache, _transform_matte,
     _transform_linear_rgb, _transform_premultiplied, _numpy_to_qimage,
+    processed_rgba_to_qimage,
 )
 from ui.preview.frame_index import ViewMode
 
@@ -84,6 +85,31 @@ class TestTransformPremultiplied:
         bgra = np.zeros((10, 10, 4), dtype=np.float32)
         qimg = _transform_premultiplied(bgra)
         assert isinstance(qimg, QImage)
+
+    def test_keeps_premultiplied_values_instead_of_unpremultiplying(self):
+        """Processed preview should show the stored premultiplied image over black."""
+        bgra = np.zeros((1, 130, 4), dtype=np.float32)
+        bgra[:, :, :3] = 0.25
+        bgra[:, :, 3] = 0.5
+        qimg = _transform_premultiplied(bgra)
+        color = qimg.pixelColor(129, 0)
+        assert 130 <= color.red() <= 145
+        assert 130 <= color.green() <= 145
+        assert 130 <= color.blue() <= 145
+
+    def test_live_preview_rgba_matches_saved_bgra_display(self):
+        """Live processed preview and saved EXR decode should use the same transform."""
+        rgba = np.zeros((4, 4, 4), dtype=np.float32)
+        rgba[:, :, :3] = 0.25
+        rgba[:, :, 3] = 0.5
+        bgra = rgba[:, :, [2, 1, 0, 3]]
+        live_qimg = processed_rgba_to_qimage(rgba)
+        saved_qimg = _transform_premultiplied(bgra)
+        live = live_qimg.pixelColor(0, 0)
+        saved = saved_qimg.pixelColor(0, 0)
+        assert live.red() == saved.red()
+        assert live.green() == saved.green()
+        assert live.blue() == saved.blue()
 
 
 class TestDecodeFrame:

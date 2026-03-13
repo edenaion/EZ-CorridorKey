@@ -110,12 +110,12 @@ _DIAGNOSTICS: list[Diagnostic] = [
             "FFmpeg 7.0+ plus FFprobe."
         ),
         steps=[
-            "Windows: go to Edit > Preferences > Repair FFmpeg.\n"
+            "Go to Edit > Preferences > Repair FFmpeg.\n"
             "This will automatically download a compatible FFmpeg build.",
-            "Alternatively, re-run 1-install.bat.",
-            "macOS: install a current build with Homebrew:\n"
-            "    brew install ffmpeg",
-            "Linux: install both ffmpeg and ffprobe from your package manager, then verify the version is 7.0+.",
+            "If that doesn't work:\n"
+            "  Windows: re-run 1-install.bat.\n"
+            "  macOS: brew install ffmpeg\n"
+            "  Linux: install both ffmpeg and ffprobe from your package manager (version 7.0+).",
             "Verify both commands work:\n"
             "    ffmpeg -version\n"
             "    ffprobe -version",
@@ -136,11 +136,12 @@ _DIAGNOSTICS: list[Diagnostic] = [
             "not found on your system."
         ),
         steps=[
-            "Windows: go to Edit > Preferences > Repair FFmpeg.\n"
+            "Go to Edit > Preferences > Repair FFmpeg.\n"
             "This will automatically download and install FFmpeg for you.",
-            "Alternatively, re-run 1-install.bat.",
-            "macOS: brew install ffmpeg",
-            "Linux: install ffmpeg from your package manager.",
+            "If that doesn't work:\n"
+            "  Windows: re-run 1-install.bat.\n"
+            "  macOS: brew install ffmpeg\n"
+            "  Linux: install ffmpeg from your package manager.",
             "Restart EZ-CorridorKey.",
         ],
         tags=["ffmpeg", "video"],

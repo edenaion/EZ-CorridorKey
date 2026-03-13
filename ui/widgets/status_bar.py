@@ -12,6 +12,7 @@ GPU/VRAM info is displayed in the top brand bar (see main_window.py).
 """
 from __future__ import annotations
 
+import textwrap
 import time
 
 from PySide6.QtWidgets import (
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QProgressBar, QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox,
 )
 from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtGui import QTextCursor
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -39,6 +41,24 @@ def _fmt_bytes(num_bytes: int) -> str:
             return f"{value:.1f} {unit}"
         value /= 1024.0
     return f"{value:.1f} GB"
+
+
+def _wrap_tooltip_text(text: str, width: int = 90) -> str:
+    """Wrap tooltip text to a readable width without truncating content."""
+    wrapped_lines: list[str] = []
+    for line in text.splitlines() or [""]:
+        if not line:
+            wrapped_lines.append("")
+            continue
+        wrapped_lines.append(
+            textwrap.fill(
+                line,
+                width=width,
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+        )
+    return "\n".join(wrapped_lines)
 
 
 class StatusBar(QWidget):
@@ -143,6 +163,7 @@ class StatusBar(QWidget):
         self._job_start: float = 0.0
         self._last_current = 0
         self._last_total = 0
+        self._last_fps: float = 0.0
         self._job_label: str = ""
 
         # 1-second tick timer for elapsed display
@@ -237,6 +258,7 @@ class StatusBar(QWidget):
         self._job_start = time.monotonic()
         self._last_current = 0
         self._last_total = 0
+        self._last_fps = 0.0
         self._job_label = label
         self._phase = ""  # phase text shown during loading (e.g. "Loading frames...")
 
@@ -250,10 +272,12 @@ class StatusBar(QWidget):
         """Stop the elapsed timer."""
         self._tick_timer.stop()
 
-    def update_progress(self, current: int, total: int) -> None:
-        """Update progress bar, frame counter, and ETA."""
+    def update_progress(self, current: int, total: int, fps: float = 0.0) -> None:
+        """Update progress bar, frame counter, FPS, and ETA."""
         self._last_current = current
         self._last_total = total
+        if fps > 0:
+            self._last_fps = fps
         # Clear phase text once real frame progress flows
         if total > 0 and current > 0:
             self._phase = ""
@@ -264,10 +288,15 @@ class StatusBar(QWidget):
             pct = int(current / total * 100)
             self._progress.setValue(pct)
 
+            fps_str = ""
             eta_str = ""
             if current > 0 and current < total:
-                rate = elapsed / current
-                remaining = rate * (total - current)
+                if fps > 0:
+                    fps_str = f"  {fps:.2f} fps"
+                    remaining = (total - current) / fps
+                else:
+                    rate = elapsed / current
+                    remaining = rate * (total - current)
                 eta_str = f"  ETA {_fmt_duration(remaining)}"
 
             elapsed_str = _fmt_duration(elapsed)
@@ -279,7 +308,7 @@ class StatusBar(QWidget):
                 current_text = str(current)
                 total_text = str(total)
             self._frame_label.setText(
-                f"{label}{current_text}/{total_text}  {pct}%  {elapsed_str}{eta_str}"
+                f"{label}{current_text}/{total_text}  {pct}%{fps_str}  {elapsed_str}{eta_str}"
             )
         else:
             self._progress.setValue(0)
@@ -308,10 +337,8 @@ class StatusBar(QWidget):
         self._warn_btn.setText(label)
         self._warn_btn.show()
         if self._warnings:
-            latest = self._warnings[-1]
-            if len(latest) > 120:
-                latest = latest[:117] + "..."
-            self._warn_btn.setToolTip(f"Latest: {latest}\n\nClick for all warnings")
+            latest = _wrap_tooltip_text(self._warnings[-1])
+            self._warn_btn.setToolTip(f"Latest:\n{latest}\n\nClick for all warnings")
 
     def set_message(self, text: str) -> None:
         """Show a status message in the frame label area."""
@@ -334,8 +361,8 @@ class StatusBar(QWidget):
         phase = getattr(self, '_phase', '')
 
         if self._last_total > 0 and self._last_current > 0:
-            # Real frame progress — show frame counter + ETA
-            self.update_progress(self._last_current, self._last_total)
+            # Real frame progress — show frame counter + ETA + FPS
+            self.update_progress(self._last_current, self._last_total, self._last_fps)
         elif phase:
             # Loading phase — show phase text + elapsed timer
             self._frame_label.setText(f"{label}{phase}  {elapsed_str}")
@@ -348,8 +375,24 @@ class StatusBar(QWidget):
         if not self._warnings:
             return
 
-        dlg = QDialog(self)
+        dlg = self._build_warnings_dialog()
+        dlg.raise_()
+        dlg.activateWindow()
+        dlg.exec()
+
+    def _dialog_parent(self) -> QWidget:
+        """Parent dialogs to the main window so they show in a visible place."""
+        window = self.window()
+        if isinstance(window, QWidget) and window is not self:
+            return window
+        return self
+
+    def _build_warnings_dialog(self) -> QDialog:
+        """Build the warnings dialog."""
+        dlg = QDialog(self._dialog_parent())
         dlg.setWindowTitle(f"Warnings ({self._warning_count})")
+        dlg.setModal(True)
+        dlg.setWindowModality(Qt.WindowModal)
         dlg.setMinimumSize(500, 300)
         dlg.setStyleSheet(
             "QDialog { background: #1A1900; }"
@@ -364,11 +407,10 @@ class StatusBar(QWidget):
         text.setReadOnly(True)
         for i, msg in enumerate(self._warnings, 1):
             text.append(f"[{i}] {msg}\n")
-        text.moveCursor(text.textCursor().Start)
+        text.moveCursor(QTextCursor.Start)
         layout.addWidget(text, 1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok)
         buttons.accepted.connect(dlg.accept)
         layout.addWidget(buttons)
-
-        dlg.exec()
+        return dlg

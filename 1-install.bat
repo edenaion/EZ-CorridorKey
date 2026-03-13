@@ -9,34 +9,14 @@ echo   EZ-CorridorKey - One-Click Installer
 echo  ========================================
 echo.
 
-REM ── Step 1: Check Python ──
-echo [1/7] Checking Python...
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo   [ERROR] Python not found. Install Python 3.10+ from https://python.org
-    echo   Make sure to check "Add Python to PATH" during installation.
-    goto :fail
-)
+set "PYTHON_SPEC=%CORRIDORKEY_PYTHON_VERSION%"
+if not defined PYTHON_SPEC set "PYTHON_SPEC=3.11"
+set "INSTALL_PYTHON="
+set "PYVER="
 
-for /f "tokens=2 delims= " %%v in ('python --version 2^>^&1') do set PYVER=%%v
-for /f "tokens=1,2 delims=." %%a in ("!PYVER!") do (
-    set PYMAJOR=%%a
-    set PYMINOR=%%b
-)
-if !PYMAJOR! LSS 3 (
-    echo   [ERROR] Python 3.10 or 3.11 required, found !PYVER!
-    goto :fail
-)
-if !PYMAJOR!==3 if !PYMINOR! LSS 10 (
-    echo   [ERROR] Python 3.10 or 3.11 required, found !PYVER!
-    goto :fail
-)
-if !PYMAJOR!==3 if !PYMINOR! GEQ 14 (
-    echo   [ERROR] Python !PYVER! is not yet supported.
-    echo   Please install Python 3.10-3.13 from https://python.org
-    goto :fail
-)
-echo   [OK] Python !PYVER!
+echo [0/7] Installer runtime target...
+echo   CorridorKey will provision and use managed Python !PYTHON_SPEC! for this install.
+echo.
 
 REM ── Step 1b: Check Visual Studio Build Tools (needed to compile OpenEXR etc.) ──
 echo [1b/7] Checking C++ build tools...
@@ -197,6 +177,13 @@ if exist "%LOCALAPPDATA%\uv\uv.exe" (
     goto :uv_done
 )
 
+if exist "%USERPROFILE%\.cargo\bin\uv.exe" (
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+    set UV_AVAILABLE=1
+    echo   [OK] uv found at %USERPROFILE%\.cargo\bin
+    goto :uv_done
+)
+
 for /f "delims=" %%i in ('python -c "import os, site; print(os.path.join(site.USER_BASE, 'Scripts', 'uv.exe'))" 2^>nul') do set "UV_USER_EXE=%%i"
 if defined UV_USER_EXE (
     if exist "!UV_USER_EXE!" (
@@ -207,8 +194,8 @@ if defined UV_USER_EXE (
     )
 )
 
-echo   uv not found. Trying safer user-level install via pip...
-python -m pip install --user uv >nul 2>&1
+echo   uv not found. Installing standalone uv...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://astral.sh/uv/install.ps1 | iex" >nul 2>&1
 
 if defined UV_USER_EXE (
     if exist "!UV_USER_EXE!" (
@@ -226,19 +213,48 @@ if exist "%USERPROFILE%\.local\bin\uv.exe" (
     goto :uv_done
 )
 
-echo   [WARN] uv install failed, falling back to pip (slower)
-echo   Manual install: python -m pip install --user uv
+if exist "%USERPROFILE%\.cargo\bin\uv.exe" (
+    set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
+    set UV_AVAILABLE=1
+    echo   [OK] uv installed
+    goto :uv_done
+)
+
+echo   [WARN] uv install failed.
+echo   Manual install: https://docs.astral.sh/uv/getting-started/installation/
 
 :uv_done
 
-REM ── Step 4: Create venv + install dependencies ──
-echo [3/7] Installing dependencies...
+REM ── Step 4: Provision managed/system Python ──
+echo [3/7] Provisioning Python...
+if !UV_AVAILABLE!==1 (
+    uv python install --managed-python !PYTHON_SPEC! >nul 2>&1
+    if !errorlevel! equ 0 (
+        for /f "usebackq delims=" %%i in (`uv python find --managed-python !PYTHON_SPEC! 2^>nul`) do set "INSTALL_PYTHON=%%i"
+    ) else (
+        echo   [WARN] Managed Python download failed, trying a supported system Python...
+    )
+)
+if not defined INSTALL_PYTHON call :resolve_system_python
+if not defined INSTALL_PYTHON (
+    echo   [ERROR] Could not find a supported Python runtime.
+    echo   CorridorKey needs Python 3.10-3.13, and the one-click installer targets managed Python !PYTHON_SPEC!.
+    echo   Please install uv or Python 3.11 manually, then rerun this installer.
+    goto :fail
+)
+for /f "tokens=2 delims= " %%v in ('"!INSTALL_PYTHON!" --version 2^>^&1') do set "PYVER=%%v"
+echo   [OK] Using Python !PYVER!
+
+REM ── Step 5: Create venv + install dependencies ──
+echo [4/7] Installing dependencies...
 
 if !UV_AVAILABLE!==0 goto :use_pip
 
-if not exist ".venv\Scripts\activate.bat" (
-    echo   Creating virtual environment...
-    uv venv .venv >nul 2>&1
+echo   Creating virtual environment...
+uv venv --clear --managed-python --python "!INSTALL_PYTHON!" .venv >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   [WARN] uv venv creation failed, trying pip fallback...
+    goto :use_pip
 )
 echo   Installing packages (uv + auto CUDA detection)...
 uv pip install --python .venv\Scripts\python.exe --torch-backend=auto -e . 2>&1
@@ -250,49 +266,41 @@ echo   [OK] Dependencies installed via uv
 goto :deps_done
 
 :use_pip
-if not exist ".venv\Scripts\activate.bat" (
-    echo   Creating virtual environment...
-    python -m venv .venv
+echo   Creating virtual environment...
+if exist ".venv" rmdir /s /q ".venv" >nul 2>&1
+"!INSTALL_PYTHON!" -m venv .venv
+if %errorlevel% neq 0 (
+    echo   [ERROR] Failed to create .venv with !INSTALL_PYTHON!
+    goto :fail
 )
 call .venv\Scripts\activate.bat
 
 REM Detect CUDA version for correct PyTorch wheel
-set INDEX_URL=
-nvidia-smi >nul 2>&1
-if !errorlevel! neq 0 goto :no_nvidia
+set "INDEX_URL="
+set "DRIVER="
+set "CUDA_LINE="
+set "CUDA_VERSION="
+set "CUDA_WHEEL_LABEL="
+set "CUDA_NOTE="
+for /f "usebackq tokens=1,* delims==" %%A in (`.venv\Scripts\python.exe scripts\detect_windows_torch_index.py --format env`) do set "%%A=%%B"
+if not defined INDEX_URL set "INDEX_URL=https://download.pytorch.org/whl/cpu"
+if not defined CUDA_NOTE set "CUDA_NOTE=Could not run CUDA detection helper; installing CPU-only PyTorch."
 
-for /f "tokens=*" %%i in ('nvidia-smi --query-gpu=driver_version --format=csv^,noheader 2^>nul') do set DRIVER=%%i
-echo   NVIDIA driver detected: !DRIVER!
-for /f "tokens=*" %%i in ('nvidia-smi 2^>nul ^| findstr "CUDA Version"') do set CUDA_LINE=%%i
-echo   !CUDA_LINE!
-
-<nul set /p "=!CUDA_LINE!" | findstr /r "13\.0 12\.8 12\.7 12\.6 12\.5 12\.4"
-if !errorlevel!==0 (
-    set INDEX_URL=https://download.pytorch.org/whl/cu128
-    echo   Using PyTorch CUDA 12.8 wheels
-    goto :pip_install
+if defined DRIVER echo(  NVIDIA driver detected: !DRIVER!
+if defined CUDA_LINE echo(  !CUDA_LINE!
+if /i "!CUDA_DETECT_MODE!"=="nvidia" (
+    echo(  Using !CUDA_WHEEL_LABEL!
+) else (
+    echo(  !CUDA_NOTE!
+    if /i "!CUDA_DETECT_REASON!"=="nvidia_smi_not_found" (
+        echo(  If you have an NVIDIA GPU, ensure drivers are installed and nvidia-smi works.
+    )
 )
-<nul set /p "=!CUDA_LINE!" | findstr /r "12\.1 12\.2 12\.3"
-if !errorlevel!==0 (
-    set INDEX_URL=https://download.pytorch.org/whl/cu121
-    echo   Using PyTorch CUDA 12.1 wheels
-    goto :pip_install
-)
-<nul set /p "=!CUDA_LINE!" | findstr /r "11\.8 11\.7"
-if !errorlevel!==0 (
-    set INDEX_URL=https://download.pytorch.org/whl/cu118
-    echo   Using PyTorch CUDA 11.8 wheels
-    goto :pip_install
-)
-
-:no_nvidia
-echo   No NVIDIA GPU detected, installing CPU-only PyTorch
-set INDEX_URL=https://download.pytorch.org/whl/cpu
 
 :pip_install
 echo   Installing packages via pip (this may take a few minutes)...
-pip install --upgrade pip >nul 2>&1
-pip install --extra-index-url !INDEX_URL! -e . 2>&1
+.venv\Scripts\python.exe -m pip install --upgrade pip >nul 2>&1
+.venv\Scripts\python.exe -m pip install --extra-index-url !INDEX_URL! -e . 2>&1
 if !errorlevel! neq 0 (
     echo   [ERROR] pip install failed
     goto :fail
@@ -301,7 +309,25 @@ echo   [OK] Dependencies installed via pip
 
 :deps_done
 
-echo [3b/7] Verifying Triton...
+echo [4b/7] Verifying torch runtime...
+set "DIAGNOSTICS_DIR=logs\diagnostics"
+set "TORCH_RUNTIME_LOG=%DIAGNOSTICS_DIR%\install-torch-runtime.json"
+set "SUPPORT_REPORT_LOG=%DIAGNOSTICS_DIR%\install-support-report.md"
+if not exist "%DIAGNOSTICS_DIR%" mkdir "%DIAGNOSTICS_DIR%"
+.venv\Scripts\python.exe scripts\verify_torch_runtime.py --log "%TORCH_RUNTIME_LOG%"
+if %errorlevel% neq 0 (
+    echo   [ERROR] Installed torch runtime did not validate.
+    echo   Preparing a pre-filled GitHub issue to help you report this.
+    .venv\Scripts\python.exe scripts\open_installer_issue.py --json "%TORCH_RUNTIME_LOG%" --body-out "%SUPPORT_REPORT_LOG%" --stage "windows-installer-runtime-verification"
+    if %errorlevel% neq 0 (
+        echo   [WARN] Could not open the GitHub issue helper automatically.
+    )
+    echo   See %TORCH_RUNTIME_LOG% and %SUPPORT_REPORT_LOG% for details.
+    goto :fail
+)
+echo   [OK] Torch runtime verified
+
+echo [4c/7] Verifying Triton...
 .venv\Scripts\python.exe -c "import triton, torch; print(triton.__version__); print(torch.__version__)" >nul 2>&1
 if %errorlevel%==0 (
     echo   [OK] Triton import verified
@@ -311,7 +337,7 @@ if %errorlevel%==0 (
     echo     .venv\Scripts\python.exe -m pip install -U "triton-windows^>=3.5,^<3.6"
 )
 
-echo [3c/7] Optional SAM2 tracker...
+echo [4d/7] Optional SAM2 tracker...
 set INSTALL_SAM2=y
 if defined CORRIDORKEY_INSTALL_SAM2 (
     set "INSTALL_SAM2_INPUT=%CORRIDORKEY_INSTALL_SAM2%"
@@ -328,9 +354,9 @@ if /i "!INSTALL_SAM2!"=="y" (
         if !errorlevel! equ 0 set SAM2_OK=1
     ) else (
         if defined INDEX_URL (
-            pip install --extra-index-url !INDEX_URL! -e ".[tracker]" 2>&1
+            .venv\Scripts\python.exe -m pip install --extra-index-url !INDEX_URL! -e ".[tracker]" 2>&1
         ) else (
-            pip install -e ".[tracker]" 2>&1
+            .venv\Scripts\python.exe -m pip install -e ".[tracker]" 2>&1
         )
         if !errorlevel! equ 0 set SAM2_OK=1
     )
@@ -507,6 +533,21 @@ echo     .venv\Scripts\python scripts\setup_models.py --videomama
 echo.
 pause
 exit /b 0
+
+:resolve_system_python
+set "INSTALL_PYTHON="
+python --version >nul 2>&1
+if %errorlevel% neq 0 goto :eof
+for /f "tokens=2 delims= " %%v in ('python --version 2^>^&1') do set "SYSTEM_PYVER=%%v"
+for /f "tokens=1,2 delims=." %%a in ("!SYSTEM_PYVER!") do (
+    set SYSTEM_PYMAJOR=%%a
+    set SYSTEM_PYMINOR=%%b
+)
+if !SYSTEM_PYMAJOR! LSS 3 goto :eof
+if !SYSTEM_PYMAJOR!==3 if !SYSTEM_PYMINOR! LSS 10 goto :eof
+if !SYSTEM_PYMAJOR!==3 if !SYSTEM_PYMINOR! GEQ 14 goto :eof
+set "INSTALL_PYTHON=python"
+goto :eof
 
 :fail
 echo.

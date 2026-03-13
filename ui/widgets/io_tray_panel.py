@@ -14,12 +14,13 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import sys
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QSplitter,
     QToolTip, QPushButton, QMenu, QFileDialog, QMessageBox,
 )
-from PySide6.QtCore import Qt, Signal, QRect, QSize, QEvent
-from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent, QAction
+from PySide6.QtCore import Qt, Signal, QRect, QSize, QEvent, QUrl
+from PySide6.QtGui import QPainter, QColor, QImage, QMouseEvent, QAction, QDesktopServices
 
 from backend import ClipEntry, ClipState
 from backend.project import VIDEO_FILE_FILTER, is_image_file, is_video_file
@@ -678,13 +679,30 @@ class IOTrayPanel(QWidget):
         rename_action.triggered.connect(lambda: self._rename_clip(clip))
         menu.addAction(rename_action)
 
-        # Open in Explorer — single only
-        explorer_action = QAction("Open in Explorer", self)
+        # Open in file manager — single only
+        _fm = "Finder" if sys.platform == "darwin" else "Explorer"
+        explorer_action = QAction(f"Open in {_fm}", self)
         explorer_action.setEnabled(not multi)
         explorer_action.triggered.connect(lambda: self._open_in_explorer(clip))
         menu.addAction(explorer_action)
 
         menu.addSeparator()
+
+        # Clear Mask — only show when there's a VideoMamaMaskHint to clear
+        any_mask = any(c.mask_asset is not None for c in selected)
+        if any_mask:
+            label_mask = f"Clear Mask ({n} clips)" if multi else "Clear Mask"
+            clear_mask_action = QAction(label_mask, self)
+            clear_mask_action.triggered.connect(lambda: self._clear_mask_batch(selected))
+            menu.addAction(clear_mask_action)
+
+        # Clear Alpha — only show when there's an AlphaHint to clear
+        any_alpha = any(c.alpha_asset is not None for c in selected)
+        if any_alpha:
+            label_alpha = f"Clear Alpha ({n} clips)" if multi else "Clear Alpha"
+            clear_alpha_action = QAction(label_alpha, self)
+            clear_alpha_action.triggered.connect(lambda: self._clear_alpha_batch(selected))
+            menu.addAction(clear_alpha_action)
 
         # Clear Outputs — only show when there are outputs to clear
         any_outputs = any(c.has_outputs for c in selected)
@@ -693,6 +711,14 @@ class IOTrayPanel(QWidget):
             clear_action = QAction(label_clear, self)
             clear_action.triggered.connect(lambda: self._clear_outputs_batch(selected))
             menu.addAction(clear_action)
+
+        # Clear All — show when there's any generated data to clear
+        if any_mask or any_alpha or any_outputs:
+            menu.addSeparator()
+            label_all = f"Clear All ({n} clips)" if multi else "Clear All"
+            clear_all_action = QAction(label_all, self)
+            clear_all_action.triggered.connect(lambda: self._clear_all_batch(selected))
+            menu.addAction(clear_all_action)
 
         # Remove...
         label_remove = f"Remove ({n} clips)..." if multi else "Remove..."
@@ -732,7 +758,9 @@ class IOTrayPanel(QWidget):
             output_dir = clip.root_path
 
         open_action = QAction("Open Containing Folder", self)
-        open_action.triggered.connect(lambda: os.startfile(output_dir))
+        open_action.triggered.connect(
+            lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(output_dir))
+        )
         menu.addAction(open_action)
 
         from PySide6.QtGui import QCursor
@@ -744,7 +772,7 @@ class IOTrayPanel(QWidget):
         if not os.path.isdir(output_dir):
             output_dir = clip.root_path
         if os.path.isdir(output_dir):
-            os.startfile(output_dir)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(output_dir))
 
     def _rename_clip(self, clip: ClipEntry) -> None:
         """Prompt user to rename a clip's display name."""
@@ -763,7 +791,111 @@ class IOTrayPanel(QWidget):
 
     def _open_in_explorer(self, clip: ClipEntry) -> None:
         if os.path.isdir(clip.root_path):
-            os.startfile(clip.root_path)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(clip.root_path))
+
+    def _clear_mask_batch(self, clips: list[ClipEntry]) -> None:
+        """Delete VideoMamaMaskHint folder from disk for one or more clips."""
+        names = ", ".join(c.name for c in clips[:3])
+        if len(clips) > 3:
+            names += f" (+{len(clips) - 3} more)"
+        confirm = QMessageBox.question(
+            self, "Clear Mask",
+            f"Delete tracked masks for {len(clips)} clip(s)?\n{names}\n\n"
+            "This will remove all SAM2 mask frames from disk.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        for clip in clips:
+            mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
+            if os.path.isdir(mask_dir):
+                shutil.rmtree(mask_dir, ignore_errors=True)
+            clip.mask_asset = None
+            clip.find_assets()
+            self._model.update_clip_state(clip.name, clip.state)
+
+        self._model.layoutChanged.emit()
+        if clips:
+            self.clip_clicked.emit(clips[0])
+        logger.info(f"Cleared masks for {len(clips)} clip(s)")
+
+    def _clear_all_batch(self, clips: list[ClipEntry]) -> None:
+        """Delete masks, alpha hints, and outputs for one or more clips."""
+        names = ", ".join(c.name for c in clips[:3])
+        if len(clips) > 3:
+            names += f" (+{len(clips) - 3} more)"
+        confirm = QMessageBox.question(
+            self, "Clear All",
+            f"Remove ALL generated data for {len(clips)} clip(s)?\n{names}\n\n"
+            "This will delete masks, alpha hints, and all output frames.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        for clip in clips:
+            # Masks
+            mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
+            if os.path.isdir(mask_dir):
+                shutil.rmtree(mask_dir, ignore_errors=True)
+            clip.mask_asset = None
+
+            # Alpha
+            alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+            if os.path.isdir(alpha_dir):
+                shutil.rmtree(alpha_dir, ignore_errors=True)
+            clip.alpha_asset = None
+
+            # Outputs
+            output_dir = clip.output_dir
+            for subdir in ("FG", "Matte", "Comp", "Processed"):
+                d = os.path.join(output_dir, subdir)
+                if os.path.isdir(d):
+                    for f in os.listdir(d):
+                        fpath = os.path.join(d, f)
+                        if os.path.isfile(fpath):
+                            os.remove(fpath)
+            manifest = os.path.join(output_dir, ".corridorkey_manifest.json")
+            if os.path.isfile(manifest):
+                os.remove(manifest)
+
+            clip.find_assets()
+            self._model.update_clip_state(clip.name, clip.state)
+
+        self._model.layoutChanged.emit()
+        if clips:
+            self.clip_clicked.emit(clips[0])
+        logger.info(f"Cleared all generated data for {len(clips)} clip(s)")
+
+    def _clear_alpha_batch(self, clips: list[ClipEntry]) -> None:
+        """Delete AlphaHint folder from disk for one or more clips."""
+        names = ", ".join(c.name for c in clips[:3])
+        if len(clips) > 3:
+            names += f" (+{len(clips) - 3} more)"
+        confirm = QMessageBox.question(
+            self, "Clear Alpha",
+            f"Delete AlphaHint for {len(clips)} clip(s)?\n{names}\n\n"
+            "This will remove all generated alpha hint frames from disk.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        for clip in clips:
+            alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+            if os.path.isdir(alpha_dir):
+                shutil.rmtree(alpha_dir, ignore_errors=True)
+            clip.alpha_asset = None
+            clip.find_assets()  # re-scan disk, updates alpha_asset and state
+            self._model.update_clip_state(clip.name, clip.state)
+
+        self._model.layoutChanged.emit()
+        # Re-select first affected clip so the viewer rebuilds its FrameIndex
+        # (clears stale ALPHA button + scrubber coverage bar)
+        if clips:
+            self.clip_clicked.emit(clips[0])
+        logger.info(f"Cleared AlphaHint for {len(clips)} clip(s)")
 
     def _clear_outputs_batch(self, clips: list[ClipEntry]) -> None:
         """Clear output files for one or more clips."""
@@ -801,6 +933,9 @@ class IOTrayPanel(QWidget):
             total_cleared += cleared
 
         self._model.layoutChanged.emit()
+        # Re-select first affected clip so the viewer rebuilds its FrameIndex
+        if clips:
+            self.clip_clicked.emit(clips[0])
         logger.info(f"Cleared {total_cleared} output files across {len(clips)} clip(s)")
 
     def _remove_dialog(self, clips: list[ClipEntry]) -> None:
