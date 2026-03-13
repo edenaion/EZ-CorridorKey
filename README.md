@@ -6,6 +6,8 @@ A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopue
 
 This GUI replaces the CLI drag-and-drop workflow with a complete desktop application while preserving 100% backward compatibility (`python main.py --cli` still runs the original wizard).
 
+[![Star History Chart](https://api.star-history.com/svg?repos=bytebase/star-history&type=Date)](https://star-history.com/#bytebase/star-history&Date)
+
 ![EZ-CorridorKey](dev-docs/guides/screenshots/EZ-CorridorKey_Inference_Done.jpg)
 
 | Capability | CLI (Upstream) | GUI (This Project) |
