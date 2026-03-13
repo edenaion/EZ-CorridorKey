@@ -192,17 +192,17 @@ class TestGetEnginePool:
         result = svc._get_engine_pool()
         assert result[0] is mock_engine
 
-    @patch("backend.service.glob_module.glob")
-    def test_no_checkpoint_raises(self, mock_glob):
-        mock_glob.return_value = []
+    @patch("CorridorKeyModule.backend.create_engine", side_effect=FileNotFoundError("No .pth checkpoint found"))
+    @patch("CorridorKeyModule.backend.resolve_backend", return_value="torch")
+    def test_no_checkpoint_raises(self, _rb, _ce):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.NONE
         with pytest.raises(FileNotFoundError, match="No .pth checkpoint"):
             svc._get_engine_pool()
 
-    @patch("backend.service.glob_module.glob")
-    def test_multiple_checkpoints_raises(self, mock_glob):
-        mock_glob.return_value = ["/a/ckpt1.pth", "/a/ckpt2.pth"]
+    @patch("CorridorKeyModule.backend.create_engine", side_effect=ValueError("Multiple checkpoints"))
+    @patch("CorridorKeyModule.backend.resolve_backend", return_value="torch")
+    def test_multiple_checkpoints_raises(self, _rb, _ce):
         svc = CorridorKeyService()
         with pytest.raises(ValueError, match="Multiple checkpoints"):
             svc._get_engine_pool()
