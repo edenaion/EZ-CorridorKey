@@ -442,6 +442,14 @@ class ParameterPanel(QWidget):
         if self._color_space.currentIndex() != target:
             self._color_space.setCurrentIndex(target)
 
+    def set_input_is_linear(self, input_is_linear: bool) -> None:
+        """Programmatically set Color Space without emitting params_changed."""
+        self._suppress_signals = True
+        try:
+            self._color_space.setCurrentIndex(1 if input_is_linear else 0)
+        finally:
+            self._suppress_signals = False
+
     def set_params(self, params: InferenceParams) -> None:
         """Load parameter values (e.g. from a saved session).
 
