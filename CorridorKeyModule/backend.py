@@ -11,6 +11,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +258,38 @@ def _prepare_mlx_image_u8(image: np.ndarray, input_is_linear: bool) -> np.ndarra
     return (np.clip(image_f32, 0.0, 1.0) * 255.0).astype(np.uint8)
 
 
+def _resize_float_image_bicubic(image: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    """Resize float image data with PIL bicubic to match upstream MLX behavior."""
+    if image.ndim == 2:
+        return np.asarray(
+            Image.fromarray(image.astype(np.float32), mode="F").resize(size, Image.Resampling.BICUBIC),
+            dtype=np.float32,
+        )
+
+    if image.ndim == 3 and image.shape[2] == 1:
+        resized = np.asarray(
+            Image.fromarray(image[:, :, 0].astype(np.float32), mode="F").resize(
+                size, Image.Resampling.BICUBIC
+            ),
+            dtype=np.float32,
+        )
+        return resized[:, :, np.newaxis]
+
+    if image.ndim == 3 and image.shape[2] >= 2:
+        channels = [
+            np.asarray(
+                Image.fromarray(image[:, :, idx].astype(np.float32), mode="F").resize(
+                    size, Image.Resampling.BICUBIC
+                ),
+                dtype=np.float32,
+            )
+            for idx in range(image.shape[2])
+        ]
+        return np.stack(channels, axis=-1)
+
+    raise ValueError(f"Unsupported image shape for float resize: {image.shape}")
+
+
 def _try_mlx_float_outputs(raw_engine, image_u8: np.ndarray, mask_u8: np.ndarray, refiner_scale: float) -> dict | None:
     """Use corridorkey-mlx internals to recover float outputs before uint8 quantization."""
     if not hasattr(raw_engine, "_model") or not hasattr(raw_engine, "_img_size"):
@@ -277,9 +310,20 @@ def _try_mlx_float_outputs(raw_engine, image_u8: np.ndarray, mask_u8: np.ndarray
     mask_f32 = mask_plane.astype(np.float32)[:, :, np.newaxis] / 255.0
 
     if rgb_f32.shape[0] != target_size or rgb_f32.shape[1] != target_size:
-        rgb_f32 = cv2.resize(rgb_f32, (target_size, target_size), interpolation=cv2.INTER_CUBIC)
-        resized_mask = cv2.resize(mask_plane, (target_size, target_size), interpolation=cv2.INTER_CUBIC)
-        mask_f32 = resized_mask.astype(np.float32)[:, :, np.newaxis] / 255.0
+        resized_rgb_u8 = np.asarray(
+            Image.fromarray(image_u8, mode="RGB").resize(
+                (target_size, target_size), Image.Resampling.BICUBIC
+            ),
+            dtype=np.uint8,
+        )
+        resized_mask_u8 = np.asarray(
+            Image.fromarray(mask_plane, mode="L").resize(
+                (target_size, target_size), Image.Resampling.BICUBIC
+            ),
+            dtype=np.uint8,
+        )
+        rgb_f32 = resized_rgb_u8.astype(np.float32) / 255.0
+        mask_f32 = resized_mask_u8.astype(np.float32)[:, :, np.newaxis] / 255.0
 
     x = preprocess(rgb_f32, mask_f32)
     outputs = raw_engine._model(x)
@@ -309,10 +353,8 @@ def _try_mlx_float_outputs(raw_engine, image_u8: np.ndarray, mask_u8: np.ndarray
         alpha = alpha[:, :, np.newaxis]
 
     if alpha.shape[:2] != (original_h, original_w):
-        alpha = cv2.resize(alpha, (original_w, original_h), interpolation=cv2.INTER_CUBIC)
-        fg = cv2.resize(fg, (original_w, original_h), interpolation=cv2.INTER_CUBIC)
-        if alpha.ndim == 2:
-            alpha = alpha[:, :, np.newaxis]
+        alpha = _resize_float_image_bicubic(alpha, (original_w, original_h))
+        fg = _resize_float_image_bicubic(fg, (original_w, original_h))
 
     return {
         "alpha": np.clip(alpha, 0.0, 1.0).astype(np.float32),
