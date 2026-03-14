@@ -119,6 +119,11 @@ class CorridorKeyEngine:
     #   'lowvram' — tiled refiner + compiled tile kernel (8GB GPUs)
     VALID_OPT_MODES = ('auto', 'speed', 'lowvram')
 
+    _COMPILE_BACKENDS = [
+        ("torch_tensorrt", "torch_tensorrt"),
+        ("torch_migraphx", "torch_migraphx"),
+    ]
+
     def __init__(self, checkpoint_path, device='cuda', img_size=2048, use_refiner=True,
                  optimization_mode='auto', tile_overlap=128, on_status=None):
         logger.info("CorridorKeyEngine.__init__: begin")
@@ -460,9 +465,21 @@ class CorridorKeyEngine:
                         logger.debug("FX graph cache config not available in this PyTorch version")
 
                     t0 = _time.monotonic()
-                    self._compiled_model = torch.compile(eager_model, fullgraph=False)
+                    backend = "inductor"
+                    if self.device.type == 'cuda':
+                        for accel_mod, accel_name in self._COMPILE_BACKENDS:
+                            try:
+                                __import__(accel_mod)
+                                backend = accel_name
+                                break
+                            except ImportError:
+                                continue
+                    compile_kwargs = dict(fullgraph=False)
+                    if backend != "inductor":
+                        compile_kwargs = dict(backend=backend, dynamic=False)
+                    self._compiled_model = torch.compile(eager_model, **compile_kwargs)
                     model = self._compiled_model
-                    logger.info(f"torch.compile complete: {_time.monotonic() - t0:.1f}s")
+                    logger.info(f"torch.compile ({backend}): {_time.monotonic() - t0:.1f}s")
                 except Exception as e:
                     self._compiled_model = None
                     logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
@@ -471,7 +488,7 @@ class CorridorKeyEngine:
         return model
 
     @torch.no_grad()
-    def process_frame(self, image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400, despeckle_dilation=25, despeckle_blur=5):
+    def process_frame(self, image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400, despeckle_dilation=25, despeckle_blur=5, fast_preview=False):
         """
         Process a single frame.
         Args:
@@ -525,7 +542,8 @@ class CorridorKeyEngine:
         inp_t = torch.cat([img_norm_t, mask_t], dim=1)
 
         # 5. Inference
-        refiner_scale_t = inp_t.new_tensor(refiner_scale)
+        effective_refiner_scale = 0.0 if fast_preview else refiner_scale
+        refiner_scale_t = inp_t.new_tensor(effective_refiner_scale)
         with torch.autocast(device_type=self.device.type, dtype=torch.float16):
             out = self._forward_model(inp_t, refiner_scale_t)
 
@@ -542,14 +560,10 @@ class CorridorKeyEngine:
         res_fg_t = res_fg_t[0].permute(1, 2, 0)
 
         # A. Clean Matte (Auto-Despeckle)
+        res_alpha_np = res_alpha_t.cpu().numpy()
         if auto_despeckle:
-            if res_alpha_t.device.type != 'cpu':
-                processed_alpha_t = cu.clean_matte_gpu(res_alpha_t, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur)
-            else:
-                res_alpha_np = res_alpha_t.numpy()
-                processed_alpha_t = torch.from_numpy(cu.clean_matte(res_alpha_np, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur))
-        else:
-            processed_alpha_t = res_alpha_t
+            res_alpha_np = cu.clean_matte(res_alpha_np, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur)
+        processed_alpha_t = torch.from_numpy(res_alpha_np).to(self.device)
 
         # B–D + 7. Fused post-processing on GPU (despill + srgb→linear + premul + composite)
         cache_key = (w, h)
