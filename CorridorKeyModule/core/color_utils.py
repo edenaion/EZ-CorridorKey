@@ -64,6 +64,37 @@ def composite_premul(fg, bg, alpha):
     """
     return fg + bg * (1.0 - alpha)
 
+
+def match_luminance(source_rgb, image_rgb, min_scale=0.9, max_scale=1.15, strength=1.0, eps=1e-6):
+    """
+    Re-match image luminance to a source reference while keeping the image chroma.
+
+    Both inputs are expected to be linear RGB float images with matching shapes.
+    A per-pixel Rec. 709 luminance ratio is computed and clamped to avoid
+    aggressive swings from noisy pixels or edge cases.
+    """
+    if strength <= 0.0:
+        return image_rgb
+
+    if _is_tensor(image_rgb):
+        weights = image_rgb.new_tensor([0.2126, 0.7152, 0.0722]).view(*([1] * (image_rgb.dim() - 1)), 3)
+        src_y = (source_rgb * weights).sum(dim=-1, keepdim=True)
+        img_y = (image_rgb * weights).sum(dim=-1, keepdim=True)
+        scale = (src_y / torch.clamp(img_y, min=eps)).clamp(min=min_scale, max=max_scale)
+        corrected = image_rgb * scale
+        if strength < 1.0:
+            corrected = image_rgb * (1.0 - strength) + corrected * strength
+        return corrected.clamp(min=0.0)
+
+    weights = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
+    src_y = np.sum(source_rgb * weights, axis=-1, keepdims=True)
+    img_y = np.sum(image_rgb * weights, axis=-1, keepdims=True)
+    scale = np.clip(src_y / np.maximum(img_y, eps), min_scale, max_scale)
+    corrected = image_rgb * scale
+    if strength < 1.0:
+        corrected = image_rgb * (1.0 - strength) + corrected * strength
+    return np.clip(corrected, 0.0, None)
+
 def rgb_to_yuv(image):
     """
     Converts RGB to YUV (Rec. 601).

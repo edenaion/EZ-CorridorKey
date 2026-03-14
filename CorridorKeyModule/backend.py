@@ -108,6 +108,8 @@ def _discover_checkpoint(ext: str) -> Path:
 
 def _wrap_mlx_output(
     raw: dict,
+    source_image: np.ndarray,
+    input_is_linear: bool,
     despill_strength: float,
     auto_despeckle: bool,
     despeckle_size: int,
@@ -145,11 +147,21 @@ def _wrap_mlx_output(
     # Apply despill (MLX stubs this)
     fg_despilled = cu.despill(fg, green_limit_mode="average", strength=despill_strength)
 
+    if source_image.dtype != np.float32:
+        source_rgb = source_image.astype(np.float32)
+        if source_rgb.max() > 1.0:
+            source_rgb /= 255.0
+    else:
+        source_rgb = source_image
+
+    source_lin = source_rgb if input_is_linear else cu.srgb_to_linear(source_rgb)
+
     # Composite over checkerboard for comp output
     h, w = fg.shape[:2]
     bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
+    fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
     comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha)
     comp_srgb = cu.linear_to_srgb(comp_lin)
 
@@ -212,7 +224,7 @@ class _MLXEngineAdapter:
         )
 
         return _wrap_mlx_output(
-            raw, despill_strength, auto_despeckle,
+            raw, image, input_is_linear, despill_strength, auto_despeckle,
             despeckle_size, despeckle_dilation, despeckle_blur,
         )
 
