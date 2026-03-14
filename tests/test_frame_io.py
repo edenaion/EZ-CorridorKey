@@ -8,7 +8,7 @@ os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
 import cv2
 
-from backend.frame_io import _linear_to_srgb, read_image_frame
+from backend.frame_io import _linear_to_srgb, _srgb_to_linear, read_image_frame
 
 
 def _write_exr_or_skip(path: str, rgb: np.ndarray) -> None:
@@ -29,6 +29,22 @@ class TestLinearToSrgb:
         )
 
         converted = _linear_to_srgb(linear)
+
+        np.testing.assert_allclose(converted, expected, atol=1e-6)
+
+
+class TestSrgbToLinear:
+    def test_matches_reference_points(self):
+        srgb = np.array(
+            [0.0, 0.01292, 0.04045, 0.09985282, 0.46135613, 0.7353569, 1.0],
+            dtype=np.float32,
+        )
+        expected = np.array(
+            [0.0, 0.001, 0.0031308, 0.01, 0.18, 0.5, 1.0],
+            dtype=np.float32,
+        )
+
+        converted = _srgb_to_linear(srgb)
 
         np.testing.assert_allclose(converted, expected, atol=1e-6)
 

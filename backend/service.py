@@ -57,6 +57,7 @@ from .validators import (
     ensure_output_dirs,
 )
 from .frame_io import (
+    _srgb_to_linear,
     write_exr,
     read_image_frame,
     read_mask_frame,
@@ -840,7 +841,10 @@ class CorridorKeyService:
 
         # FG
         if cfg.fg_enabled:
-            fg_bgr = cv2.cvtColor(pred_fg, cv2.COLOR_RGB2BGR)
+            fg_rgb = pred_fg
+            if cfg.fg_format == "exr":
+                fg_rgb = _srgb_to_linear(fg_rgb)
+            fg_bgr = cv2.cvtColor(fg_rgb.astype(np.float32), cv2.COLOR_RGB2BGR)
             fg_path = os.path.join(dirs['fg'], f"{input_stem}.{cfg.fg_format}")
             self._write_image(fg_bgr, fg_path, cfg.fg_format, clip_name, frame_index,
                               exr_compression=cfg.exr_compression)
@@ -857,10 +861,14 @@ class CorridorKeyService:
         # Comp
         if cfg.comp_enabled:
             comp_srgb = res['comp']
-            comp_bgr = cv2.cvtColor(
-                (np.clip(comp_srgb, 0.0, 1.0) * 255.0).astype(np.uint8),
-                cv2.COLOR_RGB2BGR,
-            )
+            if cfg.comp_format == "exr":
+                comp_rgb = _srgb_to_linear(comp_srgb)
+                comp_bgr = cv2.cvtColor(comp_rgb.astype(np.float32), cv2.COLOR_RGB2BGR)
+            else:
+                comp_bgr = cv2.cvtColor(
+                    (np.clip(comp_srgb, 0.0, 1.0) * 255.0).astype(np.uint8),
+                    cv2.COLOR_RGB2BGR,
+                )
             comp_path = os.path.join(dirs['comp'], f"{input_stem}.{cfg.comp_format}")
             self._write_image(comp_bgr, comp_path, cfg.comp_format, clip_name, frame_index,
                               exr_compression=cfg.exr_compression)

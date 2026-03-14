@@ -43,6 +43,17 @@ def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
     ).astype(np.float32)
 
 
+def _srgb_to_linear(srgb: np.ndarray) -> np.ndarray:
+    """Convert sRGB RGB values to linear-light using the standard piecewise curve."""
+    srgb = np.clip(srgb.astype(np.float32), 0.0, None)
+    mask = srgb <= 0.04045
+    return np.where(
+        mask,
+        srgb / 12.92,
+        np.power((srgb + 0.055) / 1.055, 2.4),
+    ).astype(np.float32)
+
+
 def _exr_compression_constant(name: str):
     """Map a compression name to the Imath compression enum value."""
     import Imath
