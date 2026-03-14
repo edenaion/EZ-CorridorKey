@@ -96,3 +96,59 @@ def test_sync_selected_clip_view_reapplies_remembered_input_interpretation():
     assert window._param_panel.last_set_input_is_linear is True
     assert refreshed_input_thumb == [True]
     assert refreshed_export_thumb == ["shot"]
+
+
+class _DummyTray:
+    def __init__(self):
+        self.selected: list[str] = []
+
+    def selected_count(self) -> int:
+        return 0
+
+    def set_selected(self, name: str) -> None:
+        self.selected.append(name)
+
+
+class _DummyGpuWorker:
+    def isRunning(self) -> bool:
+        return False
+
+
+class _DummyStatusBar:
+    def set_running(self, _running: bool) -> None:
+        return None
+
+    def update_button_state(self, **_kwargs) -> None:
+        return None
+
+
+def test_selecting_another_clip_remembers_previous_clip_color_space_override():
+    window = MainWindow.__new__(MainWindow)
+    previous = _clip("previous")
+    previous.state = ClipState.READY
+    previous.completed_frame_count = lambda: 0
+    selected = _clip("selected")
+    selected.state = ClipState.READY
+    selected.completed_frame_count = lambda: 0
+
+    window._clip_input_is_linear = {}
+    window._current_clip = previous
+    window._param_panel = _DummyParamPanel(input_is_linear=True)
+    window._io_tray = _DummyTray()
+    window._dual_viewer = _DummyDualViewer()
+    window._gpu_worker = _DummyGpuWorker()
+    window._status_bar = _DummyStatusBar()
+    window._sync_selected_clip_view = lambda clip: None
+    window._update_annotation_info = lambda: None
+    window._clip_has_videomama_ready_mask = lambda _clip: False
+    window._refresh_input_thumbnail = lambda *_args, **_kwargs: None
+    window._refresh_export_thumbnail = lambda *_args, **_kwargs: None
+    window._param_panel.set_gvm_enabled = lambda _enabled: None
+    window._param_panel.set_videomama_enabled = lambda _enabled: None
+    window._param_panel.set_matanyone2_enabled = lambda _enabled: None
+    window._param_panel.set_import_alpha_enabled = lambda _enabled: None
+
+    MainWindow._on_clip_selected(window, selected)
+
+    assert window._clip_input_is_linear["previous"] is True
+    assert window._current_clip is selected
