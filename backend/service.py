@@ -1127,14 +1127,7 @@ class CorridorKeyService:
                     with self._gpu_lock:
                         res = engine.process_frame(
                             item.image, item.mask,
-                            input_is_linear=item.is_linear,
-                            fg_is_straight=True,
-                            despill_strength=params.despill_strength,
-                            auto_despeckle=params.auto_despeckle,
-                            despeckle_size=params.despeckle_size,
-                            despeckle_dilation=params.despeckle_dilation,
-                            despeckle_blur=params.despeckle_blur,
-                            refiner_scale=params.refiner_scale,
+                            **self._build_process_kwargs(params, item.is_linear),
                         )
                     dt = time.monotonic() - t_frame
                     frame_times.append(dt)
@@ -1187,6 +1180,20 @@ class CorridorKeyService:
             clip, results, skipped, processed_count,
             t_start, frame_range, num_frames,
             on_warning=on_warning,
+        )
+
+    def _build_process_kwargs(self, params: InferenceParams, is_linear: bool) -> dict:
+        """Build kwargs for engine.process_frame from params + service state."""
+        return dict(
+            input_is_linear=is_linear,
+            fg_is_straight=True,
+            despill_strength=params.despill_strength,
+            auto_despeckle=params.auto_despeckle,
+            despeckle_size=params.despeckle_size,
+            despeckle_dilation=params.despeckle_dilation,
+            despeckle_blur=params.despeckle_blur,
+            refiner_scale=params.refiner_scale,
+            fast_preview=self._preview_mode,
         )
 
     def _prefetch_one_frame(
@@ -1300,14 +1307,7 @@ class CorridorKeyService:
                 try:
                     res = eng.process_frame(
                         img, mask,
-                        input_is_linear=is_linear,
-                        fg_is_straight=True,
-                        despill_strength=params.despill_strength,
-                        auto_despeckle=params.auto_despeckle,
-                        despeckle_size=params.despeckle_size,
-                        despeckle_dilation=params.despeckle_dilation,
-                        despeckle_blur=params.despeckle_blur,
-                        refiner_scale=params.refiner_scale,
+                        **self._build_process_kwargs(params, is_linear),
                     )
                     out_q.put((frame_idx, stem, res, None))
                     if not warmup_done.is_set():
@@ -1588,14 +1588,7 @@ class CorridorKeyService:
         with self._gpu_lock:
             res = engine.process_frame(
                 img, mask,
-                input_is_linear=is_linear,
-                fg_is_straight=True,
-                despill_strength=params.despill_strength,
-                auto_despeckle=params.auto_despeckle,
-                despeckle_size=params.despeckle_size,
-                despeckle_dilation=params.despeckle_dilation,
-                despeckle_blur=params.despeckle_blur,
-                refiner_scale=params.refiner_scale,
+                **self._build_process_kwargs(params, is_linear),
             )
         logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")
         return res
