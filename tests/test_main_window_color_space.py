@@ -2,13 +2,19 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import cv2
+import numpy as np
 import pytest
 
 pytest.importorskip("PySide6", reason="PySide6 not installed")
 
 from backend.clip_state import ClipEntry, ClipState
 from backend.service import InferenceParams
-from ui.main_window import MainWindow, _remove_alpha_hint_assets
+from ui.main_window import (
+    MainWindow,
+    _import_alpha_video_as_sequence,
+    _remove_alpha_hint_assets,
+)
 
 
 class _DummyParamPanel:
@@ -165,3 +171,38 @@ def test_remove_alpha_hint_assets_deletes_sequence_dir_and_video_file(tmp_path):
 
     assert not alpha_dir.exists()
     assert not alpha_video.exists()
+
+
+def test_import_alpha_video_as_sequence_writes_pngs_named_like_input_frames(tmp_path, monkeypatch):
+    alpha_dir = tmp_path / "AlphaHint"
+    input_files = ["frame_000000.exr", "frame_000001.exr"]
+    frames = [
+        np.array([[[0, 0, 255]]], dtype=np.uint8),
+        np.array([[[255, 255, 255]]], dtype=np.uint8),
+    ]
+
+    class _FakeCapture:
+        def __init__(self, _path):
+            self._index = 0
+
+        def read(self):
+            if self._index >= len(frames):
+                return False, None
+            frame = frames[self._index]
+            self._index += 1
+            return True, frame
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr("ui.main_window.cv2.VideoCapture", _FakeCapture)
+
+    imported = _import_alpha_video_as_sequence("alpha.mov", str(alpha_dir), input_files)
+
+    assert imported == 2
+    assert (alpha_dir / "frame_000000.png").is_file()
+    assert (alpha_dir / "frame_000001.png").is_file()
+    first = cv2.imread(str(alpha_dir / "frame_000000.png"), cv2.IMREAD_GRAYSCALE)
+    second = cv2.imread(str(alpha_dir / "frame_000001.png"), cv2.IMREAD_GRAYSCALE)
+    assert int(first[0, 0]) < 255
+    assert int(second[0, 0]) == 255
