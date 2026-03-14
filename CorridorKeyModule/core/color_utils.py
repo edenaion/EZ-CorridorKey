@@ -1,8 +1,31 @@
+import math
+from functools import lru_cache
+
 import torch
+import torch.nn.functional as F
 import numpy as np
 
 def _is_tensor(x):
     return isinstance(x, torch.Tensor)
+
+
+# --- Pure-tensor paths (torch.compile safe, no isinstance dispatch) ---
+
+def linear_to_srgb_tensor(x: torch.Tensor) -> torch.Tensor:
+    """Pure-tensor Linear→sRGB. Use this for torch.compile contexts."""
+    x = x.clamp(min=0.0)
+    mask = x <= 0.0031308
+    return torch.where(mask, x * 12.92, 1.055 * torch.pow(x, 1.0 / 2.4) - 0.055)
+
+
+def srgb_to_linear_tensor(x: torch.Tensor) -> torch.Tensor:
+    """Pure-tensor sRGB→Linear. Use this for torch.compile contexts."""
+    x = x.clamp(min=0.0)
+    mask = x <= 0.04045
+    return torch.where(mask, x / 12.92, torch.pow((x + 0.055) / 1.055, 2.4))
+
+
+# --- Dual numpy/tensor dispatchers ---
 
 def linear_to_srgb(x):
     """
@@ -10,13 +33,10 @@ def linear_to_srgb(x):
     Supports both Numpy arrays and PyTorch tensors.
     """
     if _is_tensor(x):
-        x = x.clamp(min=0.0)
-        mask = x <= 0.0031308
-        return torch.where(mask, x * 12.92, 1.055 * torch.pow(x, 1.0/2.4) - 0.055)
-    else:
-        x = np.clip(x, 0.0, None)
-        mask = x <= 0.0031308
-        return np.where(mask, x * 12.92, 1.055 * np.power(x, 1.0/2.4) - 0.055)
+        return linear_to_srgb_tensor(x)
+    x = np.clip(x, 0.0, None)
+    mask = x <= 0.0031308
+    return np.where(mask, x * 12.92, 1.055 * np.power(x, 1.0/2.4) - 0.055)
 
 def srgb_to_linear(x):
     """
@@ -24,13 +44,10 @@ def srgb_to_linear(x):
     Supports both Numpy arrays and PyTorch tensors.
     """
     if _is_tensor(x):
-        x = x.clamp(min=0.0)
-        mask = x <= 0.04045
-        return torch.where(mask, x / 12.92, torch.pow((x + 0.055) / 1.055, 2.4))
-    else:
-        x = np.clip(x, 0.0, None)
-        mask = x <= 0.04045
-        return np.where(mask, x / 12.92, np.power((x + 0.055) / 1.055, 2.4))
+        return srgb_to_linear_tensor(x)
+    x = np.clip(x, 0.0, None)
+    mask = x <= 0.04045
+    return np.where(mask, x / 12.92, np.power((x + 0.055) / 1.055, 2.4))
 
 def premultiply(fg, alpha):
     """
@@ -183,27 +200,20 @@ def despill(image, green_limit_mode='average', strength=1.0):
             return image * (1.0 - strength) + despilled * strength
         return despilled
     else:
-        # Numpy Impl
-        r = image[..., 0]
-        g = image[..., 1]
-        b = image[..., 2]
-        
-        if green_limit_mode == 'max':
-            limit = np.maximum(r, b)
-        else:
-            limit = (r + b) / 2.0
-            
+        # Numpy impl, in-place to avoid np.stack allocation
+        result = image.copy()
+        r, g, b = result[..., 0], result[..., 1], result[..., 2]
+
+        limit = np.maximum(r, b) if green_limit_mode == 'max' else (r + b) / 2.0
         spill_amount = np.maximum(g - limit, 0.0)
-        
-        g_new = g - spill_amount
-        r_new = r + (spill_amount * 0.5)
-        b_new = b + (spill_amount * 0.5)
-        
-        despilled = np.stack([r_new, g_new, b_new], axis=-1)
-        
+
+        g -= spill_amount
+        r += spill_amount * 0.5
+        b += spill_amount * 0.5
+
         if strength < 1.0:
-            return image * (1.0 - strength) + despilled * strength
-        return despilled
+            return image * (1.0 - strength) + result * strength
+        return result
 
 def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
     """
@@ -211,12 +221,9 @@ def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
     alpha_np: Numpy array [H, W] or [H, W, 1] float (0.0 - 1.0)
     """
     import cv2
-    import numpy as np
-    
-    # Needs to be 2D
-    is_3d = False
-    if alpha_np.ndim == 3:
-        is_3d = True
+
+    is_3d = alpha_np.ndim == 3
+    if is_3d:
         alpha_np = alpha_np[:, :, 0]
         
     # Threshold to binary
@@ -225,13 +232,11 @@ def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
     # Find connected components
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_8u, connectivity=8)
     
-    # Create an empty mask for the cleaned components
-    cleaned_mask = np.zeros_like(mask_8u)
-    
-    # Keep components larger than the threshold (skip label 0, which is background)
-    for i in range(1, num_labels):
-        if stats[i, cv2.CC_STAT_AREA] >= area_threshold:
-            cleaned_mask[labels == i] = 255
+    # Keep components larger than the threshold (skip label 0 = background)
+    # Vectorized: build set of valid labels, apply in one pass via np.isin
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    valid_labels = np.where(areas >= area_threshold)[0] + 1
+    cleaned_mask = np.where(np.isin(labels, valid_labels), np.uint8(255), np.uint8(0))
             
     # Dilate
     if dilation > 0:
@@ -255,30 +260,94 @@ def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
         
     return result_alpha
 
+_gaussian_kernel_cache: dict[tuple, torch.Tensor] = {}
+
+
+def _gaussian_kernel_2d(size: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    """Create a normalized 2D Gaussian kernel [1, 1, size, size]."""
+    key = (size, device, dtype)
+    cached = _gaussian_kernel_cache.get(key)
+    if cached is not None:
+        return cached
+    coords = torch.arange(size, device=device, dtype=dtype) - (size - 1) / 2.0
+    g = torch.exp(-0.5 * (coords / max((size - 1) / 6.0, 1e-6)) ** 2)
+    kernel = g[:, None] * g[None, :]
+    kernel /= kernel.sum()
+    result = kernel.reshape(1, 1, size, size)
+    _gaussian_kernel_cache[key] = result
+    return result
+
+
+def clear_gpu_caches():
+    """Release cached GPU tensors (call on engine teardown)."""
+    _gaussian_kernel_cache.clear()
+
+
+def clean_matte_gpu(alpha_t: torch.Tensor, area_threshold: int = 300,
+                    dilation: int = 15, blur_size: int = 5) -> torch.Tensor:
+    """GPU-resident matte cleanup - no CPU roundtrip.
+
+    Uses morphological opening (erode then dilate) to remove small islands,
+    replacing OpenCV's connectedComponentsWithStats. The kernel size is derived
+    from area_threshold: kernel ≈ 2 * sqrt(area / π). Elongated thin structures
+    smaller than the kernel may also be removed (acceptable for matte cleanup).
+
+    alpha_t: Tensor [H, W] or [H, W, 1] float 0-1 on any device.
+    """
+    is_3d = alpha_t.ndim == 3
+    if is_3d:
+        alpha_t_2d = alpha_t[:, :, 0]
+    else:
+        alpha_t_2d = alpha_t
+
+    # Threshold to binary
+    mask = (alpha_t_2d > 0.5).float()
+
+    # Morphological opening to remove small islands
+    # kernel_size derived from area_threshold (area of circle with that pixel count)
+    open_k = max(3, int(2 * math.sqrt(area_threshold / math.pi)) | 1)  # ensure odd
+    mask_4d = mask.unsqueeze(0).unsqueeze(0)  # [1, 1, H, W]
+    pad = open_k // 2
+
+    # Erode: invert → max_pool → invert
+    eroded = 1.0 - F.max_pool2d(1.0 - mask_4d, open_k, stride=1, padding=pad)
+    # Dilate: max_pool
+    opened = F.max_pool2d(eroded, open_k, stride=1, padding=pad)
+
+    # Additional dilation
+    if dilation > 0:
+        d_k = int(dilation * 2 + 1)
+        d_pad = d_k // 2
+        opened = F.max_pool2d(opened, d_k, stride=1, padding=d_pad)
+
+    # Gaussian blur
+    if blur_size > 0:
+        b_k = int(blur_size * 2 + 1)
+        b_pad = b_k // 2
+        g_kernel = _gaussian_kernel_2d(b_k, alpha_t.device, alpha_t.dtype)
+        opened = F.conv2d(opened, g_kernel, padding=b_pad)
+
+    safe_zone = opened.squeeze(0).squeeze(0)  # [H, W]
+    result = alpha_t_2d * safe_zone
+
+    if is_3d:
+        result = result.unsqueeze(-1)
+
+    return result
+
+
+@lru_cache(maxsize=8)
 def create_checkerboard(width, height, checker_size=64, color1=0.2, color2=0.4):
     """
     Creates a linear grayscale checkerboard pattern.
-    Returns: Numpy array [H, W, 3] float (0.0-1.0)
+    Returns: Numpy array [H, W, 3] float (0.0-1.0), read-only (cached).
     """
-    import numpy as np
-    
-    # Create coordinate grids
-    x = np.arange(width)
-    y = np.arange(height)
-    
-    # Determine tile parity
-    x_tiles = x // checker_size
-    y_tiles = y // checker_size
-    
-    # Broadcast to 2D
+    x_tiles = np.arange(width) // checker_size
+    y_tiles = np.arange(height) // checker_size
     x_grid, y_grid = np.meshgrid(x_tiles, y_tiles)
-    
-    # XOR for checker pattern (1 if odd, 0 if even)
     checker = (x_grid + y_grid) % 2
-    
-    # Map 0 to color1 and 1 to color2
     bg_img = np.where(checker == 0, color1, color2).astype(np.float32)
-    
-    # Make it 3-channel
-    return np.stack([bg_img, bg_img, bg_img], axis=-1)
+    result = np.stack([bg_img, bg_img, bg_img], axis=-1)
+    result.flags.writeable = False
+    return result
 

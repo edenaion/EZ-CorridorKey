@@ -23,7 +23,8 @@ import queue
 import threading
 import time
 import warnings
-from collections import deque
+from collections import deque, namedtuple
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Any, Callable, Optional
@@ -129,6 +130,42 @@ def _import_matanyone2_processor_class():
         f"MatAnyone2 module not found. Expected {expected}"
     ) from last_error
 
+def _import_birefnet_handler_class():
+    """Import BiRefNetHandler from the module layout."""
+    candidates = (
+        ("modules.BiRefNetModule.wrapper", BASE_DIR),
+        ("BiRefNetModule.wrapper", os.path.join(BASE_DIR, "modules")),
+        ("BiRefNetModule.wrapper", BASE_DIR),
+    )
+    missing_roots = (
+        os.path.join(BASE_DIR, "modules", "BiRefNetModule"),
+        os.path.join(BASE_DIR, "BiRefNetModule"),
+    )
+    last_error: ModuleNotFoundError | None = None
+
+    for module_name, path_entry in candidates:
+        if path_entry and path_entry not in sys.path:
+            sys.path.insert(0, path_entry)
+        try:
+            module = importlib.import_module(module_name)
+            return module.BiRefNetHandler
+        except ModuleNotFoundError as exc:
+            if exc.name not in {
+                "modules",
+                "modules.BiRefNetModule",
+                "modules.BiRefNetModule.wrapper",
+                "BiRefNetModule",
+                "BiRefNetModule.wrapper",
+            }:
+                raise
+            last_error = exc
+
+    expected = " or ".join(missing_roots)
+    raise ModuleNotFoundError(
+        f"BiRefNet module not found. Expected {expected}"
+    ) from last_error
+
+
 class _ActiveModel(Enum):
     """Tracks which heavy model is currently loaded in VRAM."""
     NONE = "none"
@@ -137,6 +174,7 @@ class _ActiveModel(Enum):
     SAM2 = "sam2"
     VIDEOMAMA = "videomama"
     MATANYONE2 = "matanyone2"
+    BIREFNET = "birefnet"
 
 
 @dataclass
@@ -248,6 +286,11 @@ def export_masks_headless(clip: "ClipEntry") -> str | None:
     return model.export_masks(clip.root_path, stems, w, h, start_index=start_idx)
 
 
+_PrefetchItem = namedtuple('_PrefetchItem', [
+    'kind', 'frame_idx', 'progress_idx', 'stem', 'image', 'mask', 'is_linear', 'error',
+])
+
+
 class CorridorKeyService:
     """Main backend service — scan, validate, process, write.
 
@@ -264,10 +307,12 @@ class CorridorKeyService:
     def __init__(self):
         self._engine_pool: list = []
         self._pool_size: int = 1
+        self._preview_mode: bool = False  # True = img_size 1024, False = 2048
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
         self._matanyone2_processor = None
+        self._birefnet_handler = None
         self._active_model = _ActiveModel.NONE
         self._device: str = 'cpu'
         self._job_queue: Optional[GPUJobQueue] = None
@@ -310,6 +355,34 @@ class CorridorKeyService:
                     torch.cuda.empty_cache()
             except Exception:
                 logger.debug("CUDA cache clear skipped after SAM2 model switch", exc_info=True)
+
+    @property
+    def preview_mode(self) -> bool:
+        """True when engines run at img_size=1024 for faster preview."""
+        return self._preview_mode
+
+    def set_preview_mode(self, enabled: bool, on_status=None) -> None:
+        """Switch between preview (1024) and full-quality (2048) inference.
+
+        Rebuilds the engine pool when the mode changes.
+        """
+        if enabled == self._preview_mode:
+            return
+        logger.info("Preview mode: %s -> %s", self._preview_mode, enabled)
+        self._preview_mode = enabled
+        # Force engine pool rebuild with new img_size
+        if self._engine_pool:
+            for eng in self._engine_pool:
+                self._safe_offload(eng)
+            self._engine_pool.clear()
+            gc.collect()
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+            logger.info("Engine pool cleared for preview mode change")
 
     def set_pool_size(self, n: int) -> None:
         """Set the number of parallel inference engines.
@@ -431,6 +504,8 @@ class CorridorKeyService:
                 logger.warning(f"Model {name} has no .to()/.cpu()/.unload() — VRAM may leak")
         except Exception as e:
             logger.warning(f"Model offload failed for {name}: {e}")
+        from CorridorKeyModule.core import color_utils as cu
+        cu.clear_gpu_caches()
 
     def _ensure_model(self, needed: _ActiveModel, on_status=None) -> None:
         """Model residency manager — unload current model if switching types.
@@ -493,6 +568,9 @@ class CorridorKeyService:
             elif self._active_model == _ActiveModel.MATANYONE2:
                 self._safe_offload(self._matanyone2_processor)
                 self._matanyone2_processor = None
+            elif self._active_model == _ActiveModel.BIREFNET:
+                self._safe_offload(self._birefnet_handler)
+                self._birefnet_handler = None
             logger.info(f"_safe_offload took {time.monotonic() - t0:.1f}s")
 
             import gc
@@ -558,7 +636,19 @@ class CorridorKeyService:
 
         backend = resolve_backend()
         opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
-        _img_size = 1024 if self._device == 'mps' else 2048
+        if self._device == 'mps' or self._preview_mode:
+            _img_size = 1024
+        else:
+            # Adapt backbone resolution to available VRAM.
+            # 2048 needs ~20 GB activations, 1536 needs ~12 GB, 1024 needs ~6 GB.
+            from CorridorKeyModule.inference_engine import CorridorKeyEngine
+            vram_gb = CorridorKeyEngine._get_vram_gb()
+            if vram_gb > 0 and vram_gb < 12:
+                _img_size = 1536
+                logger.info(f"VRAM {vram_gb:.1f} GB < 12 GB: using img_size=1536 "
+                            f"(2048 requires ~20 GB activations)")
+            else:
+                _img_size = 2048
 
         # MLX: unified memory, single engine only
         pool_size = 1 if backend == "mlx" else self._pool_size
@@ -669,6 +759,28 @@ class CorridorKeyService:
         logger.info(f"MatAnyone2 loaded in {time.monotonic() - t0:.1f}s")
         return self._matanyone2_processor
 
+    def _get_birefnet(self, model_variant: str = "General"):
+        """Lazy-load the BiRefNet handler. Reloads if variant changed."""
+        self._ensure_model(_ActiveModel.BIREFNET)
+
+        if (self._birefnet_handler is not None
+                and self._birefnet_handler._model_variant == model_variant):
+            return self._birefnet_handler
+
+        # Variant changed or first load — (re)create handler
+        if self._birefnet_handler is not None:
+            self._safe_offload(self._birefnet_handler)
+            self._birefnet_handler = None
+
+        BiRefNetHandler = _import_birefnet_handler_class()
+        logger.info(f"Loading BiRefNet handler (variant={model_variant})...")
+        t0 = time.monotonic()
+        self._birefnet_handler = BiRefNetHandler(
+            device=self._device, model_variant=model_variant,
+        )
+        logger.info(f"BiRefNet loaded in {time.monotonic() - t0:.1f}s")
+        return self._birefnet_handler
+
     def unload_engines(self) -> None:
         """Free GPU memory by unloading all engines."""
         for eng in self._engine_pool:
@@ -678,10 +790,12 @@ class CorridorKeyService:
         self._safe_offload(self._sam2_tracker)
         self._safe_offload(self._videomama_pipeline)
         self._safe_offload(self._matanyone2_processor)
+        self._safe_offload(self._birefnet_handler)
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
         self._matanyone2_processor = None
+        self._birefnet_handler = None
         self._active_model = _ActiveModel.NONE
         import gc
         gc.collect()
@@ -731,8 +845,8 @@ class CorridorKeyService:
             ret, frame = input_cap.read()
             if not ret:
                 return None, input_stem, False
-            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            return img_rgb.astype(np.float32) / 255.0, input_stem, input_is_linear
+            from CorridorKeyModule.core.native_ops import bgr_u8_to_rgb_f32
+            return bgr_u8_to_rgb_f32(frame), input_stem, input_is_linear
         else:
             fpath = os.path.join(clip.input_asset.path, input_files[frame_index])
             input_stem = os.path.splitext(input_files[frame_index])[0]
@@ -856,11 +970,9 @@ class CorridorKeyService:
 
         # Comp
         if cfg.comp_enabled:
+            from CorridorKeyModule.core.native_ops import rgb_f32_to_bgr_u8
             comp_srgb = res['comp']
-            comp_bgr = cv2.cvtColor(
-                (np.clip(comp_srgb, 0.0, 1.0) * 255.0).astype(np.uint8),
-                cv2.COLOR_RGB2BGR,
-            )
+            comp_bgr = rgb_f32_to_bgr_u8(comp_srgb)
             comp_path = os.path.join(dirs['comp'], f"{input_stem}.{cfg.comp_format}")
             self._write_image(comp_bgr, comp_path, cfg.comp_format, clip_name, frame_index,
                               exr_compression=cfg.exr_compression)
@@ -1012,64 +1124,87 @@ class CorridorKeyService:
 
         _warmup_done = False
 
-        try:
+        # Early cancel check before spawning any threads
+        if job and job.is_cancelled:
+            raise JobCancelledError(clip.name, 0)
+
+        # --- Prefetch frames in background thread ---
+        _PREFETCH_DEPTH = 3
+        prefetch_q: queue.Queue = queue.Queue(maxsize=_PREFETCH_DEPTH)
+        prefetch_stop = threading.Event()
+
+        def _prefetch_worker():
+            """Read frames ahead of GPU processing."""
             for progress_i, i in enumerate(frame_indices):
+                if prefetch_stop.is_set() or (job and job.is_cancelled):
+                    break
+                try:
+                    item = self._prefetch_one_frame(
+                        clip, i, progress_i, input_files, input_cap,
+                        alpha_files, alpha_cap, alpha_stem_lookup,
+                        params.input_is_linear, skip_stems,
+                    )
+                    prefetch_q.put(item)
+                except FrameReadError as e:
+                    prefetch_q.put(_PrefetchItem('error', i, progress_i, None, None, None, None, str(e)))
+            prefetch_q.put(None)  # sentinel
+
+        prefetch_thread = threading.Thread(target=_prefetch_worker, daemon=True)
+        prefetch_thread.start()
+
+        # --- Async write-back ---
+        write_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="corridorkey-write")
+        write_futures: deque = deque()
+
+        def _drain_completed_writes():
+            """Drain finished write futures, report errors."""
+            while write_futures and write_futures[0].done():
+                fut = write_futures.popleft()
+                try:
+                    fut.result()
+                except Exception as e:
+                    logger.error(f"Async write error: {e}")
+                    if on_warning:
+                        on_warning(str(e))
+
+        try:
+            while True:
+                item = prefetch_q.get()
+                if item is None:
+                    break
+
                 if job and job.is_cancelled:
-                    raise JobCancelledError(clip.name, i)
+                    raise JobCancelledError(clip.name, item.frame_idx)
 
                 if not _warmup_done and on_status:
                     on_status("Compiling (first frame may take a minute)...")
 
                 if on_progress:
-                    timing_kwargs: dict[str, float] = {}
-                    elapsed = time.monotonic() - t_start
-                    timing_kwargs["elapsed"] = elapsed
-                    if frame_times:
-                        avg_time = sum(frame_times) / len(frame_times)
-                        fps = 1.0 / avg_time if avg_time > 0 else 0.0
-                        remaining = range_count - progress_i
-                        timing_kwargs["fps"] = fps
-                        timing_kwargs["eta_seconds"] = remaining * avg_time
-                    on_progress(clip.name, progress_i, range_count, **timing_kwargs)
+                    timing_kwargs = self._build_timing_kwargs(t_start, frame_times, range_count, item.progress_idx)
+                    on_progress(clip.name, item.progress_idx, range_count, **timing_kwargs)
+
+                if item.kind == 'skip':
+                    skipped.append(item.frame_idx)
+                    results.append(FrameResult(item.frame_idx, item.stem or f"{item.frame_idx:05d}", False, item.error))
+                    continue
+
+                if item.kind == 'resume':
+                    results.append(FrameResult(item.frame_idx, item.stem, True, "resumed (skipped)"))
+                    continue
+
+                if item.kind == 'error':
+                    skipped.append(item.frame_idx)
+                    results.append(FrameResult(item.frame_idx, f"{item.frame_idx:05d}", False, item.error))
+                    if on_warning:
+                        on_warning(item.error)
+                    continue
 
                 try:
-                    img, input_stem, is_linear = self._read_input_frame(
-                        clip, i, input_files, input_cap, params.input_is_linear,
-                    )
-                    if img is None:
-                        skipped.append(i)
-                        results.append(FrameResult(i, f"{i:05d}", False, "video read failed"))
-                        continue
-
-                    if input_stem in skip_stems:
-                        results.append(FrameResult(i, input_stem, True, "resumed (skipped)"))
-                        continue
-
-                    mask = self._read_alpha_frame(
-                        clip, i, alpha_files, alpha_cap,
-                        input_stem=input_stem,
-                        alpha_stem_lookup=alpha_stem_lookup,
-                    )
-                    if mask is None:
-                        skipped.append(i)
-                        results.append(FrameResult(i, input_stem, False, "alpha read failed"))
-                        continue
-
-                    if mask.shape[:2] != img.shape[:2]:
-                        mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
-
                     t_frame = time.monotonic()
                     with self._gpu_lock:
                         res = engine.process_frame(
-                            img, mask,
-                            input_is_linear=is_linear,
-                            fg_is_straight=True,
-                            despill_strength=params.despill_strength,
-                            auto_despeckle=params.auto_despeckle,
-                            despeckle_size=params.despeckle_size,
-                            despeckle_dilation=params.despeckle_dilation,
-                            despeckle_blur=params.despeckle_blur,
-                            refiner_scale=params.refiner_scale,
+                            item.image, item.mask,
+                            **self._build_process_kwargs(params, item.is_linear),
                         )
                     dt = time.monotonic() - t_frame
                     frame_times.append(dt)
@@ -1079,37 +1214,40 @@ class CorridorKeyService:
                         _warmup_done = True
                         if on_status:
                             on_status("")
+
                     total_t = sum(frame_times)
                     avg_fps = len(frame_times) / total_t if total_t > 0 else 0.0
-                    logger.debug(
-                        f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)"
-                    )
+                    logger.debug(f"Frame {item.frame_idx}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)")
 
-                    self._write_outputs(res, dirs, input_stem, clip.name, i, cfg)
-                    results.append(FrameResult(i, input_stem, True))
-
-                except FrameReadError as e:
-                    logger.warning(str(e))
-                    skipped.append(i)
-                    results.append(FrameResult(i, f"{i:05d}", False, str(e)))
-                    if on_warning:
-                        on_warning(str(e))
+                    fut = write_pool.submit(self._write_outputs, res, dirs, item.stem, clip.name, item.frame_idx, cfg)
+                    write_futures.append(fut)
+                    _drain_completed_writes()
+                    results.append(FrameResult(item.frame_idx, item.stem, True))
 
                 except WriteFailureError as e:
                     logger.error(str(e))
-                    results.append(FrameResult(i, f"{i:05d}", False, str(e)))
+                    results.append(FrameResult(item.frame_idx, f"{item.frame_idx:05d}", False, str(e)))
+                    if on_warning:
+                        on_warning(str(e))
+
+            # Wait for remaining async writes
+            for fut in write_futures:
+                try:
+                    fut.result(timeout=60)
+                except Exception as e:
+                    logger.error(f"Async write error: {e}")
                     if on_warning:
                         on_warning(str(e))
 
             if on_progress:
-                final_elapsed = time.monotonic() - t_start
-                final_kwargs: dict[str, float] = {"elapsed": final_elapsed, "eta_seconds": 0.0}
-                total_t = sum(frame_times)
-                if total_t > 0:
-                    final_kwargs["fps"] = len(frame_times) / total_t
+                final_kwargs = self._build_timing_kwargs(t_start, frame_times, range_count, range_count)
+                final_kwargs["eta_seconds"] = 0.0
                 on_progress(clip.name, range_count, range_count, **final_kwargs)
 
         finally:
+            prefetch_stop.set()  # signal prefetch thread to stop
+            prefetch_thread.join(timeout=10)
+            write_pool.shutdown(wait=True)
             if input_cap:
                 input_cap.release()
             if alpha_cap:
@@ -1120,6 +1258,57 @@ class CorridorKeyService:
             t_start, frame_range, num_frames,
             on_warning=on_warning,
         )
+
+    def _build_process_kwargs(self, params: InferenceParams, is_linear: bool) -> dict:
+        """Build kwargs for engine.process_frame from params + service state."""
+        return dict(
+            input_is_linear=is_linear,
+            fg_is_straight=True,
+            despill_strength=params.despill_strength,
+            auto_despeckle=params.auto_despeckle,
+            despeckle_size=params.despeckle_size,
+            despeckle_dilation=params.despeckle_dilation,
+            despeckle_blur=params.despeckle_blur,
+            refiner_scale=params.refiner_scale,
+            fast_preview=self._preview_mode,
+        )
+
+    def _prefetch_one_frame(
+        self, clip, i, progress_i, input_files, input_cap,
+        alpha_files, alpha_cap, alpha_stem_lookup, input_is_linear, skip_stems,
+    ) -> _PrefetchItem:
+        """Read one frame pair (input + alpha) for prefetch. Returns a _PrefetchItem."""
+        img, input_stem, is_linear = self._read_input_frame(
+            clip, i, input_files, input_cap, input_is_linear,
+        )
+        if img is None:
+            return _PrefetchItem('skip', i, progress_i, None, None, None, None, "video read failed")
+
+        if input_stem in skip_stems:
+            return _PrefetchItem('resume', i, progress_i, input_stem, None, None, None, None)
+
+        mask = self._read_alpha_frame(
+            clip, i, alpha_files, alpha_cap,
+            input_stem=input_stem,
+            alpha_stem_lookup=alpha_stem_lookup,
+        )
+        if mask is None:
+            return _PrefetchItem('skip', i, progress_i, input_stem, None, None, None, "alpha read failed")
+
+        if mask.shape[:2] != img.shape[:2]:
+            mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+        return _PrefetchItem('frame', i, progress_i, input_stem, img, mask, is_linear, None)
+
+    @staticmethod
+    def _build_timing_kwargs(t_start, frame_times, range_count, progress_i) -> dict[str, float]:
+        """Build timing kwargs dict for on_progress callbacks."""
+        kwargs: dict[str, float] = {"elapsed": time.monotonic() - t_start}
+        if frame_times:
+            avg_time = sum(frame_times) / len(frame_times)
+            kwargs["fps"] = 1.0 / avg_time if avg_time > 0 else 0.0
+            kwargs["eta_seconds"] = (range_count - progress_i) * avg_time
+        return kwargs
 
     def _run_inference_parallel(
         self,
@@ -1195,14 +1384,7 @@ class CorridorKeyService:
                 try:
                     res = eng.process_frame(
                         img, mask,
-                        input_is_linear=is_linear,
-                        fg_is_straight=True,
-                        despill_strength=params.despill_strength,
-                        auto_despeckle=params.auto_despeckle,
-                        despeckle_size=params.despeckle_size,
-                        despeckle_dilation=params.despeckle_dilation,
-                        despeckle_blur=params.despeckle_blur,
-                        refiner_scale=params.refiner_scale,
+                        **self._build_process_kwargs(params, is_linear),
                     )
                     out_q.put((frame_idx, stem, res, None))
                     if not warmup_done.is_set():
@@ -1483,14 +1665,7 @@ class CorridorKeyService:
         with self._gpu_lock:
             res = engine.process_frame(
                 img, mask,
-                input_is_linear=is_linear,
-                fg_is_straight=True,
-                despill_strength=params.despill_strength,
-                auto_despeckle=params.auto_despeckle,
-                despeckle_size=params.despeckle_size,
-                despeckle_dilation=params.despeckle_dilation,
-                despeckle_blur=params.despeckle_blur,
-                refiner_scale=params.refiner_scale,
+                **self._build_process_kwargs(params, is_linear),
             )
         logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")
         return res
@@ -2225,6 +2400,106 @@ class CorridorKeyService:
 
         logger.info(
             f"MatAnyone2 complete for '{clip.name}': "
+            f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )
+
+    def run_birefnet(
+        self,
+        clip: ClipEntry,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+        model_variant: str = "General",
+    ) -> None:
+        """Run BiRefNet alpha generation for a clip.
+
+        Transitions clip: RAW|MASKED -> READY (creates AlphaHint directory).
+        No annotation required — automatic salient object segmentation.
+        """
+        # ── Preflight validation ──
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for BiRefNet")
+        if self._device == 'cpu':
+            raise GPURequiredError("BiRefNet")
+        if clip.input_asset.asset_type != "sequence":
+            raise CorridorKeyError("BiRefNet requires an extracted image sequence")
+
+        def _status(msg: str) -> None:
+            logger.info(f"BiRefNet [{clip.name}]: {msg}")
+            if on_status:
+                on_status(msg)
+
+        def _check_cancel() -> bool:
+            return bool(job and job.is_cancelled)
+
+        t_start = time.monotonic()
+
+        # ── Phase 1: Load model ──
+        _status("Loading BiRefNet model...")
+        with self._gpu_lock:
+            handler = self._get_birefnet(model_variant=model_variant)
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 2: Load input frames ──
+        _status("Loading frames...")
+        selected_input_names = self._selected_sequence_files(clip)
+        if not selected_input_names:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for BiRefNet")
+
+        named_input_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            selected_input_names,
+            clip.name,
+            job=job,
+            on_status=on_status,
+        )
+        input_frames = [frame for _, frame in named_input_frames]
+        input_names = [fname for fname, _ in named_input_frames]
+        frame_stems = [os.path.splitext(fname)[0] for fname in input_names]
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 3: Inference ──
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        try:
+            frames_written = handler.process_frames(
+                input_frames=input_frames,
+                output_dir=alpha_dir,
+                frame_names=frame_stems,
+                progress_callback=on_progress,
+                on_status=on_status,
+                cancel_check=_check_cancel,
+                clip_name=clip.name,
+            )
+        except Exception as e:
+            if "CUDA out of memory" in str(e) or "OutOfMemoryError" in type(e).__name__:
+                logger.error(f"BiRefNet OOM for '{clip.name}': {e}")
+                self._birefnet_handler = None
+                self._active_model = _ActiveModel.NONE
+                try:
+                    import torch as _torch
+                    _torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                raise CorridorKeyError(
+                    f"BiRefNet ran out of GPU memory processing '{clip.name}'. "
+                    f"Try closing other GPU applications or using a smaller clip."
+                ) from e
+            raise
+
+        # ── Phase 4: Finalize ──
+        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+
+        try:
+            clip.transition_to(ClipState.READY)
+        except Exception as e:
+            if on_warning:
+                on_warning(f"State transition after BiRefNet: {e}")
+
+        logger.info(
+            f"BiRefNet complete for '{clip.name}': "
             f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
         )
 

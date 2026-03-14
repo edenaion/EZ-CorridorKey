@@ -918,6 +918,7 @@ class MainWindow(QMainWindow):
         self._param_panel.gvm_requested.connect(self._on_run_gvm)
         self._param_panel.videomama_requested.connect(self._on_run_videomama)
         self._param_panel.matanyone2_requested.connect(self._on_run_matanyone2)
+        self._param_panel.birefnet_requested.connect(self._on_run_birefnet)
         self._param_panel.track_masks_requested.connect(self._on_track_masks)
         self._param_panel.import_alpha_requested.connect(self._on_import_alpha)
 
@@ -1055,6 +1056,7 @@ class MainWindow(QMainWindow):
 
         # Enable GVM/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
+        self._param_panel.set_birefnet_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
         has_mask = self._clip_has_videomama_ready_mask(clip)
         self._param_panel.set_videomama_enabled(has_mask)
         self._param_panel.set_matanyone2_enabled(has_mask)
@@ -2287,6 +2289,24 @@ class MainWindow(QMainWindow):
         self._current_clip.set_processing(True)
         self._start_worker_if_needed(job.id, job_label="MatAnyone2")
 
+    @Slot()
+    def _on_run_birefnet(self) -> None:
+        """Run BiRefNet alpha generation on the selected clip."""
+        if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
+            return
+
+        if not self._warn_mps_slow("BiRefNet"):
+            return
+
+        variant = self._param_panel.birefnet_variant
+        job = create_job_snapshot(self._current_clip, job_type=JobType.BIREFNET_ALPHA)
+        job.params["_birefnet_variant"] = variant
+        if not self._service.job_queue.submit(job):
+            return
+
+        self._current_clip.set_processing(True)
+        self._start_worker_if_needed(job.id, job_label=f"BiRefNet ({variant})")
+
     def _start_worker_if_needed(
         self,
         first_job_id: str | None = None,
@@ -2442,7 +2462,7 @@ class MainWindow(QMainWindow):
         if job_type == JobType.SAM2_TRACK.value:
             target_state = ClipState.MASKED
         elif job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value,
-                          JobType.MATANYONE2_ALPHA.value):
+                          JobType.MATANYONE2_ALPHA.value, JobType.BIREFNET_ALPHA.value):
             target_state = ClipState.READY
         else:
             target_state = ClipState.COMPLETE
@@ -2512,6 +2532,7 @@ class MainWindow(QMainWindow):
                     JobType.SAM2_TRACK: "Track Mask",
                     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
                     JobType.MATANYONE2_ALPHA: "MatAnyone2",
+                    JobType.BIREFNET_ALPHA: "BiRefNet",
                     JobType.INFERENCE: "Inference",
                 }
                 next_label = _label_map.get(next_job.job_type, "Pipeline")
@@ -2529,6 +2550,7 @@ class MainWindow(QMainWindow):
                 JobType.GVM_ALPHA.value: "GVM Auto",
                 JobType.VIDEOMAMA_ALPHA.value: "VideoMaMa",
                 JobType.MATANYONE2_ALPHA.value: "MatAnyone2",
+                JobType.BIREFNET_ALPHA.value: "BiRefNet",
             }.get(job_type, "Alpha")
             # Show alpha coverage count
             alpha_info = ""
@@ -2852,19 +2874,37 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # Use provided source_dir or auto-detect
+        # Use provided source_dir or let user choose
         if source_dir and os.path.isdir(source_dir) and os.listdir(source_dir):
             pass  # use as-is
         else:
             comp_dir = os.path.join(clip.output_dir, "Comp")
             fg_dir = os.path.join(clip.output_dir, "FG")
+            alpha_dir = os.path.join(clip.output_dir, "Alpha")
+
+            available = []
             if os.path.isdir(comp_dir) and os.listdir(comp_dir):
-                source_dir = comp_dir
-            elif os.path.isdir(fg_dir) and os.listdir(fg_dir):
-                source_dir = fg_dir
-            else:
+                available.append(("Composite", comp_dir))
+            if os.path.isdir(fg_dir) and os.listdir(fg_dir):
+                available.append(("Foreground", fg_dir))
+            if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
+                available.append(("Alpha", alpha_dir))
+
+            if not available:
                 QMessageBox.warning(self, "No Output", "No output frames found to export.")
                 return
+
+            if len(available) == 1:
+                source_dir = available[0][1]
+            else:
+                from PySide6.QtWidgets import QInputDialog
+                labels = [name for name, _ in available]
+                choice, ok = QInputDialog.getItem(
+                    self, "Export Video", "Choose output to export:", labels, 0, False,
+                )
+                if not ok:
+                    return
+                source_dir = dict(available)[choice]
 
         # Read video metadata for fps
         from backend.ffmpeg_tools import read_video_metadata, stitch_video, require_ffmpeg_install

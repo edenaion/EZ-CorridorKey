@@ -30,7 +30,7 @@ resolve_system_python() {
     return 1
 }
 
-echo "[0/6] Installer runtime target..."
+echo "[0/7] Installer runtime target..."
 echo "  CorridorKey will provision and use Python ${PYTHON_SPEC} for this install."
 
 # ── Step 2: Check for old venv ──
@@ -42,7 +42,7 @@ if [ -d "venv" ] && [ ! -d ".venv" ]; then
 fi
 
 # ── Step 3: Install/locate uv ──
-echo "[2/6] Setting up package manager..."
+echo "[2/7] Setting up package manager..."
 UV_AVAILABLE=0
 
 if command -v uv &>/dev/null; then
@@ -72,7 +72,7 @@ case "$(uname -s)" in
 esac
 
 # ── Step 4: Provision Python ──
-echo "[3/6] Provisioning Python..."
+echo "[3/7] Provisioning Python..."
 if [ "$UV_AVAILABLE" -eq 1 ]; then
     if uv python install --managed-python "$PYTHON_SPEC" >/dev/null 2>&1; then
         INSTALL_PYTHON="$(uv python find --managed-python "$PYTHON_SPEC")"
@@ -96,7 +96,7 @@ PYVER="$("$INSTALL_PYTHON" --version 2>&1 | awk '{print $2}')"
 echo "  [OK] Using Python $PYVER ($INSTALL_PYTHON)"
 
 # ── Step 5: Create venv + install dependencies ──
-echo "[4/6] Installing dependencies..."
+echo "[4/7] Installing dependencies..."
 if [ "$UV_AVAILABLE" -eq 1 ]; then
     echo "  Creating virtual environment..."
     uv venv --clear --managed-python --python "$INSTALL_PYTHON" .venv >/dev/null 2>&1
@@ -149,7 +149,7 @@ if [ "$UV_AVAILABLE" -eq 0 ]; then
     echo "  [OK] Dependencies installed via pip"
 fi
 
-echo "[4b/6] Verifying torch runtime..."
+echo "[4b/7] Verifying torch runtime..."
 DIAGNOSTICS_DIR="logs/diagnostics"
 TORCH_RUNTIME_LOG="${DIAGNOSTICS_DIR}/install-torch-runtime.json"
 SUPPORT_REPORT_LOG="${DIAGNOSTICS_DIR}/install-support-report.md"
@@ -168,7 +168,7 @@ fi
 
 # ── Step 4c: MLX acceleration for Apple Silicon ──
 if [ "$OS_TYPE" = "macos" ] && [ "$(uname -m)" = "arm64" ]; then
-    echo "[4c/6] Installing MLX acceleration for Apple Silicon..."
+    echo "[4c/7] Installing MLX acceleration for Apple Silicon..."
     MLX_OK=0
     if [ "$UV_AVAILABLE" -eq 1 ]; then
         if uv pip install --python .venv/bin/python -e ".[mlx]" 2>&1; then
@@ -189,10 +189,73 @@ if [ "$OS_TYPE" = "macos" ] && [ "$(uname -m)" = "arm64" ]; then
         echo "  You can retry later with: .venv/bin/python -m pip install -e '.[mlx]'"
     fi
 else
-    echo "[4c/6] MLX acceleration — skipped (Apple Silicon only)"
+    echo "[4c/7] MLX acceleration — skipped (Apple Silicon only)"
 fi
 
-echo "[4d/6] Optional SAM2 tracker..."
+# ── Step 4d: Performance accelerators (TensorRT / MIGraphX / Rust native) ──
+echo "[4d/7] Installing performance accelerators..."
+
+if [ "$OS_TYPE" != "macos" ]; then
+    # Detect GPU vendor and install matching torch.compile backend
+    if command -v nvidia-smi &>/dev/null; then
+        echo "  NVIDIA GPU detected, installing torch-tensorrt..."
+        if [ "$UV_AVAILABLE" -eq 1 ]; then
+            uv pip install --python .venv/bin/python torch-tensorrt 2>&1 && \
+                echo "  [OK] torch-tensorrt installed" || \
+                echo "  [WARN] torch-tensorrt install failed (will use default backend)"
+        else
+            .venv/bin/python -m pip install torch-tensorrt 2>&1 && \
+                echo "  [OK] torch-tensorrt installed" || \
+                echo "  [WARN] torch-tensorrt install failed (will use default backend)"
+        fi
+    elif [ -d "/opt/rocm" ] || command -v rocminfo &>/dev/null; then
+        echo "  AMD ROCm detected, installing torch-migraphx..."
+        if [ "$UV_AVAILABLE" -eq 1 ]; then
+            uv pip install --python .venv/bin/python torch_migraphx 2>&1 && \
+                echo "  [OK] torch-migraphx installed" || \
+                echo "  [WARN] torch-migraphx install failed (will use default backend)"
+        else
+            .venv/bin/python -m pip install torch_migraphx 2>&1 && \
+                echo "  [OK] torch-migraphx installed" || \
+                echo "  [WARN] torch-migraphx install failed (will use default backend)"
+        fi
+    else
+        echo "  No NVIDIA/AMD GPU detected, skipping torch.compile accelerator"
+    fi
+else
+    echo "  macOS: torch.compile accelerators not available"
+fi
+
+# Build Rust native extension (install cargo if missing)
+if ! command -v cargo &>/dev/null; then
+    echo "  Installing Rust toolchain..."
+    if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>/dev/null; then
+        source "$HOME/.cargo/env" 2>/dev/null
+        echo "  [OK] Rust installed"
+    else
+        echo "  [WARN] Rust install failed (Python fallback will be used)"
+    fi
+fi
+if command -v cargo &>/dev/null; then
+    echo "  Building native Rust extension..."
+    MATURIN_CMD=""
+    if command -v maturin &>/dev/null; then
+        MATURIN_CMD="maturin"
+    elif command -v uvx &>/dev/null; then
+        MATURIN_CMD="uvx maturin"
+    fi
+    if [ -n "$MATURIN_CMD" ]; then
+        if (cd corridorkey_native && $MATURIN_CMD develop --release --uv) 2>&1; then
+            echo "  [OK] Rust native extension installed"
+        else
+            echo "  [WARN] Rust build failed (Python fallback will be used)"
+        fi
+    else
+        echo "  [WARN] maturin not found, skipping Rust build (pip install maturin)"
+    fi
+fi
+
+echo "[4e/7] Optional SAM2 tracker..."
 INSTALL_SAM2="y"
 if [ "$OS_TYPE" = "macos" ]; then
     echo "  [NOTE] SAM2 tracking on macOS is experimental in CorridorKey."
@@ -241,7 +304,7 @@ if [ "$INSTALL_SAM2" = "y" ]; then
 fi
 
 # ── Step 6: Check FFmpeg ──
-echo "[5/6] Checking FFmpeg..."
+echo "[5/7] Checking FFmpeg..."
 if .venv/bin/python scripts/check_ffmpeg.py; then
     :
 else
@@ -293,7 +356,7 @@ else
 fi
 
 # ── Step 7: Download model weights ──
-echo "[6/6] Checking model weights..."
+echo "[6/7] Checking model weights..."
 .venv/bin/python scripts/setup_models.py --check
 .venv/bin/python scripts/setup_models.py --corridorkey
 if [ $? -ne 0 ]; then
@@ -302,7 +365,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "[6/6] Optional models (can be downloaded later)"
+echo "[7/7] Optional models (can be downloaded later)"
 echo ""
 
 INSTALL_GVM="${CORRIDORKEY_INSTALL_GVM:-}"

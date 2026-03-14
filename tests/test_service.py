@@ -22,6 +22,7 @@ from backend.service import (
     OutputConfig,
     FrameResult,
     _ActiveModel,
+    _PrefetchItem,
     _import_matanyone2_processor_class,
 )
 from backend.clip_state import ClipAsset, ClipEntry, ClipState
@@ -71,13 +72,13 @@ class TestDeviceDetection:
             # Force reimport failure
             result = svc.detect_device()
         # Falls back to cpu when torch import fails
-        assert result in ("cpu", "cuda")  # depends on real env
+        assert result in ("cpu", "cuda", "mps")  # depends on real env
 
     def test_detect_device_returns_string(self):
         svc = CorridorKeyService()
         result = svc.detect_device()
         assert isinstance(result, str)
-        assert result in ("cuda", "cpu")
+        assert result in ("cuda", "mps", "cpu")
 
 
 # ── TestVRAMInfo ──
@@ -1097,3 +1098,64 @@ class TestRunGVM:
 
             with pytest.raises(JobCancelledError):
                 svc.run_gvm(clip, job=job)
+
+
+# ── Preview mode ──
+
+
+class TestPreviewMode:
+    def test_default_is_off(self):
+        svc = CorridorKeyService()
+        assert svc.preview_mode is False
+
+    def test_toggle_on(self):
+        svc = CorridorKeyService()
+        svc.set_preview_mode(True)
+        assert svc.preview_mode is True
+
+    def test_toggle_noop_when_same(self):
+        svc = CorridorKeyService()
+        svc.set_preview_mode(False)
+        assert svc.preview_mode is False
+
+    def test_clears_engine_pool_on_switch(self):
+        svc = CorridorKeyService()
+        svc._engine_pool = ["fake_engine_1"]
+        svc.set_preview_mode(True)
+        assert svc._engine_pool == []
+
+
+# ── Prefetch helpers ──
+
+
+class TestPrefetchItem:
+    def test_namedtuple_fields(self):
+        item = _PrefetchItem('frame', 5, 3, 'stem_005', None, None, True, None)
+        assert item.kind == 'frame'
+        assert item.frame_idx == 5
+        assert item.progress_idx == 3
+        assert item.stem == 'stem_005'
+        assert item.is_linear is True
+
+    def test_skip_item(self):
+        item = _PrefetchItem('skip', 0, 0, None, None, None, None, "read failed")
+        assert item.kind == 'skip'
+        assert item.error == "read failed"
+
+
+class TestBuildTimingKwargs:
+    def test_empty_frame_times(self):
+        from collections import deque
+        kwargs = CorridorKeyService._build_timing_kwargs(0.0, deque(), 100, 0)
+        assert "elapsed" in kwargs
+        assert "fps" not in kwargs
+
+    def test_with_frame_times(self):
+        import time
+        from collections import deque
+        t_start = time.monotonic() - 1.0  # 1 second ago
+        frame_times = deque([0.04, 0.04, 0.04])  # 25 fps
+        kwargs = CorridorKeyService._build_timing_kwargs(t_start, frame_times, 100, 10)
+        assert "fps" in kwargs
+        assert kwargs["fps"] == pytest.approx(25.0, rel=0.01)
+        assert "eta_seconds" in kwargs

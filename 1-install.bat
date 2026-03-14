@@ -337,7 +337,61 @@ if %errorlevel%==0 (
     echo     .venv\Scripts\python.exe -m pip install -U "triton-windows^>=3.5,^<3.6"
 )
 
-echo [4d/7] Optional SAM2 tracker...
+REM ── Step 4d: Performance accelerators ──
+echo [4d/7] Installing performance accelerators...
+
+where nvidia-smi >nul 2>&1
+if !errorlevel! equ 0 (
+    echo   NVIDIA GPU detected, installing torch-tensorrt...
+    .venv\Scripts\python.exe -m pip install torch-tensorrt >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo   [OK] torch-tensorrt installed
+    ) else (
+        echo   [WARN] torch-tensorrt install failed ^(will use default backend^)
+    )
+) else (
+    echo   No NVIDIA GPU detected, skipping torch-tensorrt
+)
+
+where cargo >nul 2>&1
+if !errorlevel! neq 0 (
+    echo   Installing Rust toolchain...
+    powershell -Command "Invoke-WebRequest -Uri https://win.rustup.rs/x86_64 -OutFile rustup-init.exe" >nul 2>&1
+    if exist rustup-init.exe (
+        rustup-init.exe -y --default-toolchain stable >nul 2>&1
+        del rustup-init.exe >nul 2>&1
+        set "PATH=%USERPROFILE%\.cargo\bin;!PATH!"
+        where cargo >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo   [OK] Rust installed
+        ) else (
+            echo   [WARN] Rust install failed ^(Python fallback will be used^)
+        )
+    ) else (
+        echo   [WARN] Rust download failed ^(Python fallback will be used^)
+    )
+)
+where cargo >nul 2>&1
+if !errorlevel! equ 0 (
+    echo   Building native Rust extension...
+    where maturin >nul 2>&1
+    if !errorlevel! equ 0 (
+        pushd corridorkey_native
+        maturin develop --release >nul 2>&1
+        if !errorlevel! equ 0 (
+            echo   [OK] Rust native extension installed
+        ) else (
+            echo   [WARN] Rust build failed ^(Python fallback will be used^)
+        )
+        popd
+    ) else (
+        echo   [WARN] maturin not found, skipping Rust build ^(pip install maturin^)
+    )
+) else (
+    echo   Rust not available, skipping native extension ^(Python fallback will be used^)
+)
+
+echo [4e/7] Optional SAM2 tracker...
 set INSTALL_SAM2=y
 if defined CORRIDORKEY_INSTALL_SAM2 (
     set "INSTALL_SAM2_INPUT=%CORRIDORKEY_INSTALL_SAM2%"

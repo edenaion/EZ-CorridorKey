@@ -19,6 +19,7 @@ class ParameterPanel(QWidget):
     gvm_requested = Signal()      # GVM AUTO button clicked
     videomama_requested = Signal() # VIDEOMAMA button clicked
     matanyone2_requested = Signal()  # MatAnyone2 button clicked
+    birefnet_requested = Signal()    # BiRefNet button clicked
     track_masks_requested = Signal()  # Track annotation prompts into dense masks
     import_alpha_requested = Signal()  # Import own AlphaHint folder
 
@@ -63,6 +64,31 @@ class ParameterPanel(QWidget):
         )
         self._gvm_btn.clicked.connect(self.gvm_requested.emit)
         alpha_layout.addWidget(self._gvm_btn)
+
+        birefnet_row = QHBoxLayout()
+        self._birefnet_btn = QPushButton("BIREFNET")
+        self._birefnet_btn.setEnabled(False)
+        self._birefnet_btn.setToolTip(
+            "Auto-generate alpha hint using BiRefNet segmentation.\n"
+            "No annotations required — works directly on raw footage.\n"
+            "Lightweight alternative to GVM for salient object detection."
+        )
+        self._birefnet_btn.clicked.connect(self.birefnet_requested.emit)
+        birefnet_row.addWidget(self._birefnet_btn, stretch=1)
+
+        self._birefnet_variant = QComboBox()
+        self._birefnet_variant.addItems([
+            "General", "General-Lite", "Matting", "Portrait",
+        ])
+        self._birefnet_variant.setToolTip(
+            "General: full model, best quality, slowest\n"
+            "General-Lite: lighter, faster, slightly lower quality\n"
+            "Matting: trained for alpha matting (hair, transparency)\n"
+            "Portrait: optimized for faces and busts"
+        )
+        self._birefnet_variant.setFixedWidth(100)
+        birefnet_row.addWidget(self._birefnet_variant)
+        alpha_layout.addLayout(birefnet_row)
 
         or_label = QLabel("— or —")
         or_label.setAlignment(Qt.AlignCenter)
@@ -465,6 +491,15 @@ class ParameterPanel(QWidget):
     def set_matanyone2_enabled(self, enabled: bool) -> None:
         """Enable/disable MatAnyone2 button based on clip state."""
         self._matanyone2_btn.setEnabled(enabled)
+
+    def set_birefnet_enabled(self, enabled: bool) -> None:
+        """Enable/disable BiRefNet button based on clip state."""
+        self._birefnet_btn.setEnabled(enabled)
+
+    @property
+    def birefnet_variant(self) -> str:
+        """Currently selected BiRefNet model variant."""
+        return self._birefnet_variant.currentText()
 
     def set_import_alpha_enabled(self, enabled: bool) -> None:
         """Enable/disable Import Alpha button based on clip state."""

@@ -69,3 +69,5 @@ bench_vram_report.json
 .tmp/
 Projects/
 reports/
+.gitnexus
+corridorkey_native/target/
