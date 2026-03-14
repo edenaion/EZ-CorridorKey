@@ -105,6 +105,38 @@ The report records:
 - exact `OutputConfig`
 - output directories written by the service
 
+## Frame Compare
+
+Once the harness has rendered a `Processed` frame, generate a repeatable
+side-by-side compare artifact:
+
+Windows:
+
+```bash
+.venv\Scripts\python.exe scripts\dvr_compare_frames.py ^
+  --source-frame reports\source_video_frame_000000.png ^
+  --processed-frame Projects\260314_095211_EZCK_DVR_TEST_HARNESS\clips\shot_lin\Output\Processed\frame_000000.exr ^
+  --source-is-linear ^
+  --image-out reports\dvr_compare_video_linear_assumed_vs_processed.png ^
+  --json-out reports\dvr_compare_video_linear_assumed_vs_processed.json
+```
+
+If you want to compare against the app-extracted EXR input frame instead of the
+original source video frame:
+
+```bash
+.venv\Scripts\python.exe scripts\dvr_compare_frames.py ^
+  --source-frame Projects\260314_095211_EZCK_DVR_TEST_HARNESS\clips\shot_lin\Frames\frame_000000.exr ^
+  --processed-frame Projects\260314_095211_EZCK_DVR_TEST_HARNESS\clips\shot_lin\Output\Processed\frame_000000.exr ^
+  --source-is-linear ^
+  --image-out reports\dvr_compare_frame_000000.png ^
+  --json-out reports\dvr_compare_frame_000000.json
+```
+
+The compare JSON reports luminance ratios at several alpha thresholds, which is
+useful for separating a true whole-image brightness drift from edge-only alpha
+differences.
+
 ## Resolve-Side Check
 
 After the harness completes, use the same general Fusion A/B method the tester
