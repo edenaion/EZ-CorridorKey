@@ -107,13 +107,56 @@ The report records:
 
 ## Resolve-Side Check
 
-After the harness completes:
+After the harness completes, use the same general Fusion A/B method the tester
+used in the tutorial video.
+
+### Fusion A/B Workflow
 
 1. Open the Resolve project `EZCK_DVR TEST`.
-2. Import the rendered sequence from `Output/Processed/`.
-3. Do not add a grade or CST just for the baseline check.
-4. Compare against the original source using a wipe or side-by-side.
-5. If needed, rerun with `--despill 0.0` to isolate keying controls from export math.
+2. Open a Fusion composition.
+3. Add `Loader1` pointing at the original source clip, for example:
+   `Projects/DVR_Test/shot_lin.mov`
+4. Add `Loader2` pointing at the rendered EZCK output sequence, for example:
+   `Output/Processed/frame_000000.exr`
+5. Send `Loader1` to viewer buffer `A`.
+6. Send `Loader2` to viewer buffer `B`.
+7. In the Fusion viewer, enable the same viewer-level gamut normalization the
+   tester showed:
+   - open the viewer LUT menu
+   - choose `GamutView LUT`
+   - keep `Source Space = No Change`
+   - set `Output Space = ITU-R BT.709 (scene)`
+   - leave `Add Gamma` enabled
+8. Switch the viewer compare mode to `Buffer Split Wipe`.
+9. Scrub to a representative frame and inspect the split line directly across
+   skin, fabric, and neutral areas.
+
+### Pass / Fail
+
+Pass:
+
+- The processed result does not show a global brightness, gamma, or contrast
+  shift relative to the source under the same viewer normalization.
+- Any visible change is attributable to despill, refiner, matte cleanup, or
+  edge handling rather than a whole-image darkening.
+
+Fail:
+
+- The processed side looks globally darker under the same Fusion viewer setup.
+- The mismatch is broad and image-wide, not localized to expected keying
+  changes.
+
+### Isolation Runs
+
+If the first comparison looks wrong:
+
+1. Re-run the EZCK harness with `--despill 0.0`.
+2. Keep `Processed` as `EXR`.
+3. Re-import only the new output sequence in Fusion.
+4. Repeat the exact same `Buffer Split Wipe` comparison.
+
+That keeps the A/B stable while isolating export math from intentional keying
+adjustments.
 
 ## Notes
 

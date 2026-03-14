@@ -250,6 +250,7 @@ def _run_inference_like_app(
     frame_range: tuple[int, int] | None = None,
 ) -> dict[str, object]:
     service = CorridorKeyService()
+    detected_device = service.detect_device()
     timings: dict[str, object] = {}
     last_progress = 0
     total_frames = 0
@@ -294,6 +295,7 @@ def _run_inference_like_app(
     timings["warning_count"] = sum(1 for result in results if result.warning)
     timings["service_warning_messages"] = warnings
     timings["status_messages"] = status_messages
+    timings["detected_device"] = detected_device
     return timings
 
 
