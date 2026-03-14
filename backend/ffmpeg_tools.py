@@ -1248,9 +1248,11 @@ def stitch_video(
     )
 
     frame_re = re.compile(r"frame=\s*(\d+)")
+    stderr_lines: list[str] = []
 
     try:
         for line in proc.stderr:
+            stderr_lines.append(line.rstrip())
             if cancel_event and cancel_event.is_set():
                 try:
                     proc.stdin.write("q\n")
@@ -1273,7 +1275,10 @@ def stitch_video(
         raise RuntimeError("FFmpeg stitching timed out")
 
     if proc.returncode != 0 and not (cancel_event and cancel_event.is_set()):
-        raise RuntimeError(f"FFmpeg stitching failed with code {proc.returncode}")
+        err_detail = "\n".join(stderr_lines[-20:])  # last 20 lines
+        raise RuntimeError(
+            f"FFmpeg stitching failed with code {proc.returncode}\n{err_detail}"
+        )
 
     logger.info(f"Video stitched: {out_path}")
 

@@ -89,7 +89,7 @@ if [ -n "$EXTRAS" ]; then
 fi
 
 if [ "$UV_AVAILABLE" = "1" ]; then
-    if uv pip install --python .venv/bin/python --torch-backend=auto $INSTALL_TARGET 2>&1; then
+    if uv pip install --python .venv/bin/python --torch-backend=auto --reinstall-package corridorkey $INSTALL_TARGET 2>&1; then
         echo "  [OK] Dependencies updated via uv"
     else
         echo "  [WARN] uv update failed, trying pip..."
