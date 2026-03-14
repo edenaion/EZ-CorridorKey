@@ -4,6 +4,23 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.6.7] - 2026-03-14 — Color Space Preview Truth & Tester Branch
+
+### Fixed
+- **Input viewer color truth across source types** — the left `INPUT` viewer now follows the selected color-space interpretation for direct video, LDR images, and EXR sequences, so it matches what CorridorKey will assume at inference time.
+- **Input/export thumbnail parity** — input thumbnails continue to match the left viewer, and export thumbnails remain separate from input thumbnails.
+- **Fresh-launch live preview warmup** — with Live Preview enabled, the first preview update now loads the inference engine on demand instead of silently doing nothing.
+
+### Changed
+- **Color space UX copy** — tooltips and README now explain that color space affects future exports only after rerunning inference, while existing files on disk are unchanged.
+- **Parallel frames messaging** — the in-panel tooltip now explicitly says the feature is CUDA-only for now and not currently supported on Apple Silicon.
+- **Preferences cleanup** — removed the duplicate `Performance` / `Parallel frames` section from Preferences so the control exists only in the main inference UI.
+
+### Notes
+- This branch is intended for targeted user testing before merging to `main`.
+
+---
+
 ## [1.6.6] - 2026-03-13 — Parallel Frames & Apple Silicon UX
 
 ### Improvements

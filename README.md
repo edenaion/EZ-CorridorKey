@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.6.6](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.6.6)**
+# EZ-CorridorKey **v1.6.7**
 
-> **Latest:** Parallel inference (1.8-2x speedup), MatAnyone2, MLX Apple Silicon acceleration, macOS support — [full changelog](CHANGELOG.md)
+> **Tester branch:** color-space/input-preview validation build. Latest stable release remains **v1.6.6**. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
