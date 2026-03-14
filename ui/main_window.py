@@ -1072,6 +1072,8 @@ class MainWindow(QMainWindow):
 
     @Slot(ClipEntry)
     def _on_clip_selected(self, clip: ClipEntry) -> None:
+        if self._current_clip is not None and self._current_clip is not clip:
+            self._remember_current_clip_input_color_space()
         self._current_clip = clip
         logger.debug(f"Clip selected: '{clip.name}' state={clip.state.value}")
 

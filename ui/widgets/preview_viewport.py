@@ -181,7 +181,10 @@ class PreviewViewport(QWidget):
             self._annotation_model.save(self._clip.root_path)
         self._clip = clip
         self._clip_name = clip.name
-        self._input_exr_is_linear = clip.should_default_input_linear()
+        # Preserve the caller-managed input interpretation when reloading a clip.
+        # MainWindow reapplies the remembered per-clip override after set_clip();
+        # resetting here causes tray clicks and clear actions to snap back to the
+        # auto-detected default before the user asked for it.
         clear_cache()
         self._annotation_model.load(clip.root_path)
 
