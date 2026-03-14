@@ -1,0 +1,72 @@
+# ============================================================
+#  EZ-CorridorKey — docker compose
+#
+#  CPU:  docker compose up --build
+#  GPU:  docker compose up corridorkey-gpu --build
+#
+#  All options live in .env — edit that file, not this one.
+#  Open in browser: http://localhost:6080
+#
+#  First start extracts source + installs everything (few mins).
+#  Subsequent starts are instant.
+# ============================================================
+
+x-base: &base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  ports:
+    - "6080:6080"   # noVNC GUI  → http://localhost:6080
+    - "6081:6081"   # filebrowser → http://localhost:6081
+    - "5900:5900"   # raw VNC (optional)
+  volumes:
+    # Full project — source, venv, models, outputs
+    - corridorkey_app:/app
+    # Uploads on a separate volume so clips survive if /app is wiped
+    - corridorkey_uploads:/app/ClipsForInference
+  environment:
+    - DISPLAY=:1
+    - QT_QPA_PLATFORM=xcb
+    - CORRIDORKEY_PYTHON_VERSION
+    - CORRIDORKEY_INSTALL_SAM2
+    - CORRIDORKEY_PREDOWNLOAD_SAM2
+    - CORRIDORKEY_INSTALL_GVM
+    - CORRIDORKEY_INSTALL_VIDEOMAMA
+    - CORRIDORKEY_OPT_MODE
+    - CORRIDORKEY_RESOLUTION
+  restart: unless-stopped
+  stdin_open: true
+  tty: true
+
+services:
+
+  # ── CPU / default ─────────────────────────────────────────
+  corridorkey:
+    <<: *base
+    image: corridorkey:cpu
+    container_name: corridorkey
+
+  # ── NVIDIA GPU ────────────────────────────────────────────
+  corridorkey-gpu:
+    <<: *base
+    image: corridorkey:gpu
+    container_name: corridorkey-gpu
+    runtime: nvidia
+    environment:
+      - DISPLAY=:1
+      - QT_QPA_PLATFORM=xcb
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,display
+      - CORRIDORKEY_PYTHON_VERSION
+      - CORRIDORKEY_INSTALL_SAM2
+      - CORRIDORKEY_PREDOWNLOAD_SAM2
+      - CORRIDORKEY_INSTALL_GVM
+      - CORRIDORKEY_INSTALL_VIDEOMAMA
+      - CORRIDORKEY_OPT_MODE
+      - CORRIDORKEY_RESOLUTION
+
+volumes:
+  corridorkey_app:
+    name: corridorkey_app
+  corridorkey_uploads:
+    name: corridorkey_uploads
