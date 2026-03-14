@@ -176,6 +176,64 @@ def _wrap_mlx_output(
     }
 
 
+def _assemble_mlx_output(
+    *,
+    alpha: np.ndarray,
+    fg: np.ndarray,
+    source_image: np.ndarray,
+    input_is_linear: bool,
+    despill_strength: float,
+    auto_despeckle: bool,
+    despeckle_size: int,
+    despeckle_dilation: int = 25,
+    despeckle_blur: int = 5,
+) -> dict:
+    """Assemble the shared Torch-style contract from MLX float outputs."""
+    from CorridorKeyModule.core import color_utils as cu
+
+    alpha = np.clip(alpha.astype(np.float32, copy=False), 0.0, 1.0)
+    if alpha.ndim == 2:
+        alpha = alpha[:, :, np.newaxis]
+
+    fg = np.clip(fg.astype(np.float32, copy=False), 0.0, 1.0)
+
+    if auto_despeckle:
+        processed_alpha = cu.clean_matte(
+            alpha, area_threshold=despeckle_size,
+            dilation=despeckle_dilation, blur_size=despeckle_blur,
+        )
+    else:
+        processed_alpha = alpha
+
+    fg_despilled = cu.despill(fg, green_limit_mode="average", strength=despill_strength)
+
+    if source_image.dtype != np.float32:
+        source_rgb = source_image.astype(np.float32)
+        if source_rgb.max() > 1.0:
+            source_rgb /= 255.0
+    else:
+        source_rgb = source_image
+
+    source_lin = source_rgb if input_is_linear else cu.srgb_to_linear(source_rgb)
+
+    h, w = fg.shape[:2]
+    bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
+    bg_lin = cu.srgb_to_linear(bg_srgb)
+    fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
+    fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
+    comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha)
+    comp_srgb = cu.linear_to_srgb(comp_lin)
+
+    processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
+
+    return {
+        "alpha": alpha,
+        "fg": fg,
+        "comp": comp_srgb,
+        "processed": processed_rgba,
+    }
+
+
 def _prepare_mlx_image_u8(image: np.ndarray, input_is_linear: bool) -> np.ndarray:
     """Prepare image input for corridorkey-mlx.
 
@@ -196,6 +254,69 @@ def _prepare_mlx_image_u8(image: np.ndarray, input_is_linear: bool) -> np.ndarra
         image_f32 = cu.linear_to_srgb(image_f32)
 
     return (np.clip(image_f32, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+
+def _try_mlx_float_outputs(raw_engine, image_u8: np.ndarray, mask_u8: np.ndarray, refiner_scale: float) -> dict | None:
+    """Use corridorkey-mlx internals to recover float outputs before uint8 quantization."""
+    if not hasattr(raw_engine, "_model") or not hasattr(raw_engine, "_img_size"):
+        return None
+
+    try:
+        import mlx.core as mx
+        from corridorkey_mlx.io.image import preprocess
+    except Exception as exc:
+        logger.debug("MLX float-output path unavailable: %s", exc)
+        return None
+
+    original_h, original_w = image_u8.shape[:2]
+    target_size = int(getattr(raw_engine, "_img_size"))
+
+    rgb_f32 = image_u8.astype(np.float32) / 255.0
+    mask_plane = mask_u8 if mask_u8.ndim == 2 else mask_u8[:, :, 0]
+    mask_f32 = mask_plane.astype(np.float32)[:, :, np.newaxis] / 255.0
+
+    if rgb_f32.shape[0] != target_size or rgb_f32.shape[1] != target_size:
+        rgb_f32 = cv2.resize(rgb_f32, (target_size, target_size), interpolation=cv2.INTER_CUBIC)
+        resized_mask = cv2.resize(mask_plane, (target_size, target_size), interpolation=cv2.INTER_CUBIC)
+        mask_f32 = resized_mask.astype(np.float32)[:, :, np.newaxis] / 255.0
+
+    x = preprocess(rgb_f32, mask_f32)
+    outputs = raw_engine._model(x)
+    mx.eval(outputs)
+
+    alpha_coarse = outputs["alpha_coarse"]
+    fg_coarse = outputs["fg_coarse"]
+    alpha_refined = outputs["alpha_final"]
+    fg_refined = outputs["fg_final"]
+
+    use_refiner = bool(getattr(raw_engine, "_use_refiner", True))
+    if not use_refiner or refiner_scale == 0.0:
+        alpha_out = alpha_coarse
+        fg_out = fg_coarse
+    elif refiner_scale == 1.0:
+        alpha_out = alpha_refined
+        fg_out = fg_refined
+    else:
+        s = refiner_scale
+        alpha_out = alpha_coarse * (1.0 - s) + alpha_refined * s
+        fg_out = fg_coarse * (1.0 - s) + fg_refined * s
+
+    alpha = np.array(alpha_out[0], dtype=np.float32)
+    fg = np.array(fg_out[0], dtype=np.float32)
+
+    if alpha.ndim == 2:
+        alpha = alpha[:, :, np.newaxis]
+
+    if alpha.shape[:2] != (original_h, original_w):
+        alpha = cv2.resize(alpha, (original_w, original_h), interpolation=cv2.INTER_CUBIC)
+        fg = cv2.resize(fg, (original_w, original_h), interpolation=cv2.INTER_CUBIC)
+        if alpha.ndim == 2:
+            alpha = alpha[:, :, np.newaxis]
+
+    return {
+        "alpha": np.clip(alpha, 0.0, 1.0).astype(np.float32),
+        "fg": np.clip(fg, 0.0, 1.0).astype(np.float32),
+    }
 
 
 class _MLXEngineAdapter:
@@ -230,6 +351,20 @@ class _MLXEngineAdapter:
         # Squeeze mask to 2D for MLX
         if mask_u8.ndim == 3:
             mask_u8 = mask_u8[:, :, 0]
+
+        float_outputs = _try_mlx_float_outputs(self._engine, image_u8, mask_u8, refiner_scale)
+        if float_outputs is not None:
+            return _assemble_mlx_output(
+                alpha=float_outputs["alpha"],
+                fg=float_outputs["fg"],
+                source_image=image,
+                input_is_linear=input_is_linear,
+                despill_strength=despill_strength,
+                auto_despeckle=auto_despeckle,
+                despeckle_size=despeckle_size,
+                despeckle_dilation=despeckle_dilation,
+                despeckle_blur=despeckle_blur,
+            )
 
         raw = self._engine.process_frame(
             image_u8,

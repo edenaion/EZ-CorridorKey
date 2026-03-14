@@ -1,8 +1,16 @@
 """Tests for backend output contracts shared across torch and MLX."""
 
+import sys
+import types
+
 import numpy as np
 
-from CorridorKeyModule.backend import _prepare_mlx_image_u8, _wrap_mlx_output
+from CorridorKeyModule.backend import (
+    _assemble_mlx_output,
+    _prepare_mlx_image_u8,
+    _try_mlx_float_outputs,
+    _wrap_mlx_output,
+)
 from CorridorKeyModule.core import color_utils as cu
 
 
@@ -69,3 +77,64 @@ def test_prepare_mlx_image_u8_leaves_srgb_input_in_srgb_space():
 
     expected = (np.clip(srgb, 0.0, 1.0) * 255.0).astype(np.uint8)
     np.testing.assert_array_equal(prepared, expected)
+
+
+def test_assemble_mlx_output_preserves_float_precision_for_processed_rgba():
+    fg = np.array([[[0.12345, 0.45678, 0.78901]]], dtype=np.float32)
+    alpha = np.array([[[0.54321]]], dtype=np.float32)
+
+    wrapped = _assemble_mlx_output(
+        alpha=alpha,
+        fg=fg,
+        source_image=fg.copy(),
+        input_is_linear=False,
+        despill_strength=0.0,
+        auto_despeckle=False,
+        despeckle_size=400,
+    )
+
+    expected_rgb = cu.srgb_to_linear(fg)
+    np.testing.assert_allclose(wrapped["processed"][:, :, :3], expected_rgb, atol=1e-6)
+    np.testing.assert_allclose(wrapped["processed"][:, :, 3:], alpha, atol=1e-6)
+
+
+def test_try_mlx_float_outputs_uses_raw_model_predictions_before_uint8_quantization(monkeypatch):
+    fake_mx = types.ModuleType("mlx.core")
+    fake_mx.eval = lambda outputs: None
+    fake_mlx_pkg = types.ModuleType("mlx")
+    fake_mlx_pkg.core = fake_mx
+    monkeypatch.setitem(sys.modules, "mlx", fake_mlx_pkg)
+    monkeypatch.setitem(sys.modules, "mlx.core", fake_mx)
+
+    fake_image_mod = types.ModuleType("corridorkey_mlx.io.image")
+    fake_image_mod.preprocess = lambda rgb, mask: {"rgb": rgb, "mask": mask}
+    monkeypatch.setitem(sys.modules, "corridorkey_mlx.io.image", fake_image_mod)
+
+    alpha_final = np.array([[[[0.1], [0.9]], [[0.3], [0.7]]]], dtype=np.float32)
+    fg_final = np.array(
+        [[[[0.2, 0.4, 0.6], [0.8, 0.6, 0.4]], [[0.1, 0.3, 0.5], [0.7, 0.5, 0.3]]]],
+        dtype=np.float32,
+    )
+
+    class _FakeModel:
+        def __call__(self, _x):
+            return {
+                "alpha_coarse": alpha_final * 0.5,
+                "fg_coarse": fg_final * 0.5,
+                "alpha_final": alpha_final,
+                "fg_final": fg_final,
+            }
+
+    class _FakeEngine:
+        _img_size = 2
+        _use_refiner = True
+        _model = _FakeModel()
+
+    image_u8 = np.zeros((2, 2, 3), dtype=np.uint8)
+    mask_u8 = np.zeros((2, 2), dtype=np.uint8)
+
+    result = _try_mlx_float_outputs(_FakeEngine(), image_u8, mask_u8, refiner_scale=1.0)
+
+    assert result is not None
+    np.testing.assert_allclose(result["alpha"], alpha_final[0], atol=1e-6)
+    np.testing.assert_allclose(result["fg"], fg_final[0], atol=1e-6)
