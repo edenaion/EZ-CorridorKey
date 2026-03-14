@@ -98,11 +98,11 @@ class ViewModeBar(QWidget):
         for mode, btn in self._buttons.items():
             btn.setEnabled(mode in mode_set)
 
-        # If current mode is unavailable, switch to first available
+        # If current mode is unavailable, switch to the most useful fallback.
         current = self.current_mode()
         if current not in mode_set and mode_set:
-            # Prefer COMP, then INPUT, then first available
-            for fallback in [ViewMode.COMP, ViewMode.INPUT]:
+            # Prefer final outputs first, then AlphaHint, then source views.
+            for fallback in [ViewMode.COMP, ViewMode.ALPHA, ViewMode.INPUT]:
                 if fallback in mode_set:
                     self._buttons[fallback].setChecked(True)
                     self._on_mode_clicked(list(ViewMode).index(fallback))

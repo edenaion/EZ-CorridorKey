@@ -1885,7 +1885,12 @@ class MainWindow(QMainWindow):
         if 'comp' not in result:
             return
 
-        mode = self._dual_viewer._output_viewer._current_mode
+        mode = self._dual_viewer.current_output_mode
+
+        # INPUT, MASK, and ALPHA are source/guide views, not inference outputs.
+        # Don't replace them with a COMP preview under the wrong mode label.
+        if mode in (ViewMode.INPUT, ViewMode.MASK, ViewMode.ALPHA):
+            return
 
         # Pick the array that matches current view mode
         if mode == ViewMode.MATTE and 'alpha' in result:
