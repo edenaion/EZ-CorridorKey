@@ -505,8 +505,10 @@ class CorridorKeyEngine:
         # res_fg is sRGB.
         fg_despilled = cu.despill(res_fg, green_limit_mode='average', strength=despill_strength)
         
-        # C. Convert to linear for output assembly.
+        # C. Convert to linear for output assembly and preserve source luminance.
+        source_lin = image if input_is_linear else cu.srgb_to_linear(image)
         fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
+        fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
 
         # D. Pack straight linear RGBA for NLE/compositor interchange.
         processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
