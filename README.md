@@ -242,11 +242,19 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 
 | Control | Range | Default | Description |
 |---------|-------|---------|-------------|
-| **Color Space** | sRGB, Linear | sRGB | Working color space |
+| **Color Space** | sRGB, Linear | sRGB | How CorridorKey interprets the input before inference |
 | **Despill Strength** | 0.0 – 1.0 | 1.0 | Green spill removal intensity |
 | **Despeckle** | 50 – 2000 px | ON, 400 px | Removes isolated artifacts smaller than threshold |
 | **Refiner Scale** | 0.0 – 3.0 | 1.0 | Edge refinement. 0 = disabled |
-| **Live Preview** | — | OFF | Reprocess current frame when parameters change |
+| **Live Preview** | — | ON | Reprocess current frame when parameters change |
+
+**Color Space behavior**
+
+- The **left INPUT viewer** always shows CorridorKey's current interpretation of the source. If the input looks wrong there, your future inference results and exports will be based on that wrong interpretation too.
+- Changing **Color Space** before clicking **RUN INFERENCE** affects how the next live preview and the next export run are generated.
+- Changing **Color Space** after outputs already exist does **not** rewrite those files on disk. It only updates the viewer and live preview. To keep that new interpretation in saved files, rerun inference.
+- CorridorKey auto-detects color space from file type and metadata when possible, but you can override it if the INPUT viewer does not look representative.
+- With **Live Preview** enabled, the first adjustment after a fresh launch may pause briefly while the inference engine loads.
 
 **Middle-click** any slider to reset it to default.
 

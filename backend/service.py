@@ -1424,6 +1424,7 @@ class CorridorKeyService:
         params: InferenceParams,
         frame_index: int,
         job: Optional[GPUJob] = None,
+        on_status: Optional[Callable[[str], None]] = None,
     ) -> Optional[dict]:
         """Reprocess a single frame with current params.
 
@@ -1439,7 +1440,7 @@ class CorridorKeyService:
             return None
 
         with self._gpu_lock:
-            engines = self._get_engine_pool()
+            engines = self._get_engine_pool(on_status=on_status)
             engine = engines[0]
 
         # Read the specific input frame

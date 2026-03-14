@@ -789,6 +789,37 @@ class TestReprocessSingleFrame:
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 9999)
         assert result is None
 
+    def test_reprocess_forwards_status_during_engine_warmup(self, sample_clip):
+        svc = CorridorKeyService()
+        mock_engine = MagicMock()
+        mock_engine.process_frame.return_value = {
+            "fg": np.ones((4, 4, 3), dtype=np.float32),
+            "alpha": np.ones((4, 4, 1), dtype=np.float32),
+            "comp": np.ones((4, 4, 3), dtype=np.float32),
+            "processed": np.ones((4, 4, 4), dtype=np.float32),
+        }
+        statuses: list[str] = []
+
+        def _fake_get_engine_pool(on_status=None):
+            assert on_status is not None
+            on_status("Loading engine 1/1...")
+            return [mock_engine]
+
+        fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+        fake_mask = np.ones((4, 4), dtype=np.float32)
+        with patch.object(svc, "_get_engine_pool", side_effect=_fake_get_engine_pool), patch(
+            "backend.service.read_image_frame", return_value=fake_img
+        ), patch("backend.service.read_mask_frame", return_value=fake_mask):
+            result = svc.reprocess_single_frame(
+                sample_clip,
+                InferenceParams(),
+                0,
+                on_status=statuses.append,
+            )
+
+        assert result is not None
+        assert statuses == ["Loading engine 1/1..."]
+
     def test_exr_sequence_honors_explicit_srgb_setting(self):
         svc = CorridorKeyService()
         svc._active_model = _ActiveModel.INFERENCE

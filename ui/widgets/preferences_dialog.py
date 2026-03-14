@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
-    QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication, QSpinBox,
+    QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication,
 )
 from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal
 
@@ -312,44 +312,6 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(ffmpeg_group)
 
-        # Performance section
-        perf_group = QGroupBox("Performance")
-        perf_layout = QVBoxLayout(perf_group)
-
-        parallel_row = QHBoxLayout()
-        parallel_label = QLabel("Parallel frames")
-        parallel_row.addWidget(parallel_label)
-
-        self._parallel_clips_spin = QSpinBox()
-        self._parallel_clips_spin.setRange(1, 8)
-        self._parallel_clips_spin.setValue(
-            get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS)
-        )
-        self._parallel_clips_spin.setToolTip(
-            "Number of frames to process simultaneously.\n\n"
-            "Uses multiple inference engine instances to process\n"
-            "N frames at once within a single clip. Higher values\n"
-            "use more GPU memory but increase throughput.\n\n"
-            "1 = Sequential (default, safest)\n"
-            "2 = ~70% faster, uses ~3 GB extra VRAM\n"
-            "3-4 = Diminishing returns, needs 16+ GB VRAM\n\n"
-            "Changes take effect on the next inference run."
-        )
-        self._parallel_clips_spin.setFixedWidth(60)
-        parallel_row.addWidget(self._parallel_clips_spin)
-        parallel_row.addStretch(1)
-        perf_layout.addLayout(parallel_row)
-
-        perf_info = QLabel(
-            "Multiple engine instances process frames concurrently.\n"
-            "Each extra engine adds ~3 GB VRAM but increases throughput."
-        )
-        perf_info.setWordWrap(True)
-        perf_info.setStyleSheet("color: #999980; font-size: 11px;")
-        perf_layout.addWidget(perf_info)
-
-        layout.addWidget(perf_group)
-
         layout.addStretch(1)
 
         # Buttons
@@ -385,7 +347,6 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
         s.setValue(KEY_EXR_COMPRESSION, self._exr_compression_combo.currentData())
         s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
-        s.setValue(KEY_PARALLEL_CLIPS, self._parallel_clips_spin.value())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
