@@ -226,14 +226,25 @@ else
     echo "  macOS: torch.compile accelerators not available"
 fi
 
-# Build Rust native extension if cargo is available
+# Build Rust native extension (install cargo if missing)
+if ! command -v cargo &>/dev/null; then
+    echo "  Installing Rust toolchain..."
+    if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>/dev/null; then
+        source "$HOME/.cargo/env" 2>/dev/null
+        echo "  [OK] Rust installed"
+    else
+        echo "  [WARN] Rust install failed (Python fallback will be used)"
+    fi
+fi
 if command -v cargo &>/dev/null; then
     echo "  Building native Rust extension..."
-    if command -v maturin &>/dev/null || command -v uvx &>/dev/null; then
+    MATURIN_CMD=""
+    if command -v maturin &>/dev/null; then
         MATURIN_CMD="maturin"
-        if ! command -v maturin &>/dev/null; then
-            MATURIN_CMD="uvx maturin"
-        fi
+    elif command -v uvx &>/dev/null; then
+        MATURIN_CMD="uvx maturin"
+    fi
+    if [ -n "$MATURIN_CMD" ]; then
         if (cd corridorkey_native && $MATURIN_CMD develop --release --uv) 2>&1; then
             echo "  [OK] Rust native extension installed"
         else
@@ -242,8 +253,6 @@ if command -v cargo &>/dev/null; then
     else
         echo "  [WARN] maturin not found, skipping Rust build (pip install maturin)"
     fi
-else
-    echo "  Rust toolchain not found, skipping native extension (Python fallback will be used)"
 fi
 
 echo "[4e/7] Optional SAM2 tracker..."
