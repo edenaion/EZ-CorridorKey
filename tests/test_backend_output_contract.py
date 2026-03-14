@@ -138,3 +138,42 @@ def test_try_mlx_float_outputs_uses_raw_model_predictions_before_uint8_quantizat
     assert result is not None
     np.testing.assert_allclose(result["alpha"], alpha_final[0], atol=1e-6)
     np.testing.assert_allclose(result["fg"], fg_final[0], atol=1e-6)
+
+
+def test_try_mlx_float_outputs_handles_resize_path(monkeypatch):
+    fake_mx = types.ModuleType("mlx.core")
+    fake_mx.eval = lambda outputs: None
+    fake_mlx_pkg = types.ModuleType("mlx")
+    fake_mlx_pkg.core = fake_mx
+    monkeypatch.setitem(sys.modules, "mlx", fake_mlx_pkg)
+    monkeypatch.setitem(sys.modules, "mlx.core", fake_mx)
+
+    fake_image_mod = types.ModuleType("corridorkey_mlx.io.image")
+    fake_image_mod.preprocess = lambda rgb, mask: {"rgb": rgb, "mask": mask}
+    monkeypatch.setitem(sys.modules, "corridorkey_mlx.io.image", fake_image_mod)
+
+    alpha_final = np.array([[[[0.25]]]], dtype=np.float32)
+    fg_final = np.array([[[[0.2, 0.4, 0.6]]]], dtype=np.float32)
+
+    class _FakeModel:
+        def __call__(self, _x):
+            return {
+                "alpha_coarse": alpha_final,
+                "fg_coarse": fg_final,
+                "alpha_final": alpha_final,
+                "fg_final": fg_final,
+            }
+
+    class _FakeEngine:
+        _img_size = 1
+        _use_refiner = True
+        _model = _FakeModel()
+
+    image_u8 = np.zeros((2, 2, 3), dtype=np.uint8)
+    mask_u8 = np.zeros((2, 2), dtype=np.uint8)
+
+    result = _try_mlx_float_outputs(_FakeEngine(), image_u8, mask_u8, refiner_scale=1.0)
+
+    assert result is not None
+    assert result["alpha"].shape == (2, 2, 1)
+    assert result["fg"].shape == (2, 2, 3)
