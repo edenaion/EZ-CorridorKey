@@ -141,7 +141,7 @@ DIALOGS = [
     # main_window.py:2840
     ("information", "No Folder", "Open a clips folder first.", None),
     # main_window.py:3061
-    ("question", "Update EZ-CORRIDORKEY",
+    ("question", "Update EZ-CorridorKey",
      "This will save your session, close the app, and run the updater.\n"
      "Continue?",
      QMessageBox.Yes | QMessageBox.No),
