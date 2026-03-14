@@ -1022,6 +1022,21 @@ class MainWindow(QMainWindow):
             export_mode=self._dual_viewer.current_output_mode,
         )
 
+    def _sync_selected_clip_view(self, clip: ClipEntry) -> None:
+        """Reload the selected clip while preserving its remembered input interpretation."""
+        self._dual_viewer.set_clip(clip)
+
+        if clip.input_asset is not None:
+            input_is_linear = self._input_is_linear_for_clip(clip)
+            self._param_panel.set_input_is_linear(input_is_linear)
+            self._dual_viewer.set_input_exr_is_linear(input_is_linear)
+            self._refresh_input_thumbnail(
+                clip,
+                input_is_linear=input_is_linear,
+            )
+
+        self._refresh_export_thumbnail(clip)
+
     @Slot(object)
     def _on_tray_clip_clicked(self, clip: ClipEntry) -> None:
         """Handle clip clicked in I/O tray — select it and load preview."""
@@ -1065,8 +1080,9 @@ class MainWindow(QMainWindow):
         if batch_count <= 1:
             self._io_tray.set_selected(clip.name)
 
-        # Load clip into dual viewer (both input + output viewports)
-        self._dual_viewer.set_clip(clip)
+        # Load clip into both viewers while preserving the remembered input
+        # interpretation for the selected clip.
+        self._sync_selected_clip_view(clip)
 
         # Refresh annotation coverage bar (annotations loaded from disk above)
         self._update_annotation_info()
@@ -1087,18 +1103,6 @@ class MainWindow(QMainWindow):
             batch_count=batch_count if batch_count > 1 else 0,
             needs_extraction=needs_extraction,
         )
-
-        # Keep each clip's chosen input interpretation sticky instead of
-        # re-auto-detecting on every tray click.
-        if clip.input_asset is not None:
-            input_is_linear = self._input_is_linear_for_clip(clip)
-            self._param_panel.set_input_is_linear(input_is_linear)
-            self._dual_viewer.set_input_exr_is_linear(input_is_linear)
-            self._refresh_input_thumbnail(
-                clip,
-                input_is_linear=input_is_linear,
-            )
-        self._refresh_export_thumbnail(clip)
 
         # Enable GVM/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
@@ -2272,7 +2276,7 @@ class MainWindow(QMainWindow):
 
         # Reload preview and button states
         if self._current_clip and self._current_clip.name == clip.name:
-            self._dual_viewer.set_clip(clip)
+            self._sync_selected_clip_view(clip)
             self._refresh_button_state()
             self._param_panel.set_import_alpha_enabled(
                 clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
@@ -2644,7 +2648,7 @@ class MainWindow(QMainWindow):
 
         # If selected clip, reload preview to show new assets
         if self._current_clip and self._current_clip.name == clip_name:
-            self._dual_viewer.set_clip(self._current_clip)
+            self._sync_selected_clip_view(self._current_clip)
             self._refresh_button_state()
             _has_mask = self._clip_has_videomama_ready_mask(self._current_clip)
             self._param_panel.set_videomama_enabled(_has_mask)
@@ -2671,7 +2675,7 @@ class MainWindow(QMainWindow):
                     # Refresh viewer to show any partial output from before cancel
                     if self._current_clip and self._current_clip.name == clip_name:
                         clip.find_assets()
-                        self._dual_viewer.set_clip(clip)
+                        self._sync_selected_clip_view(clip)
                         self._refresh_button_state()
                     break
             self._status_bar.stop_job_timer()
@@ -2705,7 +2709,7 @@ class MainWindow(QMainWindow):
                 # Refresh viewer to show any partial output
                 if self._current_clip and self._current_clip.name == clip_name:
                     clip.find_assets()
-                    self._dual_viewer.set_clip(clip)
+                    self._sync_selected_clip_view(clip)
                 break
         self._queue_panel.refresh()
         logger.error(f"Worker error for {clip_name}: {error_msg}")

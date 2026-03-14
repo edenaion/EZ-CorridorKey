@@ -14,9 +14,25 @@ from ui.main_window import MainWindow
 class _DummyParamPanel:
     def __init__(self, *, input_is_linear: bool):
         self._input_is_linear = input_is_linear
+        self.last_set_input_is_linear = input_is_linear
 
     def get_params(self) -> InferenceParams:
         return InferenceParams(input_is_linear=self._input_is_linear)
+
+    def set_input_is_linear(self, input_is_linear: bool) -> None:
+        self.last_set_input_is_linear = input_is_linear
+
+
+class _DummyDualViewer:
+    def __init__(self):
+        self.clips: list[str] = []
+        self.input_linear_flags: list[bool] = []
+
+    def set_clip(self, clip: ClipEntry) -> None:
+        self.clips.append(clip.name)
+
+    def set_input_exr_is_linear(self, enabled: bool) -> None:
+        self.input_linear_flags.append(enabled)
 
 
 def _clip(name: str) -> ClipEntry:
@@ -50,3 +66,33 @@ def test_clip_color_space_defaults_are_cached_per_clip():
 
     assert MainWindow._input_is_linear_for_clip(window, clip) is True
     assert window._clip_input_is_linear == {"linear_shot": True}
+
+
+def test_sync_selected_clip_view_reapplies_remembered_input_interpretation():
+    window = MainWindow.__new__(MainWindow)
+    clip = _clip("shot")
+    clip.should_default_input_linear = lambda: False
+    clip.input_asset = object()
+    window._clip_input_is_linear = {"shot": True}
+    window._dual_viewer = _DummyDualViewer()
+    window._param_panel = _DummyParamPanel(input_is_linear=False)
+
+    refreshed_input_thumb: list[bool] = []
+    refreshed_export_thumb: list[str] = []
+
+    def _refresh_input_thumbnail(_clip: ClipEntry, *, input_is_linear: bool | None = None) -> None:
+        refreshed_input_thumb.append(bool(input_is_linear))
+
+    def _refresh_export_thumbnail(_clip: ClipEntry) -> None:
+        refreshed_export_thumb.append(_clip.name)
+
+    window._refresh_input_thumbnail = _refresh_input_thumbnail
+    window._refresh_export_thumbnail = _refresh_export_thumbnail
+
+    MainWindow._sync_selected_clip_view(window, clip)
+
+    assert window._dual_viewer.clips == ["shot"]
+    assert window._dual_viewer.input_linear_flags == [True]
+    assert window._param_panel.last_set_input_is_linear is True
+    assert refreshed_input_thumb == [True]
+    assert refreshed_export_thumb == ["shot"]
