@@ -94,8 +94,10 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     _configure_runtime_backends()
 
     app = QApplication(argv)
-    app.setApplicationName("EZ-CORRIDORKEY")
-    app.setApplicationDisplayName("EZ-CORRIDORKEY")
+    # Keep the internal settings key stable; use the display name for
+    # user-facing platform chrome like the macOS app menu.
+    app.setApplicationName("CorridorKey")
+    app.setApplicationDisplayName("EZ-CorridorKey")
     app.setOrganizationName("Corridor Digital")
 
     # ── Font loading (frozen-build aware) ──
