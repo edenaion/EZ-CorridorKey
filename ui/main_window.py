@@ -200,6 +200,7 @@ class MainWindow(QMainWindow):
         self._recent_store = store or RecentSessionsStore()
         self._current_clip: ClipEntry | None = None
         self._clips_dir: str | None = None
+        self._clip_input_is_linear: dict[str, bool] = {}
         # Track active job ID — set only once when job starts, not on every progress
         self._active_job_id: str | None = None
         self._cancel_requested_job_id: str | None = None
@@ -1082,16 +1083,15 @@ class MainWindow(QMainWindow):
             needs_extraction=needs_extraction,
         )
 
-        # Default standalone EXR sequences to Linear, but keep extracted video
-        # EXRs in sRGB-range mode because FFmpeg writes video values as-is.
+        # Keep each clip's chosen input interpretation sticky instead of
+        # re-auto-detecting on every tray click.
         if clip.input_asset is not None:
-            self._param_panel.auto_detect_color_space(clip.should_default_input_linear())
-            self._dual_viewer.set_input_exr_is_linear(
-                self._param_panel.get_params().input_is_linear
-            )
+            input_is_linear = self._input_is_linear_for_clip(clip)
+            self._param_panel.set_input_is_linear(input_is_linear)
+            self._dual_viewer.set_input_exr_is_linear(input_is_linear)
             self._refresh_input_thumbnail(
                 clip,
-                input_is_linear=self._param_panel.get_params().input_is_linear,
+                input_is_linear=input_is_linear,
             )
         self._refresh_export_thumbnail(clip)
 
@@ -1111,6 +1111,7 @@ class MainWindow(QMainWindow):
         select_clip: str | None = None,
     ) -> None:
         logger.info(f"Scanning clips directory: {dir_path}")
+        previous_clips_dir = self._clips_dir
         self._clips_dir = dir_path
         # Reset status bar state on project load (no active job)
         self._status_bar.set_running(False)
@@ -1128,6 +1129,19 @@ class MainWindow(QMainWindow):
             clips = self._service.scan_clips(
                 dir_path, allow_standalone_videos=not is_projects,
             )
+            if (
+                previous_clips_dir is None
+                or os.path.normcase(os.path.abspath(previous_clips_dir))
+                != os.path.normcase(os.path.abspath(dir_path))
+            ):
+                self._clip_input_is_linear = {}
+            else:
+                current_names = {clip.name for clip in clips}
+                self._clip_input_is_linear = {
+                    name: value
+                    for name, value in self._clip_input_is_linear.items()
+                    if name in current_names
+                }
             self._clip_model.set_clips(clips)
 
             # Generate thumbnails for all clips (background)
@@ -1243,6 +1257,7 @@ class MainWindow(QMainWindow):
         self._welcome.refresh_recents()
         self._clips_dir = None
         self._current_clip = None
+        self._clip_input_is_linear = {}
 
     @Slot(list)
     def _on_tray_folder_imported(self, dir_path: str) -> None:
@@ -1782,6 +1797,7 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_params_changed(self) -> None:
         """Handle parameter change — debounce before reprocess."""
+        self._remember_current_clip_input_color_space()
         self._dual_viewer.set_input_exr_is_linear(
             self._param_panel.get_params().input_is_linear
         )
@@ -3011,6 +3027,7 @@ class MainWindow(QMainWindow):
 
     def _build_session_data(self) -> dict:
         """Build session data dict from current UI state."""
+        self._remember_current_clip_input_color_space()
         data: dict = {
             "version": _SESSION_VERSION,
             "params": self._param_panel.get_params().to_dict(),
@@ -3036,6 +3053,8 @@ class MainWindow(QMainWindow):
         # Selected clip
         if self._current_clip:
             data["selected_clip"] = self._current_clip.name
+        if self._clip_input_is_linear:
+            data["clip_input_is_linear"] = dict(sorted(self._clip_input_is_linear.items()))
 
         return data
 
@@ -3068,6 +3087,16 @@ class MainWindow(QMainWindow):
         # Restore live preview toggle
         if "live_preview" in data:
             self._param_panel._live_preview.setChecked(bool(data["live_preview"]))
+
+        if "clip_input_is_linear" in data:
+            try:
+                loaded = data["clip_input_is_linear"]
+                if isinstance(loaded, dict):
+                    self._clip_input_is_linear = {
+                        str(name): bool(value) for name, value in loaded.items()
+                    }
+            except Exception as e:
+                logger.warning(f"Failed to restore clip color-space overrides: {e}")
 
         # Restore splitter sizes (validate: must have 2 panels, none at 0)
         if "splitter_sizes" in data:
@@ -3106,6 +3135,25 @@ class MainWindow(QMainWindow):
                 if clip.name == clip_name:
                     self._on_clip_selected(clip)
                     break
+
+    def _remember_current_clip_input_color_space(self) -> None:
+        """Persist the current clip's chosen input interpretation in memory."""
+        if self._current_clip is None:
+            return
+        self._clip_input_is_linear[self._current_clip.name] = (
+            self._param_panel.get_params().input_is_linear
+        )
+
+    def _input_is_linear_for_clip(self, clip: ClipEntry) -> bool:
+        """Return the remembered input interpretation for a clip, or its default."""
+        if clip.name in self._clip_input_is_linear:
+            return self._clip_input_is_linear[clip.name]
+
+        input_is_linear = bool(
+            clip.input_asset is not None and clip.should_default_input_linear()
+        )
+        self._clip_input_is_linear[clip.name] = input_is_linear
+        return input_is_linear
 
     @Slot()
     def _on_save_session(self) -> None:
