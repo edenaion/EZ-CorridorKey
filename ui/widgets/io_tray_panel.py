@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import sys
+import glob as glob_module
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QSplitter,
     QToolTip, QPushButton, QMenu, QFileDialog, QMessageBox,
@@ -820,6 +821,9 @@ class IOTrayPanel(QWidget):
             mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
             if os.path.isdir(mask_dir):
                 shutil.rmtree(mask_dir, ignore_errors=True)
+            for candidate in glob_module.glob(os.path.join(clip.root_path, "VideoMamaMaskHint.*")):
+                if os.path.isfile(candidate) and is_video_file(candidate):
+                    os.remove(candidate)
             clip.mask_asset = None
             clip.find_assets()
             self._model.update_clip_state(clip.name, clip.state)
@@ -848,12 +852,18 @@ class IOTrayPanel(QWidget):
             mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
             if os.path.isdir(mask_dir):
                 shutil.rmtree(mask_dir, ignore_errors=True)
+            for candidate in glob_module.glob(os.path.join(clip.root_path, "VideoMamaMaskHint.*")):
+                if os.path.isfile(candidate) and is_video_file(candidate):
+                    os.remove(candidate)
             clip.mask_asset = None
 
             # Alpha
             alpha_dir = os.path.join(clip.root_path, "AlphaHint")
             if os.path.isdir(alpha_dir):
                 shutil.rmtree(alpha_dir, ignore_errors=True)
+            for candidate in glob_module.glob(os.path.join(clip.root_path, "AlphaHint.*")):
+                if os.path.isfile(candidate) and is_video_file(candidate):
+                    os.remove(candidate)
             clip.alpha_asset = None
 
             # Outputs
@@ -895,6 +905,9 @@ class IOTrayPanel(QWidget):
             alpha_dir = os.path.join(clip.root_path, "AlphaHint")
             if os.path.isdir(alpha_dir):
                 shutil.rmtree(alpha_dir, ignore_errors=True)
+            for candidate in glob_module.glob(os.path.join(clip.root_path, "AlphaHint.*")):
+                if os.path.isfile(candidate) and is_video_file(candidate):
+                    os.remove(candidate)
             clip.alpha_asset = None
             clip.find_assets()  # re-scan disk, updates alpha_asset and state
             self._model.update_clip_state(clip.name, clip.state)

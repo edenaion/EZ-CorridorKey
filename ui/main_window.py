@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import sys
+import glob as glob_module
 
 import cv2
 import numpy as np
@@ -35,11 +36,11 @@ from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve, Q
 from PySide6.QtGui import QKeySequence, QAction, QImage, QPainter
 
 from backend import (
-    CorridorKeyService, ClipEntry, ClipState, InferenceParams,
+    CorridorKeyService, ClipAsset, ClipEntry, ClipState, InferenceParams,
     InOutRange, OutputConfig, JobType,
     PipelineRoute, classify_pipeline_route, mask_sequence_is_videomama_ready,
 )
-from backend.project import VIDEO_FILE_FILTER
+from backend.project import VIDEO_FILE_FILTER, is_video_file
 
 from ui.models.clip_model import ClipListModel
 from ui.preview.frame_index import ViewMode
@@ -116,6 +117,20 @@ class _Toast(QLabel):
         QTimer.singleShot(duration_ms, self._fade.start)
         self.show()
         self.raise_()
+
+
+def _remove_alpha_hint_assets(root_path: str) -> None:
+    """Delete sequence or video alpha-hint assets for a clip."""
+    alpha_dir = os.path.join(root_path, "AlphaHint")
+    if os.path.isdir(alpha_dir):
+        shutil.rmtree(alpha_dir, ignore_errors=True)
+
+    for candidate in glob_module.glob(os.path.join(root_path, "AlphaHint.*")):
+        if os.path.isfile(candidate) and is_video_file(candidate):
+            try:
+                os.remove(candidate)
+            except OSError:
+                logger.warning("Failed to remove alpha video asset: %s", candidate)
 
     def mousePressEvent(self, event):
         self.deleteLater()
@@ -2181,7 +2196,15 @@ class MainWindow(QMainWindow):
 
         # If AlphaHint already exists, ask before replacing
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
-        if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
+        alpha_video_candidates = [
+            c for c in glob_module.glob(os.path.join(clip.root_path, "AlphaHint.*"))
+            if os.path.isfile(c) and is_video_file(c)
+        ]
+        has_existing_alpha = (
+            (os.path.isdir(alpha_dir) and os.listdir(alpha_dir))
+            or bool(alpha_video_candidates)
+        )
+        if has_existing_alpha:
             result = QMessageBox.question(
                 self, "Replace Alpha Hints?",
                 f"Clip '{clip.name}' already has alpha hint images.\n\n"
@@ -2191,21 +2214,68 @@ class MainWindow(QMainWindow):
             if result != QMessageBox.Yes:
                 return
 
-        src_dir = QFileDialog.getExistingDirectory(
-            self, "Select Alpha Hint Folder",
-            "",
-            QFileDialog.ShowDirsOnly,
-        )
-        if not src_dir:
+        picker = QMessageBox(self)
+        picker.setWindowTitle("Import Alpha")
+        picker.setText("Import alpha from an image folder or a video file?")
+        folder_btn = picker.addButton("Image Folder", QMessageBox.AcceptRole)
+        video_btn = picker.addButton("Video File", QMessageBox.ActionRole)
+        picker.addButton(QMessageBox.Cancel)
+        picker.setDefaultButton(folder_btn)
+        picker.exec()
+
+        source_kind: str | None = None
+        source_path = ""
+        clicked = picker.clickedButton()
+        if clicked == folder_btn:
+            source_path = QFileDialog.getExistingDirectory(
+                self, "Select Alpha Hint Folder",
+                "",
+                QFileDialog.ShowDirsOnly,
+            )
+            if source_path:
+                source_kind = "folder"
+        elif clicked == video_btn:
+            source_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Select Alpha Hint Video",
+                "",
+                VIDEO_FILE_FILTER,
+            )
+            if source_path:
+                source_kind = "video"
+
+        if not source_kind or not source_path:
             return
 
-        # Find image files in the selected folder (natural/numeric sort)
-        import glob as glob_module
+        n_src = 0
+        src_files: list[str] = []
+
+        if source_kind == "folder":
+            # Find image files in the selected folder (natural/numeric sort)
+            patterns = ("*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff", "*.exr")
+            for pat in patterns:
+                src_files.extend(glob_module.glob(os.path.join(source_path, pat)))
+
+            if not src_files:
+                QMessageBox.warning(
+                    self, "No Images",
+                    "No image files found in the selected folder.\n"
+                    "Expected grayscale images (white=foreground, black=background).",
+                )
+                return
+
+            n_src = len(src_files)
+        else:
+            alpha_video = ClipAsset(source_path, "video")
+            n_src = alpha_video.frame_count
+            if n_src <= 0:
+                QMessageBox.warning(
+                    self, "Unreadable Video",
+                    "Could not read frame count from the selected alpha video.",
+                )
+                return
+
         import re as re_module
-        patterns = ("*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff", "*.exr")
-        src_files = []
-        for pat in patterns:
-            src_files.extend(glob_module.glob(os.path.join(src_dir, pat)))
 
         def _natural_key(path: str):
             """Sort key that handles any zero-padding scheme correctly."""
@@ -2215,18 +2285,9 @@ class MainWindow(QMainWindow):
 
         src_files.sort(key=_natural_key)
 
-        if not src_files:
-            QMessageBox.warning(
-                self, "No Images",
-                "No image files found in the selected folder.\n"
-                "Expected grayscale images (white=foreground, black=background).",
-            )
-            return
-
         # Get input frame stems for renaming
         input_files = clip.input_asset.get_frame_files()
         n_input = len(input_files)
-        n_src = len(src_files)
 
         if n_src != n_input:
             result = QMessageBox.warning(
@@ -2242,39 +2303,59 @@ class MainWindow(QMainWindow):
 
         # Confirm import
         n_paired = min(n_src, n_input)
-        msg = f"Import {n_paired} alpha hint images into '{clip.name}'?"
+        if source_kind == "video":
+            msg = f"Import alpha video ({n_src} frames) into '{clip.name}'?"
+        else:
+            msg = f"Import {n_paired} alpha hint images into '{clip.name}'?"
         if n_src != n_input:
             msg += f"\n({abs(n_src - n_input)} frames will have no alpha hint)"
         if QMessageBox.question(self, "Import Alpha", msg) != QMessageBox.Yes:
             return
 
-        # Copy + rename to match input frame stems
-        import shutil
-        import cv2
-        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
-        if os.path.isdir(alpha_dir):
-            shutil.rmtree(alpha_dir)
-        os.makedirs(alpha_dir)
+        imported_count = 0
+        try:
+            _remove_alpha_hint_assets(clip.root_path)
 
-        for i in range(n_paired):
-            src_path = src_files[i]
-            # Use the input frame's stem with .png extension
-            input_stem = os.path.splitext(input_files[i])[0]
-            dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
-
-            src_ext = os.path.splitext(src_path)[1].lower()
-            if src_ext == '.png':
-                shutil.copy2(src_path, dst_path)
+            if source_kind == "video":
+                src_ext = os.path.splitext(source_path)[1].lower() or ".mov"
+                dst_path = os.path.join(clip.root_path, f"AlphaHint{src_ext}")
+                shutil.copy2(source_path, dst_path)
+                imported_count = n_src
+                logger.info("Imported alpha video into %s", dst_path)
             else:
-                # Convert non-PNG to PNG (grayscale)
-                img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
-                if img is not None:
-                    cv2.imwrite(dst_path, img)
-                else:
-                    logger.warning(f"Failed to read alpha image: {src_path}")
+                alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+                os.makedirs(alpha_dir, exist_ok=True)
 
-        logger.info(f"Imported {n_paired} alpha hints into {alpha_dir} "
-                     f"(renamed to match input stems)")
+                for i in range(n_paired):
+                    src_path = src_files[i]
+                    input_stem = os.path.splitext(input_files[i])[0]
+                    dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
+
+                    src_ext = os.path.splitext(src_path)[1].lower()
+                    if src_ext == ".png":
+                        shutil.copy2(src_path, dst_path)
+                        imported_count += 1
+                        continue
+
+                    img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+                    if img is not None and cv2.imwrite(dst_path, img):
+                        imported_count += 1
+                    else:
+                        logger.warning("Failed to import alpha image: %s", src_path)
+
+                if imported_count == 0:
+                    shutil.rmtree(alpha_dir, ignore_errors=True)
+                logger.info(
+                    "Imported %d/%d alpha hints into %s (renamed to match input stems)",
+                    imported_count, n_paired, alpha_dir,
+                )
+        except OSError as exc:
+            QMessageBox.critical(
+                self,
+                "Import Alpha Failed",
+                f"Failed to import alpha hints:\n{exc}",
+            )
+            return
 
         # Refresh clip state
         clip.find_assets()
@@ -2288,7 +2369,17 @@ class MainWindow(QMainWindow):
                 clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
 
-        _Toast(self, f"Imported {n_src} alpha hints.\nClip is now {clip.state.value}.")
+        if source_kind == "video":
+            toast_msg = (
+                f"Imported alpha video ({imported_count} frames).\n"
+                f"Clip is now {clip.state.value}."
+            )
+        else:
+            toast_msg = (
+                f"Imported {imported_count}/{n_paired} alpha hints.\n"
+                f"Clip is now {clip.state.value}."
+            )
+        _Toast(self, toast_msg)
 
     def _on_run_gvm(self) -> None:
         """Run GVM alpha generation on the selected clip."""
