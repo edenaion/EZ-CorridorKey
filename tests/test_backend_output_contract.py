@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from CorridorKeyModule.backend import _wrap_mlx_output
+from CorridorKeyModule.backend import _prepare_mlx_image_u8, _wrap_mlx_output
 from CorridorKeyModule.core import color_utils as cu
 
 
@@ -51,3 +51,21 @@ def test_wrap_mlx_output_matches_source_luminance_within_clamp():
 
     assert out_luma > float(np.sum(cu.srgb_to_linear(raw["fg"].astype(np.float32) / 255.0) * weights, axis=-1).mean())
     assert out_luma <= src_luma * 1.15
+
+
+def test_prepare_mlx_image_u8_converts_linear_input_to_srgb_before_quantizing():
+    linear = np.array([[[0.18, 0.18, 0.18]]], dtype=np.float32)
+
+    prepared = _prepare_mlx_image_u8(linear, input_is_linear=True)
+
+    expected = (np.clip(cu.linear_to_srgb(linear), 0.0, 1.0) * 255.0).astype(np.uint8)
+    np.testing.assert_array_equal(prepared, expected)
+
+
+def test_prepare_mlx_image_u8_leaves_srgb_input_in_srgb_space():
+    srgb = np.array([[[0.5, 0.25, 0.125]]], dtype=np.float32)
+
+    prepared = _prepare_mlx_image_u8(srgb, input_is_linear=False)
+
+    expected = (np.clip(srgb, 0.0, 1.0) * 255.0).astype(np.uint8)
+    np.testing.assert_array_equal(prepared, expected)

@@ -176,6 +176,28 @@ def _wrap_mlx_output(
     }
 
 
+def _prepare_mlx_image_u8(image: np.ndarray, input_is_linear: bool) -> np.ndarray:
+    """Prepare image input for corridorkey-mlx.
+
+    The upstream MLX engine currently assumes sRGB/ImageNet-normalized inputs;
+    its `input_is_linear` parameter is a compatibility no-op. So for true
+    linear inputs we must convert to sRGB before quantizing to uint8.
+    """
+    from CorridorKeyModule.core import color_utils as cu
+
+    if image.dtype == np.uint8:
+        return image
+
+    image_f32 = image.astype(np.float32, copy=False)
+    if image_f32.max() > 1.0:
+        image_f32 = image_f32 / 255.0
+
+    if input_is_linear:
+        image_f32 = cu.linear_to_srgb(image_f32)
+
+    return (np.clip(image_f32, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+
 class _MLXEngineAdapter:
     """Wraps CorridorKeyMLXEngine to match Torch process_frame() contract."""
 
@@ -197,11 +219,8 @@ class _MLXEngineAdapter:
         despeckle_blur=5,
     ):
         """Delegate to MLX engine, then normalize output to Torch contract."""
-        # MLX engine expects uint8 input — convert if float
-        if image.dtype != np.uint8:
-            image_u8 = (np.clip(image, 0.0, 1.0) * 255).astype(np.uint8)
-        else:
-            image_u8 = image
+        # corridorkey-mlx expects sRGB uint8 input even when input_is_linear=True.
+        image_u8 = _prepare_mlx_image_u8(image, input_is_linear)
 
         if mask_linear.dtype != np.uint8:
             mask_u8 = (np.clip(mask_linear, 0.0, 1.0) * 255).astype(np.uint8)
