@@ -8,7 +8,7 @@ pytest.importorskip("PySide6", reason="PySide6 not installed")
 
 from backend.clip_state import ClipEntry, ClipState
 from backend.service import InferenceParams
-from ui.main_window import MainWindow
+from ui.main_window import MainWindow, _remove_alpha_hint_assets
 
 
 class _DummyParamPanel:
@@ -152,3 +152,16 @@ def test_selecting_another_clip_remembers_previous_clip_color_space_override():
 
     assert window._clip_input_is_linear["previous"] is True
     assert window._current_clip is selected
+
+
+def test_remove_alpha_hint_assets_deletes_sequence_dir_and_video_file(tmp_path):
+    alpha_dir = tmp_path / "AlphaHint"
+    alpha_dir.mkdir()
+    (alpha_dir / "frame_000000.png").write_text("dummy", encoding="utf-8")
+    alpha_video = tmp_path / "AlphaHint.mov"
+    alpha_video.write_text("dummy", encoding="utf-8")
+
+    _remove_alpha_hint_assets(str(tmp_path))
+
+    assert not alpha_dir.exists()
+    assert not alpha_video.exists()
