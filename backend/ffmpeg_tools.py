@@ -1384,11 +1384,16 @@ class FFmpegFrameWriter:
         self.height = height
         self._frame_bytes = width * height * 3  # uint8 RGB
 
-        # Try NVENC, fall back to libx264
+        # Detect hardware encoder: NVENC (NVIDIA), AMF (AMD), QSV (Intel)
         codec = "libx264"
         hwaccels = detect_hwaccel(ffmpeg)
-        if any("cuda" in f for f in hwaccels):
+        hw_set = set(hwaccels)
+        if "cuda" in hw_set:
             codec = "h264_nvenc"
+        elif "vaapi" in hw_set or "d3d11va" in hw_set:
+            codec = "h264_amf" if os.name == "nt" else "h264_vaapi"
+        elif "qsv" in hw_set:
+            codec = "h264_qsv"
 
         cmd = [
             ffmpeg,
@@ -1404,6 +1409,12 @@ class FFmpegFrameWriter:
         ]
         if codec == "h264_nvenc":
             cmd.extend(["-preset", "p4", "-rc", "constqp", "-qp", str(crf)])
+        elif codec == "h264_amf":
+            cmd.extend(["-quality", "speed", "-rc", "cqp", "-qp_i", str(crf), "-qp_p", str(crf)])
+        elif codec == "h264_vaapi":
+            cmd.extend(["-qp", str(crf)])
+        elif codec == "h264_qsv":
+            cmd.extend(["-preset", "faster", "-global_quality", str(crf)])
         else:
             cmd.extend(["-crf", str(crf), "-preset", "fast"])
         cmd.append(output_path)
