@@ -66,6 +66,11 @@ from ui.shortcut_registry import ShortcutRegistry
 
 logger = logging.getLogger(__name__)
 
+# TEMPORARY: keep a visible tester build identifier on the 1.6.7 user-test
+# branch so remote testers can confirm they pulled the right build. Remove this
+# before merging the branch back into main.
+_SHOW_TESTER_BUILD_ID = True
+
 # Session file stored in clips dir (Codex: JSON sidecar)
 _SESSION_FILENAME = ".corridorkey_session.json"
 _SESSION_VERSION = 1
@@ -191,7 +196,7 @@ class MainWindow(QMainWindow):
     def __init__(self, service: CorridorKeyService | None = None,
                  store: RecentSessionsStore | None = None):
         super().__init__()
-        self.setWindowTitle("CORRIDORKEY")
+        self.setWindowTitle(f"CORRIDORKEY {self._get_visible_build_id()}")
         self.setMinimumSize(1100, 650)
         self.resize(1400, 800)
         self.setAcceptDrops(True)
@@ -3342,27 +3347,24 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _show_about(self) -> None:
-        try:
-            from importlib.metadata import version
-            app_version = version("corridorkey")
-        except Exception:
-            # Running from source — read version from pyproject.toml
-            try:
-                import tomllib
-                pyproject = os.path.join(os.path.dirname(os.path.dirname(__file__)), "pyproject.toml")
-                with open(pyproject, "rb") as f:
-                    app_version = tomllib.load(f)["project"]["version"]
-            except Exception:
-                app_version = "unknown"
-
+        app_version = self._get_local_version()
+        build_id = self._get_visible_build_id()
+        tester_note = ""
+        if _SHOW_TESTER_BUILD_ID:
+            tester_note = (
+                "<p><b>Temporary tester build identifier.</b><br>"
+                "Remove before merging this branch back to main.</p>"
+            )
         box = QMessageBox(self)
         box.setWindowTitle("About CorridorKey")
         box.setTextFormat(Qt.RichText)
         box.setText(
-            f"<h2>CorridorKey v{app_version}</h2>"
+            f"<h2>CorridorKey {build_id}</h2>"
             "<p>AI Green Screen Keyer<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"
+            f"<p>Package version: v{app_version}</p>"
+            f"{tester_note}"
             "<p><b>Special Thanks</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
@@ -3395,6 +3397,33 @@ class MainWindow(QMainWindow):
                     return tomllib.load(f)["project"]["version"]
             except Exception:
                 return "0.0.0"
+
+    def _get_git_short_hash(self) -> str:
+        try:
+            import subprocess
+
+            repo_root = os.path.dirname(os.path.dirname(__file__))
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=2,
+            )
+            return result.stdout.strip()
+        except Exception:
+            return ""
+
+    def _get_visible_build_id(self) -> str:
+        version = self._get_local_version()
+        if not _SHOW_TESTER_BUILD_ID:
+            return f"v{version}"
+
+        git_hash = self._get_git_short_hash()
+        if git_hash:
+            return f"v{version} test ({git_hash})"
+        return f"v{version} test"
 
     def _check_for_updates(self) -> None:
         self._update_thread = _UpdateChecker(self._get_local_version())
