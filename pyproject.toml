@@ -29,6 +29,7 @@ dependencies = [
     "nvidia-ml-py",
     "PySide6>=6.7.0",
     "triton-windows>=3.5,<3.6; sys_platform == 'win32'",
+    "kornia",
 ]
 
 [project.optional-dependencies]
@@ -46,13 +47,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["backend", "ui", "CorridorKeyModule", "gvm_core", "sam2_tracker", "VideoMaMaInferenceModule", "modules/MatAnyone2Module"]
+packages = ["backend", "ui", "CorridorKeyModule", "gvm_core", "sam2_tracker", "VideoMaMaInferenceModule", "modules/MatAnyone2Module", "modules/BiRefNetModule"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.uv]
-torch-backend = "auto"
+constraint-dependencies = [
+    "opencv-python==99999",
+]
 
 [tool.uv.sources]
 corridorkey-mlx = { git = "https://github.com/nikopueringer/corridorkey-mlx.git", tag = "v1.0.0" }

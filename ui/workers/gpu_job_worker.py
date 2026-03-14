@@ -240,6 +240,8 @@ class GPUJobWorker(QThread):
                 self._run_videomama(job)
             elif job.job_type == JobType.MATANYONE2_ALPHA:
                 self._run_matanyone2(job)
+            elif job.job_type == JobType.BIREFNET_ALPHA:
+                self._run_birefnet(job)
             elif job.job_type == JobType.PREVIEW_REPROCESS:
                 self._run_preview_reprocess(job)
             else:
@@ -441,6 +443,31 @@ class GPUJobWorker(QThread):
             on_progress=on_progress,
             on_warning=on_warning,
             on_status=on_status,
+        )
+
+    def _run_birefnet(self, job: GPUJob) -> None:
+        """Run BiRefNet alpha generation."""
+        clip = job.params.get("_clip_snapshot")
+
+        if clip is None:
+            raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
+
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
+            self.progress.emit(job.id, clip_name, current, total, kwargs.get("fps", 0.0))
+
+        def on_warning(message: str) -> None:
+            self.warning.emit(job.id, message)
+
+        def on_status(message: str) -> None:
+            self.status_update.emit(job.id, message)
+
+        self._service.run_birefnet(
+            clip=clip,
+            job=job,
+            on_progress=on_progress,
+            on_warning=on_warning,
+            on_status=on_status,
+            model_variant=job.params.get("_birefnet_variant", "General"),
         )
 
     def _run_preview_reprocess(self, job: GPUJob) -> None:

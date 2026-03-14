@@ -110,7 +110,7 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
 
 class CorridorKeyEngine:
     # VRAM threshold for optimization profile selection.
-    # Below this: tiled refiner + selective compile. Above: full-frame compile.
+    # Below this: tiled refiner. Above: full-frame compile.
     _VRAM_TILE_THRESHOLD_GB = 12
 
     # Optimization modes:
@@ -549,21 +549,27 @@ class CorridorKeyEngine:
 
         pred_alpha = out['alpha'].float()
         pred_fg = out['fg'].float()
+        # Free forward-pass intermediates early (saves ~200-500 MB on VRAM-constrained GPUs)
+        del out, inp_t, img_norm_t, img_t, mask_t
 
         # 6. Post-Process, stay on GPU as long as possible
         # Resize back to original resolution on GPU (bicubic ≈ Lanczos4)
         res_alpha_t = F.interpolate(pred_alpha, size=(h, w), mode='bicubic', align_corners=False).clamp(0, 1)
         res_fg_t = F.interpolate(pred_fg, size=(h, w), mode='bicubic', align_corners=False).clamp(0, 1)
+        del pred_alpha, pred_fg
 
         # Squeeze batch, permute to HWC for color_utils tensor paths
         res_alpha_t = res_alpha_t[0].permute(1, 2, 0)
         res_fg_t = res_fg_t[0].permute(1, 2, 0)
 
-        # A. Clean Matte (Auto-Despeckle)
-        res_alpha_np = res_alpha_t.cpu().numpy()
+        # A. Clean Matte (Auto-Despeckle) — stay on GPU to avoid GPU→CPU→GPU roundtrip
         if auto_despeckle:
-            res_alpha_np = cu.clean_matte(res_alpha_np, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur)
-        processed_alpha_t = torch.from_numpy(res_alpha_np).to(self.device)
+            processed_alpha_t = cu.clean_matte_gpu(
+                res_alpha_t, area_threshold=despeckle_size,
+                dilation=despeckle_dilation, blur_size=despeckle_blur,
+            )
+        else:
+            processed_alpha_t = res_alpha_t
 
         # B–D + 7. Fused post-processing on GPU (despill + srgb→linear + premul + composite)
         cache_key = (w, h)
@@ -597,6 +603,8 @@ class CorridorKeyEngine:
         res_fg_np = res_fg_t.cpu().numpy()
         comp_srgb_np = comp_srgb_t.cpu().numpy()
         processed_rgba_np = processed_rgba_t.cpu().numpy()
+        # Free GPU tensors immediately after transfer
+        del res_alpha_t, res_fg_t, comp_srgb_t, processed_rgba_t, processed_alpha_t
 
         logger.debug(f"process_frame: {h}x{w} in {time.monotonic() - t0:.3f}s")
 

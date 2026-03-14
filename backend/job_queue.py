@@ -36,6 +36,7 @@ class JobType(Enum):
     SAM2_TRACK = "sam2_track"
     VIDEOMAMA_ALPHA = "videomama_alpha"
     MATANYONE2_ALPHA = "matanyone2_alpha"
+    BIREFNET_ALPHA = "birefnet_alpha"
     PREVIEW_REPROCESS = "preview_reprocess"
     VIDEO_EXTRACT = "video_extract"
     VIDEO_STITCH = "video_stitch"

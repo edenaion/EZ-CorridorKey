@@ -130,6 +130,42 @@ def _import_matanyone2_processor_class():
         f"MatAnyone2 module not found. Expected {expected}"
     ) from last_error
 
+def _import_birefnet_handler_class():
+    """Import BiRefNetHandler from the module layout."""
+    candidates = (
+        ("modules.BiRefNetModule.wrapper", BASE_DIR),
+        ("BiRefNetModule.wrapper", os.path.join(BASE_DIR, "modules")),
+        ("BiRefNetModule.wrapper", BASE_DIR),
+    )
+    missing_roots = (
+        os.path.join(BASE_DIR, "modules", "BiRefNetModule"),
+        os.path.join(BASE_DIR, "BiRefNetModule"),
+    )
+    last_error: ModuleNotFoundError | None = None
+
+    for module_name, path_entry in candidates:
+        if path_entry and path_entry not in sys.path:
+            sys.path.insert(0, path_entry)
+        try:
+            module = importlib.import_module(module_name)
+            return module.BiRefNetHandler
+        except ModuleNotFoundError as exc:
+            if exc.name not in {
+                "modules",
+                "modules.BiRefNetModule",
+                "modules.BiRefNetModule.wrapper",
+                "BiRefNetModule",
+                "BiRefNetModule.wrapper",
+            }:
+                raise
+            last_error = exc
+
+    expected = " or ".join(missing_roots)
+    raise ModuleNotFoundError(
+        f"BiRefNet module not found. Expected {expected}"
+    ) from last_error
+
+
 class _ActiveModel(Enum):
     """Tracks which heavy model is currently loaded in VRAM."""
     NONE = "none"
@@ -138,6 +174,7 @@ class _ActiveModel(Enum):
     SAM2 = "sam2"
     VIDEOMAMA = "videomama"
     MATANYONE2 = "matanyone2"
+    BIREFNET = "birefnet"
 
 
 @dataclass
@@ -275,6 +312,7 @@ class CorridorKeyService:
         self._sam2_tracker = None
         self._videomama_pipeline = None
         self._matanyone2_processor = None
+        self._birefnet_handler = None
         self._active_model = _ActiveModel.NONE
         self._device: str = 'cpu'
         self._job_queue: Optional[GPUJobQueue] = None
@@ -530,6 +568,9 @@ class CorridorKeyService:
             elif self._active_model == _ActiveModel.MATANYONE2:
                 self._safe_offload(self._matanyone2_processor)
                 self._matanyone2_processor = None
+            elif self._active_model == _ActiveModel.BIREFNET:
+                self._safe_offload(self._birefnet_handler)
+                self._birefnet_handler = None
             logger.info(f"_safe_offload took {time.monotonic() - t0:.1f}s")
 
             import gc
@@ -595,7 +636,19 @@ class CorridorKeyService:
 
         backend = resolve_backend()
         opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
-        _img_size = 1024 if (self._device == 'mps' or self._preview_mode) else 2048
+        if self._device == 'mps' or self._preview_mode:
+            _img_size = 1024
+        else:
+            # Adapt backbone resolution to available VRAM.
+            # 2048 needs ~20 GB activations, 1536 needs ~12 GB, 1024 needs ~6 GB.
+            from CorridorKeyModule.inference_engine import CorridorKeyEngine
+            vram_gb = CorridorKeyEngine._get_vram_gb()
+            if vram_gb > 0 and vram_gb < 12:
+                _img_size = 1536
+                logger.info(f"VRAM {vram_gb:.1f} GB < 12 GB: using img_size=1536 "
+                            f"(2048 requires ~20 GB activations)")
+            else:
+                _img_size = 2048
 
         # MLX: unified memory, single engine only
         pool_size = 1 if backend == "mlx" else self._pool_size
@@ -706,6 +759,28 @@ class CorridorKeyService:
         logger.info(f"MatAnyone2 loaded in {time.monotonic() - t0:.1f}s")
         return self._matanyone2_processor
 
+    def _get_birefnet(self, model_variant: str = "General"):
+        """Lazy-load the BiRefNet handler. Reloads if variant changed."""
+        self._ensure_model(_ActiveModel.BIREFNET)
+
+        if (self._birefnet_handler is not None
+                and self._birefnet_handler._model_variant == model_variant):
+            return self._birefnet_handler
+
+        # Variant changed or first load — (re)create handler
+        if self._birefnet_handler is not None:
+            self._safe_offload(self._birefnet_handler)
+            self._birefnet_handler = None
+
+        BiRefNetHandler = _import_birefnet_handler_class()
+        logger.info(f"Loading BiRefNet handler (variant={model_variant})...")
+        t0 = time.monotonic()
+        self._birefnet_handler = BiRefNetHandler(
+            device=self._device, model_variant=model_variant,
+        )
+        logger.info(f"BiRefNet loaded in {time.monotonic() - t0:.1f}s")
+        return self._birefnet_handler
+
     def unload_engines(self) -> None:
         """Free GPU memory by unloading all engines."""
         for eng in self._engine_pool:
@@ -715,10 +790,12 @@ class CorridorKeyService:
         self._safe_offload(self._sam2_tracker)
         self._safe_offload(self._videomama_pipeline)
         self._safe_offload(self._matanyone2_processor)
+        self._safe_offload(self._birefnet_handler)
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
         self._matanyone2_processor = None
+        self._birefnet_handler = None
         self._active_model = _ActiveModel.NONE
         import gc
         gc.collect()
@@ -2323,6 +2400,106 @@ class CorridorKeyService:
 
         logger.info(
             f"MatAnyone2 complete for '{clip.name}': "
+            f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )
+
+    def run_birefnet(
+        self,
+        clip: ClipEntry,
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+        model_variant: str = "General",
+    ) -> None:
+        """Run BiRefNet alpha generation for a clip.
+
+        Transitions clip: RAW|MASKED -> READY (creates AlphaHint directory).
+        No annotation required — automatic salient object segmentation.
+        """
+        # ── Preflight validation ──
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for BiRefNet")
+        if self._device == 'cpu':
+            raise GPURequiredError("BiRefNet")
+        if clip.input_asset.asset_type != "sequence":
+            raise CorridorKeyError("BiRefNet requires an extracted image sequence")
+
+        def _status(msg: str) -> None:
+            logger.info(f"BiRefNet [{clip.name}]: {msg}")
+            if on_status:
+                on_status(msg)
+
+        def _check_cancel() -> bool:
+            return bool(job and job.is_cancelled)
+
+        t_start = time.monotonic()
+
+        # ── Phase 1: Load model ──
+        _status("Loading BiRefNet model...")
+        with self._gpu_lock:
+            handler = self._get_birefnet(model_variant=model_variant)
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 2: Load input frames ──
+        _status("Loading frames...")
+        selected_input_names = self._selected_sequence_files(clip)
+        if not selected_input_names:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for BiRefNet")
+
+        named_input_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            selected_input_names,
+            clip.name,
+            job=job,
+            on_status=on_status,
+        )
+        input_frames = [frame for _, frame in named_input_frames]
+        input_names = [fname for fname, _ in named_input_frames]
+        frame_stems = [os.path.splitext(fname)[0] for fname in input_names]
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 3: Inference ──
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        try:
+            frames_written = handler.process_frames(
+                input_frames=input_frames,
+                output_dir=alpha_dir,
+                frame_names=frame_stems,
+                progress_callback=on_progress,
+                on_status=on_status,
+                cancel_check=_check_cancel,
+                clip_name=clip.name,
+            )
+        except Exception as e:
+            if "CUDA out of memory" in str(e) or "OutOfMemoryError" in type(e).__name__:
+                logger.error(f"BiRefNet OOM for '{clip.name}': {e}")
+                self._birefnet_handler = None
+                self._active_model = _ActiveModel.NONE
+                try:
+                    import torch as _torch
+                    _torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                raise CorridorKeyError(
+                    f"BiRefNet ran out of GPU memory processing '{clip.name}'. "
+                    f"Try closing other GPU applications or using a smaller clip."
+                ) from e
+            raise
+
+        # ── Phase 4: Finalize ──
+        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+
+        try:
+            clip.transition_to(ClipState.READY)
+        except Exception as e:
+            if on_warning:
+                on_warning(f"State transition after BiRefNet: {e}")
+
+        logger.info(
+            f"BiRefNet complete for '{clip.name}': "
             f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
         )
 
