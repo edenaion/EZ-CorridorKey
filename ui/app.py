@@ -94,7 +94,8 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     _configure_runtime_backends()
 
     app = QApplication(argv)
-    app.setApplicationName("CorridorKey")
+    app.setApplicationName("EZ-CORRIDORKEY")
+    app.setApplicationDisplayName("EZ-CORRIDORKEY")
     app.setOrganizationName("Corridor Digital")
 
     # ── Font loading (frozen-build aware) ──

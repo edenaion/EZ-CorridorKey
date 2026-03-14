@@ -196,7 +196,7 @@ class MainWindow(QMainWindow):
     def __init__(self, service: CorridorKeyService | None = None,
                  store: RecentSessionsStore | None = None):
         super().__init__()
-        self.setWindowTitle(f"CORRIDORKEY {self._get_visible_build_id()}")
+        self.setWindowTitle(f"EZ-CORRIDORKEY {self._get_visible_build_id()}")
         self.setMinimumSize(1100, 650)
         self.resize(1400, 800)
         self.setAcceptDrops(True)
@@ -382,7 +382,11 @@ class MainWindow(QMainWindow):
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(12, 6, 12, 6)
 
-        brand = QLabel('<span style="color:#FFF203;">CORRIDOR</span><span style="color:#2CC350;">KEY</span>')
+        brand = QLabel(
+            '<span style="color:#FFF203;">EZ-</span>'
+            '<span style="color:#FFF203;">CORRIDOR</span>'
+            '<span style="color:#2CC350;">KEY</span>'
+        )
         brand.setObjectName("brandMark")
         top_bar.addWidget(brand)
         top_bar.addStretch()
@@ -664,7 +668,7 @@ class MainWindow(QMainWindow):
                 self,
                 "Force Stop Failed",
                 "Could not relaunch the app automatically.\n\n"
-                "Please close and reopen CorridorKey manually.",
+                "Please close and reopen EZ-CORRIDORKEY manually.",
             )
             return
 
@@ -3362,10 +3366,10 @@ class MainWindow(QMainWindow):
                 "Remove before merging this branch back to main.</p>"
             )
         box = QMessageBox(self)
-        box.setWindowTitle("About CorridorKey")
+        box.setWindowTitle("About EZ-CORRIDORKEY")
         box.setTextFormat(Qt.RichText)
         box.setText(
-            f"<h2>CorridorKey {build_id}</h2>"
+            f"<h2>EZ-CORRIDORKEY {build_id}</h2>"
             "<p>AI Green Screen Keyer<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"
@@ -3449,7 +3453,7 @@ class MainWindow(QMainWindow):
 
     def _run_update(self) -> None:
         reply = QMessageBox.question(
-            self, "Update CorridorKey",
+            self, "Update EZ-CORRIDORKEY",
             "This will save your session, close the app, and run the updater.\n"
             "The app will relaunch automatically after updating.\n\n"
             "Continue?",
