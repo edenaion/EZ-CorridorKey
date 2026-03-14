@@ -118,6 +118,10 @@ class _Toast(QLabel):
         self.show()
         self.raise_()
 
+    def mousePressEvent(self, event):
+        self.deleteLater()
+        super().mousePressEvent(event)
+
 
 def _remove_alpha_hint_assets(root_path: str) -> None:
     """Delete sequence or video alpha-hint assets for a clip."""
@@ -132,8 +136,38 @@ def _remove_alpha_hint_assets(root_path: str) -> None:
             except OSError:
                 logger.warning("Failed to remove alpha video asset: %s", candidate)
 
-    def mousePressEvent(self, event):
-        self.deleteLater()
+
+def _import_alpha_video_as_sequence(
+    video_path: str,
+    alpha_dir: str,
+    input_files: list[str],
+) -> int:
+    """Decode an alpha video into AlphaHint/*.png named to match input stems."""
+    os.makedirs(alpha_dir, exist_ok=True)
+    cap = cv2.VideoCapture(video_path)
+    imported_count = 0
+    try:
+        for input_name in input_files:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            input_stem = os.path.splitext(input_name)[0]
+            dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
+            if frame.ndim == 2:
+                mask_u8 = frame
+            elif frame.ndim == 3 and frame.shape[2] == 4:
+                mask_u8 = frame[:, :, 3]
+            else:
+                mask_u8 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if mask_u8.dtype != np.uint8:
+                mask_u8 = (np.clip(mask_u8, 0.0, 1.0) * 255.0).astype(np.uint8)
+            if cv2.imwrite(dst_path, mask_u8):
+                imported_count += 1
+            else:
+                logger.warning("Failed to write imported alpha video frame: %s", dst_path)
+    finally:
+        cap.release()
+    return imported_count
 
 
 class _MuteOverlay(QLabel):
@@ -2183,10 +2217,11 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_import_alpha(self) -> None:
-        """Import user-provided alpha hint images into the clip's AlphaHint/ folder.
+        """Import user-provided alpha hints into AlphaHint/*.png.
 
-        Files are renamed to match input frame stems so index-based matching
-        in the inference loop works correctly (frame 0 → frame 0, etc.).
+        Image folders and alpha videos are both normalized into 8-bit PNG
+        frames named to match input frame stems so index-based matching in
+        the inference loop works correctly (frame 0 -> frame 0, etc.).
         """
         clip = self._current_clip
         if clip is None or clip.state not in (ClipState.RAW, ClipState.MASKED, ClipState.READY):
@@ -2293,7 +2328,7 @@ class MainWindow(QMainWindow):
             result = QMessageBox.warning(
                 self, "Frame Count Mismatch",
                 f"Clip '{clip.name}' has {n_input} input frames but you "
-                f"selected {n_src} alpha images.\n\n"
+                f"selected {n_src} alpha hints.\n\n"
                 f"Each input frame needs a matching alpha hint.\n"
                 f"Only {min(n_src, n_input)} frames will be paired.",
                 QMessageBox.Ok | QMessageBox.Cancel,
@@ -2304,7 +2339,10 @@ class MainWindow(QMainWindow):
         # Confirm import
         n_paired = min(n_src, n_input)
         if source_kind == "video":
-            msg = f"Import alpha video ({n_src} frames) into '{clip.name}'?"
+            msg = (
+                f"Import alpha video ({n_src} frames) into '{clip.name}'?\n\n"
+                "The video will be converted to 8-bit PNG alpha frames in AlphaHint/."
+            )
         else:
             msg = f"Import {n_paired} alpha hint images into '{clip.name}'?"
         if n_src != n_input:
@@ -2315,15 +2353,21 @@ class MainWindow(QMainWindow):
         imported_count = 0
         try:
             _remove_alpha_hint_assets(clip.root_path)
+            alpha_dir = os.path.join(clip.root_path, "AlphaHint")
 
             if source_kind == "video":
-                src_ext = os.path.splitext(source_path)[1].lower() or ".mov"
-                dst_path = os.path.join(clip.root_path, f"AlphaHint{src_ext}")
-                shutil.copy2(source_path, dst_path)
-                imported_count = n_src
-                logger.info("Imported alpha video into %s", dst_path)
+                imported_count = _import_alpha_video_as_sequence(
+                    source_path,
+                    alpha_dir,
+                    input_files[:n_paired],
+                )
+                if imported_count == 0:
+                    shutil.rmtree(alpha_dir, ignore_errors=True)
+                logger.info(
+                    "Imported %d/%d alpha frames from video into %s",
+                    imported_count, n_paired, alpha_dir,
+                )
             else:
-                alpha_dir = os.path.join(clip.root_path, "AlphaHint")
                 os.makedirs(alpha_dir, exist_ok=True)
 
                 for i in range(n_paired):
@@ -2371,7 +2415,7 @@ class MainWindow(QMainWindow):
 
         if source_kind == "video":
             toast_msg = (
-                f"Imported alpha video ({imported_count} frames).\n"
+                f"Imported {imported_count}/{n_paired} alpha frames from video.\n"
                 f"Clip is now {clip.state.value}."
             )
         else:
