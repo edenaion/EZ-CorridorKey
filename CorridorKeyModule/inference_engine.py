@@ -4,7 +4,6 @@ import os
 import time
 import types
 
-import cv2
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,6 +12,49 @@ import torch.nn.functional as F
 logger = logging.getLogger(__name__)
 from .core.model_transformer import GreenFormer
 from .core import color_utils as cu
+
+
+def _postproc_kernel(
+    fg_srgb: torch.Tensor,
+    alpha: torch.Tensor,
+    bg_lin: torch.Tensor,
+    despill_strength: float,
+    fg_is_straight: bool,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Fused post-processing: despill + srgb→linear + premul + composite + linear→srgb.
+
+    All ops are element-wise torch, ideal for kernel fusion via torch.compile.
+    Returns (processed_rgba, comp_srgb, fg_despilled_lin).
+    """
+    # Despill (inline, avoids isinstance dispatch in cu.despill)
+    r, g, b = fg_srgb[..., 0], fg_srgb[..., 1], fg_srgb[..., 2]
+    limit = (r + b) / 2.0
+    spill = torch.clamp(g - limit, min=0.0)
+    g_new = g - spill
+    r_new = r + spill * 0.5
+    b_new = b + spill * 0.5
+    fg_despilled = torch.stack([r_new, g_new, b_new], dim=-1)
+    if despill_strength < 1.0:
+        fg_despilled = fg_srgb * (1.0 - despill_strength) + fg_despilled * despill_strength
+
+    # sRGB → Linear
+    fg_lin = cu.srgb_to_linear_tensor(fg_despilled)
+
+    # Premultiply
+    fg_premul = fg_lin * alpha
+
+    # Pack RGBA
+    processed_rgba = torch.cat([fg_premul, alpha], dim=-1)
+
+    # Composite
+    if fg_is_straight:
+        comp_lin = fg_lin * alpha + bg_lin * (1.0 - alpha)
+    else:
+        comp_lin = fg_lin + bg_lin * (1.0 - alpha)
+
+    comp_srgb = cu.linear_to_srgb_tensor(comp_lin)
+
+    return processed_rgba, comp_srgb, fg_lin
 
 def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
     """Monkey-patch MaskUnitAttention.forward on global-attention blocks.
@@ -136,6 +178,13 @@ class CorridorKeyEngine:
 
         self.mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
         self.std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
+        # GPU tensors for ImageNet normalization (created lazily on first use)
+        self._mean_t = None
+        self._std_t = None
+        # Cached checkerboard linear tensor, keyed by (w, h)
+        self._bg_lin_cache: dict[tuple[int, int], torch.Tensor] = {}
+        # Compiled post-processing kernel (lazy init after model compile)
+        self._compiled_postproc = None
 
         logger.info("CorridorKeyEngine.__init__: entering _load_model")
         self.model = self._load_model()
@@ -283,6 +332,11 @@ class CorridorKeyEngine:
         t0 = _time.monotonic()
         model = model.to(self.device)
         model.eval()
+        # Convert weights to fp16, saves ~450 MB VRAM.
+        # Inference already runs in fp16 via autocast, so this is lossless.
+        if self.device.type != 'cpu':
+            model.half()
+            _diag("Model weights converted to fp16")
         _diag(f"Step 2 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"Model to device: {_time.monotonic() - t0:.1f}s")
 
@@ -293,7 +347,7 @@ class CorridorKeyEngine:
         _diag("Step 3: torch.load checkpoint...")
         self._status("Loading checkpoint weights...")
         t0 = _time.monotonic()
-        checkpoint = torch.load(self.checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(self.checkpoint_path, map_location=self.device, mmap=True)
         state_dict = checkpoint.get('state_dict', checkpoint)
         _diag(f"Step 3 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"Checkpoint loaded: {_time.monotonic() - t0:.1f}s")
@@ -441,99 +495,100 @@ class CorridorKeyEngine:
         # 1. Inputs Check & Normalization
         if image.dtype == np.uint8:
             image = image.astype(np.float32) / 255.0
-            
+
         if mask_linear.dtype == np.uint8:
             mask_linear = mask_linear.astype(np.float32) / 255.0
-            
+
         h, w = image.shape[:2]
-        
+
         # Ensure Mask Shape
         if mask_linear.ndim == 2:
             mask_linear = mask_linear[:, :, np.newaxis]
-            
-        # 2. Resize to Model Size
-        # If input is linear, we resize in linear to preserve energy/highlights,
-        # THEN convert to sRGB for the model.
-        if input_is_linear:
-             # Resize in Linear
-             img_resized_lin = cv2.resize(image, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
-             # Convert to sRGB for Model
-             img_resized = cu.linear_to_srgb(img_resized_lin)
-        else:
-             # Standard sRGB Resize
-             img_resized = cv2.resize(image, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
 
-        mask_resized = cv2.resize(mask_linear, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
-        
-        if mask_resized.ndim == 2:
-            mask_resized = mask_resized[:, :, np.newaxis]
-            
-        # 3. Normalize (ImageNet)
-        # Model expects sRGB input normalized
-        img_norm = (img_resized - self.mean) / self.std
-        
+        # 2. Resize to Model Size on GPU via F.interpolate
+        img_t = torch.from_numpy(image.transpose((2, 0, 1))).unsqueeze(0).to(self.device)
+        mask_t = torch.from_numpy(mask_linear.transpose((2, 0, 1))).unsqueeze(0).to(self.device)
+
+        img_t = F.interpolate(img_t, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
+        mask_t = F.interpolate(mask_t, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
+
+        if input_is_linear:
+            img_t = cu.linear_to_srgb(img_t)
+
+        # 3. Normalize (ImageNet) on GPU
+        if self._mean_t is None:
+            self._mean_t = torch.tensor([0.485, 0.456, 0.406], device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+            self._std_t = torch.tensor([0.229, 0.224, 0.225], device=self.device, dtype=torch.float32).view(1, 3, 1, 1)
+        img_norm_t = (img_t - self._mean_t) / self._std_t
+
         # 4. Prepare Tensor
-        inp_np = np.concatenate([img_norm, mask_resized], axis=-1) # [H, W, 4]
-        inp_t = torch.from_numpy(inp_np.transpose((2, 0, 1))).float().unsqueeze(0).to(self.device)
-        
+        inp_t = torch.cat([img_norm_t, mask_t], dim=1)
+
         # 5. Inference
         refiner_scale_t = inp_t.new_tensor(refiner_scale)
         with torch.autocast(device_type=self.device.type, dtype=torch.float16):
             out = self._forward_model(inp_t, refiner_scale_t)
-            
-        pred_alpha = out['alpha']
-        pred_fg = out['fg'] # Output is sRGB (Sigmoid)
-        
-        # 6. Post-Process (Resize Back to Original Resolution)
-        # We use Lanczos4 for high-quality resampling to minimize blur when going back to 4K/Original.
-        res_alpha = pred_alpha[0].permute(1, 2, 0).float().cpu().numpy()
-        res_fg = pred_fg[0].permute(1, 2, 0).float().cpu().numpy()
-        res_alpha = cv2.resize(res_alpha, (w, h), interpolation=cv2.INTER_LANCZOS4)
-        res_fg = cv2.resize(res_fg, (w, h), interpolation=cv2.INTER_LANCZOS4)
-        
-        if res_alpha.ndim == 2: res_alpha = res_alpha[:, :, np.newaxis]
 
-        # --- ADVANCED COMPOSITING ---
-        
+        pred_alpha = out['alpha'].float()
+        pred_fg = out['fg'].float()
+
+        # 6. Post-Process, stay on GPU as long as possible
+        # Resize back to original resolution on GPU (bicubic ≈ Lanczos4)
+        res_alpha_t = F.interpolate(pred_alpha, size=(h, w), mode='bicubic', align_corners=False).clamp(0, 1)
+        res_fg_t = F.interpolate(pred_fg, size=(h, w), mode='bicubic', align_corners=False).clamp(0, 1)
+
+        # Squeeze batch, permute to HWC for color_utils tensor paths
+        res_alpha_t = res_alpha_t[0].permute(1, 2, 0)
+        res_fg_t = res_fg_t[0].permute(1, 2, 0)
+
         # A. Clean Matte (Auto-Despeckle)
         if auto_despeckle:
-            processed_alpha = cu.clean_matte(res_alpha, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur)
+            if res_alpha_t.device.type != 'cpu':
+                processed_alpha_t = cu.clean_matte_gpu(res_alpha_t, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur)
+            else:
+                res_alpha_np = res_alpha_t.numpy()
+                processed_alpha_t = torch.from_numpy(cu.clean_matte(res_alpha_np, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur))
         else:
-            processed_alpha = res_alpha
-            
-        # B. Despill FG
-        # res_fg is sRGB.
-        fg_despilled = cu.despill(res_fg, green_limit_mode='average', strength=despill_strength)
-        
-        # C. Premultiply (for EXR Output)
-        # CONVERT TO LINEAR FIRST! EXRs must house linear color premultiplied by linear alpha.
-        fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
-        fg_premul_lin = cu.premultiply(fg_despilled_lin, processed_alpha)
-        
-        # D. Pack RGBA
-        # [H, W, 4] - All channels are now strictly Linear Float
-        processed_rgba = np.concatenate([fg_premul_lin, processed_alpha], axis=-1)
+            processed_alpha_t = res_alpha_t
 
-        # ----------------------------
-        
-        # 7. Composite (on Checkerboard) for checking
-        # Generate Dark/Light Gray Checkerboard (in sRGB, convert to Linear)
-        bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
-        bg_lin = cu.srgb_to_linear(bg_srgb)
-        
-        if fg_is_straight:
-             comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha) 
-        else:
-             # If premultiplied model, we shouldn't multiply again (though our pipeline forces straight)
-             comp_lin = cu.composite_premul(fg_despilled_lin, bg_lin, processed_alpha)
-             
-        comp_srgb = cu.linear_to_srgb(comp_lin)
-        
+        # B–D + 7. Fused post-processing on GPU (despill + srgb→linear + premul + composite)
+        cache_key = (w, h)
+        bg_lin_t = self._bg_lin_cache.get(cache_key)
+        if bg_lin_t is None:
+            bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
+            bg_lin_t = cu.srgb_to_linear_tensor(torch.from_numpy(bg_srgb).to(self.device))
+            if len(self._bg_lin_cache) >= 4:
+                oldest = next(iter(self._bg_lin_cache))
+                del self._bg_lin_cache[oldest]
+            self._bg_lin_cache[cache_key] = bg_lin_t
+
+        # Lazy-compile post-proc kernel (only on CUDA with torch.compile available)
+        postproc_fn = _postproc_kernel
+        if self._use_compile and self._compiled_postproc is None and self.device.type == 'cuda':
+            try:
+                self._compiled_postproc = torch.compile(_postproc_kernel, dynamic=True)
+                logger.info("Post-processing kernel compiled")
+            except Exception as e:
+                logger.debug(f"Post-proc compile skipped: {e}")
+                self._compiled_postproc = _postproc_kernel
+        if self._compiled_postproc is not None:
+            postproc_fn = self._compiled_postproc
+
+        processed_rgba_t, comp_srgb_t, _ = postproc_fn(
+            res_fg_t, processed_alpha_t, bg_lin_t, despill_strength, fg_is_straight,
+        )
+
+        # 8. Single GPU→CPU transfer at the end
+        res_alpha_np = res_alpha_t.cpu().numpy()
+        res_fg_np = res_fg_t.cpu().numpy()
+        comp_srgb_np = comp_srgb_t.cpu().numpy()
+        processed_rgba_np = processed_rgba_t.cpu().numpy()
+
         logger.debug(f"process_frame: {h}x{w} in {time.monotonic() - t0:.3f}s")
 
         return {
-            'alpha': res_alpha,        # Linear, Raw Prediction
-            'fg': res_fg,              # sRGB, Raw Prediction (Straight)
-            'comp': comp_srgb,         # sRGB, Composite
-            'processed': processed_rgba # Linear/Premul, RGBA, Garbage Matted & Despilled
+            'alpha': res_alpha_np,          # Linear, Raw Prediction
+            'fg': res_fg_np,                # sRGB, Raw Prediction (Straight)
+            'comp': comp_srgb_np,           # sRGB, Composite
+            'processed': processed_rgba_np  # Linear/Premul, RGBA, Garbage Matted & Despilled
         }
