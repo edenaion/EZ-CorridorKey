@@ -6,7 +6,7 @@ Supports EXR (float16/32, 1ch/3ch/4ch), PNG, and video frames.
 Codex critical finding: naive clip-to-8bit looks wrong for:
 - Linear EXR (needs linear→sRGB gamma)
 - Matte (1ch → grayscale visualization)
-- Processed (premultiplied RGBA → display stored RGB over black)
+- Processed (straight RGBA → composite with alpha for display)
 - Negative/HDR values (needs clamping before conversion)
 """
 from __future__ import annotations
@@ -57,7 +57,7 @@ def decode_frame(
     - ALPHA: 8-bit grayscale PNG from AlphaHint, direct load
     - FG: Linear float EXR → sRGB gamma
     - MATTE: 1-channel float → grayscale visualization
-    - PROCESSED: Premultiplied RGBA float → display stored RGB over black
+    - PROCESSED: Straight RGBA float → composite over black for display
 
     Returns None if the file can't be read.
     """
@@ -136,9 +136,9 @@ def _decode_exr(path: str, mode: ViewMode, *, input_exr_is_linear: bool = False)
             # BGR float — FG or Input
             return _transform_linear_rgb(img, mode, input_exr_is_linear=input_exr_is_linear)
         elif channels == 4:
-            # BGRA float — Processed (premultiplied)
+            # BGRA float — Processed (straight RGBA)
             if mode == ViewMode.PROCESSED:
-                return _transform_premultiplied(img)
+                return _transform_processed_rgba(img)
             else:
                 # Strip alpha, treat as RGB
                 return _transform_linear_rgb(
@@ -198,35 +198,30 @@ def _transform_linear_rgb(
     return _numpy_to_qimage(rgb)
 
 
-def _transform_premultiplied(bgra: np.ndarray) -> QImage:
-    """Premultiplied linear BGRA float → display over black.
-
-    Processed EXR stores premultiplied linear RGBA on disk. For preview
-    fidelity, display the stored premultiplied RGB channels over black
-    rather than unpremultiplying them into a different image.
-    """
+def _transform_processed_rgba(bgra: np.ndarray) -> QImage:
+    """Straight linear BGRA float → composite over black for display."""
     bgra_f = bgra.astype(np.float32)
     bgr = np.clip(bgra_f[:, :, :3], 0.0, None)
-    max_val = bgr.max()
+    alpha = np.clip(bgra_f[:, :, 3:4], 0.0, 1.0)
+    composite = bgr * alpha
+    max_val = composite.max()
     if max_val > 1.0:
-        bgr = bgr / (1.0 + bgr)
-    srgb = _linear_to_srgb(bgr)
+        composite = composite / (1.0 + composite)
+    srgb = _linear_to_srgb(composite)
     rgb = cv2.cvtColor((srgb * 255.0).astype(np.uint8), cv2.COLOR_BGR2RGB)
     return _numpy_to_qimage(rgb)
 
 
 def processed_rgba_to_qimage(rgba: np.ndarray) -> QImage:
-    """Render in-memory premultiplied linear RGBA preview over black.
-
-    Live preview returns RGBA in RGB channel order, while saved EXRs are
-    decoded as BGRA. This helper keeps the display contract identical.
-    """
+    """Render in-memory straight linear RGBA preview composited over black."""
     rgba_f = rgba.astype(np.float32)
     rgb = np.clip(rgba_f[:, :, :3], 0.0, None)
-    max_val = rgb.max()
+    alpha = np.clip(rgba_f[:, :, 3:4], 0.0, 1.0)
+    composite = rgb * alpha
+    max_val = composite.max()
     if max_val > 1.0:
-        rgb = rgb / (1.0 + rgb)
-    srgb = _linear_to_srgb(rgb)
+        composite = composite / (1.0 + composite)
+    srgb = _linear_to_srgb(composite)
     return _numpy_to_qimage((srgb * 255.0).astype(np.uint8))
 
 
