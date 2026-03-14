@@ -32,6 +32,17 @@ EXR_WRITE_FLAGS = [
 ]
 
 
+def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
+    """Convert linear-light RGB to sRGB using the standard piecewise curve."""
+    linear = np.clip(linear.astype(np.float32), 0.0, None)
+    mask = linear <= 0.0031308
+    return np.where(
+        mask,
+        linear * 12.92,
+        1.055 * np.power(linear, 1.0 / 2.4) - 0.055,
+    ).astype(np.float32)
+
+
 def _exr_compression_constant(name: str):
     """Map a compression name to the Imath compression enum value."""
     import Imath
@@ -145,8 +156,8 @@ def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np
 
     Args:
         fpath: Absolute path to image file.
-        gamma_correct_exr: If True, apply gamma 1/2.2 to EXR data
-            (converts linear → approximate sRGB for models expecting sRGB).
+        gamma_correct_exr: If True, apply the standard sRGB transfer curve
+            to EXR data (converts linear → sRGB for models expecting sRGB).
 
     Returns:
         float32 array [H, W, 3] in RGB order, or None if read fails.
@@ -163,7 +174,7 @@ def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         result = np.maximum(img_rgb, 0.0).astype(np.float32)
         if gamma_correct_exr:
-            result = np.power(result, 1.0 / 2.2).astype(np.float32)
+            result = _linear_to_srgb(result)
         return result
     else:
         img = cv2.imread(fpath)

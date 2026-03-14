@@ -236,12 +236,29 @@ class ClipEntry:
         """True when this clip's Frames/ were extracted from a source video."""
         return os.path.isfile(os.path.join(self.root_path, ".video_metadata.json"))
 
+    def _video_source_transfer(self) -> str:
+        """Best-effort source transfer string from extraction sidecar metadata."""
+        metadata_path = os.path.join(self.root_path, ".video_metadata.json")
+        if not os.path.isfile(metadata_path):
+            return ""
+        try:
+            import json
+            with open(metadata_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            return ""
+        source_probe = payload.get("source_probe", {})
+        return str(source_probe.get("color_transfer", "") or "").strip().lower()
+
     def should_default_input_linear(self) -> bool:
-        """Default Linear only for standalone EXR sequences, not extracted video EXRs."""
+        """Default Linear for standalone EXR or video-derived EXR tagged as linear."""
         return bool(
             self.input_asset is not None
             and self.input_asset.is_exr_sequence()
-            and not self.has_video_metadata()
+            and (
+                not self.has_video_metadata()
+                or self._video_source_transfer() == "linear"
+            )
         )
 
     @property

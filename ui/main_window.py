@@ -938,6 +938,7 @@ class MainWindow(QMainWindow):
 
         # Sync IO tray divider with dual viewer splitter
         self._dual_viewer._viewer_splitter.splitterMoved.connect(self._sync_io_divider)
+        self._dual_viewer.output_mode_changed.connect(self._on_output_mode_changed)
 
         # Reposition queue overlay when vertical splitter is dragged
         self._vsplitter.splitterMoved.connect(self._position_queue_panel)
@@ -981,6 +982,39 @@ class MainWindow(QMainWindow):
         """Display GPU name in the top bar."""
         short = name.replace("NVIDIA GeForce ", "").replace("NVIDIA ", "")
         self._gpu_label.setText(short)
+
+    def _refresh_input_thumbnail(
+        self,
+        clip: ClipEntry,
+        *,
+        input_is_linear: bool | None = None,
+    ) -> None:
+        """Regenerate the input-strip thumbnail using the viewer's input decode."""
+        if clip.input_asset is None:
+            return
+        self._thumb_gen.generate(
+            clip.name,
+            clip.root_path,
+            kind="input",
+            input_path=clip.input_asset.path,
+            asset_type=clip.input_asset.asset_type,
+            input_exr_is_linear=(
+                clip.should_default_input_linear()
+                if input_is_linear is None
+                else input_is_linear
+            ),
+        )
+
+    def _refresh_export_thumbnail(self, clip: ClipEntry) -> None:
+        """Regenerate the export-strip thumbnail using the current output mode."""
+        if clip.state != ClipState.COMPLETE:
+            return
+        self._thumb_gen.generate(
+            clip.name,
+            clip.root_path,
+            kind="export",
+            export_mode=self._dual_viewer.current_output_mode,
+        )
 
     @Slot(object)
     def _on_tray_clip_clicked(self, clip: ClipEntry) -> None:
@@ -1052,6 +1086,14 @@ class MainWindow(QMainWindow):
         # EXRs in sRGB-range mode because FFmpeg writes video values as-is.
         if clip.input_asset is not None:
             self._param_panel.auto_detect_color_space(clip.should_default_input_linear())
+            self._dual_viewer.set_input_exr_is_linear(
+                self._param_panel.get_params().input_is_linear
+            )
+            self._refresh_input_thumbnail(
+                clip,
+                input_is_linear=self._param_panel.get_params().input_is_linear,
+            )
+        self._refresh_export_thumbnail(clip)
 
         # Enable GVM/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
@@ -1090,11 +1132,8 @@ class MainWindow(QMainWindow):
 
             # Generate thumbnails for all clips (background)
             for clip in clips:
-                if clip.input_asset:
-                    self._thumb_gen.generate(
-                        clip.name, clip.root_path,
-                        clip.input_asset.path, clip.input_asset.asset_type,
-                    )
+                self._refresh_input_thumbnail(clip)
+                self._refresh_export_thumbnail(clip)
 
             # Auto-submit EXTRACTING clips to extract worker
             self._auto_extract_clips(clips)
@@ -1743,13 +1782,33 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_params_changed(self) -> None:
         """Handle parameter change — debounce before reprocess."""
-        if self._param_panel.live_preview_enabled and self._service.is_engine_loaded():
+        self._dual_viewer.set_input_exr_is_linear(
+            self._param_panel.get_params().input_is_linear
+        )
+        if self._current_clip is not None:
+            self._refresh_input_thumbnail(
+                self._current_clip,
+                input_is_linear=self._param_panel.get_params().input_is_linear,
+            )
+        if self._param_panel.live_preview_enabled:
             self._reprocess_timer.start()
+
+    @Slot(str)
+    def _on_output_mode_changed(self, mode_value: str) -> None:
+        """Keep export-strip thumbnails aligned with the current output viewer mode."""
+        try:
+            ViewMode(mode_value)
+        except ValueError:
+            return
+
+        for clip in self._clip_model.clips:
+            if clip.state == ClipState.COMPLETE:
+                self._refresh_export_thumbnail(clip)
 
     @Slot(bool)
     def _on_live_preview_toggled(self, checked: bool) -> None:
         """When live preview is re-enabled, immediately reprocess current frame."""
-        if checked and self._service.is_engine_loaded():
+        if checked:
             self._reprocess_timer.start()
 
     def _do_reprocess(self) -> None:
@@ -1758,8 +1817,6 @@ class MainWindow(QMainWindow):
             return
         clip = self._current_clip
         if clip.state not in (ClipState.READY, ClipState.COMPLETE):
-            return
-        if not self._service.is_engine_loaded():
             return
 
         frame_idx = max(0, self._dual_viewer.current_stem_index)
@@ -2460,7 +2517,17 @@ class MainWindow(QMainWindow):
                         pass
                     clip.state = target_state
                     self._clip_model.update_clip_state(clip_name, target_state)
+                elif target_state == ClipState.COMPLETE:
+                    try:
+                        clip.find_assets()
+                    except Exception:
+                        pass
                 break
+
+        finished_clip = next((c for c in self._clip_model.clips if c.name == clip_name), None)
+        if finished_clip is not None:
+            self._refresh_input_thumbnail(finished_clip)
+            self._refresh_export_thumbnail(finished_clip)
 
         # Pipeline auto-chain: queue the next stage, if any.
         if clip_name in self._pipeline_steps and self._pipeline_steps[clip_name]:
@@ -2787,11 +2854,7 @@ class MainWindow(QMainWindow):
                 self._clip_model.update_clip_state(clip_name, ClipState.RAW)
 
                 # Regenerate thumbnail from sequence
-                if clip.input_asset:
-                    self._thumb_gen.generate(
-                        clip.name, clip.root_path,
-                        clip.input_asset.path, clip.input_asset.asset_type,
-                    )
+                self._refresh_input_thumbnail(clip)
 
                 # If this is the selected clip, fully re-select to update
                 # viewer, param panel buttons (GVM/VideoMaMa), and status bar

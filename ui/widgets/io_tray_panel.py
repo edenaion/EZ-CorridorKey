@@ -59,11 +59,17 @@ class ThumbnailCanvas(QWidget):
     THUMB_W = 110
     THUMB_H = 62
 
-    def __init__(self, parent=None, show_manifest_tooltip: bool = False):
+    def __init__(
+        self,
+        parent=None,
+        show_manifest_tooltip: bool = False,
+        thumbnail_kind: str = "input",
+    ):
         super().__init__(parent)
         self._clips: list[ClipEntry] = []
         self._model: ClipListModel | None = None
         self._show_manifest_tooltip = show_manifest_tooltip
+        self._thumbnail_kind = thumbnail_kind
         self._selected_names: set[str] = set()
         self._hovered_name: str | None = None
         self._thumb_cache: dict[str, QImage] = {}  # name → scaled thumbnail
@@ -153,7 +159,7 @@ class ThumbnailCanvas(QWidget):
         # on every repaint.
         scaled = self._thumb_cache.get(clip.name)
         if scaled is None and self._model:
-            thumb = self._model.get_thumbnail(clip.name)
+            thumb = self._model.get_thumbnail(clip.name, kind=self._thumbnail_kind)
             if isinstance(thumb, QImage) and not thumb.isNull():
                 scaled = thumb.scaled(
                     self.THUMB_W, self.THUMB_H,
@@ -428,7 +434,7 @@ class IOTrayPanel(QWidget):
         self._input_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._input_scroll.setWidgetResizable(False)
 
-        self._input_canvas = ThumbnailCanvas()
+        self._input_canvas = ThumbnailCanvas(thumbnail_kind="input")
         self._input_canvas.card_clicked.connect(self._on_single_click)
         self._input_canvas.multi_select_toggled.connect(self._on_multi_select_toggle)
         self._input_canvas.shift_select_requested.connect(self._on_shift_select)
@@ -454,7 +460,10 @@ class IOTrayPanel(QWidget):
         self._export_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._export_scroll.setWidgetResizable(False)
 
-        self._export_canvas = ThumbnailCanvas(show_manifest_tooltip=True)
+        self._export_canvas = ThumbnailCanvas(
+            show_manifest_tooltip=True,
+            thumbnail_kind="export",
+        )
         self._export_canvas.card_clicked.connect(self.clip_clicked.emit)
         self._export_canvas.card_double_clicked.connect(self.clip_clicked.emit)
         self._export_canvas.context_menu_requested.connect(self._on_export_context_menu)
@@ -1039,10 +1048,21 @@ class IOTrayPanel(QWidget):
         current_clips = self._model.clips if self._model else []
         current_key = {(c.name, c.state) for c in current_clips}
         cached_key = {(c.name, c.state) for c in self._input_canvas._clips}
+        thumbnail_roles = {
+            ClipListModel.ThumbnailRole,
+            ClipListModel.ExportThumbnailRole,
+        }
         # Full rebuild when clip set or any clip state changes
         if current_key != cached_key:
             self._rebuild()
         else:
+            if roles and any(role in thumbnail_roles for role in roles):
+                for row in range(top_left.row(), bottom_right.row() + 1):
+                    clip = self._model.get_clip(row)
+                    if clip is None:
+                        continue
+                    self._input_canvas._thumb_cache.pop(clip.name, None)
+                    self._export_canvas._thumb_cache.pop(clip.name, None)
             # Lightweight: just repaint the canvases (no thumbnail rescale)
             self._input_canvas.update()
             self._export_canvas.update()

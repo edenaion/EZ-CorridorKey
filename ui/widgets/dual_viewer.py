@@ -32,6 +32,7 @@ class DualViewerPanel(QWidget):
     """
 
     frame_changed = Signal(int)  # current stem index (for external listeners)
+    output_mode_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -81,6 +82,7 @@ class DualViewerPanel(QWidget):
 
         # Wire zoom from output viewer (primary)
         self._output_viewer._split_view.zoom_changed.connect(self._on_zoom_changed)
+        self._output_viewer.view_mode_changed.connect(self.output_mode_changed.emit)
 
     @property
     def current_stem_index(self) -> int:
@@ -88,9 +90,19 @@ class DualViewerPanel(QWidget):
         return self._output_viewer.current_stem_index
 
     @property
+    def current_output_mode(self) -> ViewMode:
+        """Current output viewer mode."""
+        return self._output_viewer._current_mode
+
+    @property
     def input_viewer(self) -> PreviewViewport:
         """Access the input (left) viewer."""
         return self._input_viewer
+
+    def set_input_exr_is_linear(self, enabled: bool) -> None:
+        """Keep both viewers aligned on INPUT-mode EXR display interpretation."""
+        self._input_viewer.set_input_exr_is_linear(enabled)
+        self._output_viewer.set_input_exr_is_linear(enabled)
 
     # ── Public API ──
 

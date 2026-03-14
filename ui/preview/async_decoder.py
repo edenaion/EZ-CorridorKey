@@ -29,7 +29,8 @@ class _DecodeTask(QRunnable):
 
     def __init__(self, request_id: int, path: str, mode: ViewMode,
                  stem_index: int, video_path: str | None = None,
-                 video_frame_index: int = 0):
+                 video_frame_index: int = 0,
+                 input_exr_is_linear: bool = False):
         super().__init__()
         self.signals = _DecodeSignals()
         self._request_id = request_id
@@ -38,14 +39,23 @@ class _DecodeTask(QRunnable):
         self._stem_index = stem_index
         self._video_path = video_path
         self._video_frame_index = video_frame_index
+        self._input_exr_is_linear = input_exr_is_linear
         self.setAutoDelete(True)
 
     def run(self) -> None:
         try:
             if self._video_path:
-                qimg = decode_video_frame(self._video_path, self._video_frame_index)
+                qimg = decode_video_frame(
+                    self._video_path,
+                    self._video_frame_index,
+                    input_exr_is_linear=self._input_exr_is_linear,
+                )
             else:
-                qimg = decode_frame(self._path, self._mode)
+                qimg = decode_frame(
+                    self._path,
+                    self._mode,
+                    input_exr_is_linear=self._input_exr_is_linear,
+                )
             self.signals.finished.emit(self._stem_index, self._mode.value, qimg)
         except RuntimeError:
             pass  # Signal source deleted — task outlived its decoder
@@ -82,12 +92,21 @@ class AsyncDecoder(QObject):
 
     def request_decode(self, path: str, mode: ViewMode, stem_index: int,
                        video_path: str | None = None,
-                       video_frame_index: int = 0) -> None:
+                       video_frame_index: int = 0,
+                       input_exr_is_linear: bool = False) -> None:
         """Submit a decode request. Supersedes any pending request."""
         self._current_request_id += 1
         req_id = self._current_request_id
 
-        task = _DecodeTask(req_id, path, mode, stem_index, video_path, video_frame_index)
+        task = _DecodeTask(
+            req_id,
+            path,
+            mode,
+            stem_index,
+            video_path,
+            video_frame_index,
+            input_exr_is_linear=input_exr_is_linear,
+        )
 
         # Keep a strong reference to the signals object
         self._pending_signals[req_id] = task.signals
