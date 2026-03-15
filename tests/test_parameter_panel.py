@@ -50,3 +50,15 @@ def test_parallel_frames_tooltip_is_cuda_only():
     assert "CUDA only right now" in tooltip
     assert "Not currently supported on Apple Silicon" in tooltip
     assert "Apple Silicon with 64GB+ unified RAM" not in tooltip
+
+
+def test_set_input_is_linear_updates_combo_without_emitting_params_changed():
+    _app()
+    panel = ParameterPanel()
+    fired: list[bool] = []
+    panel.params_changed.connect(lambda: fired.append(True))
+
+    panel.set_input_is_linear(True)
+
+    assert panel.get_params().input_is_linear is True
+    assert fired == []

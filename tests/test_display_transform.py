@@ -14,7 +14,7 @@ from PySide6.QtGui import QImage
 
 from ui.preview.display_transform import (
     decode_frame, clear_cache, _cache_key, _transform_matte,
-    _transform_linear_rgb, _transform_premultiplied, _numpy_to_qimage,
+    _transform_linear_rgb, _transform_processed_rgba, _numpy_to_qimage,
     processed_rgba_to_qimage, decode_video_frame,
 )
 from ui.preview.frame_index import ViewMode
@@ -90,31 +90,31 @@ class TestTransformLinearRGB:
         assert isinstance(qimg, QImage)
 
 
-class TestTransformPremultiplied:
-    def test_4ch_premultiplied(self):
-        """Codex test: 4-channel premultiplied RGBA (Processed output)."""
+class TestTransformProcessedRGBA:
+    def test_4ch_straight_rgba(self):
+        """Codex test: 4-channel straight RGBA (Processed output)."""
         bgra = np.zeros((10, 10, 4), dtype=np.float32)
-        bgra[:, :, :3] = 0.25  # premultiplied color
+        bgra[:, :, :3] = 0.25
         bgra[:, :, 3] = 0.5   # alpha
-        qimg = _transform_premultiplied(bgra)
+        qimg = _transform_processed_rgba(bgra)
         assert isinstance(qimg, QImage)
 
     def test_zero_alpha(self):
         """Codex test: zero alpha should not cause divide-by-zero."""
         bgra = np.zeros((10, 10, 4), dtype=np.float32)
-        qimg = _transform_premultiplied(bgra)
+        qimg = _transform_processed_rgba(bgra)
         assert isinstance(qimg, QImage)
 
-    def test_keeps_premultiplied_values_instead_of_unpremultiplying(self):
-        """Processed preview should show the stored premultiplied image over black."""
+    def test_composites_straight_rgba_over_black_for_preview(self):
+        """Processed preview should composite straight RGBA over black."""
         bgra = np.zeros((1, 130, 4), dtype=np.float32)
         bgra[:, :, :3] = 0.25
         bgra[:, :, 3] = 0.5
-        qimg = _transform_premultiplied(bgra)
+        qimg = _transform_processed_rgba(bgra)
         color = qimg.pixelColor(129, 0)
-        assert 130 <= color.red() <= 145
-        assert 130 <= color.green() <= 145
-        assert 130 <= color.blue() <= 145
+        assert 99 <= color.red() <= 100
+        assert 99 <= color.green() <= 100
+        assert 99 <= color.blue() <= 100
 
     def test_live_preview_rgba_matches_saved_bgra_display(self):
         """Live processed preview and saved EXR decode should use the same transform."""
@@ -123,7 +123,7 @@ class TestTransformPremultiplied:
         rgba[:, :, 3] = 0.5
         bgra = rgba[:, :, [2, 1, 0, 3]]
         live_qimg = processed_rgba_to_qimage(rgba)
-        saved_qimg = _transform_premultiplied(bgra)
+        saved_qimg = _transform_processed_rgba(bgra)
         live = live_qimg.pixelColor(0, 0)
         saved = saved_qimg.pixelColor(0, 0)
         assert live.red() == saved.red()

@@ -27,12 +27,12 @@ class TestInferenceParams:
         d = {"input_is_linear": True, "future_field": 42}
         params = InferenceParams.from_dict(d)
         assert params.input_is_linear is True
-        assert params.despill_strength == 1.0  # default
+        assert params.despill_strength == 0.5  # default
 
     def test_defaults(self):
         params = InferenceParams()
         assert params.input_is_linear is False
-        assert params.despill_strength == 1.0
+        assert params.despill_strength == 0.5
         assert params.refiner_scale == 1.0
         assert params.despeckle_dilation == 25
         assert params.despeckle_blur == 5

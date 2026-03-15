@@ -505,14 +505,13 @@ class CorridorKeyEngine:
         # res_fg is sRGB.
         fg_despilled = cu.despill(res_fg, green_limit_mode='average', strength=despill_strength)
         
-        # C. Premultiply (for EXR Output)
-        # CONVERT TO LINEAR FIRST! EXRs must house linear color premultiplied by linear alpha.
+        # C. Convert to linear for output assembly and preserve source luminance.
+        source_lin = image if input_is_linear else cu.srgb_to_linear(image)
         fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
-        fg_premul_lin = cu.premultiply(fg_despilled_lin, processed_alpha)
-        
-        # D. Pack RGBA
-        # [H, W, 4] - All channels are now strictly Linear Float
-        processed_rgba = np.concatenate([fg_premul_lin, processed_alpha], axis=-1)
+        fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
+
+        # D. Pack straight linear RGBA for NLE/compositor interchange.
+        processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
 
         # ----------------------------
         
@@ -535,5 +534,5 @@ class CorridorKeyEngine:
             'alpha': res_alpha,        # Linear, Raw Prediction
             'fg': res_fg,              # sRGB, Raw Prediction (Straight)
             'comp': comp_srgb,         # sRGB, Composite
-            'processed': processed_rgba # Linear/Premul, RGBA, Garbage Matted & Despilled
+            'processed': processed_rgba,  # Linear/Straight RGBA, garbage matted + despilled
         }

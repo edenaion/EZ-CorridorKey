@@ -43,6 +43,17 @@ def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
     ).astype(np.float32)
 
 
+def _srgb_to_linear(srgb: np.ndarray) -> np.ndarray:
+    """Convert sRGB RGB values to linear-light using the standard piecewise curve."""
+    srgb = np.clip(srgb.astype(np.float32), 0.0, None)
+    mask = srgb <= 0.04045
+    return np.where(
+        mask,
+        srgb / 12.92,
+        np.power((srgb + 0.055) / 1.055, 2.4),
+    ).astype(np.float32)
+
+
 def _exr_compression_constant(name: str):
     """Map a compression name to the Imath compression enum value."""
     import Imath
@@ -62,7 +73,7 @@ def write_exr(path: str, img: np.ndarray, compression: str = "dwab") -> bool:
         path: Output file path.
         img: Image array. Accepts:
             - BGR float32 [H, W, 3] (from cv2.imread, service.py output)
-            - BGRA float32 [H, W, 4] (premultiplied RGBA from inference)
+            - BGRA float32 [H, W, 4] (straight RGBA from inference)
             - Grayscale float32 [H, W] (single-channel matte)
         compression: EXR compression — "dwab", "piz", "zip", or "none".
 
@@ -264,13 +275,35 @@ def read_mask_frame(fpath: str, clip_name: str = "", frame_index: int = 0) -> Op
     return mask
 
 
+def decode_video_mask_frame(frame: np.ndarray) -> np.ndarray:
+    """Normalize a decoded video frame into a single-channel matte.
+
+    This keeps alpha-video behavior aligned with imported alpha images:
+    visible BGR video mattes are converted to grayscale before
+    normalization, while a decoded BGRA frame uses its explicit alpha
+    channel if the decoder preserves it.
+    """
+    if frame.ndim == 2:
+        mask_in = frame
+    elif frame.ndim == 3 and frame.shape[2] == 4:
+        mask_in = frame[:, :, 3]
+    elif frame.ndim == 3 and frame.shape[2] == 3:
+        mask_in = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    else:
+        mask_in = frame
+
+    mask = normalize_mask_dtype(mask_in)
+    return normalize_mask_channels(mask)
+
+
 def read_video_mask_at(
     video_path: str, frame_index: int,
 ) -> Optional[np.ndarray]:
     """Read a single mask frame from a video by index, as float32 [H, W] [0, 1].
 
-    Extracts the blue channel (index 2) from BGR, matching the convention
-    used by alpha-channel video masks.
+    Decoded BGRA frames use the explicit alpha channel when available.
+    Standard decoded BGR video mattes are converted to grayscale, matching
+    how imported alpha images are normalized in the UI.
 
     Args:
         video_path: Path to video file.
@@ -285,6 +318,6 @@ def read_video_mask_at(
         ret, frame = cap.read()
         if not ret:
             return None
-        return frame[:, :, 2].astype(np.float32) / 255.0
+        return decode_video_mask_frame(frame)
     finally:
         cap.release()

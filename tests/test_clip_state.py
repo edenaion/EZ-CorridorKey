@@ -188,6 +188,38 @@ class TestClipEntryFindAssets:
             assert clip.alpha_asset is not None
             assert clip.state == ClipState.READY
 
+    def test_finds_alpha_hint_video(self, monkeypatch):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shot_dir = os.path.join(tmpdir, "shot1")
+            input_dir = os.path.join(shot_dir, "Input")
+            os.makedirs(input_dir)
+
+            for i in range(3):
+                with open(os.path.join(input_dir, f"{i:05d}.png"), "w") as f:
+                    f.write("dummy")
+
+            alpha_video = os.path.join(shot_dir, "AlphaHint.mov")
+            with open(alpha_video, "w") as f:
+                f.write("dummy")
+
+            original_calc = ClipAsset._calculate_length
+
+            def _fake_calculate_length(self):
+                if self.asset_type == "video" and self.path.endswith("AlphaHint.mov"):
+                    self.frame_count = 3
+                    return
+                return original_calc(self)
+
+            monkeypatch.setattr(ClipAsset, "_calculate_length", _fake_calculate_length)
+
+            clip = ClipEntry(name="shot1", root_path=shot_dir)
+            clip.find_assets()
+
+            assert clip.alpha_asset is not None
+            assert clip.alpha_asset.asset_type == "video"
+            assert clip.alpha_asset.path == alpha_video
+            assert clip.state == ClipState.READY
+
     def test_empty_input_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             shot_dir = os.path.join(tmpdir, "shot1")

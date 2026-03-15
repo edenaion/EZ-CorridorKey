@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QProgressBar, QScrollArea, QFrame, QSizePolicy,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 
 from backend.job_queue import GPUJobQueue, GPUJob, JobStatus, JobType
 
@@ -92,13 +92,27 @@ class QueuePanel(QWidget):
         self._main_layout.setContentsMargins(0, 0, 0, 0)
         self._main_layout.setSpacing(0)
 
-        # ── Always-visible tab: vertical "QUEUE" ──
-        self._tab = QPushButton("Q\nU\nE\nU\nE")
+        # ── Always-visible tab: vertical "QUEUE" as clickable strip ──
+        self._tab = QPushButton("")
         self._tab.setCursor(Qt.PointingHandCursor)
         self._tab.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._tab.setFixedWidth(_TAB_W)
         self._tab.setToolTip("Toggle queue panel (Q)")
         self._tab.clicked.connect(self.toggle_collapsed)
+
+        tab_layout = QVBoxLayout(self._tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(0)
+        tab_layout.addStretch()
+        self._tab_letters: list[QLabel] = []
+        for ch in "QUEUE":
+            lbl = QLabel(ch)
+            lbl.setAlignment(Qt.AlignCenter)
+            lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            tab_layout.addWidget(lbl)
+            self._tab_letters.append(lbl)
+        tab_layout.addStretch()
+
         self._main_layout.addWidget(self._tab)
         self._apply_tab_style()
 
@@ -176,16 +190,60 @@ class QueuePanel(QWidget):
         self._row_cache: dict[str, _JobRowCache] = {}
         self._displayed_ids: list[str] = []
 
+        # One-shot startup shimmer on the tab
+        QTimer.singleShot(2000, self._start_shimmer)
+
     def _apply_tab_style(self) -> None:
         """Update tab color based on collapsed/expanded state."""
         color = "#808070" if self._collapsed else "#CCCCAA"
         self._tab.setStyleSheet(
-            f"QPushButton {{ color: {color}; background: #0E0D00; "
+            "QPushButton { background: #0E0D00; "
             "border: none; border-right: 1px solid #2A2910; "
-            "font-size: 11px; font-weight: 700; padding: 0; "
-            "line-height: 14px; }"
-            "QPushButton:hover { color: #FFF203; background: #1A1900; }"
+            "padding: 0; }"
+            "QPushButton:hover { background: #1A1900; }"
         )
+        for lbl in self._tab_letters:
+            lbl.setStyleSheet(
+                f"QLabel {{ color: {color}; background: transparent; "
+                "font-size: 11px; font-weight: 700; padding: 0; }}"
+            )
+
+    # ── Startup shimmer animation ──────────────────────────────
+    def _start_shimmer(self) -> None:
+        """Light up each letter gold one at a time, then revert."""
+        if not self._collapsed:
+            return
+        self._shimmer_idx = 0
+        self._shimmer_timer = QTimer(self)
+        self._shimmer_timer.setInterval(150)  # ms per letter
+        self._shimmer_timer.timeout.connect(self._shimmer_tick)
+        self._shimmer_timer.start()
+
+    def _shimmer_tick(self) -> None:
+        """Advance the shimmer one letter forward."""
+        gold = "#FFF203"
+        base = "#808070"
+        letters = self._tab_letters
+        idx = self._shimmer_idx
+
+        # Revert previous letter
+        if idx > 0 and idx - 1 < len(letters):
+            letters[idx - 1].setStyleSheet(
+                f"QLabel {{ color: {base}; background: transparent; "
+                "font-size: 11px; font-weight: 700; padding: 0; }}"
+            )
+
+        # Light up current letter
+        if idx < len(letters):
+            letters[idx].setStyleSheet(
+                f"QLabel {{ color: {gold}; background: transparent; "
+                "font-size: 11px; font-weight: 700; padding: 0; }}"
+            )
+            self._shimmer_idx += 1
+        else:
+            # Done — revert last letter and stop
+            self._shimmer_timer.stop()
+            self._apply_tab_style()
 
     def toggle_collapsed(self) -> None:
         """Toggle between collapsed (tab only) and expanded (tab + content)."""

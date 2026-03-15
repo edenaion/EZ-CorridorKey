@@ -466,6 +466,13 @@ class ClipEntry:
         alpha_dir = os.path.join(self.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
             self.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+        else:
+            alpha_candidates = glob_module.glob(
+                os.path.join(self.root_path, "AlphaHint.*")
+            )
+            alpha_candidates = [c for c in alpha_candidates if _is_video_file(c)]
+            if alpha_candidates:
+                self.alpha_asset = ClipAsset(alpha_candidates[0], 'video')
 
         # VideoMaMa mask hint — directory OR video file
         mask_dir = os.path.join(self.root_path, "VideoMamaMaskHint")

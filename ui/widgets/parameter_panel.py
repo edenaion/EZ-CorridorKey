@@ -191,7 +191,7 @@ class ParameterPanel(QWidget):
         inf_layout.addWidget(self._despill_label)
         self._despill_slider = QSlider(Qt.Horizontal)
         self._despill_slider.setRange(0, 10)
-        self._despill_slider.setValue(10)
+        self._despill_slider.setValue(5)
         self._despill_slider.setToolTip(
             "Green spill removal strength (0.0–1.0).\n"
             "Removes green color bleed from hair, skin, and edges.\n"
@@ -308,15 +308,15 @@ class ParameterPanel(QWidget):
         self._proc_check = QCheckBox("Processed")
         self._proc_check.setChecked(True)
         self._proc_check.setToolTip(
-            "Processed — production-ready RGBA (premultiplied, linear).\n"
-            "Designed for import into compositing tools (Nuke, After Effects).\n"
+            "Processed — production-ready RGBA (straight, linear).\n"
+            "Designed for import into Resolve, Premiere, and compositing tools.\n"
             "Includes despill + garbage matte cleanup applied."
         )
         proc_row.addWidget(self._proc_check, 1)
         self._proc_format = QComboBox()
         self._proc_format.addItems(["exr", "png"])
         self._proc_format.setFixedWidth(70)
-        self._proc_format.setToolTip("EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for premultiplied data).")
+        self._proc_format.setToolTip("EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for straight linear RGBA).")
         proc_row.addWidget(self._proc_format)
         out_layout.addLayout(proc_row)
 
@@ -360,7 +360,7 @@ class ParameterPanel(QWidget):
 
         # Middle-click reset: map widget → (setter_callable, default_value)
         self._middle_click_defaults: dict[QWidget, tuple] = {
-            self._despill_slider: (self._despill_slider.setValue, 10),      # 1.0
+            self._despill_slider: (self._despill_slider.setValue, 5),       # 0.5
             self._refiner_slider: (self._refiner_slider.setValue, 10),      # 1.0
             self._despeckle_size: (self._despeckle_size.setValue, 400),      # 400px
         }
@@ -441,6 +441,14 @@ class ParameterPanel(QWidget):
         target = 1 if prefer_linear else 0  # 1=Linear, 0=sRGB
         if self._color_space.currentIndex() != target:
             self._color_space.setCurrentIndex(target)
+
+    def set_input_is_linear(self, input_is_linear: bool) -> None:
+        """Programmatically set Color Space without emitting params_changed."""
+        self._suppress_signals = True
+        try:
+            self._color_space.setCurrentIndex(1 if input_is_linear else 0)
+        finally:
+            self._suppress_signals = False
 
     def set_params(self, params: InferenceParams) -> None:
         """Load parameter values (e.g. from a saved session).

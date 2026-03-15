@@ -57,6 +57,7 @@ from .validators import (
     ensure_output_dirs,
 )
 from .frame_io import (
+    _srgb_to_linear,
     write_exr,
     read_image_frame,
     read_mask_frame,
@@ -65,6 +66,8 @@ from .frame_io import (
     read_video_mask_at,
 )
 from .job_queue import GPUJob, GPUJobQueue
+
+from .frame_io import decode_video_mask_frame
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +146,7 @@ class _ActiveModel(Enum):
 class InferenceParams:
     """Frozen parameters for a single inference job."""
     input_is_linear: bool = False
-    despill_strength: float = 1.0  # 0.0 to 1.0
+    despill_strength: float = 0.5  # 0.0 to 1.0
     auto_despeckle: bool = True
     despeckle_size: int = 400
     despeckle_dilation: int = 25   # clean_matte dilation radius
@@ -755,7 +758,7 @@ class CorridorKeyService:
             ret, frame = alpha_cap.read()
             if not ret:
                 return None
-            return frame[:, :, 2].astype(np.float32) / 255.0
+            return decode_video_mask_frame(frame)
         else:
             fname: str | None = None
             if input_stem is not None and alpha_stem_lookup is not None:
@@ -840,7 +843,10 @@ class CorridorKeyService:
 
         # FG
         if cfg.fg_enabled:
-            fg_bgr = cv2.cvtColor(pred_fg, cv2.COLOR_RGB2BGR)
+            fg_rgb = pred_fg
+            if cfg.fg_format == "exr":
+                fg_rgb = _srgb_to_linear(fg_rgb)
+            fg_bgr = cv2.cvtColor(fg_rgb.astype(np.float32), cv2.COLOR_RGB2BGR)
             fg_path = os.path.join(dirs['fg'], f"{input_stem}.{cfg.fg_format}")
             self._write_image(fg_bgr, fg_path, cfg.fg_format, clip_name, frame_index,
                               exr_compression=cfg.exr_compression)
@@ -857,15 +863,19 @@ class CorridorKeyService:
         # Comp
         if cfg.comp_enabled:
             comp_srgb = res['comp']
-            comp_bgr = cv2.cvtColor(
-                (np.clip(comp_srgb, 0.0, 1.0) * 255.0).astype(np.uint8),
-                cv2.COLOR_RGB2BGR,
-            )
+            if cfg.comp_format == "exr":
+                comp_rgb = _srgb_to_linear(comp_srgb)
+                comp_bgr = cv2.cvtColor(comp_rgb.astype(np.float32), cv2.COLOR_RGB2BGR)
+            else:
+                comp_bgr = cv2.cvtColor(
+                    (np.clip(comp_srgb, 0.0, 1.0) * 255.0).astype(np.uint8),
+                    cv2.COLOR_RGB2BGR,
+                )
             comp_path = os.path.join(dirs['comp'], f"{input_stem}.{cfg.comp_format}")
             self._write_image(comp_bgr, comp_path, cfg.comp_format, clip_name, frame_index,
                               exr_compression=cfg.exr_compression)
 
-        # Processed (RGBA premultiplied)
+        # Processed (RGBA straight linear)
         if cfg.processed_enabled and 'processed' in res:
             proc_rgba = res['processed']
             proc_bgra = cv2.cvtColor(proc_rgba, cv2.COLOR_RGBA2BGRA)

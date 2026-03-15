@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import sys
+import glob as glob_module
 
 import cv2
 import numpy as np
@@ -35,11 +36,11 @@ from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve, Q
 from PySide6.QtGui import QKeySequence, QAction, QImage, QPainter
 
 from backend import (
-    CorridorKeyService, ClipEntry, ClipState, InferenceParams,
+    CorridorKeyService, ClipAsset, ClipEntry, ClipState, InferenceParams,
     InOutRange, OutputConfig, JobType,
     PipelineRoute, classify_pipeline_route, mask_sequence_is_videomama_ready,
 )
-from backend.project import VIDEO_FILE_FILTER
+from backend.project import VIDEO_FILE_FILTER, is_video_file
 
 from ui.models.clip_model import ClipListModel
 from ui.preview.frame_index import ViewMode
@@ -65,6 +66,11 @@ from ui.recent_sessions import RecentSessionsStore
 from ui.shortcut_registry import ShortcutRegistry
 
 logger = logging.getLogger(__name__)
+
+# TEMPORARY: keep a visible tester build identifier on the 1.6.7 user-test
+# branch so remote testers can confirm they pulled the right build. Remove this
+# before merging the branch back into main.
+_SHOW_TESTER_BUILD_ID = True
 
 # Session file stored in clips dir (Codex: JSON sidecar)
 _SESSION_FILENAME = ".corridorkey_session.json"
@@ -114,6 +120,54 @@ class _Toast(QLabel):
 
     def mousePressEvent(self, event):
         self.deleteLater()
+        super().mousePressEvent(event)
+
+
+def _remove_alpha_hint_assets(root_path: str) -> None:
+    """Delete sequence or video alpha-hint assets for a clip."""
+    alpha_dir = os.path.join(root_path, "AlphaHint")
+    if os.path.isdir(alpha_dir):
+        shutil.rmtree(alpha_dir, ignore_errors=True)
+
+    for candidate in glob_module.glob(os.path.join(root_path, "AlphaHint.*")):
+        if os.path.isfile(candidate) and is_video_file(candidate):
+            try:
+                os.remove(candidate)
+            except OSError:
+                logger.warning("Failed to remove alpha video asset: %s", candidate)
+
+
+def _import_alpha_video_as_sequence(
+    video_path: str,
+    alpha_dir: str,
+    input_files: list[str],
+) -> int:
+    """Decode an alpha video into AlphaHint/*.png named to match input stems."""
+    os.makedirs(alpha_dir, exist_ok=True)
+    cap = cv2.VideoCapture(video_path)
+    imported_count = 0
+    try:
+        for input_name in input_files:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            input_stem = os.path.splitext(input_name)[0]
+            dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
+            if frame.ndim == 2:
+                mask_u8 = frame
+            elif frame.ndim == 3 and frame.shape[2] == 4:
+                mask_u8 = frame[:, :, 3]
+            else:
+                mask_u8 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if mask_u8.dtype != np.uint8:
+                mask_u8 = (np.clip(mask_u8, 0.0, 1.0) * 255.0).astype(np.uint8)
+            if cv2.imwrite(dst_path, mask_u8):
+                imported_count += 1
+            else:
+                logger.warning("Failed to write imported alpha video frame: %s", dst_path)
+    finally:
+        cap.release()
+    return imported_count
 
 
 class _MuteOverlay(QLabel):
@@ -191,7 +245,7 @@ class MainWindow(QMainWindow):
     def __init__(self, service: CorridorKeyService | None = None,
                  store: RecentSessionsStore | None = None):
         super().__init__()
-        self.setWindowTitle("CORRIDORKEY")
+        self.setWindowTitle(f"EZ-CorridorKey {self._get_visible_build_id()}")
         self.setMinimumSize(1100, 650)
         self.resize(1400, 800)
         self.setAcceptDrops(True)
@@ -200,6 +254,7 @@ class MainWindow(QMainWindow):
         self._recent_store = store or RecentSessionsStore()
         self._current_clip: ClipEntry | None = None
         self._clips_dir: str | None = None
+        self._clip_input_is_linear: dict[str, bool] = {}
         # Track active job ID — set only once when job starts, not on every progress
         self._active_job_id: str | None = None
         self._cancel_requested_job_id: str | None = None
@@ -376,7 +431,11 @@ class MainWindow(QMainWindow):
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(12, 6, 12, 6)
 
-        brand = QLabel('<span style="color:#FFF203;">CORRIDOR</span><span style="color:#2CC350;">KEY</span>')
+        brand = QLabel(
+            '<span style="color:#FFF203;">EZ-</span>'
+            '<span style="color:#FFF203;">CORRIDOR</span>'
+            '<span style="color:#2CC350;">KEY</span>'
+        )
         brand.setObjectName("brandMark")
         top_bar.addWidget(brand)
         top_bar.addStretch()
@@ -658,7 +717,7 @@ class MainWindow(QMainWindow):
                 self,
                 "Force Stop Failed",
                 "Could not relaunch the app automatically.\n\n"
-                "Please close and reopen CorridorKey manually.",
+                "Please close and reopen EZ-CorridorKey manually.",
             )
             return
 
@@ -1016,6 +1075,21 @@ class MainWindow(QMainWindow):
             export_mode=self._dual_viewer.current_output_mode,
         )
 
+    def _sync_selected_clip_view(self, clip: ClipEntry) -> None:
+        """Reload the selected clip while preserving its remembered input interpretation."""
+        self._dual_viewer.set_clip(clip)
+
+        if clip.input_asset is not None:
+            input_is_linear = self._input_is_linear_for_clip(clip)
+            self._param_panel.set_input_is_linear(input_is_linear)
+            self._dual_viewer.set_input_exr_is_linear(input_is_linear)
+            self._refresh_input_thumbnail(
+                clip,
+                input_is_linear=input_is_linear,
+            )
+
+        self._refresh_export_thumbnail(clip)
+
     @Slot(object)
     def _on_tray_clip_clicked(self, clip: ClipEntry) -> None:
         """Handle clip clicked in I/O tray — select it and load preview."""
@@ -1051,6 +1125,8 @@ class MainWindow(QMainWindow):
 
     @Slot(ClipEntry)
     def _on_clip_selected(self, clip: ClipEntry) -> None:
+        if self._current_clip is not None and self._current_clip is not clip:
+            self._remember_current_clip_input_color_space()
         self._current_clip = clip
         logger.debug(f"Clip selected: '{clip.name}' state={clip.state.value}")
 
@@ -1059,8 +1135,9 @@ class MainWindow(QMainWindow):
         if batch_count <= 1:
             self._io_tray.set_selected(clip.name)
 
-        # Load clip into dual viewer (both input + output viewports)
-        self._dual_viewer.set_clip(clip)
+        # Load clip into both viewers while preserving the remembered input
+        # interpretation for the selected clip.
+        self._sync_selected_clip_view(clip)
 
         # Refresh annotation coverage bar (annotations loaded from disk above)
         self._update_annotation_info()
@@ -1082,19 +1159,6 @@ class MainWindow(QMainWindow):
             needs_extraction=needs_extraction,
         )
 
-        # Default standalone EXR sequences to Linear, but keep extracted video
-        # EXRs in sRGB-range mode because FFmpeg writes video values as-is.
-        if clip.input_asset is not None:
-            self._param_panel.auto_detect_color_space(clip.should_default_input_linear())
-            self._dual_viewer.set_input_exr_is_linear(
-                self._param_panel.get_params().input_is_linear
-            )
-            self._refresh_input_thumbnail(
-                clip,
-                input_is_linear=self._param_panel.get_params().input_is_linear,
-            )
-        self._refresh_export_thumbnail(clip)
-
         # Enable GVM/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
         has_mask = self._clip_has_videomama_ready_mask(clip)
@@ -1111,6 +1175,7 @@ class MainWindow(QMainWindow):
         select_clip: str | None = None,
     ) -> None:
         logger.info(f"Scanning clips directory: {dir_path}")
+        previous_clips_dir = self._clips_dir
         self._clips_dir = dir_path
         # Reset status bar state on project load (no active job)
         self._status_bar.set_running(False)
@@ -1128,6 +1193,19 @@ class MainWindow(QMainWindow):
             clips = self._service.scan_clips(
                 dir_path, allow_standalone_videos=not is_projects,
             )
+            if (
+                previous_clips_dir is None
+                or os.path.normcase(os.path.abspath(previous_clips_dir))
+                != os.path.normcase(os.path.abspath(dir_path))
+            ):
+                self._clip_input_is_linear = {}
+            else:
+                current_names = {clip.name for clip in clips}
+                self._clip_input_is_linear = {
+                    name: value
+                    for name, value in self._clip_input_is_linear.items()
+                    if name in current_names
+                }
             self._clip_model.set_clips(clips)
 
             # Generate thumbnails for all clips (background)
@@ -1243,6 +1321,7 @@ class MainWindow(QMainWindow):
         self._welcome.refresh_recents()
         self._clips_dir = None
         self._current_clip = None
+        self._clip_input_is_linear = {}
 
     @Slot(list)
     def _on_tray_folder_imported(self, dir_path: str) -> None:
@@ -1782,6 +1861,7 @@ class MainWindow(QMainWindow):
     @Slot()
     def _on_params_changed(self) -> None:
         """Handle parameter change — debounce before reprocess."""
+        self._remember_current_clip_input_color_space()
         self._dual_viewer.set_input_exr_is_linear(
             self._param_panel.get_params().input_is_linear
         )
@@ -1869,7 +1949,12 @@ class MainWindow(QMainWindow):
         if 'comp' not in result:
             return
 
-        mode = self._dual_viewer._output_viewer._current_mode
+        mode = self._dual_viewer.current_output_mode
+
+        # INPUT, MASK, and ALPHA are source/guide views, not inference outputs.
+        # Don't replace them with a COMP preview under the wrong mode label.
+        if mode in (ViewMode.INPUT, ViewMode.MASK, ViewMode.ALPHA):
+            return
 
         # Pick the array that matches current view mode
         if mode == ViewMode.MATTE and 'alpha' in result:
@@ -2132,10 +2217,11 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_import_alpha(self) -> None:
-        """Import user-provided alpha hint images into the clip's AlphaHint/ folder.
+        """Import user-provided alpha hints into AlphaHint/*.png.
 
-        Files are renamed to match input frame stems so index-based matching
-        in the inference loop works correctly (frame 0 → frame 0, etc.).
+        Image folders and alpha videos are both normalized into 8-bit PNG
+        frames named to match input frame stems so index-based matching in
+        the inference loop works correctly (frame 0 -> frame 0, etc.).
         """
         clip = self._current_clip
         if clip is None or clip.state not in (ClipState.RAW, ClipState.MASKED, ClipState.READY):
@@ -2145,7 +2231,15 @@ class MainWindow(QMainWindow):
 
         # If AlphaHint already exists, ask before replacing
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
-        if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
+        alpha_video_candidates = [
+            c for c in glob_module.glob(os.path.join(clip.root_path, "AlphaHint.*"))
+            if os.path.isfile(c) and is_video_file(c)
+        ]
+        has_existing_alpha = (
+            (os.path.isdir(alpha_dir) and os.listdir(alpha_dir))
+            or bool(alpha_video_candidates)
+        )
+        if has_existing_alpha:
             result = QMessageBox.question(
                 self, "Replace Alpha Hints?",
                 f"Clip '{clip.name}' already has alpha hint images.\n\n"
@@ -2155,21 +2249,68 @@ class MainWindow(QMainWindow):
             if result != QMessageBox.Yes:
                 return
 
-        src_dir = QFileDialog.getExistingDirectory(
-            self, "Select Alpha Hint Folder",
-            "",
-            QFileDialog.ShowDirsOnly,
-        )
-        if not src_dir:
+        picker = QMessageBox(self)
+        picker.setWindowTitle("Import Alpha")
+        picker.setText("Import alpha from an image folder or a video file?")
+        folder_btn = picker.addButton("Image Folder", QMessageBox.AcceptRole)
+        video_btn = picker.addButton("Video File", QMessageBox.ActionRole)
+        picker.addButton(QMessageBox.Cancel)
+        picker.setDefaultButton(folder_btn)
+        picker.exec()
+
+        source_kind: str | None = None
+        source_path = ""
+        clicked = picker.clickedButton()
+        if clicked == folder_btn:
+            source_path = QFileDialog.getExistingDirectory(
+                self, "Select Alpha Hint Folder",
+                "",
+                QFileDialog.ShowDirsOnly,
+            )
+            if source_path:
+                source_kind = "folder"
+        elif clicked == video_btn:
+            source_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Select Alpha Hint Video",
+                "",
+                VIDEO_FILE_FILTER,
+            )
+            if source_path:
+                source_kind = "video"
+
+        if not source_kind or not source_path:
             return
 
-        # Find image files in the selected folder (natural/numeric sort)
-        import glob as glob_module
+        n_src = 0
+        src_files: list[str] = []
+
+        if source_kind == "folder":
+            # Find image files in the selected folder (natural/numeric sort)
+            patterns = ("*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff", "*.exr")
+            for pat in patterns:
+                src_files.extend(glob_module.glob(os.path.join(source_path, pat)))
+
+            if not src_files:
+                QMessageBox.warning(
+                    self, "No Images",
+                    "No image files found in the selected folder.\n"
+                    "Expected grayscale images (white=foreground, black=background).",
+                )
+                return
+
+            n_src = len(src_files)
+        else:
+            alpha_video = ClipAsset(source_path, "video")
+            n_src = alpha_video.frame_count
+            if n_src <= 0:
+                QMessageBox.warning(
+                    self, "Unreadable Video",
+                    "Could not read frame count from the selected alpha video.",
+                )
+                return
+
         import re as re_module
-        patterns = ("*.png", "*.jpg", "*.jpeg", "*.tif", "*.tiff", "*.exr")
-        src_files = []
-        for pat in patterns:
-            src_files.extend(glob_module.glob(os.path.join(src_dir, pat)))
 
         def _natural_key(path: str):
             """Sort key that handles any zero-padding scheme correctly."""
@@ -2179,24 +2320,15 @@ class MainWindow(QMainWindow):
 
         src_files.sort(key=_natural_key)
 
-        if not src_files:
-            QMessageBox.warning(
-                self, "No Images",
-                "No image files found in the selected folder.\n"
-                "Expected grayscale images (white=foreground, black=background).",
-            )
-            return
-
         # Get input frame stems for renaming
         input_files = clip.input_asset.get_frame_files()
         n_input = len(input_files)
-        n_src = len(src_files)
 
         if n_src != n_input:
             result = QMessageBox.warning(
                 self, "Frame Count Mismatch",
                 f"Clip '{clip.name}' has {n_input} input frames but you "
-                f"selected {n_src} alpha images.\n\n"
+                f"selected {n_src} alpha hints.\n\n"
                 f"Each input frame needs a matching alpha hint.\n"
                 f"Only {min(n_src, n_input)} frames will be paired.",
                 QMessageBox.Ok | QMessageBox.Cancel,
@@ -2206,39 +2338,68 @@ class MainWindow(QMainWindow):
 
         # Confirm import
         n_paired = min(n_src, n_input)
-        msg = f"Import {n_paired} alpha hint images into '{clip.name}'?"
+        if source_kind == "video":
+            msg = (
+                f"Import alpha video ({n_src} frames) into '{clip.name}'?\n\n"
+                "The video will be converted to 8-bit PNG alpha frames in AlphaHint/."
+            )
+        else:
+            msg = f"Import {n_paired} alpha hint images into '{clip.name}'?"
         if n_src != n_input:
             msg += f"\n({abs(n_src - n_input)} frames will have no alpha hint)"
         if QMessageBox.question(self, "Import Alpha", msg) != QMessageBox.Yes:
             return
 
-        # Copy + rename to match input frame stems
-        import shutil
-        import cv2
-        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
-        if os.path.isdir(alpha_dir):
-            shutil.rmtree(alpha_dir)
-        os.makedirs(alpha_dir)
+        imported_count = 0
+        try:
+            _remove_alpha_hint_assets(clip.root_path)
+            alpha_dir = os.path.join(clip.root_path, "AlphaHint")
 
-        for i in range(n_paired):
-            src_path = src_files[i]
-            # Use the input frame's stem with .png extension
-            input_stem = os.path.splitext(input_files[i])[0]
-            dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
-
-            src_ext = os.path.splitext(src_path)[1].lower()
-            if src_ext == '.png':
-                shutil.copy2(src_path, dst_path)
+            if source_kind == "video":
+                imported_count = _import_alpha_video_as_sequence(
+                    source_path,
+                    alpha_dir,
+                    input_files[:n_paired],
+                )
+                if imported_count == 0:
+                    shutil.rmtree(alpha_dir, ignore_errors=True)
+                logger.info(
+                    "Imported %d/%d alpha frames from video into %s",
+                    imported_count, n_paired, alpha_dir,
+                )
             else:
-                # Convert non-PNG to PNG (grayscale)
-                img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
-                if img is not None:
-                    cv2.imwrite(dst_path, img)
-                else:
-                    logger.warning(f"Failed to read alpha image: {src_path}")
+                os.makedirs(alpha_dir, exist_ok=True)
 
-        logger.info(f"Imported {n_paired} alpha hints into {alpha_dir} "
-                     f"(renamed to match input stems)")
+                for i in range(n_paired):
+                    src_path = src_files[i]
+                    input_stem = os.path.splitext(input_files[i])[0]
+                    dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
+
+                    src_ext = os.path.splitext(src_path)[1].lower()
+                    if src_ext == ".png":
+                        shutil.copy2(src_path, dst_path)
+                        imported_count += 1
+                        continue
+
+                    img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+                    if img is not None and cv2.imwrite(dst_path, img):
+                        imported_count += 1
+                    else:
+                        logger.warning("Failed to import alpha image: %s", src_path)
+
+                if imported_count == 0:
+                    shutil.rmtree(alpha_dir, ignore_errors=True)
+                logger.info(
+                    "Imported %d/%d alpha hints into %s (renamed to match input stems)",
+                    imported_count, n_paired, alpha_dir,
+                )
+        except OSError as exc:
+            QMessageBox.critical(
+                self,
+                "Import Alpha Failed",
+                f"Failed to import alpha hints:\n{exc}",
+            )
+            return
 
         # Refresh clip state
         clip.find_assets()
@@ -2246,13 +2407,23 @@ class MainWindow(QMainWindow):
 
         # Reload preview and button states
         if self._current_clip and self._current_clip.name == clip.name:
-            self._dual_viewer.set_clip(clip)
+            self._sync_selected_clip_view(clip)
             self._refresh_button_state()
             self._param_panel.set_import_alpha_enabled(
                 clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
 
-        _Toast(self, f"Imported {n_src} alpha hints.\nClip is now {clip.state.value}.")
+        if source_kind == "video":
+            toast_msg = (
+                f"Imported {imported_count}/{n_paired} alpha frames from video.\n"
+                f"Clip is now {clip.state.value}."
+            )
+        else:
+            toast_msg = (
+                f"Imported {imported_count}/{n_paired} alpha hints.\n"
+                f"Clip is now {clip.state.value}."
+            )
+        _Toast(self, toast_msg)
 
     def _on_run_gvm(self) -> None:
         """Run GVM alpha generation on the selected clip."""
@@ -2618,7 +2789,7 @@ class MainWindow(QMainWindow):
 
         # If selected clip, reload preview to show new assets
         if self._current_clip and self._current_clip.name == clip_name:
-            self._dual_viewer.set_clip(self._current_clip)
+            self._sync_selected_clip_view(self._current_clip)
             self._refresh_button_state()
             _has_mask = self._clip_has_videomama_ready_mask(self._current_clip)
             self._param_panel.set_videomama_enabled(_has_mask)
@@ -2645,7 +2816,7 @@ class MainWindow(QMainWindow):
                     # Refresh viewer to show any partial output from before cancel
                     if self._current_clip and self._current_clip.name == clip_name:
                         clip.find_assets()
-                        self._dual_viewer.set_clip(clip)
+                        self._sync_selected_clip_view(clip)
                         self._refresh_button_state()
                     break
             self._status_bar.stop_job_timer()
@@ -2679,7 +2850,7 @@ class MainWindow(QMainWindow):
                 # Refresh viewer to show any partial output
                 if self._current_clip and self._current_clip.name == clip_name:
                     clip.find_assets()
-                    self._dual_viewer.set_clip(clip)
+                    self._sync_selected_clip_view(clip)
                 break
         self._queue_panel.refresh()
         logger.error(f"Worker error for {clip_name}: {error_msg}")
@@ -3011,6 +3182,7 @@ class MainWindow(QMainWindow):
 
     def _build_session_data(self) -> dict:
         """Build session data dict from current UI state."""
+        self._remember_current_clip_input_color_space()
         data: dict = {
             "version": _SESSION_VERSION,
             "params": self._param_panel.get_params().to_dict(),
@@ -3036,6 +3208,8 @@ class MainWindow(QMainWindow):
         # Selected clip
         if self._current_clip:
             data["selected_clip"] = self._current_clip.name
+        if self._clip_input_is_linear:
+            data["clip_input_is_linear"] = dict(sorted(self._clip_input_is_linear.items()))
 
         return data
 
@@ -3068,6 +3242,16 @@ class MainWindow(QMainWindow):
         # Restore live preview toggle
         if "live_preview" in data:
             self._param_panel._live_preview.setChecked(bool(data["live_preview"]))
+
+        if "clip_input_is_linear" in data:
+            try:
+                loaded = data["clip_input_is_linear"]
+                if isinstance(loaded, dict):
+                    self._clip_input_is_linear = {
+                        str(name): bool(value) for name, value in loaded.items()
+                    }
+            except Exception as e:
+                logger.warning(f"Failed to restore clip color-space overrides: {e}")
 
         # Restore splitter sizes (validate: must have 2 panels, none at 0)
         if "splitter_sizes" in data:
@@ -3106,6 +3290,25 @@ class MainWindow(QMainWindow):
                 if clip.name == clip_name:
                     self._on_clip_selected(clip)
                     break
+
+    def _remember_current_clip_input_color_space(self) -> None:
+        """Persist the current clip's chosen input interpretation in memory."""
+        if self._current_clip is None:
+            return
+        self._clip_input_is_linear[self._current_clip.name] = (
+            self._param_panel.get_params().input_is_linear
+        )
+
+    def _input_is_linear_for_clip(self, clip: ClipEntry) -> bool:
+        """Return the remembered input interpretation for a clip, or its default."""
+        if clip.name in self._clip_input_is_linear:
+            return self._clip_input_is_linear[clip.name]
+
+        input_is_linear = bool(
+            clip.input_asset is not None and clip.should_default_input_linear()
+        )
+        self._clip_input_is_linear[clip.name] = input_is_linear
+        return input_is_linear
 
     @Slot()
     def _on_save_session(self) -> None:
@@ -3289,27 +3492,24 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def _show_about(self) -> None:
-        try:
-            from importlib.metadata import version
-            app_version = version("corridorkey")
-        except Exception:
-            # Running from source — read version from pyproject.toml
-            try:
-                import tomllib
-                pyproject = os.path.join(os.path.dirname(os.path.dirname(__file__)), "pyproject.toml")
-                with open(pyproject, "rb") as f:
-                    app_version = tomllib.load(f)["project"]["version"]
-            except Exception:
-                app_version = "unknown"
-
+        app_version = self._get_local_version()
+        build_id = self._get_visible_build_id()
+        tester_note = ""
+        if _SHOW_TESTER_BUILD_ID:
+            tester_note = (
+                "<p><b>Temporary tester build identifier.</b><br>"
+                "Remove before merging this branch back to main.</p>"
+            )
         box = QMessageBox(self)
-        box.setWindowTitle("About CorridorKey")
+        box.setWindowTitle("About EZ-CorridorKey")
         box.setTextFormat(Qt.RichText)
         box.setText(
-            f"<h2>CorridorKey v{app_version}</h2>"
+            f"<h2>EZ-CorridorKey {build_id}</h2>"
             "<p>AI Green Screen Keyer<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"
+            f"<p>Package version: v{app_version}</p>"
+            f"{tester_note}"
             "<p><b>Special Thanks</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
@@ -3343,6 +3543,33 @@ class MainWindow(QMainWindow):
             except Exception:
                 return "0.0.0"
 
+    def _get_git_short_hash(self) -> str:
+        try:
+            import subprocess
+
+            repo_root = os.path.dirname(os.path.dirname(__file__))
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=2,
+            )
+            return result.stdout.strip()
+        except Exception:
+            return ""
+
+    def _get_visible_build_id(self) -> str:
+        version = self._get_local_version()
+        if not _SHOW_TESTER_BUILD_ID:
+            return f"v{version}"
+
+        git_hash = self._get_git_short_hash()
+        if git_hash:
+            return f"v{version} test ({git_hash})"
+        return f"v{version} test"
+
     def _check_for_updates(self) -> None:
         self._update_thread = _UpdateChecker(self._get_local_version())
         self._update_thread.update_available.connect(self._on_update_available)
@@ -3361,7 +3588,7 @@ class MainWindow(QMainWindow):
 
     def _run_update(self) -> None:
         reply = QMessageBox.question(
-            self, "Update CorridorKey",
+            self, "Update EZ-CorridorKey",
             "This will save your session, close the app, and run the updater.\n"
             "The app will relaunch automatically after updating.\n\n"
             "Continue?",
