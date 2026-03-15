@@ -253,6 +253,7 @@ class MainWindow(QMainWindow):
         self._service = service or CorridorKeyService()
         self._recent_store = store or RecentSessionsStore()
         self._current_clip: ClipEntry | None = None
+        self._last_clip_index: int = 0  # track position for left-neighbor on delete
         self._clips_dir: str | None = None
         self._clip_input_is_linear: dict[str, bool] = {}
         # Track active job ID — set only once when job starts, not on every progress
@@ -1096,7 +1097,11 @@ class MainWindow(QMainWindow):
 
     @Slot(int)
     def _on_clip_count_changed(self, count: int) -> None:
-        """Handle clip added/removed — clear viewer if selected clip is gone."""
+        """Handle clip added/removed — clear viewer if selected clip is gone.
+
+        When the deleted clip was at position N, select the clip to its left
+        (position N-1) rather than jumping to the first clip.
+        """
         if self._current_clip is None:
             return
         # Check if current clip still exists in the model
@@ -1105,9 +1110,13 @@ class MainWindow(QMainWindow):
         if any(c.name == current_name for c in remaining):
             return  # Selected clip still exists, nothing to do
 
-        # Selected clip was removed — select next available or show placeholder
+        # Selected clip was removed — pick the nearest neighbor or show placeholder
         if remaining:
-            self._on_clip_selected(remaining[0])
+            # Use _last_clip_index to find the left neighbor
+            pick = min(self._last_clip_index, len(remaining) - 1)
+            if pick > 0:
+                pick = pick - 1  # prefer left neighbor
+            self._on_clip_selected(remaining[pick])
         else:
             self._current_clip = None
             self._dual_viewer.show_placeholder("No clip selected")
@@ -1151,6 +1160,11 @@ class MainWindow(QMainWindow):
         if self._current_clip is not None and self._current_clip is not clip:
             self._remember_current_clip_input_color_space()
         self._current_clip = clip
+        # Track position for left-neighbor selection on delete
+        for i, c in enumerate(self._clip_model.clips):
+            if c.name == clip.name:
+                self._last_clip_index = i
+                break
         logger.debug(f"Clip selected: '{clip.name}' state={clip.state.value}")
 
         # Highlight in I/O tray (single-select unless multi-select is active)

@@ -484,6 +484,7 @@ class IOTrayPanel(QWidget):
         # Connect to model signals for auto-rebuild
         self._model.modelReset.connect(self._rebuild)
         self._model.dataChanged.connect(self._on_data_changed)
+        self._model.layoutChanged.connect(self._rebuild)
         self._model.clip_count_changed.connect(lambda _: self._rebuild())
 
     # ── + ADD button ──
