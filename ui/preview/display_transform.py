@@ -188,10 +188,7 @@ def _transform_linear_rgb(
         display = np.clip(clamped, 0.0, 1.0)
     else:
         # Linear EXR input and inference outputs both need gamma for display.
-        max_val = clamped.max()
-        if max_val > 1.0:
-            clamped = clamped / (1.0 + clamped)  # Reinhard tone map
-        display = _linear_to_srgb(clamped)
+        display = _linear_to_srgb(np.clip(clamped, 0.0, 1.0))
 
     # BGR → RGB
     rgb = cv2.cvtColor((display * 255.0).astype(np.uint8), cv2.COLOR_BGR2RGB)
