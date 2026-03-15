@@ -213,34 +213,38 @@ def test_try_mlx_float_outputs_handles_resize_path(monkeypatch):
 def test_restore_opaque_source_detail_prefers_source_on_opaque_low_spill_pixels():
     source_lin = np.array(
         [
-            [[0.8, 0.1, 0.1], [0.2, 0.8, 0.2]],
-            [[0.3, 0.3, 0.3], [0.4, 0.2, 0.1]],
+            [[0.8, 0.1, 0.1], [0.2, 0.8, 0.2], [0.1, 0.1, 0.8], [0.2, 0.2, 0.2], [0.6, 0.2, 0.1]],
+            [[0.3, 0.3, 0.3], [0.4, 0.2, 0.1], [0.2, 0.4, 0.6], [0.3, 0.1, 0.1], [0.7, 0.2, 0.2]],
+            [[0.2, 0.2, 0.2], [0.7, 0.2, 0.2], [0.7, 0.2, 0.2], [0.6, 0.3, 0.2], [0.4, 0.2, 0.1]],
+            [[0.1, 0.2, 0.2], [0.6, 0.2, 0.3], [0.5, 0.1, 0.2], [0.8, 0.2, 0.2], [0.2, 0.3, 0.4]],
+            [[0.2, 0.2, 0.1], [0.4, 0.2, 0.1], [0.3, 0.1, 0.1], [0.4, 0.2, 0.2], [0.5, 0.2, 0.2]],
         ],
         dtype=np.float32,
     )
     source_srgb = np.clip(source_lin, 0.0, 1.0)
     image_lin = np.full_like(source_lin, 0.05, dtype=np.float32)
-    alpha = np.array(
-        [
-            [[1.0], [1.0]],
-            [[0.5], [1.0]],
-        ],
-        dtype=np.float32,
+    alpha = np.ones((5, 5, 1), dtype=np.float32)
+    alpha[0, :, 0] = 0.0
+    alpha[:, 0, 0] = 0.0
+
+    restored = _restore_opaque_source_detail(
+        source_lin, source_srgb, image_lin, alpha, edge_band_radius=1, edge_band_softness=1
     )
 
-    restored = _restore_opaque_source_detail(source_lin, source_srgb, image_lin, alpha)
-
-    np.testing.assert_allclose(restored[0, 0], source_lin[0, 0], atol=1e-6)
-    np.testing.assert_allclose(restored[1, 1], source_lin[1, 1], atol=1e-6)
-    np.testing.assert_allclose(restored[1, 0], image_lin[1, 0], atol=1e-6)
+    np.testing.assert_allclose(restored[3, 3], source_lin[3, 3], atol=1e-6)
+    np.testing.assert_allclose(restored[0, 1], image_lin[0, 1], atol=1e-6)
 
 
-def test_restore_opaque_source_detail_avoids_source_restore_on_green_spill_pixels():
-    source_lin = np.array([[[0.2, 0.9, 0.1]]], dtype=np.float32)
+def test_restore_opaque_source_detail_keeps_model_control_in_edge_band():
+    source_lin = np.full((5, 5, 3), 0.9, dtype=np.float32)
     source_srgb = source_lin.copy()
-    image_lin = np.array([[[0.5, 0.4, 0.3]]], dtype=np.float32)
-    alpha = np.array([[[1.0]]], dtype=np.float32)
+    image_lin = np.full((5, 5, 3), 0.1, dtype=np.float32)
+    alpha = np.ones((5, 5, 1), dtype=np.float32)
+    alpha[:, 4, 0] = 0.0
 
-    restored = _restore_opaque_source_detail(source_lin, source_srgb, image_lin, alpha)
+    restored = _restore_opaque_source_detail(
+        source_lin, source_srgb, image_lin, alpha, edge_band_radius=1, edge_band_softness=1
+    )
 
-    np.testing.assert_allclose(restored, image_lin, atol=1e-6)
+    np.testing.assert_allclose(restored[2, 1], source_lin[2, 1], atol=1e-6)
+    assert np.linalg.norm(restored[2, 3] - source_lin[2, 3]) > 0.05
