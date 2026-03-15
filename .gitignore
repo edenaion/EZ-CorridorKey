@@ -51,6 +51,8 @@ VideoMaMaInferenceModule/checkpoints/*
 !VideoMaMaInferenceModule/checkpoints/.gitkeep
 gvm_core/weights/*
 !gvm_core/weights/.gitkeep
+modules/BiRefNetModule/checkpoints/*
+!modules/BiRefNetModule/checkpoints/.gitkeep
 
 # Dev docs (local only)
 dev-docs/research/
