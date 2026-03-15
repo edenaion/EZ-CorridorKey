@@ -4,6 +4,24 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.7.0] - 2026-03-15 — BiRefNet, Color Accuracy, UI Polish
+
+### Added
+- **BiRefNet automatic alpha generation** — new one-click alpha hint method with 16 model variants (Matting, Portrait, General, HR, Lite, etc.). Downloads on first use from HuggingFace and caches locally. Inline model selector dropdown in the parameter panel. No painting or annotation required. *(Adapted from [Warwlock](https://github.com/Warwlock)'s [PR #10](https://github.com/edenaion/EZ-CorridorKey/pull/10))*
+- **"Automatic" / "Requires brushstrokes" section labels** in the Alpha Generation panel for clearer workflow guidance.
+
+### Fixed
+- **Processed output color accuracy** — removed `match_luminance` which was comparing the model's foreground against the full green-screen source, causing systematic brightness shifts. Output colors now faithfully match the input on both CUDA and MLX paths.
+- **Processed viewer washout** — removed global Reinhard tone map (`x/(1+x)`) from the PROC display transform. A single hot pixel above 1.0 was compressing the entire image, making it appear washed out.
+- **Viewer clears on clip deletion** — deleting the currently-viewed clip now either selects the left neighbor or shows a "No clip selected" placeholder instead of displaying stale cached frames.
+- **Export strip refresh on Clear Outputs** — the export thumbnail strip now correctly removes clips when outputs are cleared (COMPLETE → READY state change).
+- **INPUT / EXPORT strip selection sync** — clicking either strip now highlights the same clip in both, preventing visual confusion about which clip the viewer is showing.
+- **Left-neighbor selection on delete** — deleting clip N now selects clip N-1 instead of jumping to the first clip.
+- **torch.compile hang after BiRefNet** — clearing the inductor code cache during model switch prevents a one-time freeze when transitioning from BiRefNet to CorridorKey inference.
+- **Debug console stays on top** — the floating console window no longer hides behind the main window.
+
+---
+
 ## [1.6.7] - 2026-03-14 — Color Truth, Export Fidelity, MLX Parity
 
 ### Added

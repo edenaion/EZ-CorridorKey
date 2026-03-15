@@ -1,6 +1,6 @@
-# EZ-CorridorKey **v1.6.7**
+# EZ-CorridorKey **v1.7.0**
 
-> **Latest release: [v1.6.7](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.6.7)** — Sticky color-space overrides, straight linear EXR exports, alpha-video import, and Apple Silicon / MLX improvements. See the [full changelog](CHANGELOG.md).
+> **Latest release: [v1.7.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.7.0)** — BiRefNet automatic alpha hints, accurate processed output colors, and UI polish. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -23,7 +23,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Sound feedback | None | 7 context-aware sound effects |
 | Session persistence | None | Recent projects, auto-save |
 | Paint / masking | Manual external tool | Built-in brush tool for VideoMaMa / MatAnyone2 masks |
-| Alpha generators | None | GVM, VideoMaMa, MatAnyone2 (one-click) |
+| Alpha generators | None | GVM, BiRefNet, VideoMaMa, MatAnyone2 (one-click) |
 | Apple Silicon | MPS only | MLX acceleration (auto-detected) |
 
 ---

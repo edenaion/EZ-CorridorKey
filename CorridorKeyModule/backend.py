@@ -164,7 +164,6 @@ def _wrap_mlx_output(
     bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
-    fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
     fg_despilled_lin = _restore_opaque_source_detail(
         source_lin,
         source_srgb,
@@ -230,7 +229,6 @@ def _assemble_mlx_output(
     bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
-    fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
     fg_despilled_lin = _restore_opaque_source_detail(
         source_lin,
         source_srgb,
