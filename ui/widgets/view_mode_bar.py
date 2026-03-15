@@ -48,9 +48,9 @@ _MODE_TOOLTIPS: dict[ViewMode, str] = {
         "Best preview of key quality with faithful colors."
     ),
     ViewMode.PROCESSED: (
-        "Processed — production RGBA (premultiplied, linear).\n"
-        "For compositing tools (Nuke, After Effects).\n"
-        "Preview shows the stored premultiplied image over black.\n"
+        "Processed — production RGBA (straight, linear).\n"
+        "For Resolve, Premiere, and compositing tools.\n"
+        "Preview composites the stored image over black.\n"
         "Final compositing should happen in your compositor of choice."
     ),
 }

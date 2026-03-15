@@ -67,24 +67,7 @@ from .frame_io import (
 )
 from .job_queue import GPUJob, GPUJobQueue
 
-try:
-    from .frame_io import decode_video_mask_frame
-except ImportError:
-    def decode_video_mask_frame(frame: np.ndarray) -> np.ndarray:
-        """Compatibility fallback for older frame_io modules missing this helper."""
-        from .validators import normalize_mask_channels, normalize_mask_dtype
-
-        if frame.ndim == 2:
-            mask_in = frame
-        elif frame.ndim == 3 and frame.shape[2] == 4:
-            mask_in = frame[:, :, 3]
-        elif frame.ndim == 3 and frame.shape[2] == 3:
-            mask_in = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        else:
-            mask_in = frame
-
-        mask = normalize_mask_dtype(mask_in)
-        return normalize_mask_channels(mask)
+from .frame_io import decode_video_mask_frame
 
 logger = logging.getLogger(__name__)
 

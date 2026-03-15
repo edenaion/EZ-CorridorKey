@@ -35,8 +35,7 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Low-spill edge tint reduction** — the current tester runtime state reduces orange/red tint on low-spill opaque clothing edges while still letting MLX control genuinely contaminated green-screen boundaries.
 
 ### Notes
-- **Latest stable release is still `v1.6.6`.** This `1.6.7` section documents the active tester branch work since that release.
-- **MLX parity work is still in progress.** Brightness parity is much improved on the tester branch, but Apple Silicon edge/detail tuning is still under active validation before merge to `main`.
+- **MLX parity work is still in progress.** Brightness parity is much improved on the tester branch, but Apple Silicon edge/detail tuning is still under active scrutiny.
 
 ---
 
