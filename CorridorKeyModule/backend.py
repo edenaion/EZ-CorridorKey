@@ -310,11 +310,12 @@ def _restore_opaque_source_detail(
     image_lin: np.ndarray,
     alpha: np.ndarray,
     *,
-    opaque_threshold: float = 0.98,
-    opaque_softness: float = 0.02,
-    max_green_excess: float = 0.04,
+    opaque_threshold: float = 0.92,
+    opaque_softness: float = 0.08,
+    edge_band_radius: int = 8,
+    edge_band_softness: int = 6,
 ) -> np.ndarray:
-    """Prefer source detail where the subject is already opaque and low-spill."""
+    """Prefer source detail away from the alpha edge band."""
     alpha_plane = alpha if alpha.ndim == 3 else alpha[:, :, np.newaxis]
     alpha_plane = np.clip(alpha_plane.astype(np.float32, copy=False), 0.0, 1.0)
 
@@ -323,15 +324,22 @@ def _restore_opaque_source_detail(
         0.0,
         1.0,
     )
+    alpha_2d = alpha_plane[:, :, 0]
+    opaque_mask = (alpha_2d >= opaque_threshold).astype(np.uint8)
 
-    source_srgb = np.clip(source_srgb.astype(np.float32, copy=False), 0.0, 1.0)
-    green_excess = np.maximum(
-        source_srgb[:, :, 1:2] - np.maximum(source_srgb[:, :, 0:1], source_srgb[:, :, 2:3]),
-        0.0,
-    )
-    low_spill_weight = 1.0 - np.clip(green_excess / max(max_green_excess, 1e-6), 0.0, 1.0)
+    if opaque_mask.size == 0 or not opaque_mask.any():
+        interior_weight = np.zeros_like(alpha_plane, dtype=np.float32)
+    elif opaque_mask.all():
+        interior_weight = np.ones_like(alpha_plane, dtype=np.float32)
+    else:
+        dist_to_edge = cv2.distanceTransform(opaque_mask, cv2.DIST_L2, 5)
+        interior_weight = np.clip(
+            (dist_to_edge - float(edge_band_radius)) / max(float(edge_band_softness), 1e-6),
+            0.0,
+            1.0,
+        )[:, :, np.newaxis]
 
-    detail_weight = opaque_weight * low_spill_weight
+    detail_weight = opaque_weight * interior_weight
     return image_lin * (1.0 - detail_weight) + source_lin * detail_weight
 
 
