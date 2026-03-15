@@ -235,16 +235,32 @@ def test_restore_opaque_source_detail_prefers_source_on_opaque_low_spill_pixels(
     np.testing.assert_allclose(restored[0, 1], image_lin[0, 1], atol=1e-6)
 
 
-def test_restore_opaque_source_detail_keeps_model_control_in_edge_band():
-    source_lin = np.full((5, 5, 3), 0.9, dtype=np.float32)
+def test_restore_opaque_source_detail_prefers_source_on_low_spill_edge_pixels():
+    source_lin = np.full((5, 5, 3), [0.78, 0.72, 0.16], dtype=np.float32)
     source_srgb = source_lin.copy()
-    image_lin = np.full((5, 5, 3), 0.1, dtype=np.float32)
+    image_lin = np.full((5, 5, 3), [0.82, 0.48, 0.10], dtype=np.float32)
     alpha = np.ones((5, 5, 1), dtype=np.float32)
     alpha[:, 4, 0] = 0.0
+    alpha[:, 3, 0] = 0.9
 
     restored = _restore_opaque_source_detail(
         source_lin, source_srgb, image_lin, alpha, edge_band_radius=1, edge_band_softness=1
     )
 
     np.testing.assert_allclose(restored[2, 1], source_lin[2, 1], atol=1e-6)
-    assert np.linalg.norm(restored[2, 3] - source_lin[2, 3]) > 0.05
+    assert np.linalg.norm(restored[2, 3] - source_lin[2, 3]) < np.linalg.norm(restored[2, 3] - image_lin[2, 3])
+
+
+def test_restore_opaque_source_detail_keeps_model_control_on_green_spill_edge_pixels():
+    source_lin = np.full((5, 5, 3), [0.25, 0.82, 0.12], dtype=np.float32)
+    source_srgb = source_lin.copy()
+    image_lin = np.full((5, 5, 3), [0.36, 0.44, 0.14], dtype=np.float32)
+    alpha = np.ones((5, 5, 1), dtype=np.float32)
+    alpha[:, 4, 0] = 0.0
+    alpha[:, 3, 0] = 0.9
+
+    restored = _restore_opaque_source_detail(
+        source_lin, source_srgb, image_lin, alpha, edge_band_radius=1, edge_band_softness=1
+    )
+
+    assert np.linalg.norm(restored[2, 3] - image_lin[2, 3]) < np.linalg.norm(restored[2, 3] - source_lin[2, 3])
