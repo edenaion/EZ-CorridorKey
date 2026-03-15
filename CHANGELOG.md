@@ -8,8 +8,6 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Added
 - **Manual alpha-video import in `Import Alpha`** — the UI can now accept alpha-hint video files as well as image folders, then normalize them into `AlphaHint/*.png` frames so they follow the same downstream path as imported stills.
-- **DaVinci Resolve roundtrip QA tooling** — added repeatable harnesses and guides for EZ-CorridorKey → Resolve / Fusion A-B validation, including the `scripts/dvr_roundtrip_qa.py`, `scripts/dvr_compare_frames.py`, and the `dev-docs/guides/dvr-roundtrip-qa.md` workflow.
-- **Tester-branch verification docs** — expanded the 1.6.7 tester checklist so user testing covers color interpretation, tray reselection, alpha import, export thumbnails, and Resolve roundtrips.
 
 ### Fixed
 - **Source color-space truth in viewers and thumbnails** — the left `INPUT` viewer, input thumbnails, and output/export previews now honor the selected source interpretation for video, LDR image sequences, and linear EXR sequences instead of silently drifting back to auto-detect.
