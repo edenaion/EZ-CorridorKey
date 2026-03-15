@@ -1110,12 +1110,11 @@ class MainWindow(QMainWindow):
         if any(c.name == current_name for c in remaining):
             return  # Selected clip still exists, nothing to do
 
-        # Selected clip was removed — pick the nearest neighbor or show placeholder
+        # Selected clip was removed — select left neighbor
         if remaining:
-            # Use _last_clip_index to find the left neighbor
-            pick = min(self._last_clip_index, len(remaining) - 1)
-            if pick > 0:
-                pick = pick - 1  # prefer left neighbor
+            # Deleted clip was at _last_clip_index. After removal the list
+            # shifted left, so the left neighbor is now at index-1 (clamped).
+            pick = max(0, min(self._last_clip_index - 1, len(remaining) - 1))
             self._on_clip_selected(remaining[pick])
         else:
             self._current_clip = None
