@@ -1,6 +1,6 @@
 # EZ-CorridorKey **v1.6.7**
 
-> **Tester branch:** export, color-space, and MLX validation build. Latest stable release remains **v1.6.6**. This branch currently includes source color-truth fixes, EXR/export parity work, manual alpha-video import, Apple Silicon / MLX tuning, and Resolve roundtrip QA tooling. See the [full changelog](CHANGELOG.md).
+> **Latest release: [v1.6.7](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.6.7)** — Sticky color-space overrides, straight linear EXR exports, alpha-video import, and Apple Silicon / MLX improvements. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
