@@ -939,6 +939,9 @@ class MainWindow(QMainWindow):
             self._dual_viewer._scrubber.set_annotation_markers([])
 
     def _connect_signals(self) -> None:
+        # Clip model — detect clip removal
+        self._clip_model.clip_count_changed.connect(self._on_clip_count_changed)
+
         # I/O tray — clip selection, import, drag-and-drop
         self._io_tray.clip_clicked.connect(self._on_tray_clip_clicked)
         self._io_tray.selection_changed.connect(self._on_selection_changed)
@@ -1090,6 +1093,25 @@ class MainWindow(QMainWindow):
             )
 
         self._refresh_export_thumbnail(clip)
+
+    @Slot(int)
+    def _on_clip_count_changed(self, count: int) -> None:
+        """Handle clip added/removed — clear viewer if selected clip is gone."""
+        if self._current_clip is None:
+            return
+        # Check if current clip still exists in the model
+        current_name = self._current_clip.name
+        remaining = self._clip_model.clips
+        if any(c.name == current_name for c in remaining):
+            return  # Selected clip still exists, nothing to do
+
+        # Selected clip was removed — select next available or show placeholder
+        if remaining:
+            self._on_clip_selected(remaining[0])
+        else:
+            self._current_clip = None
+            self._dual_viewer.show_placeholder("No clip selected")
+            self._refresh_button_state()
 
     @Slot(object)
     def _on_tray_clip_clicked(self, clip: ClipEntry) -> None:
