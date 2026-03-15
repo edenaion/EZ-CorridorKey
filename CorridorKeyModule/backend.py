@@ -314,8 +314,18 @@ def _restore_opaque_source_detail(
     opaque_softness: float = 0.08,
     edge_band_radius: int = 8,
     edge_band_softness: int = 6,
+    edge_source_alpha_threshold: float = 0.78,
+    edge_source_alpha_softness: float = 0.18,
+    green_spill_threshold: float = 0.03,
+    green_spill_softness: float = 0.08,
 ) -> np.ndarray:
-    """Prefer source detail away from the alpha edge band."""
+    """Prefer source detail away from the alpha edge band.
+
+    Near the edge, source color is only preserved when the pixel is still
+    reasonably opaque *and* the source does not look green-contaminated.
+    This keeps opaque clothing edges from drifting orange/red while still
+    letting MLX own real green-spill zones like wispy hair.
+    """
     alpha_plane = alpha if alpha.ndim == 3 else alpha[:, :, np.newaxis]
     alpha_plane = np.clip(alpha_plane.astype(np.float32, copy=False), 0.0, 1.0)
 
@@ -339,7 +349,25 @@ def _restore_opaque_source_detail(
             1.0,
         )[:, :, np.newaxis]
 
-    detail_weight = opaque_weight * interior_weight
+    edge_source_weight = np.clip(
+        (alpha_plane - edge_source_alpha_threshold) / max(edge_source_alpha_softness, 1e-6),
+        0.0,
+        1.0,
+    )
+
+    source_srgb = np.clip(source_srgb.astype(np.float32, copy=False), 0.0, 1.0)
+    green_excess = (
+        source_srgb[..., 1:2]
+        - np.maximum(source_srgb[..., 0:1], source_srgb[..., 2:3])
+    )
+    green_spill_weight = np.clip(
+        (green_excess - green_spill_threshold) / max(green_spill_softness, 1e-6),
+        0.0,
+        1.0,
+    )
+
+    safe_edge_source_weight = edge_source_weight * (1.0 - green_spill_weight)
+    detail_weight = np.maximum(opaque_weight * interior_weight, safe_edge_source_weight)
     return image_lin * (1.0 - detail_weight) + source_lin * detail_weight
 
 
