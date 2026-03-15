@@ -203,10 +203,7 @@ def _transform_processed_rgba(bgra: np.ndarray) -> QImage:
     bgra_f = bgra.astype(np.float32)
     bgr = np.clip(bgra_f[:, :, :3], 0.0, None)
     alpha = np.clip(bgra_f[:, :, 3:4], 0.0, 1.0)
-    composite = bgr * alpha
-    max_val = composite.max()
-    if max_val > 1.0:
-        composite = composite / (1.0 + composite)
+    composite = np.clip(bgr * alpha, 0.0, 1.0)
     srgb = _linear_to_srgb(composite)
     rgb = cv2.cvtColor((srgb * 255.0).astype(np.uint8), cv2.COLOR_BGR2RGB)
     return _numpy_to_qimage(rgb)
@@ -217,10 +214,7 @@ def processed_rgba_to_qimage(rgba: np.ndarray) -> QImage:
     rgba_f = rgba.astype(np.float32)
     rgb = np.clip(rgba_f[:, :, :3], 0.0, None)
     alpha = np.clip(rgba_f[:, :, 3:4], 0.0, 1.0)
-    composite = rgb * alpha
-    max_val = composite.max()
-    if max_val > 1.0:
-        composite = composite / (1.0 + composite)
+    composite = np.clip(rgb * alpha, 0.0, 1.0)
     srgb = _linear_to_srgb(composite)
     return _numpy_to_qimage((srgb * 255.0).astype(np.uint8))
 
