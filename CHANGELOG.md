@@ -4,20 +4,39 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [1.6.7] - 2026-03-14 — Color Space Preview Truth & Tester Branch
+## [1.6.7] - 2026-03-14 — Tester Branch: Color Truth, Export Fidelity, MLX Parity
+
+### Added
+- **Manual alpha-video import in `Import Alpha`** — the UI can now accept alpha-hint video files as well as image folders, then normalize them into `AlphaHint/*.png` frames so they follow the same downstream path as imported stills.
+- **DaVinci Resolve roundtrip QA tooling** — added repeatable harnesses and guides for EZ-CorridorKey → Resolve / Fusion A-B validation, including the `scripts/dvr_roundtrip_qa.py`, `scripts/dvr_compare_frames.py`, and the `dev-docs/guides/dvr-roundtrip-qa.md` workflow.
+- **Tester-branch verification docs** — expanded the 1.6.7 tester checklist so user testing covers color interpretation, tray reselection, alpha import, export thumbnails, and Resolve roundtrips.
 
 ### Fixed
-- **Input viewer color truth across source types** — the left `INPUT` viewer now follows the selected color-space interpretation for direct video, LDR images, and EXR sequences, so it matches what CorridorKey will assume at inference time.
-- **Input/export thumbnail parity** — input thumbnails continue to match the left viewer, and export thumbnails remain separate from input thumbnails.
-- **Fresh-launch live preview warmup** — with Live Preview enabled, the first preview update now loads the inference engine on demand instead of silently doing nothing.
+- **Source color-space truth in viewers and thumbnails** — the left `INPUT` viewer, input thumbnails, and output/export previews now honor the selected source interpretation for video, LDR image sequences, and linear EXR sequences instead of silently drifting back to auto-detect.
+- **Sticky clip-level color-space overrides** — reselecting tray thumbnails, clearing outputs, importing alpha, or stopping inference no longer resets a clip from `Linear` back to `sRGB` behind the user's back.
+- **Alpha-import preview mode mismatches** — importing alpha no longer replaces `INPUT` / `ALPHA` preview modes with the wrong pixel payload during live preview refreshes.
+- **Fresh-launch live preview** — the first live-preview reprocess now warms the inference engine on demand instead of appearing inert until a prior inference run.
+- **EXR export correctness** — `FG.exr` and `Comp.exr` are now written from linear-light data, and `Processed.exr` is written as straight linear RGBA instead of a mismatched contract that came back too dark in comp apps.
+- **Processed export luminance parity** — `Processed` output now preserves keyed-subject luminance closely enough for A-B Resolve / Fusion checks without the large darkening regression seen earlier on this tester branch.
+- **Export thumbnail truth** — export tray thumbnails now track the saved output mode they represent instead of mirroring input cards or stale preview state.
+- **Apple Silicon memory meter mismatch** — the macOS memory bar and `used / total` text now derive from the same unified-memory basis, so the bar and number agree.
+- **macOS startup regression after alpha-video work** — startup no longer hard-fails if an older `frame_io` helper layout is present; service import is backward-compatible again.
 
 ### Changed
-- **Color space UX copy** — tooltips and README now explain that color space affects future exports only after rerunning inference, while existing files on disk are unchanged.
-- **Parallel frames messaging** — the in-panel tooltip now explicitly says the feature is CUDA-only for now and not currently supported on Apple Silicon.
-- **Preferences cleanup** — removed the duplicate `Performance` / `Parallel frames` section from Preferences so the control exists only in the main inference UI.
+- **Parallel frames messaging** — the main-panel tooltip now explicitly says the feature is CUDA-only today and unsupported on Apple Silicon right now.
+- **Preferences cleanup** — removed the duplicate `Performance` / `Parallel frames` controls from Preferences so the setting only exists in the main inference UI.
+- **Default despill strength** — the default moved from `1.0` to `0.5` on this branch per the current tuning pass.
+- **Branding polish** — app chrome now uses `EZ-CorridorKey` as the product name, while the in-app logo remains `EZ-CORRIDORKEY` in all caps.
+
+### Apple Silicon / MLX
+- **Linear-input handoff fixed** — linear sources are converted to sRGB before entering the MLX path instead of being treated like already-display-encoded input.
+- **Higher-precision MLX postprocess path** — the adapter now recovers float MLX outputs before uint8 quantization when possible, aligns resize behavior with upstream bicubic handling, and applies the same downstream export contract as the Torch path.
+- **Opaque-detail preservation** — MLX output assembly now preserves more original source detail on confidently opaque, low-spill regions so fine costume details and fabric do not get overcooked as aggressively as earlier tester builds.
+- **Low-spill edge tint reduction** — the current tester runtime state reduces orange/red tint on low-spill opaque clothing edges while still letting MLX control genuinely contaminated green-screen boundaries.
 
 ### Notes
-- This branch is intended for targeted user testing before merging to `main`.
+- **Latest stable release is still `v1.6.6`.** This `1.6.7` section documents the active tester branch work since that release.
+- **MLX parity work is still in progress.** Brightness parity is much improved on the tester branch, but Apple Silicon edge/detail tuning is still under active validation before merge to `main`.
 
 ---
 

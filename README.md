@@ -1,6 +1,6 @@
 # EZ-CorridorKey **v1.6.7**
 
-> **Tester branch:** color-space/input-preview validation build. Latest stable release remains **v1.6.6**. See the [full changelog](CHANGELOG.md).
+> **Tester branch:** export, color-space, and MLX validation build. Latest stable release remains **v1.6.6**. This branch currently includes source color-truth fixes, EXR/export parity work, manual alpha-video import, Apple Silicon / MLX tuning, and Resolve roundtrip QA tooling. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -136,13 +136,15 @@ For difficult shots, use the paint brush as a prompt tool:
 6. Click **MATANYONE2** or **VIDEOMAMA** in the parameter panel
 
 **Option C — Import Alpha (bring your own):**
-If you already have alpha mattes from another tool (Rotobrush, Silhouette, etc.), click **IMPORT ALPHA** in the parameter panel and select the folder containing your images.
+If you already have alpha mattes from another tool (Rotobrush, Silhouette, Resolve, Nuke, etc.), click **IMPORT ALPHA** in the parameter panel and choose either an image folder or a matte video file.
 
-- Supported formats: **PNG, JPG, JPEG, TIF, TIFF, EXR**
-- Images should be **grayscale** (white = foreground, black = background)
+- Supported image formats: **PNG, JPG, JPEG, TIF, TIFF, EXR**
+- Supported alpha-video path: standard video files accepted by the normal clip importer (for example **MOV** or **MP4**)
+- Images and visible matte videos should be **grayscale** (white = foreground, black = background)
 - Frame count should match your input sequence
-- Non-PNG files are automatically converted to grayscale PNG on import
-- Files are copied into the clip's `AlphaHint/` folder and the clip advances to **READY** state
+- Non-PNG stills are automatically converted to grayscale PNG on import
+- Imported alpha videos are decoded into grayscale `AlphaHint/*.png` frames so they follow the same downstream path as image-sequence hints
+- Imported files are copied into the clip's `AlphaHint/` folder and the clip advances to **READY** state
 
 You can re-import at any time — if the clip already has alpha hints, you'll be asked whether to overwrite them.
 
@@ -234,7 +236,7 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 | **FG** | `Output/FG/` | Foreground with green spill removed |
 | **MATTE** | `Output/Matte/` | Alpha matte (white = opaque, black = transparent) |
 | **COMP** | `Output/Comp/` | Final key composited over checkerboard |
-| **PROCESSED** | `Output/Processed/` | Production RGBA — premultiplied linear for compositing |
+| **PROCESSED** | `Output/Processed/` | Production RGBA — straight linear for Resolve/compositing |
 
 ---
 
@@ -267,7 +269,7 @@ Each output channel can be individually enabled and set to EXR or PNG:
 | **FG** | ON | EXR | Foreground RGB with spill removed |
 | **Matte** | ON | EXR | Single-channel alpha |
 | **Comp** | ON | PNG | Key over checkerboard (for review) |
-| **Processed** | ON | EXR | Full RGBA premultiplied linear (for VFX compositing) |
+| **Processed** | ON | EXR | Full RGBA straight linear (for Resolve and compositing) |
 
 ---
 
@@ -416,8 +418,6 @@ Optional modules:
 Join EZSCAPE Discord for EZ-CorridorKey troubleshooting: https://discord.gg/6kgxHUfA
 
 Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
-
-
 
 
 
