@@ -100,6 +100,35 @@ def test_assemble_mlx_output_preserves_float_precision_for_processed_rgba():
     np.testing.assert_allclose(wrapped["processed"][:, :, 3:], alpha, atol=1e-6)
 
 
+def test_assemble_mlx_output_applies_despill_to_processed_and_comp():
+    fg = np.array([[[0.2, 0.8, 0.1]]], dtype=np.float32)
+    alpha = np.array([[[0.5]]], dtype=np.float32)
+    source = fg.copy()
+
+    no_despill = _assemble_mlx_output(
+        alpha=alpha,
+        fg=fg,
+        source_image=source,
+        input_is_linear=False,
+        despill_strength=0.0,
+        auto_despeckle=False,
+        despeckle_size=400,
+    )
+    full_despill = _assemble_mlx_output(
+        alpha=alpha,
+        fg=fg,
+        source_image=source,
+        input_is_linear=False,
+        despill_strength=1.0,
+        auto_despeckle=False,
+        despeckle_size=400,
+    )
+
+    np.testing.assert_allclose(no_despill["fg"], full_despill["fg"], atol=1e-6)
+    assert not np.allclose(no_despill["processed"][:, :, :3], full_despill["processed"][:, :, :3])
+    assert not np.allclose(no_despill["comp"], full_despill["comp"])
+
+
 def test_try_mlx_float_outputs_uses_raw_model_predictions_before_uint8_quantization(monkeypatch):
     fake_mx = types.ModuleType("mlx.core")
     fake_mx.eval = lambda outputs: None
@@ -140,6 +169,47 @@ def test_try_mlx_float_outputs_uses_raw_model_predictions_before_uint8_quantizat
     assert result is not None
     np.testing.assert_allclose(result["alpha"], alpha_final[0], atol=1e-6)
     np.testing.assert_allclose(result["fg"], fg_final[0], atol=1e-6)
+
+
+def test_try_mlx_float_outputs_blends_refiner_scale_between_coarse_and_refined(monkeypatch):
+    fake_mx = types.ModuleType("mlx.core")
+    fake_mx.eval = lambda outputs: None
+    fake_mlx_pkg = types.ModuleType("mlx")
+    fake_mlx_pkg.core = fake_mx
+    monkeypatch.setitem(sys.modules, "mlx", fake_mlx_pkg)
+    monkeypatch.setitem(sys.modules, "mlx.core", fake_mx)
+
+    fake_image_mod = types.ModuleType("corridorkey_mlx.io.image")
+    fake_image_mod.preprocess = lambda rgb, mask: {"rgb": rgb, "mask": mask}
+    monkeypatch.setitem(sys.modules, "corridorkey_mlx.io.image", fake_image_mod)
+
+    alpha_coarse = np.array([[[[0.2]]]], dtype=np.float32)
+    alpha_final = np.array([[[[0.8]]]], dtype=np.float32)
+    fg_coarse = np.array([[[[0.1, 0.2, 0.3]]]], dtype=np.float32)
+    fg_final = np.array([[[[0.7, 0.6, 0.5]]]], dtype=np.float32)
+
+    class _FakeModel:
+        def __call__(self, _x):
+            return {
+                "alpha_coarse": alpha_coarse,
+                "fg_coarse": fg_coarse,
+                "alpha_final": alpha_final,
+                "fg_final": fg_final,
+            }
+
+    class _FakeEngine:
+        _img_size = 1
+        _use_refiner = True
+        _model = _FakeModel()
+
+    image_u8 = np.zeros((1, 1, 3), dtype=np.uint8)
+    mask_u8 = np.zeros((1, 1), dtype=np.uint8)
+
+    result = _try_mlx_float_outputs(_FakeEngine(), image_u8, mask_u8, refiner_scale=0.5)
+
+    assert result is not None
+    np.testing.assert_allclose(result["alpha"], np.array([[[0.5]]], dtype=np.float32), atol=1e-6)
+    np.testing.assert_allclose(result["fg"], np.array([[[0.4, 0.4, 0.4]]], dtype=np.float32), atol=1e-6)
 
 
 def test_try_mlx_float_outputs_handles_resize_path(monkeypatch):
