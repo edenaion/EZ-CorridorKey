@@ -413,7 +413,6 @@ Optional modules:
 - **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
 - **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License
 - **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) — Apache 2.0
-- **corridorkey-mlx** ([nikopueringer/corridorkey-mlx](https://github.com/nikopueringer/corridorkey-mlx)) — CC BY-NC-SA 4.0
 
 Join EZSCAPE Discord for EZ-CorridorKey troubleshooting: https://discord.gg/6kgxHUfA
 
