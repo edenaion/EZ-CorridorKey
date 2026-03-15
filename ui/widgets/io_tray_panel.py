@@ -465,8 +465,8 @@ class IOTrayPanel(QWidget):
             show_manifest_tooltip=True,
             thumbnail_kind="export",
         )
-        self._export_canvas.card_clicked.connect(self.clip_clicked.emit)
-        self._export_canvas.card_double_clicked.connect(self.clip_clicked.emit)
+        self._export_canvas.card_clicked.connect(self._on_export_click)
+        self._export_canvas.card_double_clicked.connect(self._on_export_click)
         self._export_canvas.context_menu_requested.connect(self._on_export_context_menu)
         self._export_canvas.folder_icon_clicked.connect(self._open_export_folder)
         self._export_scroll.setWidget(self._export_canvas)
@@ -484,6 +484,7 @@ class IOTrayPanel(QWidget):
         # Connect to model signals for auto-rebuild
         self._model.modelReset.connect(self._rebuild)
         self._model.dataChanged.connect(self._on_data_changed)
+        self._model.layoutChanged.connect(self._rebuild)
         self._model.clip_count_changed.connect(lambda _: self._rebuild())
 
     # ── + ADD button ──
@@ -595,9 +596,17 @@ class IOTrayPanel(QWidget):
     # ── Single / Multi-select management ──
 
     def _on_single_click(self, clip: ClipEntry) -> None:
-        """Plain left-click — single-select, clear multi-select."""
+        """Plain left-click on INPUT card — single-select, sync both strips."""
         self._select_anchor = clip.name
         self._input_canvas.set_selected(clip.name)
+        self._export_canvas.set_selected(clip.name)
+        self.clip_clicked.emit(clip)
+
+    def _on_export_click(self, clip: ClipEntry) -> None:
+        """Click on EXPORT card — select same clip in both strips."""
+        self._select_anchor = clip.name
+        self._input_canvas.set_selected(clip.name)
+        self._export_canvas.set_selected(clip.name)
         self.clip_clicked.emit(clip)
 
     def _on_multi_select_toggle(self, clip: ClipEntry) -> None:
@@ -1031,8 +1040,9 @@ class IOTrayPanel(QWidget):
     # ── Selection highlight ──
 
     def set_selected(self, name: str | None) -> None:
-        """Set single-selected clip (clears multi-select, highlights in INPUT strip)."""
+        """Set single-selected clip (clears multi-select, highlights in both strips)."""
         self._input_canvas.set_selected(name)
+        self._export_canvas.set_selected(name)
 
     def set_multi_selected(self, names: set[str]) -> None:
         """Set multi-selected clips (for external callers)."""

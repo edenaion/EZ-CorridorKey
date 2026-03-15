@@ -67,7 +67,7 @@ from ui.shortcut_registry import ShortcutRegistry
 
 logger = logging.getLogger(__name__)
 
-# TEMPORARY: keep a visible tester build identifier on the 1.6.7 user-test
+# TEMPORARY: keep a visible tester build identifier on the user-test
 # branch so remote testers can confirm they pulled the right build. Remove this
 # before merging the branch back into main.
 _SHOW_TESTER_BUILD_ID = False
@@ -253,6 +253,7 @@ class MainWindow(QMainWindow):
         self._service = service or CorridorKeyService()
         self._recent_store = store or RecentSessionsStore()
         self._current_clip: ClipEntry | None = None
+        self._last_clip_index: int = 0  # track position for left-neighbor on delete
         self._clips_dir: str | None = None
         self._clip_input_is_linear: dict[str, bool] = {}
         # Track active job ID — set only once when job starts, not on every progress
@@ -939,6 +940,9 @@ class MainWindow(QMainWindow):
             self._dual_viewer._scrubber.set_annotation_markers([])
 
     def _connect_signals(self) -> None:
+        # Clip model — detect clip removal
+        self._clip_model.clip_count_changed.connect(self._on_clip_count_changed)
+
         # I/O tray — clip selection, import, drag-and-drop
         self._io_tray.clip_clicked.connect(self._on_tray_clip_clicked)
         self._io_tray.selection_changed.connect(self._on_selection_changed)
@@ -973,8 +977,9 @@ class MainWindow(QMainWindow):
         # Queue panel cancel signals
         self._queue_panel.cancel_job_requested.connect(self._on_cancel_job)
 
-        # Parameter panel — wire GVM / Track Mask / VideoMaMa
+        # Parameter panel — wire GVM / BiRefNet / Track Mask / VideoMaMa
         self._param_panel.gvm_requested.connect(self._on_run_gvm)
+        self._param_panel.birefnet_requested.connect(self._on_run_birefnet)
         self._param_panel.videomama_requested.connect(self._on_run_videomama)
         self._param_panel.matanyone2_requested.connect(self._on_run_matanyone2)
         self._param_panel.track_masks_requested.connect(self._on_track_masks)
@@ -1090,6 +1095,32 @@ class MainWindow(QMainWindow):
 
         self._refresh_export_thumbnail(clip)
 
+    @Slot(int)
+    def _on_clip_count_changed(self, count: int) -> None:
+        """Handle clip added/removed — clear viewer if selected clip is gone.
+
+        When the deleted clip was at position N, select the clip to its left
+        (position N-1) rather than jumping to the first clip.
+        """
+        if self._current_clip is None:
+            return
+        # Check if current clip still exists in the model
+        current_name = self._current_clip.name
+        remaining = self._clip_model.clips
+        if any(c.name == current_name for c in remaining):
+            return  # Selected clip still exists, nothing to do
+
+        # Selected clip was removed — select left neighbor
+        if remaining:
+            # Deleted clip was at _last_clip_index. After removal the list
+            # shifted left, so the left neighbor is now at index-1 (clamped).
+            pick = max(0, min(self._last_clip_index - 1, len(remaining) - 1))
+            self._on_clip_selected(remaining[pick])
+        else:
+            self._current_clip = None
+            self._dual_viewer.show_placeholder("No clip selected")
+            self._refresh_button_state()
+
     @Slot(object)
     def _on_tray_clip_clicked(self, clip: ClipEntry) -> None:
         """Handle clip clicked in I/O tray — select it and load preview."""
@@ -1128,6 +1159,11 @@ class MainWindow(QMainWindow):
         if self._current_clip is not None and self._current_clip is not clip:
             self._remember_current_clip_input_color_space()
         self._current_clip = clip
+        # Track position for left-neighbor selection on delete
+        for i, c in enumerate(self._clip_model.clips):
+            if c.name == clip.name:
+                self._last_clip_index = i
+                break
         logger.debug(f"Clip selected: '{clip.name}' state={clip.state.value}")
 
         # Highlight in I/O tray (single-select unless multi-select is active)
@@ -1159,8 +1195,9 @@ class MainWindow(QMainWindow):
             needs_extraction=needs_extraction,
         )
 
-        # Enable GVM/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
+        # Enable GVM/BiRefNet/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
+        self._param_panel.set_birefnet_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
         has_mask = self._clip_has_videomama_ready_mask(clip)
         self._param_panel.set_videomama_enabled(has_mask)
         self._param_panel.set_matanyone2_enabled(has_mask)
@@ -2468,6 +2505,54 @@ class MainWindow(QMainWindow):
         self._current_clip.set_processing(True)
         self._start_worker_if_needed(job.id, job_label="GVM Auto")
 
+    @Slot(str)
+    def _on_run_birefnet(self, usage: str) -> None:
+        """Run BiRefNet alpha generation on the selected clip."""
+        if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
+            return
+
+        if not self._warn_mps_slow("BiRefNet"):
+            return
+
+        # Detect partial alpha from a previous interrupted run
+        alpha_dir = os.path.join(self._current_clip.root_path, "AlphaHint")
+        if os.path.isdir(alpha_dir):
+            existing = [f for f in os.listdir(alpha_dir)
+                        if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            if existing:
+                total = (self._current_clip.input_asset.frame_count
+                         if self._current_clip.input_asset else 0)
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Partial Alpha Found")
+                msg.setText(
+                    f"Found {len(existing)}/{total} alpha frames from a previous run."
+                )
+                msg.setInformativeText(
+                    "Resume will skip completed frames.\n"
+                    "Regenerate will redo all frames from scratch."
+                )
+                resume_btn = msg.addButton("Resume", QMessageBox.AcceptRole)
+                regen_btn = msg.addButton("Regenerate", QMessageBox.DestructiveRole)
+                msg.addButton(QMessageBox.Cancel)
+                msg.setDefaultButton(resume_btn)
+                msg.exec()
+                clicked = msg.clickedButton()
+                if clicked == regen_btn:
+                    shutil.rmtree(alpha_dir, ignore_errors=True)
+                elif clicked != resume_btn:
+                    return  # cancelled
+
+        job = create_job_snapshot(
+            self._current_clip,
+            job_type=JobType.BIREFNET_ALPHA,
+            birefnet_usage=usage,
+        )
+        if not self._service.job_queue.submit(job):
+            return
+
+        self._current_clip.set_processing(True)
+        self._start_worker_if_needed(job.id, job_label=f"BiRefNet ({usage})")
+
     @Slot()
     def _on_run_videomama(self) -> None:
         """Run VideoMaMa alpha generation on the selected clip."""
@@ -2670,7 +2755,7 @@ class MainWindow(QMainWindow):
         if job_type == JobType.SAM2_TRACK.value:
             target_state = ClipState.MASKED
         elif job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value,
-                          JobType.MATANYONE2_ALPHA.value):
+                          JobType.MATANYONE2_ALPHA.value, JobType.BIREFNET_ALPHA.value):
             target_state = ClipState.READY
         else:
             target_state = ClipState.COMPLETE
@@ -2746,6 +2831,7 @@ class MainWindow(QMainWindow):
             if next_job:
                 _label_map = {
                     JobType.GVM_ALPHA: "GVM Auto",
+                    JobType.BIREFNET_ALPHA: "BiRefNet",
                     JobType.SAM2_PREVIEW: "Track Preview",
                     JobType.SAM2_TRACK: "Track Mask",
                     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
@@ -2765,6 +2851,7 @@ class MainWindow(QMainWindow):
             UIAudio.mask_done()
             type_label = {
                 JobType.GVM_ALPHA.value: "GVM Auto",
+                JobType.BIREFNET_ALPHA.value: "BiRefNet",
                 JobType.VIDEOMAMA_ALPHA.value: "VideoMaMa",
                 JobType.MATANYONE2_ALPHA.value: "MatAnyone2",
             }.get(job_type, "Alpha")
@@ -3518,7 +3605,8 @@ class MainWindow(QMainWindow):
             '<a href="https://github.com/Raiden129">Jhe Kim</a> — Hiera optimization<br>'
             '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization<br>'
             '<a href="https://github.com/cmoyates">Cristopher Yates</a> — MLX Apple Silicon (<a href="https://github.com/cmoyates/corridorkey-mlx">corridorkey-mlx</a>)<br>'
-            '<a href="https://github.com/99oblivius">99oblivius</a> — FX graph cache (<a href="https://github.com/99oblivius/CorridorKey-Engine">CorridorKey-Engine</a>)'
+            '<a href="https://github.com/99oblivius">99oblivius</a> — FX graph cache (<a href="https://github.com/99oblivius/CorridorKey-Engine">CorridorKey-Engine</a>)<br>'
+            '<a href="https://github.com/Warwlock">Warwlock</a> — BiRefNet integration'
             "</p>"
         )
         # QMessageBox uses an internal QLabel — find it and enable clickable links

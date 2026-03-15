@@ -42,6 +42,7 @@ class ParameterPanel(QWidget):
     params_changed = Signal()  # emitted when any parameter changes
     parallel_frames_changed = Signal(int)  # parallel engine count changed
     gvm_requested = Signal()      # GVM AUTO button clicked
+    birefnet_requested = Signal(str)  # BiRefNet button clicked, emits model variant name
     videomama_requested = Signal() # VIDEOMAMA button clicked
     matanyone2_requested = Signal()  # MatAnyone2 button clicked
     track_masks_requested = Signal()  # Track annotation prompts into dense masks
@@ -79,6 +80,12 @@ class ParameterPanel(QWidget):
         alpha_layout = QVBoxLayout(alpha_group)
         alpha_layout.setSpacing(8)
 
+        # -- Automatic sub-section --
+        auto_label = QLabel("Automatic")
+        auto_label.setAlignment(Qt.AlignCenter)
+        auto_label.setStyleSheet("color: #A0A090; font-size: 10px; margin: 0px 0 2px 0;")
+        alpha_layout.addWidget(auto_label)
+
         self._gvm_btn = QPushButton("GVM AUTO")
         self._gvm_btn.setEnabled(False)
         self._gvm_btn.setToolTip(
@@ -89,10 +96,51 @@ class ParameterPanel(QWidget):
         self._gvm_btn.clicked.connect(self.gvm_requested.emit)
         alpha_layout.addWidget(self._gvm_btn)
 
+        # BiRefNet: button + model variant dropdown in a single row
+        birefnet_row = QHBoxLayout()
+        birefnet_row.setSpacing(4)
+        self._birefnet_btn = QPushButton("BIREFNET")
+        self._birefnet_btn.setEnabled(False)
+        self._birefnet_btn.setToolTip(
+            "Auto-generate alpha hint using BiRefNet.\n"
+            "Fully automatic — no painting or annotation needed.\n"
+            "Downloads the selected model variant on first use.\n\n"
+            "Matting: Best for hair/transparency detail (recommended).\n"
+            "Portrait: Optimized for human close-ups.\n"
+            "General: Balanced foreground/background separation.\n"
+            "HR variants: For 2K/4K footage (uses more VRAM)."
+        )
+        self._birefnet_btn.clicked.connect(self._on_birefnet_clicked)
+        birefnet_row.addWidget(self._birefnet_btn, 1)
+
+        self._birefnet_model = QComboBox()
+        self._birefnet_model.setMinimumWidth(120)
+        self._birefnet_model.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        self._birefnet_model.setToolTip("BiRefNet model variant — changes take effect on next run.")
+        # Populate from the wrapper's model registry
+        from modules.BiRefNetModule.wrapper import BIREFNET_MODELS, DEFAULT_MODEL
+        for display_name in BIREFNET_MODELS:
+            self._birefnet_model.addItem(display_name)
+        # Restore last-used model from QSettings
+        from PySide6.QtCore import QSettings
+        saved_model = QSettings().value("alpha/birefnet_model", DEFAULT_MODEL)
+        idx = self._birefnet_model.findText(saved_model)
+        if idx >= 0:
+            self._birefnet_model.setCurrentIndex(idx)
+        self._birefnet_model.currentTextChanged.connect(self._on_birefnet_model_changed)
+        birefnet_row.addWidget(self._birefnet_model)
+        alpha_layout.addLayout(birefnet_row)
+
         or_label = QLabel("— or —")
         or_label.setAlignment(Qt.AlignCenter)
         or_label.setStyleSheet("color: #808070; font-size: 11px;")
         alpha_layout.addWidget(or_label)
+
+        # -- Guided sub-section --
+        guided_label = QLabel("Requires brushstrokes")
+        guided_label.setAlignment(Qt.AlignCenter)
+        guided_label.setStyleSheet("color: #A0A090; font-size: 10px; margin: 0px 0 2px 0;")
+        alpha_layout.addWidget(guided_label)
 
         annotate_hint = QLabel("Paint subject with 1, background with 2")
         annotate_hint.setAlignment(Qt.AlignCenter)
@@ -394,6 +442,15 @@ class ParameterPanel(QWidget):
         self._refiner_label.setText(f"Refiner: {display:.1f}")
         self._emit_changed()
 
+    def _on_birefnet_clicked(self) -> None:
+        """Emit birefnet_requested with the currently selected model variant."""
+        self.birefnet_requested.emit(self._birefnet_model.currentText())
+
+    def _on_birefnet_model_changed(self, text: str) -> None:
+        """Persist the selected BiRefNet model variant to QSettings."""
+        from PySide6.QtCore import QSettings
+        QSettings().setValue("alpha/birefnet_model", text)
+
     def _on_parallel_changed(self, value: int) -> None:
         from PySide6.QtCore import QSettings
         from ui.widgets.preferences_dialog import KEY_PARALLEL_CLIPS
@@ -484,6 +541,10 @@ class ParameterPanel(QWidget):
     def set_gvm_enabled(self, enabled: bool) -> None:
         """Enable/disable GVM button based on clip state."""
         self._gvm_btn.setEnabled(enabled)
+
+    def set_birefnet_enabled(self, enabled: bool) -> None:
+        """Enable/disable BiRefNet button based on clip state."""
+        self._birefnet_btn.setEnabled(enabled)
 
     def set_videomama_enabled(self, enabled: bool) -> None:
         """Enable/disable VideoMaMa button based on clip state."""

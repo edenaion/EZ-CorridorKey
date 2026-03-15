@@ -140,6 +140,7 @@ class _ActiveModel(Enum):
     SAM2 = "sam2"
     VIDEOMAMA = "videomama"
     MATANYONE2 = "matanyone2"
+    BIREFNET = "birefnet"
 
 
 @dataclass
@@ -271,6 +272,7 @@ class CorridorKeyService:
         self._sam2_tracker = None
         self._videomama_pipeline = None
         self._matanyone2_processor = None
+        self._birefnet_processor = None
         self._active_model = _ActiveModel.NONE
         self._device: str = 'cpu'
         self._job_queue: Optional[GPUJobQueue] = None
@@ -496,6 +498,9 @@ class CorridorKeyService:
             elif self._active_model == _ActiveModel.MATANYONE2:
                 self._safe_offload(self._matanyone2_processor)
                 self._matanyone2_processor = None
+            elif self._active_model == _ActiveModel.BIREFNET:
+                self._safe_offload(self._birefnet_processor)
+                self._birefnet_processor = None
             logger.info(f"_safe_offload took {time.monotonic() - t0:.1f}s")
 
             import gc
@@ -524,9 +529,9 @@ class CorridorKeyService:
             except ImportError:
                 logger.debug("torch not available for cache clear during model switch")
 
-            # Reset Triton/dynamo compilation cache so torch.compile
+            # Reset Triton/dynamo/inductor compilation cache so torch.compile
             # doesn't choke on stale CUDA state from the previous model
-            # (e.g. GVM diffusion pipeline leaves Triton state that causes
+            # (e.g. BiRefNet/transformers leaves inductor state that causes
             # torch.compile to hang when building a fresh CorridorKeyEngine).
             try:
                 import torch._dynamo
@@ -534,6 +539,13 @@ class CorridorKeyService:
                 logger.info("torch._dynamo.reset() — cleared compilation cache")
             except Exception as e:
                 logger.debug(f"dynamo reset skipped: {e}")
+
+            try:
+                import torch._inductor
+                torch._inductor.codecache.PyCodeCache.clear()
+                logger.info("torch._inductor code cache cleared")
+            except Exception as e:
+                logger.debug(f"inductor cache clear skipped: {e}")
 
             vram_after_mb = self._vram_allocated_mb()
             freed = vram_before_mb - vram_after_mb
@@ -672,6 +684,31 @@ class CorridorKeyService:
         logger.info(f"MatAnyone2 loaded in {time.monotonic() - t0:.1f}s")
         return self._matanyone2_processor
 
+    def _get_birefnet(self, usage: str = "Matting", on_status=None):
+        """Lazy-load the BiRefNet processor for a given model variant."""
+        self._ensure_model(_ActiveModel.BIREFNET, on_status=on_status)
+
+        # If already loaded with the same usage, reuse
+        if (self._birefnet_processor is not None
+                and self._birefnet_processor._usage == usage):
+            return self._birefnet_processor
+
+        # Different variant requested — release the old one
+        if self._birefnet_processor is not None:
+            self._safe_offload(self._birefnet_processor)
+            self._birefnet_processor = None
+
+        from modules.BiRefNetModule.wrapper import BiRefNetProcessor
+        logger.info(f"Loading BiRefNet ({usage})...")
+        t0 = time.monotonic()
+        self._birefnet_processor = BiRefNetProcessor(
+            device=self._device, usage=usage,
+        )
+        # Trigger actual model download/load now so VRAM is claimed
+        self._birefnet_processor._ensure_loaded(on_status=on_status)
+        logger.info(f"BiRefNet ({usage}) loaded in {time.monotonic() - t0:.1f}s")
+        return self._birefnet_processor
+
     def unload_engines(self) -> None:
         """Free GPU memory by unloading all engines."""
         for eng in self._engine_pool:
@@ -681,10 +718,12 @@ class CorridorKeyService:
         self._safe_offload(self._sam2_tracker)
         self._safe_offload(self._videomama_pipeline)
         self._safe_offload(self._matanyone2_processor)
+        self._safe_offload(self._birefnet_processor)
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
         self._matanyone2_processor = None
+        self._birefnet_processor = None
         self._active_model = _ActiveModel.NONE
         import gc
         gc.collect()
@@ -2236,6 +2275,114 @@ class CorridorKeyService:
 
         logger.info(
             f"MatAnyone2 complete for '{clip.name}': "
+            f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )
+
+    # --- BiRefNet Alpha Generation ---
+
+    def run_birefnet(
+        self,
+        clip: ClipEntry,
+        usage: str = "Matting",
+        job: Optional[GPUJob] = None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Run BiRefNet automatic alpha generation for a clip.
+
+        Fully automatic — no painting/annotation required.
+        Transitions clip: RAW → READY (creates AlphaHint directory).
+
+        Args:
+            clip: Must be in RAW state with input_asset.
+            usage: Model variant name (e.g. "Matting", "Portrait", "General HR").
+            job: Optional GPUJob for cancel checking.
+            on_progress: Progress callback (clip_name, current, total).
+            on_warning: Warning callback.
+            on_status: Phase status callback.
+        """
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for BiRefNet")
+
+        if self._device == 'cpu':
+            raise GPURequiredError("BiRefNet")
+
+        def _status(msg: str) -> None:
+            logger.info(f"BiRefNet [{clip.name}]: {msg}")
+            if on_status:
+                on_status(msg)
+
+        def _check_cancel() -> bool:
+            return bool(job and job.is_cancelled)
+
+        t_start = time.monotonic()
+
+        # ── Phase 1: Load model ──
+        _status(f"Loading BiRefNet ({usage})...")
+        with self._gpu_lock:
+            processor = self._get_birefnet(usage=usage, on_status=on_status)
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 2: Load input frames ──
+        _status("Loading frames...")
+        selected_input_names = self._selected_sequence_files(clip)
+        if not selected_input_names:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for BiRefNet")
+
+        named_input_frames = self._load_named_sequence_frames(
+            clip.input_asset,
+            selected_input_names,
+            clip.name,
+            job=job,
+            on_status=on_status,
+        )
+        input_frames = [frame for _, frame in named_input_frames]
+        input_names = [fname for fname, _ in named_input_frames]
+        frame_stems = [os.path.splitext(fname)[0] for fname in input_names]
+        if _check_cancel():
+            raise JobCancelledError(clip.name, 0)
+
+        # ── Phase 3: Inference ──
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        try:
+            frames_written = processor.process_frames(
+                input_frames=input_frames,
+                output_dir=alpha_dir,
+                frame_names=frame_stems,
+                progress_callback=on_progress,
+                on_status=on_status,
+                cancel_check=_check_cancel,
+                clip_name=clip.name,
+            )
+        except Exception as e:
+            if "CUDA out of memory" in str(e) or "OutOfMemoryError" in type(e).__name__:
+                logger.error(f"BiRefNet OOM for '{clip.name}': {e}")
+                self._birefnet_processor = None
+                self._active_model = _ActiveModel.NONE
+                try:
+                    import torch as _torch
+                    _torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                raise CorridorKeyError(
+                    f"BiRefNet ran out of GPU memory processing '{clip.name}'. "
+                    f"Try a lighter model variant (e.g. 'General Lite') or close other GPU applications."
+                ) from e
+            raise
+
+        # ── Phase 4: Finalize ──
+        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+
+        try:
+            clip.transition_to(ClipState.READY)
+        except Exception as e:
+            if on_warning:
+                on_warning(f"State transition after BiRefNet: {e}")
+
+        logger.info(
+            f"BiRefNet complete for '{clip.name}': "
             f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
         )
 

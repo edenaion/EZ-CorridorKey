@@ -150,9 +150,16 @@ def test_selecting_another_clip_remembers_previous_clip_color_space_override():
     window._refresh_input_thumbnail = lambda *_args, **_kwargs: None
     window._refresh_export_thumbnail = lambda *_args, **_kwargs: None
     window._param_panel.set_gvm_enabled = lambda _enabled: None
+    window._param_panel.set_birefnet_enabled = lambda _enabled: None
     window._param_panel.set_videomama_enabled = lambda _enabled: None
     window._param_panel.set_matanyone2_enabled = lambda _enabled: None
     window._param_panel.set_import_alpha_enabled = lambda _enabled: None
+    window._last_clip_index = 0
+
+    # Mock _clip_model with a clips list for index tracking
+    class _DummyClipModel:
+        clips = [previous, selected]
+    window._clip_model = _DummyClipModel()
 
     MainWindow._on_clip_selected(window, selected)
 

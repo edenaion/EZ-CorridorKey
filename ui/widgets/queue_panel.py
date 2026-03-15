@@ -43,6 +43,7 @@ _JOB_TYPE_LABELS = {
     JobType.SAM2_TRACK: "Track Mask",
     JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
     JobType.MATANYONE2_ALPHA: "MatAnyone2",
+    JobType.BIREFNET_ALPHA: "BiRefNet",
     JobType.PREVIEW_REPROCESS: "Preview",
 }
 

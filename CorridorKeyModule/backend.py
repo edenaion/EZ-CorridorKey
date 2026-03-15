@@ -164,7 +164,6 @@ def _wrap_mlx_output(
     bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
-    fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
     fg_despilled_lin = _restore_opaque_source_detail(
         source_lin,
         source_srgb,
@@ -177,9 +176,18 @@ def _wrap_mlx_output(
     # Build processed: [H,W,4] straight linear RGBA
     processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
 
+    # Restore source detail on FG for display accuracy (MLX model colors
+    # are lower fidelity than CUDA — blend original source back in on
+    # opaque regions so FG view matches what the user shot).
+    fg_lin = cu.srgb_to_linear(fg)
+    fg_restored_lin = _restore_opaque_source_detail(
+        source_lin, source_srgb, fg_lin, processed_alpha,
+    )
+    fg_restored = cu.linear_to_srgb(fg_restored_lin)
+
     return {
         "alpha": alpha,
-        "fg": fg,
+        "fg": fg_restored,
         "comp": comp_srgb,
         "processed": processed_rgba,
     }
@@ -230,7 +238,6 @@ def _assemble_mlx_output(
     bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
-    fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
     fg_despilled_lin = _restore_opaque_source_detail(
         source_lin,
         source_srgb,
@@ -242,9 +249,18 @@ def _assemble_mlx_output(
 
     processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
 
+    # Restore source detail on FG for display accuracy (MLX model colors
+    # are lower fidelity than CUDA — blend original source back in on
+    # opaque regions so FG view matches what the user shot).
+    fg_lin = cu.srgb_to_linear(fg)
+    fg_restored_lin = _restore_opaque_source_detail(
+        source_lin, source_srgb, fg_lin, processed_alpha,
+    )
+    fg_restored = cu.linear_to_srgb(fg_restored_lin)
+
     return {
         "alpha": alpha,
-        "fg": fg,
+        "fg": fg_restored,
         "comp": comp_srgb,
         "processed": processed_rgba,
     }

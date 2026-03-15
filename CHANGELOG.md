@@ -4,7 +4,25 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [1.6.7] - 2026-03-14 — Tester Branch: Color Truth, Export Fidelity, MLX Parity
+## [1.7.0] - 2026-03-15 — BiRefNet, Color Accuracy, UI Polish
+
+### Added
+- **BiRefNet automatic alpha generation** — new one-click alpha hint method with 16 model variants (Matting, Portrait, General, HR, Lite, etc.). Downloads on first use from HuggingFace and caches locally. Inline model selector dropdown in the parameter panel. No painting or annotation required. *(Adapted from [Warwlock](https://github.com/Warwlock)'s [PR #10](https://github.com/edenaion/EZ-CorridorKey/pull/10))*
+- **"Automatic" / "Requires brushstrokes" section labels** in the Alpha Generation panel for clearer workflow guidance.
+
+### Fixed
+- **Processed output color accuracy** — removed `match_luminance` which was comparing the model's foreground against the full green-screen source, causing systematic brightness shifts. Output colors now faithfully match the input on both CUDA and MLX paths.
+- **Processed viewer washout** — removed global Reinhard tone map (`x/(1+x)`) from the PROC display transform. A single hot pixel above 1.0 was compressing the entire image, making it appear washed out.
+- **Viewer clears on clip deletion** — deleting the currently-viewed clip now either selects the left neighbor or shows a "No clip selected" placeholder instead of displaying stale cached frames.
+- **Export strip refresh on Clear Outputs** — the export thumbnail strip now correctly removes clips when outputs are cleared (COMPLETE → READY state change).
+- **INPUT / EXPORT strip selection sync** — clicking either strip now highlights the same clip in both, preventing visual confusion about which clip the viewer is showing.
+- **Left-neighbor selection on delete** — deleting clip N now selects clip N-1 instead of jumping to the first clip.
+- **torch.compile hang after BiRefNet** — clearing the inductor code cache during model switch prevents a one-time freeze when transitioning from BiRefNet to CorridorKey inference.
+- **Debug console stays on top** — the floating console window no longer hides behind the main window.
+
+---
+
+## [1.6.7] - 2026-03-14 — Color Truth, Export Fidelity, MLX Parity
 
 ### Added
 - **Manual alpha-video import in `Import Alpha`** — the UI can now accept alpha-hint video files as well as image folders, then normalize them into `AlphaHint/*.png` frames so they follow the same downstream path as imported stills.
@@ -15,7 +33,7 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Alpha-import preview mode mismatches** — importing alpha no longer replaces `INPUT` / `ALPHA` preview modes with the wrong pixel payload during live preview refreshes.
 - **Fresh-launch live preview** — the first live-preview reprocess now warms the inference engine on demand instead of appearing inert until a prior inference run.
 - **EXR export correctness** — `FG.exr` and `Comp.exr` are now written from linear-light data, and `Processed.exr` is written as straight linear RGBA instead of a mismatched contract that came back too dark in comp apps.
-- **Processed export luminance parity** — `Processed` output now preserves keyed-subject luminance closely enough for A-B Resolve / Fusion checks without the large darkening regression seen earlier on this tester branch.
+- **Processed export luminance parity** — `Processed` output now preserves keyed-subject luminance closely enough for A-B Resolve / Fusion checks.
 - **Export thumbnail truth** — export tray thumbnails now track the saved output mode they represent instead of mirroring input cards or stale preview state.
 - **Apple Silicon memory meter mismatch** — the macOS memory bar and `used / total` text now derive from the same unified-memory basis, so the bar and number agree.
 - **macOS startup regression after alpha-video work** — startup no longer hard-fails if an older `frame_io` helper layout is present; service import is backward-compatible again.
@@ -23,17 +41,14 @@ All notable changes to EZ-CorridorKey are documented here.
 ### Changed
 - **Parallel frames messaging** — the main-panel tooltip now explicitly says the feature is CUDA-only today and unsupported on Apple Silicon right now.
 - **Preferences cleanup** — removed the duplicate `Performance` / `Parallel frames` controls from Preferences so the setting only exists in the main inference UI.
-- **Default despill strength** — the default moved from `1.0` to `0.5` on this branch per the current tuning pass.
+- **Default despill strength** — the default moved from `1.0` to `0.5`.
 - **Branding polish** — app chrome now uses `EZ-CorridorKey` as the product name, while the in-app logo remains `EZ-CORRIDORKEY` in all caps.
 
 ### Apple Silicon / MLX
 - **Linear-input handoff fixed** — linear sources are converted to sRGB before entering the MLX path instead of being treated like already-display-encoded input.
 - **Higher-precision MLX postprocess path** — the adapter now recovers float MLX outputs before uint8 quantization when possible, aligns resize behavior with upstream bicubic handling, and applies the same downstream export contract as the Torch path.
-- **Opaque-detail preservation** — MLX output assembly now preserves more original source detail on confidently opaque, low-spill regions so fine costume details and fabric do not get overcooked as aggressively as earlier tester builds.
-- **Low-spill edge tint reduction** — the current tester runtime state reduces orange/red tint on low-spill opaque clothing edges while still letting MLX control genuinely contaminated green-screen boundaries.
-
-### Notes
-- **MLX parity work is still in progress.** Brightness parity is much improved on the tester branch, but Apple Silicon edge/detail tuning is still under active scrutiny.
+- **Opaque-detail preservation** — MLX output assembly now preserves more original source detail on confidently opaque, low-spill regions so fine costume details and fabric do not get overcooked.
+- **Low-spill edge tint reduction** — reduces orange/red tint on low-spill opaque clothing edges while still letting MLX control genuinely contaminated green-screen boundaries.
 
 ---
 

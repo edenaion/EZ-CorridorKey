@@ -240,6 +240,8 @@ class GPUJobWorker(QThread):
                 self._run_videomama(job)
             elif job.job_type == JobType.MATANYONE2_ALPHA:
                 self._run_matanyone2(job)
+            elif job.job_type == JobType.BIREFNET_ALPHA:
+                self._run_birefnet(job)
             elif job.job_type == JobType.PREVIEW_REPROCESS:
                 self._run_preview_reprocess(job)
             else:
@@ -443,6 +445,33 @@ class GPUJobWorker(QThread):
             on_status=on_status,
         )
 
+    def _run_birefnet(self, job: GPUJob) -> None:
+        """Run BiRefNet automatic alpha generation."""
+        clip = job.params.get("_clip_snapshot")
+
+        if clip is None:
+            raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
+
+        usage = job.params.get("_birefnet_usage", "Matting")
+
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
+            self.progress.emit(job.id, clip_name, current, total, kwargs.get("fps", 0.0))
+
+        def on_warning(message: str) -> None:
+            self.warning.emit(job.id, message)
+
+        def on_status(message: str) -> None:
+            self.status_update.emit(job.id, message)
+
+        self._service.run_birefnet(
+            clip=clip,
+            usage=usage,
+            job=job,
+            on_progress=on_progress,
+            on_warning=on_warning,
+            on_status=on_status,
+        )
+
     def _run_preview_reprocess(self, job: GPUJob) -> None:
         """Run single-frame reprocess through GPU queue (Codex: no GPU bypass)."""
         clip = job.params.get("_clip_snapshot")
@@ -507,6 +536,7 @@ def create_job_snapshot(
     job_type: JobType = JobType.INFERENCE,
     resume: bool = False,
     chunk_size: int = 16,
+    birefnet_usage: str = "Matting",
 ) -> GPUJob:
     """Create a frozen job snapshot for the queue.
 
@@ -519,6 +549,7 @@ def create_job_snapshot(
         job_type: Type of GPU job.
         resume: If True, populate skip_stems from existing outputs.
         chunk_size: VideoMaMa chunk size.
+        birefnet_usage: BiRefNet model variant name (for BIREFNET_ALPHA jobs).
     """
     # Deep copy clip so the job holds frozen state, not a live reference
     clip_snapshot = copy.deepcopy(clip)
@@ -536,6 +567,8 @@ def create_job_snapshot(
             job_params["_inference_params"] = params
     elif job_type == JobType.VIDEOMAMA_ALPHA:
         job_params["_chunk_size"] = chunk_size
+    elif job_type == JobType.BIREFNET_ALPHA:
+        job_params["_birefnet_usage"] = birefnet_usage
     elif job_type == JobType.PREVIEW_REPROCESS:
         if params is None:
             params = InferenceParams()
