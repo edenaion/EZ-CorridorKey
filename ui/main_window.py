@@ -2511,9 +2511,6 @@ class MainWindow(QMainWindow):
         if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
             return
 
-        if not self._warn_mps_slow("BiRefNet"):
-            return
-
         # Detect partial alpha from a previous interrupted run
         alpha_dir = os.path.join(self._current_clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
