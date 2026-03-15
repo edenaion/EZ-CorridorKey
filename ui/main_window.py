@@ -70,7 +70,7 @@ logger = logging.getLogger(__name__)
 # TEMPORARY: keep a visible tester build identifier on the 1.6.7 user-test
 # branch so remote testers can confirm they pulled the right build. Remove this
 # before merging the branch back into main.
-_SHOW_TESTER_BUILD_ID = True
+_SHOW_TESTER_BUILD_ID = False
 
 # Session file stored in clips dir (Codex: JSON sidecar)
 _SESSION_FILENAME = ".corridorkey_session.json"

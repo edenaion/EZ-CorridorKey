@@ -205,7 +205,7 @@ class QueuePanel(QWidget):
         for lbl in self._tab_letters:
             lbl.setStyleSheet(
                 f"QLabel {{ color: {color}; background: transparent; "
-                "font-size: 11px; font-weight: 700; padding: 0; }}"
+                "font-size: 11px; font-weight: 700; padding: 0; }"
             )
 
     # ── Startup shimmer animation ──────────────────────────────
@@ -230,14 +230,14 @@ class QueuePanel(QWidget):
         if idx > 0 and idx - 1 < len(letters):
             letters[idx - 1].setStyleSheet(
                 f"QLabel {{ color: {base}; background: transparent; "
-                "font-size: 11px; font-weight: 700; padding: 0; }}"
+                "font-size: 11px; font-weight: 700; padding: 0; }"
             )
 
         # Light up current letter
         if idx < len(letters):
             letters[idx].setStyleSheet(
                 f"QLabel {{ color: {gold}; background: transparent; "
-                "font-size: 11px; font-weight: 700; padding: 0; }}"
+                "font-size: 11px; font-weight: 700; padding: 0; }"
             )
             self._shimmer_idx += 1
         else:
