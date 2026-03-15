@@ -9,6 +9,7 @@ from PIL import Image
 from CorridorKeyModule.backend import (
     _assemble_mlx_output,
     _prepare_mlx_image_u8,
+    _restore_opaque_source_detail,
     _try_mlx_float_outputs,
     _wrap_mlx_output,
 )
@@ -207,3 +208,39 @@ def test_try_mlx_float_outputs_handles_resize_path(monkeypatch):
 
     np.testing.assert_allclose(captured["rgb"], expected_rgb, atol=1e-6)
     np.testing.assert_allclose(captured["mask"], expected_mask, atol=1e-6)
+
+
+def test_restore_opaque_source_detail_prefers_source_on_opaque_low_spill_pixels():
+    source_lin = np.array(
+        [
+            [[0.8, 0.1, 0.1], [0.2, 0.8, 0.2]],
+            [[0.3, 0.3, 0.3], [0.4, 0.2, 0.1]],
+        ],
+        dtype=np.float32,
+    )
+    source_srgb = np.clip(source_lin, 0.0, 1.0)
+    image_lin = np.full_like(source_lin, 0.05, dtype=np.float32)
+    alpha = np.array(
+        [
+            [[1.0], [1.0]],
+            [[0.5], [1.0]],
+        ],
+        dtype=np.float32,
+    )
+
+    restored = _restore_opaque_source_detail(source_lin, source_srgb, image_lin, alpha)
+
+    np.testing.assert_allclose(restored[0, 0], source_lin[0, 0], atol=1e-6)
+    np.testing.assert_allclose(restored[1, 1], source_lin[1, 1], atol=1e-6)
+    np.testing.assert_allclose(restored[1, 0], image_lin[1, 0], atol=1e-6)
+
+
+def test_restore_opaque_source_detail_avoids_source_restore_on_green_spill_pixels():
+    source_lin = np.array([[[0.2, 0.9, 0.1]]], dtype=np.float32)
+    source_srgb = source_lin.copy()
+    image_lin = np.array([[[0.5, 0.4, 0.3]]], dtype=np.float32)
+    alpha = np.array([[[1.0]]], dtype=np.float32)
+
+    restored = _restore_opaque_source_detail(source_lin, source_srgb, image_lin, alpha)
+
+    np.testing.assert_allclose(restored, image_lin, atol=1e-6)

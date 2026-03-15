@@ -156,6 +156,7 @@ def _wrap_mlx_output(
     else:
         source_rgb = source_image
 
+    source_srgb = cu.linear_to_srgb(source_rgb) if input_is_linear else source_rgb
     source_lin = source_rgb if input_is_linear else cu.srgb_to_linear(source_rgb)
 
     # Composite over checkerboard for comp output
@@ -164,6 +165,12 @@ def _wrap_mlx_output(
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
     fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
+    fg_despilled_lin = _restore_opaque_source_detail(
+        source_lin,
+        source_srgb,
+        fg_despilled_lin,
+        processed_alpha,
+    )
     comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha)
     comp_srgb = cu.linear_to_srgb(comp_lin)
 
@@ -216,6 +223,7 @@ def _assemble_mlx_output(
     else:
         source_rgb = source_image
 
+    source_srgb = cu.linear_to_srgb(source_rgb) if input_is_linear else source_rgb
     source_lin = source_rgb if input_is_linear else cu.srgb_to_linear(source_rgb)
 
     h, w = fg.shape[:2]
@@ -223,6 +231,12 @@ def _assemble_mlx_output(
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
     fg_despilled_lin = cu.match_luminance(source_lin, fg_despilled_lin)
+    fg_despilled_lin = _restore_opaque_source_detail(
+        source_lin,
+        source_srgb,
+        fg_despilled_lin,
+        processed_alpha,
+    )
     comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha)
     comp_srgb = cu.linear_to_srgb(comp_lin)
 
@@ -288,6 +302,37 @@ def _resize_float_image_bicubic(image: np.ndarray, size: tuple[int, int]) -> np.
         return np.stack(channels, axis=-1)
 
     raise ValueError(f"Unsupported image shape for float resize: {image.shape}")
+
+
+def _restore_opaque_source_detail(
+    source_lin: np.ndarray,
+    source_srgb: np.ndarray,
+    image_lin: np.ndarray,
+    alpha: np.ndarray,
+    *,
+    opaque_threshold: float = 0.98,
+    opaque_softness: float = 0.02,
+    max_green_excess: float = 0.04,
+) -> np.ndarray:
+    """Prefer source detail where the subject is already opaque and low-spill."""
+    alpha_plane = alpha if alpha.ndim == 3 else alpha[:, :, np.newaxis]
+    alpha_plane = np.clip(alpha_plane.astype(np.float32, copy=False), 0.0, 1.0)
+
+    opaque_weight = np.clip(
+        (alpha_plane - opaque_threshold) / max(opaque_softness, 1e-6),
+        0.0,
+        1.0,
+    )
+
+    source_srgb = np.clip(source_srgb.astype(np.float32, copy=False), 0.0, 1.0)
+    green_excess = np.maximum(
+        source_srgb[:, :, 1:2] - np.maximum(source_srgb[:, :, 0:1], source_srgb[:, :, 2:3]),
+        0.0,
+    )
+    low_spill_weight = 1.0 - np.clip(green_excess / max(max_green_excess, 1e-6), 0.0, 1.0)
+
+    detail_weight = opaque_weight * low_spill_weight
+    return image_lin * (1.0 - detail_weight) + source_lin * detail_weight
 
 
 def _try_mlx_float_outputs(raw_engine, image_u8: np.ndarray, mask_u8: np.ndarray, refiner_scale: float) -> dict | None:
