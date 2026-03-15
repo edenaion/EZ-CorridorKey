@@ -35,6 +35,7 @@ class ClipListModel(QAbstractListModel):
     ClipEntryRole = Qt.UserRole
     StateColorRole = Qt.UserRole + 1
     ThumbnailRole = Qt.UserRole + 2
+    ExportThumbnailRole = Qt.UserRole + 3
 
     clip_count_changed = Signal(int)  # emitted when clip count changes
 
@@ -44,7 +45,8 @@ class ClipListModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._clips: list[ClipEntry] = []
-        self._thumbnails: OrderedDict[str, QImage] = OrderedDict()
+        self._input_thumbnails: OrderedDict[str, QImage] = OrderedDict()
+        self._export_thumbnails: OrderedDict[str, QImage] = OrderedDict()
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self._clips)
@@ -62,7 +64,9 @@ class ClipListModel(QAbstractListModel):
         elif role == self.StateColorRole:
             return QColor(_STATE_COLORS.get(clip.state, "#808070"))
         elif role == self.ThumbnailRole:
-            return self._thumbnails.get(clip.name)
+            return self._input_thumbnails.get(clip.name)
+        elif role == self.ExportThumbnailRole:
+            return self._export_thumbnails.get(clip.name)
         elif role == Qt.ToolTipRole:
             lines = [f"State: {clip.state.value}"]
             if clip.input_asset:
@@ -81,7 +85,8 @@ class ClipListModel(QAbstractListModel):
         """Replace all clips. Called after scan_clips()."""
         self.beginResetModel()
         self._clips = list(clips)
-        self._thumbnails.clear()  # Prevent stale thumbnails from previous project
+        self._input_thumbnails.clear()  # Prevent stale thumbnails from previous project
+        self._export_thumbnails.clear()
         self.endResetModel()
         self.clip_count_changed.emit(len(self._clips))
 
@@ -112,23 +117,27 @@ class ClipListModel(QAbstractListModel):
         """Filter clips by state."""
         return [c for c in self._clips if c.state == state]
 
-    def set_thumbnail(self, clip_name: str, qimage: QImage) -> None:
-        """Store a thumbnail QImage for a clip (called from main thread)."""
-        self._thumbnails[clip_name] = qimage
-        self._thumbnails.move_to_end(clip_name)
+    def set_thumbnail(self, clip_name: str, kind: str, qimage: QImage) -> None:
+        """Store an input/export thumbnail QImage for a clip."""
+        cache = self._export_thumbnails if kind == "export" else self._input_thumbnails
+        role = self.ExportThumbnailRole if kind == "export" else self.ThumbnailRole
+
+        cache[clip_name] = qimage
+        cache.move_to_end(clip_name)
         # Evict oldest if over limit
-        while len(self._thumbnails) > self._THUMB_CACHE_MAX:
-            self._thumbnails.popitem(last=False)
+        while len(cache) > self._THUMB_CACHE_MAX:
+            cache.popitem(last=False)
         # Notify view to repaint
         for i, clip in enumerate(self._clips):
             if clip.name == clip_name:
                 idx = self.index(i)
-                self.dataChanged.emit(idx, idx, [self.ThumbnailRole])
+                self.dataChanged.emit(idx, idx, [role])
                 return
 
-    def get_thumbnail(self, clip_name: str) -> QImage | None:
-        """Get cached thumbnail QImage for a clip, or None."""
-        return self._thumbnails.get(clip_name)
+    def get_thumbnail(self, clip_name: str, kind: str = "input") -> QImage | None:
+        """Get cached input/export thumbnail QImage for a clip, or None."""
+        cache = self._export_thumbnails if kind == "export" else self._input_thumbnails
+        return cache.get(clip_name)
 
     @property
     def clips(self) -> list[ClipEntry]:

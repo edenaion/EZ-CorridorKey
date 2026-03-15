@@ -1,6 +1,6 @@
-# EZ-CorridorKey **[v1.6.6](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.6.6)**
+# EZ-CorridorKey **v1.6.7**
 
-> **Latest:** Parallel inference (1.8-2x speedup), MatAnyone2, MLX Apple Silicon acceleration, macOS support — [full changelog](CHANGELOG.md)
+> **Tester branch:** export, color-space, and MLX validation build. Latest stable release remains **v1.6.6**. This branch currently includes source color-truth fixes, EXR/export parity work, manual alpha-video import, Apple Silicon / MLX tuning, and Resolve roundtrip QA tooling. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -136,13 +136,15 @@ For difficult shots, use the paint brush as a prompt tool:
 6. Click **MATANYONE2** or **VIDEOMAMA** in the parameter panel
 
 **Option C — Import Alpha (bring your own):**
-If you already have alpha mattes from another tool (Rotobrush, Silhouette, etc.), click **IMPORT ALPHA** in the parameter panel and select the folder containing your images.
+If you already have alpha mattes from another tool (Rotobrush, Silhouette, Resolve, Nuke, etc.), click **IMPORT ALPHA** in the parameter panel and choose either an image folder or a matte video file.
 
-- Supported formats: **PNG, JPG, JPEG, TIF, TIFF, EXR**
-- Images should be **grayscale** (white = foreground, black = background)
+- Supported image formats: **PNG, JPG, JPEG, TIF, TIFF, EXR**
+- Supported alpha-video path: standard video files accepted by the normal clip importer (for example **MOV** or **MP4**)
+- Images and visible matte videos should be **grayscale** (white = foreground, black = background)
 - Frame count should match your input sequence
-- Non-PNG files are automatically converted to grayscale PNG on import
-- Files are copied into the clip's `AlphaHint/` folder and the clip advances to **READY** state
+- Non-PNG stills are automatically converted to grayscale PNG on import
+- Imported alpha videos are decoded into grayscale `AlphaHint/*.png` frames so they follow the same downstream path as image-sequence hints
+- Imported files are copied into the clip's `AlphaHint/` folder and the clip advances to **READY** state
 
 You can re-import at any time — if the clip already has alpha hints, you'll be asked whether to overwrite them.
 
@@ -234,7 +236,7 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 | **FG** | `Output/FG/` | Foreground with green spill removed |
 | **MATTE** | `Output/Matte/` | Alpha matte (white = opaque, black = transparent) |
 | **COMP** | `Output/Comp/` | Final key composited over checkerboard |
-| **PROCESSED** | `Output/Processed/` | Production RGBA — premultiplied linear for compositing |
+| **PROCESSED** | `Output/Processed/` | Production RGBA — straight linear for Resolve/compositing |
 
 ---
 
@@ -242,11 +244,19 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 
 | Control | Range | Default | Description |
 |---------|-------|---------|-------------|
-| **Color Space** | sRGB, Linear | sRGB | Working color space |
+| **Color Space** | sRGB, Linear | sRGB | How CorridorKey interprets the input before inference |
 | **Despill Strength** | 0.0 – 1.0 | 1.0 | Green spill removal intensity |
 | **Despeckle** | 50 – 2000 px | ON, 400 px | Removes isolated artifacts smaller than threshold |
 | **Refiner Scale** | 0.0 – 3.0 | 1.0 | Edge refinement. 0 = disabled |
-| **Live Preview** | — | OFF | Reprocess current frame when parameters change |
+| **Live Preview** | — | ON | Reprocess current frame when parameters change |
+
+**Color Space behavior**
+
+- The **left INPUT viewer** always shows CorridorKey's current interpretation of the source. If the input looks wrong there, your future inference results and exports will be based on that wrong interpretation too.
+- Changing **Color Space** before clicking **RUN INFERENCE** affects how the next live preview and the next export run are generated.
+- Changing **Color Space** after outputs already exist does **not** rewrite those files on disk. It only updates the viewer and live preview. To keep that new interpretation in saved files, rerun inference.
+- CorridorKey auto-detects color space from file type and metadata when possible, but you can override it if the INPUT viewer does not look representative.
+- With **Live Preview** enabled, the first adjustment after a fresh launch may pause briefly while the inference engine loads.
 
 **Middle-click** any slider to reset it to default.
 
@@ -259,7 +269,7 @@ Each output channel can be individually enabled and set to EXR or PNG:
 | **FG** | ON | EXR | Foreground RGB with spill removed |
 | **Matte** | ON | EXR | Single-channel alpha |
 | **Comp** | ON | PNG | Key over checkerboard (for review) |
-| **Processed** | ON | EXR | Full RGBA premultiplied linear (for VFX compositing) |
+| **Processed** | ON | EXR | Full RGBA straight linear (for Resolve and compositing) |
 
 ---
 
@@ -403,13 +413,10 @@ Optional modules:
 - **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
 - **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License
 - **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) — Apache 2.0
-- **corridorkey-mlx** ([nikopueringer/corridorkey-mlx](https://github.com/nikopueringer/corridorkey-mlx)) — CC BY-NC-SA 4.0
 
 Join EZSCAPE Discord for EZ-CorridorKey troubleshooting: https://discord.gg/6kgxHUfA
 
 Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
-
-
 
 
 

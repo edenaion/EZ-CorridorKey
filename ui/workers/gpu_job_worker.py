@@ -452,8 +452,15 @@ class GPUJobWorker(QThread):
         if clip is None or params is None:
             return
 
+        def on_status(message: str) -> None:
+            self.status_update.emit(job.id, message)
+
         result = self._service.reprocess_single_frame(
-            clip=clip, params=params, frame_index=frame_index, job=job,
+            clip=clip,
+            params=params,
+            frame_index=frame_index,
+            job=job,
+            on_status=on_status,
         )
         if result is not None:
             self.reprocess_result.emit(job.id, result)

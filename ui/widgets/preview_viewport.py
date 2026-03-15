@@ -39,6 +39,7 @@ class PreviewViewport(QWidget):
     """
 
     frame_changed = Signal(int)  # current stem index
+    view_mode_changed = Signal(str)
 
     def __init__(self, show_scrubber: bool = True, parent=None):
         super().__init__(parent)
@@ -51,6 +52,7 @@ class PreviewViewport(QWidget):
         self._current_stem_idx: int = -1
         self._current_mode: ViewMode = ViewMode.COMP
         self._locked_mode: ViewMode | None = None
+        self._input_exr_is_linear: bool = False
 
         # Async decoder
         self._decoder = AsyncDecoder(self)
@@ -130,6 +132,20 @@ class PreviewViewport(QWidget):
         self._current_mode = mode
         self._mode_bar.hide()
 
+    def set_input_exr_is_linear(self, enabled: bool) -> None:
+        """Set how INPUT-mode source frames should be interpreted for display."""
+        if self._input_exr_is_linear == enabled:
+            return
+        self._input_exr_is_linear = enabled
+
+        if self._current_stem_idx < 0:
+            return
+
+        if self._current_mode == ViewMode.INPUT:
+            self._request_frame(self._current_stem_idx, self._current_mode)
+        if self._split_view.split_enabled:
+            self._load_split_images()
+
     # ── Annotation API ──
 
     def set_annotation_mode(self, mode: str | None) -> None:
@@ -165,6 +181,10 @@ class PreviewViewport(QWidget):
             self._annotation_model.save(self._clip.root_path)
         self._clip = clip
         self._clip_name = clip.name
+        # Preserve the caller-managed input interpretation when reloading a clip.
+        # MainWindow reapplies the remembered per-clip override after set_clip();
+        # resetting here causes tray clicks and clear actions to snap back to the
+        # auto-detected default before the user asked for it.
         clear_cache()
         self._annotation_model.load(clip.root_path)
 
@@ -383,13 +403,19 @@ class PreviewViewport(QWidget):
                     "", mode, stem_index,
                     video_path=video_path,
                     video_frame_index=stem_index,
+                    input_exr_is_linear=(self._input_exr_is_linear if mode == ViewMode.INPUT else False),
                 )
             return
 
         # Image sequence mode
         path = self._frame_index.get_path(mode, stem_index)
         if path:
-            self._decoder.request_decode(path, mode, stem_index)
+            self._decoder.request_decode(
+                path,
+                mode,
+                stem_index,
+                input_exr_is_linear=(self._input_exr_is_linear if mode == ViewMode.INPUT else False),
+            )
         else:
             # Frame not available in this mode for this stem
             self._split_view.set_placeholder(
@@ -406,13 +432,21 @@ class PreviewViewport(QWidget):
         if self._frame_index.is_video_mode(ViewMode.INPUT):
             video_path = self._frame_index.video_modes.get(ViewMode.INPUT)
             if video_path:
-                qimg = decode_video_frame(video_path, idx)
+                qimg = decode_video_frame(
+                    video_path,
+                    idx,
+                    input_exr_is_linear=self._input_exr_is_linear,
+                )
                 if qimg:
                     self._split_view.set_left_image(qimg)
         else:
             path = self._frame_index.get_path(ViewMode.INPUT, idx)
             if path:
-                qimg = decode_frame(path, ViewMode.INPUT)
+                qimg = decode_frame(
+                    path,
+                    ViewMode.INPUT,
+                    input_exr_is_linear=self._input_exr_is_linear,
+                )
                 if qimg:
                     self._split_view.set_left_image(qimg)
 
@@ -425,6 +459,7 @@ class PreviewViewport(QWidget):
             self._current_mode = ViewMode(mode_value)
         except ValueError:
             return
+        self.view_mode_changed.emit(mode_value)
 
         if self._current_stem_idx >= 0:
             self._request_frame(self._current_stem_idx, self._current_mode)

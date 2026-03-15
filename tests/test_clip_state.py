@@ -188,6 +188,38 @@ class TestClipEntryFindAssets:
             assert clip.alpha_asset is not None
             assert clip.state == ClipState.READY
 
+    def test_finds_alpha_hint_video(self, monkeypatch):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shot_dir = os.path.join(tmpdir, "shot1")
+            input_dir = os.path.join(shot_dir, "Input")
+            os.makedirs(input_dir)
+
+            for i in range(3):
+                with open(os.path.join(input_dir, f"{i:05d}.png"), "w") as f:
+                    f.write("dummy")
+
+            alpha_video = os.path.join(shot_dir, "AlphaHint.mov")
+            with open(alpha_video, "w") as f:
+                f.write("dummy")
+
+            original_calc = ClipAsset._calculate_length
+
+            def _fake_calculate_length(self):
+                if self.asset_type == "video" and self.path.endswith("AlphaHint.mov"):
+                    self.frame_count = 3
+                    return
+                return original_calc(self)
+
+            monkeypatch.setattr(ClipAsset, "_calculate_length", _fake_calculate_length)
+
+            clip = ClipEntry(name="shot1", root_path=shot_dir)
+            clip.find_assets()
+
+            assert clip.alpha_asset is not None
+            assert clip.alpha_asset.asset_type == "video"
+            assert clip.alpha_asset.path == alpha_video
+            assert clip.state == ClipState.READY
+
     def test_empty_input_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             shot_dir = os.path.join(tmpdir, "shot1")
@@ -279,6 +311,24 @@ class TestClipEntryFindAssets:
             assert clip.input_asset is not None
             assert clip.input_asset.is_exr_sequence()
             assert not clip.has_video_metadata()
+            assert clip.should_default_input_linear()
+
+    def test_video_derived_linear_exr_sequence_defaults_to_linear(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            shot_dir = os.path.join(tmpdir, "shot1")
+            frames_dir = os.path.join(shot_dir, "Frames")
+            os.makedirs(frames_dir)
+            with open(os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8") as handle:
+                handle.write("dummy")
+            with open(os.path.join(shot_dir, ".video_metadata.json"), "w", encoding="utf-8") as handle:
+                json.dump({"source_probe": {"color_transfer": "linear"}}, handle)
+
+            clip = ClipEntry(name="shot1", root_path=shot_dir)
+            clip.find_assets()
+
+            assert clip.input_asset is not None
+            assert clip.input_asset.is_exr_sequence()
+            assert clip.has_video_metadata()
             assert clip.should_default_input_linear()
 
     def test_finds_source_video(self):

@@ -11,6 +11,31 @@ from PySide6.QtCore import Qt, Signal, QEvent
 from backend import InferenceParams, OutputConfig
 
 
+_COLOR_SPACE_TOOLTIP = (
+    "How CorridorKey interprets the source before inference.\n"
+    "The left INPUT viewer always shows this interpretation, so it should match "
+    "what CorridorKey thinks your footage is.\n\n"
+    "sRGB: standard gamma-corrected footage (most cameras, phone video, PNG/JPG).\n"
+    "Linear: linear-light footage (true linear EXRs, CG renders).\n\n"
+    "Changing this before Run Inference affects live preview and any future "
+    "exports you generate.\n"
+    "Changing it after files are already exported does not rewrite those files on "
+    "disk; rerun inference to save new outputs.\n"
+    "Auto-detected from format/metadata when possible, but you can override it if "
+    "the INPUT viewer looks wrong."
+)
+
+_LIVE_PREVIEW_TOOLTIP = (
+    "Instantly reprocess the current frame when you adjust Color Space, Despill, "
+    "Refiner, or Despeckle.\n"
+    "Requires a READY or COMPLETE clip with alpha hints.\n"
+    "On a fresh launch, the first preview change may take a moment while the "
+    "inference engine loads.\n"
+    "Preview updates do not rewrite exported files on disk; rerun inference to "
+    "save them."
+)
+
+
 class ParameterPanel(QWidget):
     """Right panel with all inference parameter controls."""
 
@@ -150,16 +175,13 @@ class ParameterPanel(QWidget):
 
         # Color Space
         cs_row = QHBoxLayout()
-        cs_label = QLabel("Color Space")
-        cs_label.setFixedWidth(80)
-        cs_row.addWidget(cs_label)
+        self._color_space_label = QLabel("Color Space")
+        self._color_space_label.setFixedWidth(80)
+        self._color_space_label.setToolTip(_COLOR_SPACE_TOOLTIP)
+        cs_row.addWidget(self._color_space_label)
         self._color_space = QComboBox()
         self._color_space.addItems(["sRGB", "Linear"])
-        self._color_space.setToolTip(
-            "Input color space.\n"
-            "sRGB: standard gamma-corrected footage (most cameras).\n"
-            "Linear: raw linear-light footage (EXR sequences, CG renders)."
-        )
+        self._color_space.setToolTip(_COLOR_SPACE_TOOLTIP)
         self._color_space.currentIndexChanged.connect(self._emit_changed)
         cs_row.addWidget(self._color_space, 1)
         inf_layout.addLayout(cs_row)
@@ -169,7 +191,7 @@ class ParameterPanel(QWidget):
         inf_layout.addWidget(self._despill_label)
         self._despill_slider = QSlider(Qt.Horizontal)
         self._despill_slider.setRange(0, 10)
-        self._despill_slider.setValue(10)
+        self._despill_slider.setValue(5)
         self._despill_slider.setToolTip(
             "Green spill removal strength (0.0–1.0).\n"
             "Removes green color bleed from hair, skin, and edges.\n"
@@ -220,11 +242,7 @@ class ParameterPanel(QWidget):
         # Live Preview toggle
         self._live_preview = QCheckBox("Live Preview")
         self._live_preview.setChecked(True)
-        self._live_preview.setToolTip(
-            "Instantly reprocess the current frame when you adjust\n"
-            "Despill, Refiner, or Despeckle — see changes in real time.\n"
-            "Requires a completed inference run (engine must be loaded)."
-        )
+        self._live_preview.setToolTip(_LIVE_PREVIEW_TOOLTIP)
         inf_layout.addWidget(self._live_preview)
 
         layout.addWidget(inf_group)
@@ -290,15 +308,15 @@ class ParameterPanel(QWidget):
         self._proc_check = QCheckBox("Processed")
         self._proc_check.setChecked(True)
         self._proc_check.setToolTip(
-            "Processed — production-ready RGBA (premultiplied, linear).\n"
-            "Designed for import into compositing tools (Nuke, After Effects).\n"
+            "Processed — production-ready RGBA (straight, linear).\n"
+            "Designed for import into Resolve, Premiere, and compositing tools.\n"
             "Includes despill + garbage matte cleanup applied."
         )
         proc_row.addWidget(self._proc_check, 1)
         self._proc_format = QComboBox()
         self._proc_format.addItems(["exr", "png"])
         self._proc_format.setFixedWidth(70)
-        self._proc_format.setToolTip("EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for premultiplied data).")
+        self._proc_format.setToolTip("EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for straight linear RGBA).")
         proc_row.addWidget(self._proc_format)
         out_layout.addLayout(proc_row)
 
@@ -318,12 +336,13 @@ class ParameterPanel(QWidget):
             "Process multiple frames simultaneously using parallel engines.\n\n"
             "Each extra engine loads a full copy of the model.\n"
             "CUDA: ~6-8 GB VRAM per engine.\n"
-            "Apple Silicon: uses unified memory shared with system.\n\n"
+            "\n"
             "Default: 1 (safest). Try 2 first, then increase if stable.\n\n"
-            "EXPERIMENTAL: Values above 8 are for high-memory systems\n"
-            "(e.g. Apple Silicon with 64GB+ unified RAM, RTX 6000, etc.).\n"
+            "EXPERIMENTAL: Values above 8 are for high-memory CUDA systems\n"
+            "(e.g. RTX 6000).\n"
             "If you run out of memory, the app will automatically scale\n"
-            "back to however many engines fit."
+            "back to however many engines fit.\n\n"
+            "CUDA only right now. Not currently supported on Apple Silicon."
         )
         self._parallel_spin.setFixedWidth(60)
         from ui.widgets.preferences_dialog import get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS
@@ -341,7 +360,7 @@ class ParameterPanel(QWidget):
 
         # Middle-click reset: map widget → (setter_callable, default_value)
         self._middle_click_defaults: dict[QWidget, tuple] = {
-            self._despill_slider: (self._despill_slider.setValue, 10),      # 1.0
+            self._despill_slider: (self._despill_slider.setValue, 5),       # 0.5
             self._refiner_slider: (self._refiner_slider.setValue, 10),      # 1.0
             self._despeckle_size: (self._despeckle_size.setValue, 400),      # 400px
         }
@@ -422,6 +441,14 @@ class ParameterPanel(QWidget):
         target = 1 if prefer_linear else 0  # 1=Linear, 0=sRGB
         if self._color_space.currentIndex() != target:
             self._color_space.setCurrentIndex(target)
+
+    def set_input_is_linear(self, input_is_linear: bool) -> None:
+        """Programmatically set Color Space without emitting params_changed."""
+        self._suppress_signals = True
+        try:
+            self._color_space.setCurrentIndex(1 if input_is_linear else 0)
+        finally:
+            self._suppress_signals = False
 
     def set_params(self, params: InferenceParams) -> None:
         """Load parameter values (e.g. from a saved session).
