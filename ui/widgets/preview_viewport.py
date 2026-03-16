@@ -361,9 +361,10 @@ class PreviewViewport(QWidget):
         )
         btn.setStyleSheet(
             "QPushButton { background-color: #1A1900; color: #808070; "
-            "font-size: 10px; padding: 2px 6px; border: 1px solid #2A2910; }"
+            "font-size: 10px; padding: 2px 6px; border: 1px solid #2A2910; "
+            "margin-right: 8px; }"
             "QPushButton:checked { background-color: #FFF203; color: #000000; "
-            "font-weight: 700; border: none; }"
+            "font-weight: 700; border: none; margin-right: 8px; }"
             "QPushButton:hover { border-color: #454430; color: #E0E0E0; }"
         )
         self._top_bar.layout().addWidget(btn)
