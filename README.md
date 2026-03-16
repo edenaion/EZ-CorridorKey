@@ -201,12 +201,15 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 | **Home**         | Return to welcome screen       |
 | **Del**          | Remove selected clips          |
 | **Q**            | Toggle queue panel             |
+| **Ctrl+,**       | Toggle Preferences             |
 | **F12**          | Toggle debug console           |
 
 ### Viewer
 
 | Shortcut                 | Action                                    |
 | ------------------------ | ----------------------------------------- |
+| **F1–F7**                | View modes: INPUT, MASK, ALPHA, FG, MATTE, COMP, PROC |
+| **A**                    | Toggle A/B wipe comparison                |
 | **Ctrl + scroll wheel**  | Zoom in/out toward cursor (0.25x to 8.0x) |
 | **Shift + scroll wheel** | Horizontal pan (left/right)               |
 | **Middle-click + drag**  | Pan the image                             |
