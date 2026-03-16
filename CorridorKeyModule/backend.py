@@ -480,6 +480,9 @@ class _MLXEngineAdapter:
         despeckle_size=400,
         despeckle_dilation=25,
         despeckle_blur=5,
+        source_passthrough=True,
+        edge_erode_px=3,
+        edge_blur_px=7,
     ):
         """Delegate to MLX engine, then normalize output to Torch contract."""
         # corridorkey-mlx expects sRGB uint8 input even when input_is_linear=True.
