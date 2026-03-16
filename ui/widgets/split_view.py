@@ -224,18 +224,21 @@ class SplitViewWidget(QWidget):
     def _paint_split(self, painter: QPainter) -> None:
         """Draw split view with left/right images and divider."""
         w = self.width()
+        h = self.height()
         divider_x = int(w * self._divider_pos)
 
-        # Left side
+        # Left side — fit image into left panel
         if self._left_image:
-            dest = self._image_rect(self._left_image)
-            painter.setClipRect(0, 0, divider_x, self.height())
+            left_vp = QRectF(0, 0, divider_x, h)
+            dest = self._image_rect(self._left_image, viewport=left_vp)
+            painter.setClipRect(0, 0, divider_x, h)
             painter.drawImage(dest, self._left_image)
 
-        # Right side
+        # Right side — fit image into right panel
         if self._right_image:
-            dest = self._image_rect(self._right_image)
-            painter.setClipRect(divider_x, 0, w - divider_x, self.height())
+            right_vp = QRectF(divider_x, 0, w - divider_x, h)
+            dest = self._image_rect(self._right_image, viewport=right_vp)
+            painter.setClipRect(divider_x, 0, w - divider_x, h)
             painter.drawImage(dest, self._right_image)
 
         # Remove clip for divider drawing
@@ -354,7 +357,7 @@ class SplitViewWidget(QWidget):
         if img is None or self._annotation_model is None:
             return
 
-        dest = self._image_rect(img)
+        dest = self._image_rect(img, viewport=self._annotation_viewport())
         paintable_rect = self._annotation_paint_rect(img)
         if paintable_rect is None:
             return
@@ -396,7 +399,7 @@ class SplitViewWidget(QWidget):
         img = self._annotation_target_image()
         if img is None:
             return None
-        dest = self._image_rect(img)
+        dest = self._image_rect(img, viewport=self._annotation_viewport())
         paintable_rect = self._annotation_paint_rect(img)
         if paintable_rect is None or not paintable_rect.contains(display_pos):
             return None
@@ -410,8 +413,15 @@ class SplitViewWidget(QWidget):
     def _annotation_target_image(self) -> QImage | None:
         return self._single_image or self._left_image
 
+    def _annotation_viewport(self) -> QRectF | None:
+        """Return the left-panel viewport rect when in split mode, else None."""
+        if self._split_enabled:
+            divider_x = float(self.width()) * self._divider_pos
+            return QRectF(0, 0, divider_x, float(self.height()))
+        return None
+
     def _annotation_paint_rect(self, img: QImage) -> QRectF | None:
-        rect = self._image_rect(img)
+        rect = self._image_rect(img, viewport=self._annotation_viewport())
         if self._split_enabled:
             divider_x = float(self.width()) * self._divider_pos
             rect = rect.intersected(QRectF(0.0, 0.0, divider_x, float(self.height())))
@@ -419,19 +429,34 @@ class SplitViewWidget(QWidget):
             return None
         return rect
 
-    def _image_rect(self, img: QImage) -> QRectF:
-        """Calculate the destination rect for an image with zoom/pan."""
+    def _image_rect(self, img: QImage, viewport: QRectF | None = None) -> QRectF:
+        """Calculate the destination rect for an image with zoom/pan.
+
+        Parameters
+        ----------
+        img : QImage
+            The image to compute a destination rect for.
+        viewport : QRectF, optional
+            Sub-region of the widget to fit the image into (used by split view
+            so each panel gets its own fit calculation). Defaults to the full
+            widget area.
+        """
         iw, ih = img.width(), img.height()
-        vw, vh = self.width(), self.height()
+        if viewport is not None:
+            vx, vy = viewport.x(), viewport.y()
+            vw, vh = viewport.width(), viewport.height()
+        else:
+            vx, vy = 0.0, 0.0
+            vw, vh = self.width(), self.height()
 
         # Fit to viewport at zoom=1.0
         scale_fit = min(vw / iw, vh / ih)
         display_w = iw * scale_fit * self._zoom
         display_h = ih * scale_fit * self._zoom
 
-        # Center + pan offset
-        x = (vw - display_w) / 2 + self._pan.x()
-        y = (vh - display_h) / 2 + self._pan.y()
+        # Center within viewport + pan offset
+        x = vx + (vw - display_w) / 2 + self._pan.x()
+        y = vy + (vh - display_h) / 2 + self._pan.y()
 
         return QRectF(x, y, display_w, display_h)
 
