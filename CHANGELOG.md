@@ -4,6 +4,30 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [1.8.0] - 2026-03-16 — A/B Wipe, View Hotkeys, Docker, Model Resolution
+
+### Added
+- **Source passthrough** for CUDA — preserves original pixels in confidently opaque interior regions. 1:1 quality with your input image. Proud of this one :)
+- **A/B wipe comparison viewer** (hotkey **A**) — diagonal split between input and output with draggable/rotatable divider line. Scroll wheel slides the divider, Shift+scroll for fine-grain control. Middle-click resets to default position.
+- **F1–F7 hotkeys** for instant view mode switching (INPUT, MASK, ALPHA, FG, MATTE, COMP, PROC). Hotkeys shown in button tooltips.
+- **Ctrl+,** opens/closes Preferences (toggle, like F12 for debug console).
+- **Docker / noVNC browser mode** — run EZ-CorridorKey in a container with browser-based access. Contributed by [DCRepublic](https://github.com/DCRepublic).
+- **Model resolution setting** Exposed in Preferences — defaults to 1024 (Apple Silicon only) but users can now change to 2048 for CUDA quality parity at the cost of processing speed.
+
+### Fixed
+- **Despill label** showing 1.0 instead of 0.5 on startup.
+- **Default model resolution** on Apple Silicon set to 1024.
+- **Premultiplied RGBA output** restored on both CUDA and MLX paths.
+- **F-key view mode hotkeys** now match ViewMode enum case correctly.
+- **A/B wipe B-side** updates live when switching view modes.
+- **MLX despill** unified with inference defaults.
+
+### Changed
+- **Docker files organized** into `docker/` folder to keep repo root clean.
+- **Preferences sections** reordered for clarity.
+
+---
+
 ## [1.7.0] - 2026-03-15 — BiRefNet, Color Accuracy, UI Polish
 
 ### Added

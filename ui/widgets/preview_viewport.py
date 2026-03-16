@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import logging
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QImage
 
@@ -81,6 +81,9 @@ class PreviewViewport(QWidget):
             "color: #808070; font-size: 11px; padding-right: 8px; background: #0E0D00;"
         )
         top_bar.addWidget(self._clip_info)
+
+        # A/B wipe button — hidden by default, shown via add_ab_button()
+        self._ab_button: QPushButton | None = None
 
         layout.addWidget(self._top_bar)
 
@@ -336,6 +339,40 @@ class PreviewViewport(QWidget):
         """Hide the clip info label (used on right panel to avoid duplication)."""
         self._clip_info.hide()
 
+    def show_clip_info(self) -> None:
+        """Show the clip info label."""
+        self._clip_info.show()
+
+    def add_ab_button(self) -> QPushButton:
+        """Add an A/B wipe toggle button at the right edge of the top bar.
+
+        Returns the button so the parent can connect its signal.
+        """
+        btn = QPushButton("A/B")
+        btn.setCheckable(True)
+        btn.setFixedHeight(24)
+        btn.setFixedWidth(50)
+        btn.setToolTip(
+            "Toggle A/B wipe comparison (hotkey: A)\n\n"
+            "Overlays input (A) and current output (B) in one viewer\n"
+            "with a diagonal divider line.\n\n"
+            "Drag the center handle to slide the line.\n"
+            "Drag above or below the handle to rotate the angle.\n"
+            "Scroll wheel to slide the line (Shift+scroll for fine-grain).\n"
+            "Middle-click the line to reset to default."
+        )
+        btn.setStyleSheet(
+            "QPushButton { background-color: #1A1900; color: #808070; "
+            "font-size: 10px; padding: 2px 6px; border: 1px solid #2A2910; "
+            "margin-right: 8px; }"
+            "QPushButton:checked { background-color: #FFF203; color: #000000; "
+            "font-weight: 700; border: none; margin-right: 8px; }"
+            "QPushButton:hover { border-color: #454430; color: #E0E0E0; }"
+        )
+        self._top_bar.layout().addWidget(btn)
+        self._ab_button = btn
+        return btn
+
     def navigate_to_frame(self, stem_index: int) -> None:
         """Public method for external scrubber to drive navigation."""
         self._navigate_to(stem_index)
@@ -453,12 +490,26 @@ class PreviewViewport(QWidget):
     # ── Signal Handlers ──
 
     @Slot(str)
+    def set_view_mode(self, mode_value: str) -> None:
+        """Programmatically switch view mode (from hotkey or external call)."""
+        try:
+            mode = ViewMode(mode_value)
+        except ValueError:
+            return
+        btn = self._mode_bar._buttons.get(mode)
+        if btn and btn.isEnabled():
+            btn.setChecked(True)
+            self._on_mode_changed(mode_value)
+
     def _on_mode_changed(self, mode_value: str) -> None:
         """Handle view mode switch."""
         try:
             self._current_mode = ViewMode(mode_value)
         except ValueError:
             return
+        # Update button styles
+        for m, btn in self._mode_bar._buttons.items():
+            btn.setStyleSheet(self._mode_bar._button_style(m == self._current_mode))
         self.view_mode_changed.emit(mode_value)
 
         if self._current_stem_idx >= 0:

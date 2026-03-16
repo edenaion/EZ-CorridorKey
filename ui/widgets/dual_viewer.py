@@ -39,6 +39,8 @@ class DualViewerPanel(QWidget):
 
         self._clip: ClipEntry | None = None
 
+        self._wipe_active = False
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -63,6 +65,17 @@ class DualViewerPanel(QWidget):
 
         layout.addWidget(self._viewer_splitter, 1)
 
+        # A/B wipe overlay — sits ON TOP of the splitter, covers both viewer
+        # canvases without touching the top bars.  Hidden until activated.
+        from ui.widgets.split_view import SplitViewWidget
+        self._wipe_overlay = SplitViewWidget(parent=self)
+        self._wipe_overlay.set_wipe_mode(True)
+        self._wipe_overlay.hide()
+
+        # A/B wipe button — lives in the input viewer's top bar, right edge
+        self._ab_button = self._input_viewer.add_ab_button()
+        self._ab_button.clicked.connect(self.toggle_wipe_mode)
+
         # Shared scrubber at the bottom
         bottom = QHBoxLayout()
         bottom.setContentsMargins(0, 0, 0, 0)
@@ -83,6 +96,10 @@ class DualViewerPanel(QWidget):
         # Wire zoom from output viewer (primary)
         self._output_viewer._split_view.zoom_changed.connect(self._on_zoom_changed)
         self._output_viewer.view_mode_changed.connect(self.output_mode_changed.emit)
+
+        # Refresh wipe overlay when output viewer decodes a new frame or switches mode
+        self._output_viewer._decoder.frame_decoded.connect(self._on_wipe_frame_ready)
+        self._input_viewer._decoder.frame_decoded.connect(self._on_wipe_frame_ready)
 
     @property
     def current_stem_index(self) -> int:
@@ -236,3 +253,58 @@ class DualViewerPanel(QWidget):
     @Slot(float)
     def _on_zoom_changed(self, zoom: float) -> None:
         self._zoom_label.setText(f"{int(zoom * 100)}%")
+
+    # ── A/B Wipe ──
+
+    def toggle_wipe_mode(self) -> None:
+        """Toggle A/B wipe comparison mode.
+
+        Shows/hides a full-width overlay on top of both viewer canvases.
+        Nothing above the viewer (top bars, buttons) changes at all.
+        """
+        self._wipe_active = not self._wipe_active
+        self._ab_button.setChecked(self._wipe_active)
+
+        if self._wipe_active:
+            self._load_wipe_images()
+            self._position_wipe_overlay()
+            self._wipe_overlay.show()
+            self._wipe_overlay.raise_()
+        else:
+            self._wipe_overlay.hide()
+
+    def _position_wipe_overlay(self) -> None:
+        """Position the wipe overlay to cover both viewer canvases (below top bars)."""
+        # Map the splitter's geometry to our coordinate system
+        # The overlay should cover the canvas area of both viewers
+        # (below the 30px top bars, above the scrubber)
+        splitter_geo = self._viewer_splitter.geometry()
+        top_bar_h = 30  # fixed top bar height
+        x = splitter_geo.x()
+        y = splitter_geo.y() + top_bar_h
+        w = splitter_geo.width()
+        h = splitter_geo.height() - top_bar_h
+        self._wipe_overlay.setGeometry(x, y, w, h)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self._wipe_active:
+            self._position_wipe_overlay()
+
+    @Slot(int, str, object)
+    def _on_wipe_frame_ready(self, stem_index: int, mode_value: str, qimage: object) -> None:
+        """A viewer decoded a frame — refresh wipe if active."""
+        if self._wipe_active:
+            self._load_wipe_images()
+
+    def _load_wipe_images(self) -> None:
+        """Load INPUT (A=left) and current output mode (B=right) into wipe overlay."""
+        if not self._wipe_active:
+            return
+        input_img = self._input_viewer._split_view._single_image
+        output_img = self._output_viewer._split_view._single_image
+
+        if input_img:
+            self._wipe_overlay.set_left_image(input_img)
+        if output_img:
+            self._wipe_overlay.set_right_image(output_img)

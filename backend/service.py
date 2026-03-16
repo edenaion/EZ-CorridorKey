@@ -143,16 +143,26 @@ class _ActiveModel(Enum):
     BIREFNET = "birefnet"
 
 
+from CorridorKeyModule.inference_engine import INFERENCE_DEFAULTS as _D
+
 @dataclass
 class InferenceParams:
-    """Frozen parameters for a single inference job."""
+    """Frozen parameters for a single inference job.
+
+    Defaults are pulled from INFERENCE_DEFAULTS (single source of truth
+    in CorridorKeyModule.inference_engine).  Change a default there and
+    it propagates to every engine path and the service layer.
+    """
     input_is_linear: bool = False
-    despill_strength: float = 0.5  # 0.0 to 1.0
-    auto_despeckle: bool = True
-    despeckle_size: int = 400
-    despeckle_dilation: int = 25   # clean_matte dilation radius
-    despeckle_blur: int = 5        # clean_matte blur kernel half-size
-    refiner_scale: float = 1.0
+    despill_strength: float = _D["despill_strength"]
+    auto_despeckle: bool = _D["auto_despeckle"]
+    despeckle_size: int = _D["despeckle_size"]
+    despeckle_dilation: int = _D["despeckle_dilation"]
+    despeckle_blur: int = _D["despeckle_blur"]
+    refiner_scale: float = _D["refiner_scale"]
+    source_passthrough: bool = _D["source_passthrough"]
+    edge_erode_px: int = _D["edge_erode_px"]
+    edge_blur_px: int = _D["edge_blur_px"]
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -265,9 +275,14 @@ class CorridorKeyService:
             service.run_inference(clip, params, on_progress=my_callback)
     """
 
+    # Model resolution options — user-facing setting.
+    # 2048 = full quality (matches OG CK), 1024 = faster / less memory.
+    VALID_MODEL_RESOLUTIONS = (1024, 2048)
+
     def __init__(self):
         self._engine_pool: list = []
         self._pool_size: int = 1
+        self._model_resolution: int = 2048  # default: full quality
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
@@ -315,6 +330,36 @@ class CorridorKeyService:
                     torch.cuda.empty_cache()
             except Exception:
                 logger.debug("CUDA cache clear skipped after SAM2 model switch", exc_info=True)
+
+    @property
+    def model_resolution(self) -> int:
+        """Current model inference resolution (1024 or 2048)."""
+        return self._model_resolution
+
+    def set_model_resolution(self, res: int) -> None:
+        """Set model inference resolution. Requires engine reload to take effect.
+
+        2048 = full quality (captures fine hair detail, matches original CK).
+        1024 = faster inference, lower memory, less fine detail.
+        """
+        if res not in self.VALID_MODEL_RESOLUTIONS:
+            logger.warning("Invalid model resolution %d, ignoring", res)
+            return
+        if res != self._model_resolution:
+            logger.info("Model resolution: %d -> %d (engine reload required)", self._model_resolution, res)
+            self._model_resolution = res
+            # Clear engine pool — next inference will rebuild at new resolution
+            for eng in self._engine_pool:
+                self._safe_offload(eng)
+            self._engine_pool.clear()
+            if self._active_model == _ActiveModel.INFERENCE:
+                self._active_model = _ActiveModel.NONE
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
 
     def set_pool_size(self, n: int) -> None:
         """Set the number of parallel inference engines.
@@ -573,7 +618,7 @@ class CorridorKeyService:
 
         backend = resolve_backend()
         opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
-        _img_size = 1024 if self._device == 'mps' else 2048
+        _img_size = self._model_resolution
 
         # MLX: unified memory, single engine only
         pool_size = 1 if backend == "mlx" else self._pool_size
@@ -1119,6 +1164,9 @@ class CorridorKeyService:
                             despeckle_dilation=params.despeckle_dilation,
                             despeckle_blur=params.despeckle_blur,
                             refiner_scale=params.refiner_scale,
+                            source_passthrough=params.source_passthrough,
+                            edge_erode_px=params.edge_erode_px,
+                            edge_blur_px=params.edge_blur_px,
                         )
                     dt = time.monotonic() - t_frame
                     frame_times.append(dt)
@@ -1252,6 +1300,9 @@ class CorridorKeyService:
                         despeckle_dilation=params.despeckle_dilation,
                         despeckle_blur=params.despeckle_blur,
                         refiner_scale=params.refiner_scale,
+                        source_passthrough=params.source_passthrough,
+                        edge_erode_px=params.edge_erode_px,
+                        edge_blur_px=params.edge_blur_px,
                     )
                     out_q.put((frame_idx, stem, res, None))
                     if not warmup_done.is_set():
@@ -1541,6 +1592,9 @@ class CorridorKeyService:
                 despeckle_dilation=params.despeckle_dilation,
                 despeckle_blur=params.despeckle_blur,
                 refiner_scale=params.refiner_scale,
+                source_passthrough=params.source_passthrough,
+                edge_erode_px=params.edge_erode_px,
+                edge_blur_px=params.edge_blur_px,
             )
         logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")
         return res

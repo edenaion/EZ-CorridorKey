@@ -42,6 +42,7 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("delete_clips",       "Remove Selected Clips",        "Global",     "Del",          "_on_delete_selected_clips"),
     ShortcutDef("toggle_queue",       "Toggle Queue",                 "Global",     "Q",            "_toggle_queue_panel"),
     ShortcutDef("debug_console",     "Debug Console",                "Global",     "F12",          "_toggle_debug_console", app_shortcut=True),
+    ShortcutDef("preferences",       "Preferences",                  "Global",     "Ctrl+,",       "_show_preferences",     menu_action=True),
     # Timeline
     ShortcutDef("set_in",             "Set In-Point",                 "Timeline",   "I",            "_set_in_point"),
     ShortcutDef("set_out",            "Set Out-Point",                "Timeline",   "O",            "_set_out_point"),
@@ -54,10 +55,19 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("cycle_fg_color",     "Cycle Foreground Color",       "Paint",      "C",            "_cycle_fg_color"),
     ShortcutDef("undo_annotation",    "Undo Paint Stroke",            "Paint",      "Ctrl+Z",       "_undo_annotation"),
     ShortcutDef("clear_annotations",  "Clear Paint Strokes",          "Paint",      "Ctrl+C",       "_confirm_clear_annotations"),
+    # Viewer
+    ShortcutDef("toggle_ab_wipe",     "Toggle A/B Wipe",              "Viewer",     "A",            "_toggle_ab_wipe"),
+    ShortcutDef("view_input",         "View: INPUT",                  "Viewer",     "F1",           "_view_mode_input"),
+    ShortcutDef("view_mask",          "View: MASK",                   "Viewer",     "F2",           "_view_mode_mask"),
+    ShortcutDef("view_alpha",         "View: ALPHA",                  "Viewer",     "F3",           "_view_mode_alpha"),
+    ShortcutDef("view_fg",            "View: FG",                     "Viewer",     "F4",           "_view_mode_fg"),
+    ShortcutDef("view_matte",         "View: MATTE",                  "Viewer",     "F5",           "_view_mode_matte"),
+    ShortcutDef("view_comp",          "View: COMP",                   "Viewer",     "F6",           "_view_mode_comp"),
+    ShortcutDef("view_proc",          "View: PROC",                   "Viewer",     "F7",           "_view_mode_proc"),
 ]
 
 # Category display order
-CATEGORY_ORDER = ["Global", "Timeline", "Playback", "Paint"]
+CATEGORY_ORDER = ["Global", "Timeline", "Playback", "Viewer", "Paint"]
 
 
 class ShortcutRegistry:

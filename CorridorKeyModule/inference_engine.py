@@ -14,6 +14,21 @@ logger = logging.getLogger(__name__)
 from .core.model_transformer import GreenFormer
 from .core import color_utils as cu
 
+# ── Single source of truth for inference parameter defaults ──
+# Every engine (CUDA, MLX) and the service layer import from here.
+# Change a default ONCE, it propagates everywhere.
+INFERENCE_DEFAULTS = {
+    "refiner_scale": 1.0,
+    "despill_strength": 0.5,
+    "auto_despeckle": True,
+    "despeckle_size": 400,
+    "despeckle_dilation": 25,
+    "despeckle_blur": 5,
+    "source_passthrough": True,
+    "edge_erode_px": 3,
+    "edge_blur_px": 7,
+}
+
 def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
     """Monkey-patch MaskUnitAttention.forward on global-attention blocks.
 
@@ -416,8 +431,10 @@ class CorridorKeyEngine:
         self._status("Model ready")
         return model
 
+    _D = INFERENCE_DEFAULTS
+
     @torch.no_grad()
-    def process_frame(self, image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400, despeckle_dilation=25, despeckle_blur=5):
+    def process_frame(self, image, mask_linear, refiner_scale=_D["refiner_scale"], input_is_linear=False, fg_is_straight=True, despill_strength=_D["despill_strength"], auto_despeckle=_D["auto_despeckle"], despeckle_size=_D["despeckle_size"], despeckle_dilation=_D["despeckle_dilation"], despeckle_blur=_D["despeckle_blur"], source_passthrough=_D["source_passthrough"], edge_erode_px=_D["edge_erode_px"], edge_blur_px=_D["edge_blur_px"]):
         """
         Process a single frame.
         Args:
@@ -433,6 +450,13 @@ class CorridorKeyEngine:
             despill_strength: float. 0.0 to 1.0 multiplier for the despill effect.
             auto_despeckle: bool. If True, cleans up small disconnected components from the predicted alpha matte.
             despeckle_size: int. Minimum number of consecutive pixels required to keep an island.
+            source_passthrough: bool. If True, passes original source pixels through in opaque interior
+                                regions instead of using the model's fg prediction. Only the edge
+                                transition band uses model fg. Preserves full source quality.
+            edge_erode_px: int. Pixels to erode the interior mask inward. Safety buffer to avoid
+                           using original pixels where green spill might contaminate.
+            edge_blur_px: int. Gaussian blur radius for the transition blend between source and
+                          model fg. Controls smoothness of the seam.
         Returns:
              dict: {'alpha': np, 'fg': np (sRGB), 'comp': np (sRGB on Gray)}
         """
@@ -493,23 +517,39 @@ class CorridorKeyEngine:
         
         if res_alpha.ndim == 2: res_alpha = res_alpha[:, :, np.newaxis]
 
+        # --- SOURCE PASSTHROUGH ---
+        # Interior pixels (face, body, clothes — everywhere alpha ≈ 1.0) are passed
+        # through from the original source frame untouched.  The model's fg prediction
+        # is only used in the edge transition band where it handles green-screen
+        # separation, hair strands, and semi-transparency.
+        if source_passthrough:
+            if input_is_linear:
+                original_srgb = cu.linear_to_srgb(image)
+            else:
+                original_srgb = image
+            res_fg = cu.source_passthrough(
+                original_srgb, res_fg, res_alpha,
+                erode_px=edge_erode_px, blur_px=edge_blur_px
+            )
+
         # --- ADVANCED COMPOSITING ---
-        
+
         # A. Clean Matte (Auto-Despeckle)
         if auto_despeckle:
             processed_alpha = cu.clean_matte(res_alpha, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur)
         else:
             processed_alpha = res_alpha
-            
+
         # B. Despill FG
-        # res_fg is sRGB.
+        # res_fg is sRGB (with source passthrough blended in where applicable).
         fg_despilled = cu.despill(res_fg, green_limit_mode='average', strength=despill_strength)
         
         # C. Convert to linear for output assembly.
         fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
 
-        # D. Pack straight linear RGBA for NLE/compositor interchange.
-        processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
+        # D. Premultiply and pack linear RGBA for NLE/compositor interchange.
+        fg_premul_lin = cu.premultiply(fg_despilled_lin, processed_alpha)
+        processed_rgba = np.concatenate([fg_premul_lin, processed_alpha], axis=-1)
 
         # ----------------------------
         

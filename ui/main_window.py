@@ -56,7 +56,8 @@ from ui.widgets.preferences_dialog import (
     KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE,
     KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES,
     KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
-    get_setting_bool, get_setting_str,
+    KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION,
+    get_setting_bool, get_setting_str, get_setting_int,
 )
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
@@ -70,7 +71,7 @@ logger = logging.getLogger(__name__)
 # TEMPORARY: keep a visible tester build identifier on the user-test
 # branch so remote testers can confirm they pulled the right build. Remove this
 # before merging the branch back into main.
-_SHOW_TESTER_BUILD_ID = False
+_SHOW_TESTER_BUILD_ID = True
 
 # Session file stored in clips dir (Codex: JSON sidecar)
 _SESSION_FILENAME = ".corridorkey_session.json"
@@ -247,7 +248,23 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"EZ-CorridorKey {self._get_visible_build_id()}")
         self.setMinimumSize(1100, 650)
-        self.resize(1400, 800)
+
+        container_env = str(os.getenv("CORRIDORKEY_CONTAINER_MODE", "0")).strip().lower()
+        self._container_mode = container_env in {"1", "true", "yes", "on", "y"}
+        logger.info(
+            "MainWindow init: CORRIDORKEY_CONTAINER_MODE=%r -> container_mode=%s",
+            container_env,
+            self._container_mode,
+        )
+
+        if self._container_mode:
+            self.setMinimumSize(1100, 650)
+            logger.info("MainWindow init: fullscreen enabled for container mode")
+        else:
+            self._container_mode = False
+            self.resize(1400, 800)
+
+    
         self.setAcceptDrops(True)
 
         self._service = service or CorridorKeyService()
@@ -267,6 +284,7 @@ class MainWindow(QMainWindow):
         # Debug console — created eagerly so log handler captures from startup
         from ui.widgets.debug_console import DebugConsoleWidget
         self._debug_console = DebugConsoleWidget()
+        self._prefs_dialog = None
 
         # Data model
         self._clip_model = ClipListModel()
@@ -339,10 +357,24 @@ class MainWindow(QMainWindow):
         self._apply_tooltip_setting()
         self._apply_sound_setting()
         self._apply_tracker_model_setting()
+        self._apply_model_resolution_setting()
 
         # Check for updates (non-blocking background thread)
         if os.environ.get("CORRIDORKEY_SKIP_UPDATE_CHECK") != "1":
             self._check_for_updates()
+
+        # Re-apply configured window mode after first layout pass.
+        QTimer.singleShot(0, self._ensure_window_mode)
+
+    def _ensure_window_mode(self) -> None:
+        """Keep the top-level window in configured startup mode."""
+        if getattr(self, "_container_mode", False):
+            if not self.isFullScreen():
+                self.showFullScreen()
+        else:
+            return
+        self.raise_()
+        self.activateWindow()
 
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
@@ -367,7 +399,7 @@ class MainWindow(QMainWindow):
 
         # Edit menu
         edit_menu = menu_bar.addMenu("Edit")
-        edit_menu.addAction("Preferences...", self._show_preferences)
+        self._prefs_action = edit_menu.addAction("Preferences...", self._show_preferences)
         edit_menu.addAction("Hotkeys...", self._show_hotkeys)
         edit_menu.addSeparator()
         edit_menu.addAction("Track Paint Masks", self._on_track_masks)
@@ -545,6 +577,7 @@ class MainWindow(QMainWindow):
         reg = self._shortcut_registry
         self._save_action.setShortcut(QKeySequence(reg.get_key("save_session")))
         self._open_action.setShortcut(QKeySequence(reg.get_key("open_project")))
+        self._prefs_action.setShortcut(QKeySequence(reg.get_key("preferences")))
 
     def _toggle_mute(self) -> None:
         """Toggle UI sounds on/off and show a brief overlay indicator."""
@@ -566,6 +599,31 @@ class MainWindow(QMainWindow):
     def _toggle_playback(self) -> None:
         """Forward Space key to the scrubber's play/pause toggle."""
         self._dual_viewer.toggle_playback()
+
+    def _toggle_ab_wipe(self) -> None:
+        """Toggle A/B wipe comparison mode."""
+        self._dual_viewer.toggle_wipe_mode()
+
+    def _view_mode_input(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("Input")
+
+    def _view_mode_mask(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("Mask")
+
+    def _view_mode_alpha(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("Alpha")
+
+    def _view_mode_fg(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("FG")
+
+    def _view_mode_matte(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("Matte")
+
+    def _view_mode_comp(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("Comp")
+
+    def _view_mode_proc(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("Processed")
 
     def _on_escape(self) -> None:
         """Escape: cancel the current action — auto-detects what's running."""
@@ -1312,6 +1370,7 @@ class MainWindow(QMainWindow):
         """Switch from welcome screen to the 3-panel workspace."""
         self._stack.setCurrentIndex(1)
         self._status_bar.show()
+        QTimer.singleShot(0, self._ensure_window_mode)
         # Sync IO tray divider and position queue overlay after layout settles
         QTimer.singleShot(0, self._sync_io_divider)
         QTimer.singleShot(0, self._position_queue_panel)
@@ -1355,6 +1414,7 @@ class MainWindow(QMainWindow):
                 pass
         self._stack.setCurrentIndex(0)
         self._status_bar.hide()
+        QTimer.singleShot(0, self._ensure_window_mode)
         self._welcome.refresh_recents()
         self._clips_dir = None
         self._current_clip = None
@@ -2511,9 +2571,6 @@ class MainWindow(QMainWindow):
         if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
             return
 
-        if not self._warn_mps_slow("BiRefNet"):
-            return
-
         # Detect partial alpha from a previous interrupted run
         alpha_dir = os.path.join(self._current_clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
@@ -3365,10 +3422,13 @@ class MainWindow(QMainWindow):
         # Restore window geometry (clamped to current screen)
         if "geometry" in data:
             try:
-                g = data["geometry"]
-                self.setGeometry(g["x"], g["y"], g["width"], g["height"])
+                if not getattr(self, "_container_mode", False):
+                    g = data["geometry"]
+                    self.setGeometry(g["x"], g["y"], g["width"], g["height"])
             except Exception:
                 pass
+
+        QTimer.singleShot(0, self._ensure_window_mode)
 
         # Restore selected clip
         if "selected_clip" in data:
@@ -3499,13 +3559,20 @@ class MainWindow(QMainWindow):
             dlg.exec()
 
     def _show_preferences(self) -> None:
-        """Open the Preferences dialog and apply changes."""
+        """Toggle the Preferences dialog (Ctrl+,)."""
+        if self._prefs_dialog is not None:
+            self._prefs_dialog.reject()
+            return
         dlg = PreferencesDialog(self)
-        if dlg.exec() == PreferencesDialog.Accepted:
+        self._prefs_dialog = dlg
+        accepted = dlg.exec() == PreferencesDialog.Accepted
+        self._prefs_dialog = None
+        if accepted:
             self._apply_tooltip_setting()
             self._apply_sound_setting()
             self._apply_tracker_model_setting()
             self._apply_parallel_clips_setting()
+            self._apply_model_resolution_setting()
 
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
@@ -3540,6 +3607,11 @@ class MainWindow(QMainWindow):
         """Apply saved SAM2 tracker model preference to the backend service."""
         model_id = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
         self._service.set_sam2_model(model_id)
+
+    def _apply_model_resolution_setting(self) -> None:
+        """Apply saved model resolution preference to the backend service."""
+        res = get_setting_int(KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION)
+        self._service.set_model_resolution(res)
 
     def _apply_parallel_clips_setting(self) -> None:
         """Apply saved parallel clips preference to the GPU worker."""

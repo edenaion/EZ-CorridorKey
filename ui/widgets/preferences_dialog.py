@@ -23,6 +23,7 @@ KEY_COPY_SEQUENCES = "project/copy_image_sequences"
 KEY_EXR_COMPRESSION = "output/exr_compression"
 KEY_TRACKER_MODEL = "tracking/sam2_model"
 KEY_PARALLEL_CLIPS = "gpu/parallel_clips"
+KEY_MODEL_RESOLUTION = "inference/model_resolution"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
@@ -33,6 +34,12 @@ DEFAULT_LOOP_PLAYBACK = True
 DEFAULT_EXR_COMPRESSION = "dwab"
 DEFAULT_TRACKER_MODEL = "facebook/sam2.1-hiera-base-plus"
 DEFAULT_PARALLEL_CLIPS = 1
+import platform as _platform
+import sys as _sys
+# MPS/MLX (Apple Silicon) defaults to 1024 — 2048 needs 20GB+ and is very slow.
+# CUDA defaults to 2048 (dedicated VRAM handles it fine).
+_is_apple_silicon = _sys.platform == "darwin" and _platform.machine() == "arm64"
+DEFAULT_MODEL_RESOLUTION = 1024 if _is_apple_silicon else 2048
 
 EXR_COMPRESSION_OPTIONS = [
     ("DWAB — Lossy, Smallest Files", "dwab"),
@@ -116,6 +123,9 @@ class PreferencesDialog(QDialog):
         self.setWindowTitle("Preferences")
         self.setMinimumWidth(520)
         self.setModal(True)
+        # Ctrl+, closes the dialog (toggle behavior matching F12 pattern)
+        from PySide6.QtGui import QShortcut, QKeySequence
+        QShortcut(QKeySequence("Ctrl+,"), self, self.reject)
         self._ffmpeg_repair_worker: _FFmpegRepairWorker | None = None
         self._local_ffmpeg_dir = get_local_ffmpeg_dir()
 
@@ -138,7 +148,7 @@ class PreferencesDialog(QDialog):
         )
         ui_layout.addWidget(self._sounds_cb)
 
-        layout.addWidget(ui_group)
+        # (added to layout below in display order)
 
         # Project section
         proj_group = QGroupBox("Project")
@@ -167,7 +177,7 @@ class PreferencesDialog(QDialog):
         )
         proj_layout.addWidget(self._copy_sequences_cb)
 
-        layout.addWidget(proj_group)
+        # (added to layout below in display order)
 
         # Output section
         output_group = QGroupBox("Output")
@@ -191,7 +201,34 @@ class PreferencesDialog(QDialog):
         )
         output_layout.addWidget(self._exr_compression_combo)
 
-        layout.addWidget(output_group)
+        # (added to layout below in display order)
+
+        # Inference section
+        inference_group = QGroupBox("Inference")
+        inference_layout = QVBoxLayout(inference_group)
+
+        res_label = QLabel("Model resolution")
+        inference_layout.addWidget(res_label)
+
+        self._model_resolution_combo = QComboBox()
+        self._model_resolution_combo.addItem("2048 — Full Quality", 2048)
+        self._model_resolution_combo.addItem("1024 — Faster, Less Detail", 1024)
+        saved_res = get_setting_int(KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION)
+        idx = self._model_resolution_combo.findData(saved_res)
+        self._model_resolution_combo.setCurrentIndex(max(0, idx))
+        self._model_resolution_combo.setToolTip(
+            "Resolution the model processes internally before upscaling to your frame size.\n"
+            "Applies to all backends (CUDA, MPS, MLX, CPU).\n\n"
+            "2048: Full quality — captures fine hair strands and edge detail.\n"
+            "Matches the original CorridorKey quality. Recommended for CUDA with 8GB+ VRAM.\n"
+            "WARNING: Very slow on Apple Silicon (needs 20GB+ memory).\n\n"
+            "1024: Faster inference with lower memory usage.\n"
+            "Fine hair detail may be lost. Recommended for Apple Silicon / low-VRAM GPUs.\n\n"
+            "Changing this requires an engine reload (happens automatically)."
+        )
+        inference_layout.addWidget(self._model_resolution_combo)
+
+        # (added to layout below in display order)
 
         # Playback section
         play_group = QGroupBox("Playback")
@@ -207,7 +244,7 @@ class PreferencesDialog(QDialog):
         )
         play_layout.addWidget(self._loop_cb)
 
-        layout.addWidget(play_group)
+        # (added to layout below in display order)
 
         # Tracking section
         tracking_group = QGroupBox("Tracking")
@@ -254,7 +291,7 @@ class PreferencesDialog(QDialog):
         cache_row.addWidget(open_cache_btn)
         tracking_layout.addLayout(cache_row)
 
-        layout.addWidget(tracking_group)
+        # (added to layout below in display order)
 
         ffmpeg_group = QGroupBox("Video Tools")
         ffmpeg_layout = QVBoxLayout(ffmpeg_group)
@@ -310,6 +347,14 @@ class PreferencesDialog(QDialog):
 
         ffmpeg_layout.addLayout(ffmpeg_btn_row)
 
+        # --- Layout order ---
+        # UI > Project > Playback > Tracking > Inference > Output > Video Tools
+        layout.addWidget(ui_group)
+        layout.addWidget(proj_group)
+        layout.addWidget(play_group)
+        layout.addWidget(tracking_group)
+        layout.addWidget(inference_group)
+        layout.addWidget(output_group)
         layout.addWidget(ffmpeg_group)
 
         layout.addStretch(1)
@@ -347,6 +392,7 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
         s.setValue(KEY_EXR_COMPRESSION, self._exr_compression_combo.currentData())
         s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
+        s.setValue(KEY_MODEL_RESOLUTION, self._model_resolution_combo.currentData())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
