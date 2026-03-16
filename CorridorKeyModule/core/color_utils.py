@@ -286,6 +286,58 @@ def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
         
     return result_alpha
 
+def source_passthrough(original_srgb, model_fg_srgb, alpha, erode_px=3, blur_px=7):
+    """
+    Blend original source pixels into the model's foreground prediction.
+
+    Where the alpha matte is confidently opaque (interior of subject), we use
+    the original source pixels directly — they haven't been through the model
+    so they retain full quality.  Near edges (where alpha transitions), we use
+    the model's predicted foreground which handles green-screen separation.
+
+    Args:
+        original_srgb: [H, W, 3] float32 sRGB, original frame.
+        model_fg_srgb: [H, W, 3] float32 sRGB, model's predicted foreground.
+        alpha:         [H, W, 1] or [H, W] float32 (0-1), predicted alpha matte.
+        erode_px:      Pixels to erode the interior mask inward from the edge.
+                       Creates a safety buffer so we never use original pixels
+                       right at the boundary where green spill may exist.
+        blur_px:       Gaussian blur radius for the transition band.
+                       Controls how smoothly we blend from original → model fg.
+
+    Returns:
+        [H, W, 3] float32 sRGB, blended foreground.
+    """
+    import cv2
+
+    # Work with 2D alpha
+    a = alpha[:, :, 0] if alpha.ndim == 3 else alpha
+
+    # Interior mask: where the subject is fully opaque
+    # Use a high threshold — we only want to pass through pixels that are
+    # definitively interior (no edge ambiguity at all)
+    interior = (a > 0.95).astype(np.float32)
+
+    # Erode inward to create a safety buffer around edges.
+    # This ensures we never use original pixels where green spill might exist.
+    if erode_px > 0:
+        k = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (erode_px * 2 + 1, erode_px * 2 + 1)
+        )
+        interior = cv2.erode(interior, k)
+
+    # Smooth the transition so there's no visible seam between
+    # original pixels and model-predicted pixels.
+    if blur_px > 0:
+        ks = blur_px * 2 + 1
+        interior = cv2.GaussianBlur(interior, (ks, ks), 0)
+
+    # Expand to 3-channel for broadcasting
+    blend = interior[:, :, np.newaxis]  # 1.0 = use original, 0.0 = use model
+
+    return blend * original_srgb + (1.0 - blend) * model_fg_srgb
+
+
 def create_checkerboard(width, height, checker_size=64, color1=0.2, color2=0.4):
     """
     Creates a linear grayscale checkerboard pattern.

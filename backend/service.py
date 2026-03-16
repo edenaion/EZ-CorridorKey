@@ -153,6 +153,9 @@ class InferenceParams:
     despeckle_dilation: int = 25   # clean_matte dilation radius
     despeckle_blur: int = 5        # clean_matte blur kernel half-size
     refiner_scale: float = 1.0
+    source_passthrough: bool = True   # pass original pixels in opaque interior
+    edge_erode_px: int = 3            # interior mask erosion buffer (px)
+    edge_blur_px: int = 7             # transition blend smoothness (px)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -1119,6 +1122,9 @@ class CorridorKeyService:
                             despeckle_dilation=params.despeckle_dilation,
                             despeckle_blur=params.despeckle_blur,
                             refiner_scale=params.refiner_scale,
+                            source_passthrough=params.source_passthrough,
+                            edge_erode_px=params.edge_erode_px,
+                            edge_blur_px=params.edge_blur_px,
                         )
                     dt = time.monotonic() - t_frame
                     frame_times.append(dt)
@@ -1252,6 +1258,9 @@ class CorridorKeyService:
                         despeckle_dilation=params.despeckle_dilation,
                         despeckle_blur=params.despeckle_blur,
                         refiner_scale=params.refiner_scale,
+                        source_passthrough=params.source_passthrough,
+                        edge_erode_px=params.edge_erode_px,
+                        edge_blur_px=params.edge_blur_px,
                     )
                     out_q.put((frame_idx, stem, res, None))
                     if not warmup_done.is_set():
@@ -1541,6 +1550,9 @@ class CorridorKeyService:
                 despeckle_dilation=params.despeckle_dilation,
                 despeckle_blur=params.despeckle_blur,
                 refiner_scale=params.refiner_scale,
+                source_passthrough=params.source_passthrough,
+                edge_erode_px=params.edge_erode_px,
+                edge_blur_px=params.edge_blur_px,
             )
         logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")
         return res

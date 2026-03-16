@@ -417,7 +417,7 @@ class CorridorKeyEngine:
         return model
 
     @torch.no_grad()
-    def process_frame(self, image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400, despeckle_dilation=25, despeckle_blur=5):
+    def process_frame(self, image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400, despeckle_dilation=25, despeckle_blur=5, source_passthrough=True, edge_erode_px=3, edge_blur_px=7):
         """
         Process a single frame.
         Args:
@@ -433,6 +433,13 @@ class CorridorKeyEngine:
             despill_strength: float. 0.0 to 1.0 multiplier for the despill effect.
             auto_despeckle: bool. If True, cleans up small disconnected components from the predicted alpha matte.
             despeckle_size: int. Minimum number of consecutive pixels required to keep an island.
+            source_passthrough: bool. If True, passes original source pixels through in opaque interior
+                                regions instead of using the model's fg prediction. Only the edge
+                                transition band uses model fg. Preserves full source quality.
+            edge_erode_px: int. Pixels to erode the interior mask inward. Safety buffer to avoid
+                           using original pixels where green spill might contaminate.
+            edge_blur_px: int. Gaussian blur radius for the transition blend between source and
+                          model fg. Controls smoothness of the seam.
         Returns:
              dict: {'alpha': np, 'fg': np (sRGB), 'comp': np (sRGB on Gray)}
         """
@@ -493,16 +500,31 @@ class CorridorKeyEngine:
         
         if res_alpha.ndim == 2: res_alpha = res_alpha[:, :, np.newaxis]
 
+        # --- SOURCE PASSTHROUGH ---
+        # Interior pixels (face, body, clothes — everywhere alpha ≈ 1.0) are passed
+        # through from the original source frame untouched.  The model's fg prediction
+        # is only used in the edge transition band where it handles green-screen
+        # separation, hair strands, and semi-transparency.
+        if source_passthrough:
+            if input_is_linear:
+                original_srgb = cu.linear_to_srgb(image)
+            else:
+                original_srgb = image
+            res_fg = cu.source_passthrough(
+                original_srgb, res_fg, res_alpha,
+                erode_px=edge_erode_px, blur_px=edge_blur_px
+            )
+
         # --- ADVANCED COMPOSITING ---
-        
+
         # A. Clean Matte (Auto-Despeckle)
         if auto_despeckle:
             processed_alpha = cu.clean_matte(res_alpha, area_threshold=despeckle_size, dilation=despeckle_dilation, blur_size=despeckle_blur)
         else:
             processed_alpha = res_alpha
-            
+
         # B. Despill FG
-        # res_fg is sRGB.
+        # res_fg is sRGB (with source passthrough blended in where applicable).
         fg_despilled = cu.despill(res_fg, green_limit_mode='average', strength=despill_strength)
         
         # C. Convert to linear for output assembly.
