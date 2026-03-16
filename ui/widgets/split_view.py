@@ -596,6 +596,15 @@ class SplitViewWidget(QWidget):
                 self.update()
                 return
 
+        # Middle-click on wipe line: reset to default angle
+        if event.button() == Qt.MiddleButton and self._wipe_mode:
+            dist = abs(self._wipe_distance_to_line(event.position()))
+            if dist < self._DIVIDER_HIT_ZONE:
+                self._wipe_angle = -45.0
+                self._wipe_offset = 0.0
+                self.update()
+                return
+
         if event.button() == Qt.MiddleButton:
             self._panning = True
             self._pan_start = event.position()
