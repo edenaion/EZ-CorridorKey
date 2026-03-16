@@ -1,8 +1,8 @@
 services:
   corridorkey-cpu:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     image: corridorkey:cpu
     container_name: corridorkey-cpu
     ports:
@@ -36,8 +36,8 @@ services:
   corridorkey-gpu:
     profiles: ["gpu"]
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
     image: corridorkey:gpu
     container_name: corridorkey-gpu
     runtime: nvidia

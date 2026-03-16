@@ -9,11 +9,12 @@ Run the GUI in a browser via noVNC, with persistent volumes for projects, models
 
 ## Start
 
-From the repository root:
+From the `docker/` directory:
 
 CPU:
 
 ```bash
+cd docker
 docker compose up -d corridorkey-cpu --build
 ```
 
