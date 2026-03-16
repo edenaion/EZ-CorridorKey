@@ -767,8 +767,8 @@ class SplitViewWidget(QWidget):
         if self._wipe_mode and mods in (Qt.KeyboardModifier(0), Qt.ShiftModifier):
             delta = event.angleDelta().y()
             if mods & Qt.ShiftModifier:
-                # Fine-grain: proportional to scroll delta for smooth control
-                self._wipe_offset = max(-0.5, min(0.5, self._wipe_offset + delta / 4000.0))
+                # Fine-grain: proportional to scroll delta for butter-smooth control
+                self._wipe_offset = max(-0.5, min(0.5, self._wipe_offset + delta / 15000.0))
             else:
                 # Normal: fixed steps per notch
                 step = 0.03 if delta > 0 else -0.03
