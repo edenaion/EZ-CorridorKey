@@ -15,6 +15,8 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+from .inference_engine import INFERENCE_DEFAULTS as _D
+
 CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
 TORCH_EXT = ".pth"
 MLX_EXT = ".safetensors"
@@ -115,8 +117,8 @@ def _wrap_mlx_output(
     despill_strength: float,
     auto_despeckle: bool,
     despeckle_size: int,
-    despeckle_dilation: int = 25,
-    despeckle_blur: int = 5,
+    despeckle_dilation: int = _D["despeckle_dilation"],
+    despeckle_blur: int = _D["despeckle_blur"],
 ) -> dict:
     """Normalize MLX uint8 output to match Torch float32 contract.
 
@@ -159,14 +161,20 @@ def _wrap_mlx_output(
     source_srgb = cu.linear_to_srgb(source_rgb) if input_is_linear else source_rgb
     source_lin = source_rgb if input_is_linear else cu.srgb_to_linear(source_rgb)
 
+    # Despill the source too — _restore_opaque_source_detail blends source
+    # pixels back in, and they must already be despilled or they undo the
+    # despill we just applied to the model fg.
+    source_srgb_despilled = cu.despill(source_srgb, green_limit_mode="average", strength=despill_strength)
+    source_lin_despilled = cu.srgb_to_linear(source_srgb_despilled)
+
     # Composite over checkerboard for comp output
     h, w = fg.shape[:2]
     bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
     fg_despilled_lin = _restore_opaque_source_detail(
-        source_lin,
-        source_srgb,
+        source_lin_despilled,
+        source_srgb_despilled,
         fg_despilled_lin,
         processed_alpha,
     )
@@ -182,7 +190,7 @@ def _wrap_mlx_output(
     # opaque regions so FG view matches what the user shot).
     fg_lin = cu.srgb_to_linear(fg)
     fg_restored_lin = _restore_opaque_source_detail(
-        source_lin, source_srgb, fg_lin, processed_alpha,
+        source_lin_despilled, source_srgb_despilled, fg_lin, processed_alpha,
     )
     fg_restored = cu.linear_to_srgb(fg_restored_lin)
 
@@ -203,8 +211,8 @@ def _assemble_mlx_output(
     despill_strength: float,
     auto_despeckle: bool,
     despeckle_size: int,
-    despeckle_dilation: int = 25,
-    despeckle_blur: int = 5,
+    despeckle_dilation: int = _D["despeckle_dilation"],
+    despeckle_blur: int = _D["despeckle_blur"],
 ) -> dict:
     """Assemble the shared Torch-style contract from MLX float outputs."""
     from CorridorKeyModule.core import color_utils as cu
@@ -235,13 +243,19 @@ def _assemble_mlx_output(
     source_srgb = cu.linear_to_srgb(source_rgb) if input_is_linear else source_rgb
     source_lin = source_rgb if input_is_linear else cu.srgb_to_linear(source_rgb)
 
+    # Despill the source too — _restore_opaque_source_detail blends source
+    # pixels back in, and they must already be despilled or they undo the
+    # despill we just applied to the model fg.
+    source_srgb_despilled = cu.despill(source_srgb, green_limit_mode="average", strength=despill_strength)
+    source_lin_despilled = cu.srgb_to_linear(source_srgb_despilled)
+
     h, w = fg.shape[:2]
     bg_srgb = cu.create_checkerboard(w, h, checker_size=128, color1=0.15, color2=0.55)
     bg_lin = cu.srgb_to_linear(bg_srgb)
     fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
     fg_despilled_lin = _restore_opaque_source_detail(
-        source_lin,
-        source_srgb,
+        source_lin_despilled,
+        source_srgb_despilled,
         fg_despilled_lin,
         processed_alpha,
     )
@@ -256,7 +270,7 @@ def _assemble_mlx_output(
     # opaque regions so FG view matches what the user shot).
     fg_lin = cu.srgb_to_linear(fg)
     fg_restored_lin = _restore_opaque_source_detail(
-        source_lin, source_srgb, fg_lin, processed_alpha,
+        source_lin_despilled, source_srgb_despilled, fg_lin, processed_alpha,
     )
     fg_restored = cu.linear_to_srgb(fg_restored_lin)
 
@@ -472,17 +486,17 @@ class _MLXEngineAdapter:
         self,
         image,
         mask_linear,
-        refiner_scale=1.0,
+        refiner_scale=_D["refiner_scale"],
         input_is_linear=False,
         fg_is_straight=True,
-        despill_strength=1.0,
-        auto_despeckle=True,
-        despeckle_size=400,
-        despeckle_dilation=25,
-        despeckle_blur=5,
-        source_passthrough=True,
-        edge_erode_px=3,
-        edge_blur_px=7,
+        despill_strength=_D["despill_strength"],
+        auto_despeckle=_D["auto_despeckle"],
+        despeckle_size=_D["despeckle_size"],
+        despeckle_dilation=_D["despeckle_dilation"],
+        despeckle_blur=_D["despeckle_blur"],
+        source_passthrough=_D["source_passthrough"],
+        edge_erode_px=_D["edge_erode_px"],
+        edge_blur_px=_D["edge_blur_px"],
     ):
         """Delegate to MLX engine, then normalize output to Torch contract."""
         # corridorkey-mlx expects sRGB uint8 input even when input_is_linear=True.

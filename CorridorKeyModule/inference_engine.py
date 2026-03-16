@@ -14,6 +14,21 @@ logger = logging.getLogger(__name__)
 from .core.model_transformer import GreenFormer
 from .core import color_utils as cu
 
+# ── Single source of truth for inference parameter defaults ──
+# Every engine (CUDA, MLX) and the service layer import from here.
+# Change a default ONCE, it propagates everywhere.
+INFERENCE_DEFAULTS = {
+    "refiner_scale": 1.0,
+    "despill_strength": 0.5,
+    "auto_despeckle": True,
+    "despeckle_size": 400,
+    "despeckle_dilation": 25,
+    "despeckle_blur": 5,
+    "source_passthrough": True,
+    "edge_erode_px": 3,
+    "edge_blur_px": 7,
+}
+
 def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
     """Monkey-patch MaskUnitAttention.forward on global-attention blocks.
 
@@ -416,8 +431,10 @@ class CorridorKeyEngine:
         self._status("Model ready")
         return model
 
+    _D = INFERENCE_DEFAULTS
+
     @torch.no_grad()
-    def process_frame(self, image, mask_linear, refiner_scale=1.0, input_is_linear=False, fg_is_straight=True, despill_strength=1.0, auto_despeckle=True, despeckle_size=400, despeckle_dilation=25, despeckle_blur=5, source_passthrough=True, edge_erode_px=3, edge_blur_px=7):
+    def process_frame(self, image, mask_linear, refiner_scale=_D["refiner_scale"], input_is_linear=False, fg_is_straight=True, despill_strength=_D["despill_strength"], auto_despeckle=_D["auto_despeckle"], despeckle_size=_D["despeckle_size"], despeckle_dilation=_D["despeckle_dilation"], despeckle_blur=_D["despeckle_blur"], source_passthrough=_D["source_passthrough"], edge_erode_px=_D["edge_erode_px"], edge_blur_px=_D["edge_blur_px"]):
         """
         Process a single frame.
         Args:

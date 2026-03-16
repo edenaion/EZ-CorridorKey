@@ -143,19 +143,26 @@ class _ActiveModel(Enum):
     BIREFNET = "birefnet"
 
 
+from CorridorKeyModule.inference_engine import INFERENCE_DEFAULTS as _D
+
 @dataclass
 class InferenceParams:
-    """Frozen parameters for a single inference job."""
+    """Frozen parameters for a single inference job.
+
+    Defaults are pulled from INFERENCE_DEFAULTS (single source of truth
+    in CorridorKeyModule.inference_engine).  Change a default there and
+    it propagates to every engine path and the service layer.
+    """
     input_is_linear: bool = False
-    despill_strength: float = 0.5  # 0.0 to 1.0
-    auto_despeckle: bool = True
-    despeckle_size: int = 400
-    despeckle_dilation: int = 25   # clean_matte dilation radius
-    despeckle_blur: int = 5        # clean_matte blur kernel half-size
-    refiner_scale: float = 1.0
-    source_passthrough: bool = True   # pass original pixels in opaque interior
-    edge_erode_px: int = 3            # interior mask erosion buffer (px)
-    edge_blur_px: int = 7             # transition blend smoothness (px)
+    despill_strength: float = _D["despill_strength"]
+    auto_despeckle: bool = _D["auto_despeckle"]
+    despeckle_size: int = _D["despeckle_size"]
+    despeckle_dilation: int = _D["despeckle_dilation"]
+    despeckle_blur: int = _D["despeckle_blur"]
+    refiner_scale: float = _D["refiner_scale"]
+    source_passthrough: bool = _D["source_passthrough"]
+    edge_erode_px: int = _D["edge_erode_px"]
+    edge_blur_px: int = _D["edge_blur_px"]
 
     def to_dict(self) -> dict:
         return asdict(self)
