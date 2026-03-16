@@ -286,55 +286,53 @@ def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
         
     return result_alpha
 
-def source_passthrough(original_srgb, model_fg_srgb, alpha, erode_px=3, blur_px=7):
+def source_passthrough(original_srgb, model_fg_srgb, alpha,
+                       erode_px=150, blur_px=21):
     """
-    Blend original source pixels into the model's foreground prediction.
+    Source passthrough for deep interior regions only.
 
-    Where the alpha matte is confidently opaque (interior of subject), we use
-    the original source pixels directly — they haven't been through the model
-    so they retain full quality.  Near edges (where alpha transitions), we use
-    the model's predicted foreground which handles green-screen separation.
+    Preserves original source pixels in the deep interior of the subject
+    (face, body, clothes) where the model's fg prediction only degrades
+    quality through sigmoid reconstruction.
+
+    Everything near the edge — hard edges, hair strands, semi-transparent
+    wispy areas — is left entirely to the model.  The erosion is deliberately
+    aggressive so the passthrough boundary sits well inside the subject,
+    far from any edge detail.  Hair is the model's domain; faces are ours.
 
     Args:
         original_srgb: [H, W, 3] float32 sRGB, original frame.
         model_fg_srgb: [H, W, 3] float32 sRGB, model's predicted foreground.
-        alpha:         [H, W, 1] or [H, W] float32 (0-1), predicted alpha matte.
-        erode_px:      Pixels to erode the interior mask inward from the edge.
-                       Creates a safety buffer so we never use original pixels
-                       right at the boundary where green spill may exist.
-        blur_px:       Gaussian blur radius for the transition band.
-                       Controls how smoothly we blend from original → model fg.
+        alpha:         [H, W, 1] or [H, W] float32 (0-1), predicted alpha.
+        erode_px:      Pixels to erode inward from the opaque boundary.
+                       Default 10px keeps us well clear of any edge/hair.
+        blur_px:       Gaussian blur radius for smooth seam. Default 9.
 
     Returns:
         [H, W, 3] float32 sRGB, blended foreground.
     """
     import cv2
 
-    # Work with 2D alpha
     a = alpha[:, :, 0] if alpha.ndim == 3 else alpha
 
-    # Interior mask: where the subject is fully opaque
-    # Use a high threshold — we only want to pass through pixels that are
-    # definitively interior (no edge ambiguity at all)
-    interior = (a > 0.95).astype(np.float32)
+    # Only pixels that are absolutely, unambiguously fully opaque.
+    interior = (a > 0.99).astype(np.float32)
 
-    # Erode inward to create a safety buffer around edges.
-    # This ensures we never use original pixels where green spill might exist.
+    # Erode aggressively inward — the passthrough zone is DEEP interior only.
+    # All edge detail (hair, hard edges, semi-transparent wisps) is left
+    # entirely to the model's fg prediction.
     if erode_px > 0:
         k = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE, (erode_px * 2 + 1, erode_px * 2 + 1)
         )
         interior = cv2.erode(interior, k)
 
-    # Smooth the transition so there's no visible seam between
-    # original pixels and model-predicted pixels.
+    # Smooth transition so there's no visible seam.
     if blur_px > 0:
         ks = blur_px * 2 + 1
         interior = cv2.GaussianBlur(interior, (ks, ks), 0)
 
-    # Expand to 3-channel for broadcasting
-    blend = interior[:, :, np.newaxis]  # 1.0 = use original, 0.0 = use model
-
+    blend = interior[:, :, np.newaxis]  # 1.0 = original, 0.0 = model
     return blend * original_srgb + (1.0 - blend) * model_fg_srgb
 
 

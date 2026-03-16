@@ -153,9 +153,9 @@ class InferenceParams:
     despeckle_dilation: int = 25   # clean_matte dilation radius
     despeckle_blur: int = 5        # clean_matte blur kernel half-size
     refiner_scale: float = 1.0
-    source_passthrough: bool = True   # pass original pixels in opaque interior
-    edge_erode_px: int = 3            # interior mask erosion buffer (px)
-    edge_blur_px: int = 7             # transition blend smoothness (px)
+    source_passthrough: bool = True   # pass original pixels in deep opaque interior
+    edge_erode_px: int = 150          # erode inward from opaque boundary (px)
+    edge_blur_px: int = 21            # transition blend smoothness (px)
 
     def to_dict(self) -> dict:
         return asdict(self)
