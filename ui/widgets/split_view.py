@@ -298,9 +298,9 @@ class SplitViewWidget(QWidget):
         center = QPointF(lx, ly)
         return p1, p2, center
 
-    def _wipe_handle_rect(self, center: QPointF) -> QRectF:
-        """Return the center square handle rect (12x12)."""
-        s = 6.0
+    def _wipe_handle_rect(self, center: QPointF, hit=False) -> QRectF:
+        """Return the center square handle rect. hit=True returns 2x hitbox."""
+        s = 12.0 if hit else 6.0
         return QRectF(center.x() - s, center.y() - s, s * 2, s * 2)
 
     def _paint_wipe(self, painter: QPainter) -> None:
@@ -530,8 +530,7 @@ class SplitViewWidget(QWidget):
         # Wipe mode: check handle and line hit
         if event.button() == Qt.LeftButton and self._wipe_mode:
             _, _, center = self._wipe_line_endpoints()
-            handle = self._wipe_handle_rect(center)
-            if handle.contains(event.position()):
+            if self._wipe_handle_rect(center, hit=True).contains(event.position()):
                 self._wipe_dragging = "handle"
                 self._wipe_drag_start = event.position()
                 self._wipe_drag_start_offset = self._wipe_offset
@@ -654,8 +653,7 @@ class SplitViewWidget(QWidget):
         # Wipe mode cursor feedback
         if self._wipe_mode and not self._panning:
             _, _, center = self._wipe_line_endpoints()
-            handle = self._wipe_handle_rect(center)
-            if handle.contains(event.position()):
+            if self._wipe_handle_rect(center, hit=True).contains(event.position()):
                 self.setCursor(Qt.SizeAllCursor)
             elif abs(self._wipe_distance_to_line(event.position())) < self._DIVIDER_HIT_ZONE:
                 self.setCursor(Qt.OpenHandCursor)
@@ -762,8 +760,19 @@ class SplitViewWidget(QWidget):
             self.reset_zoom()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        """Ctrl+Wheel to zoom toward cursor position."""
+        """Ctrl+Wheel to zoom, plain wheel in wipe mode to slide divider."""
         mods = event.modifiers()
+        # Scroll in wipe mode: slide the wipe line (up = A, down = B)
+        # Shift+scroll for fine-grain control
+        if self._wipe_mode and (not mods or mods == Qt.ShiftModifier):
+            delta = event.angleDelta().y()
+            step = 0.01 if mods & Qt.ShiftModifier else 0.03
+            if delta > 0:
+                self._wipe_offset = min(0.5, self._wipe_offset + step)
+            elif delta < 0:
+                self._wipe_offset = max(-0.5, self._wipe_offset - step)
+            self.update()
+            return
         if mods & Qt.ControlModifier:
             delta = event.angleDelta().y()
             factor = 1.1 if delta > 0 else 1.0 / 1.1

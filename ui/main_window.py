@@ -398,7 +398,8 @@ class MainWindow(QMainWindow):
 
         # Edit menu
         edit_menu = menu_bar.addMenu("Edit")
-        edit_menu.addAction("Preferences...", self._show_preferences)
+        prefs_action = edit_menu.addAction("Preferences...", self._show_preferences)
+        prefs_action.setShortcut("Ctrl+,")
         edit_menu.addAction("Hotkeys...", self._show_hotkeys)
         edit_menu.addSeparator()
         edit_menu.addAction("Track Paint Masks", self._on_track_masks)
@@ -3557,9 +3558,15 @@ class MainWindow(QMainWindow):
             dlg.exec()
 
     def _show_preferences(self) -> None:
-        """Open the Preferences dialog and apply changes."""
+        """Toggle the Preferences dialog (Ctrl+,)."""
+        if hasattr(self, '_prefs_dialog') and self._prefs_dialog is not None:
+            self._prefs_dialog.reject()
+            return
         dlg = PreferencesDialog(self)
-        if dlg.exec() == PreferencesDialog.Accepted:
+        self._prefs_dialog = dlg
+        accepted = dlg.exec() == PreferencesDialog.Accepted
+        self._prefs_dialog = None
+        if accepted:
             self._apply_tooltip_setting()
             self._apply_sound_setting()
             self._apply_tracker_model_setting()
