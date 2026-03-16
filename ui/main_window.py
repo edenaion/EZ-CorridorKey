@@ -574,25 +574,25 @@ class MainWindow(QMainWindow):
         self._dual_viewer.toggle_wipe_mode()
 
     def _view_mode_input(self) -> None:
-        self._dual_viewer._output_viewer.set_view_mode("input")
+        self._dual_viewer._output_viewer.set_view_mode("Input")
 
     def _view_mode_mask(self) -> None:
-        self._dual_viewer._output_viewer.set_view_mode("mask")
+        self._dual_viewer._output_viewer.set_view_mode("Mask")
 
     def _view_mode_alpha(self) -> None:
-        self._dual_viewer._output_viewer.set_view_mode("alpha")
+        self._dual_viewer._output_viewer.set_view_mode("Alpha")
 
     def _view_mode_fg(self) -> None:
-        self._dual_viewer._output_viewer.set_view_mode("fg")
+        self._dual_viewer._output_viewer.set_view_mode("FG")
 
     def _view_mode_matte(self) -> None:
-        self._dual_viewer._output_viewer.set_view_mode("matte")
+        self._dual_viewer._output_viewer.set_view_mode("Matte")
 
     def _view_mode_comp(self) -> None:
-        self._dual_viewer._output_viewer.set_view_mode("comp")
+        self._dual_viewer._output_viewer.set_view_mode("Comp")
 
     def _view_mode_proc(self) -> None:
-        self._dual_viewer._output_viewer.set_view_mode("processed")
+        self._dual_viewer._output_viewer.set_view_mode("Processed")
 
     def _on_escape(self) -> None:
         """Escape: cancel the current action — auto-detects what's running."""
