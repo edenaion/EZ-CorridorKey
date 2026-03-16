@@ -63,9 +63,9 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 - **Windows:** Double-click `3-update.bat`
 - **macOS / Linux:** `./3-update.sh`
 
-### Docker / Browser Mode
+### Alternate Installation: Docker
 
-- Run EZ-CorridorKey in browser-access mode with Docker using the guide in [docker/README.md](docker/README.md).
+For Linux users or remote/cloud setups, EZ-CorridorKey can run inside Docker with browser-based access via noVNC. See [docker/README.md](docker/README.md) for setup instructions. The native install above is recommended for Windows and macOS.
 
 ---
 
