@@ -10,27 +10,27 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 [![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#bytebase/star-history&Date)
 
-
-| Capability | CLI (Upstream) | GUI (This Project) |
-|------------|---------------|-------------------|
-| Import clips | Drag onto .bat file | Drag-drop into app, or File > Import |
-| Configure inference | Terminal prompts | Sliders, dropdowns, checkboxes |
-| Monitor progress | Terminal text output | Progress bars, frame counter, ETA |
-| Preview results | Open output folder manually | Real-time dual viewer (input vs output) |
-| Job management | One clip at a time | Queue with batch processing + full pipeline mode |
-| GPU monitoring | None | Live VRAM meter in brand bar |
-| Keyboard shortcuts | None | 20+ hotkeys |
-| Sound feedback | None | 7 context-aware sound effects |
-| Session persistence | None | Recent projects, auto-save |
-| Paint / masking | Manual external tool | Built-in brush tool for VideoMaMa / MatAnyone2 masks |
-| Alpha generators | None | GVM, BiRefNet, VideoMaMa, MatAnyone2 (one-click) |
-| Apple Silicon | MPS only | MLX acceleration (auto-detected) |
+| Capability          | CLI (Upstream)              | GUI (This Project)                                   |
+| ------------------- | --------------------------- | ---------------------------------------------------- |
+| Import clips        | Drag onto .bat file         | Drag-drop into app, or File > Import                 |
+| Configure inference | Terminal prompts            | Sliders, dropdowns, checkboxes                       |
+| Monitor progress    | Terminal text output        | Progress bars, frame counter, ETA                    |
+| Preview results     | Open output folder manually | Real-time dual viewer (input vs output)              |
+| Job management      | One clip at a time          | Queue with batch processing + full pipeline mode     |
+| GPU monitoring      | None                        | Live VRAM meter in brand bar                         |
+| Keyboard shortcuts  | None                        | 20+ hotkeys                                          |
+| Sound feedback      | None                        | 7 context-aware sound effects                        |
+| Session persistence | None                        | Recent projects, auto-save                           |
+| Paint / masking     | Manual external tool        | Built-in brush tool for VideoMaMa / MatAnyone2 masks |
+| Alpha generators    | None                        | GVM, BiRefNet, VideoMaMa, MatAnyone2 (one-click)     |
+| Apple Silicon       | MPS only                    | MLX acceleration (auto-detected)                     |
 
 ---
 
 ## Installation
 
 **One-Click Install (Windows / macOS / Linux):**
+
 1. Clone or download this repository.
 2. The one-click path provisions and uses managed Python 3.11 automatically, so you do not need to pre-install Python just to use `1-install`.
 3. Run the installer for your platform:
@@ -40,12 +40,14 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 5. To launch: double-click `2-start.bat` (Windows) or `./2-start.sh` (macOS/Linux).
 
 **Prerequisites:**
+
 - For the one-click installer: no preinstalled Python required
 - For manual installs: [Python 3.10–3.13](https://python.org) (3.14 is not yet supported)
 - **Windows/Linux:** NVIDIA GPU with CUDA support (8 GB+ VRAM recommended). Keep your driver current — the installer verifies the torch runtime and will stop with diagnostics instead of silently leaving you on the wrong backend.
 - **macOS:** Apple Silicon (M1+). CorridorKey inference runs natively via MLX (1.5–2x faster than MPS). GPU-intensive alpha generators (SAM2, GVM, VideoMaMa, MatAnyone2) run on MPS but are significantly slower — importing pre-made alpha mattes is recommended on Mac.
 
 **What the installer does:**
+
 - Checks for [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ compiler needed by OpenEXR) — offers to auto-install if missing
 - Installs [uv](https://docs.astral.sh/uv/) and provisions managed Python 3.11 for the installer path
 - Creates a `.venv` virtual environment in the project folder
@@ -57,8 +59,13 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 - Creates a desktop shortcut (optional)
 
 **Updating:**
+
 - **Windows:** Double-click `3-update.bat`
 - **macOS / Linux:** `./3-update.sh`
+
+### Docker / Browser Mode
+
+- Run EZ-CorridorKey in browser-access mode with Docker using the guide in [docker/README.md](docker/README.md).
 
 ---
 
@@ -128,6 +135,7 @@ Click **GVM AUTO** in the parameter panel. Works great for most green screen foo
 
 **Option B — Track Mask + MatAnyone2 / VideoMaMa:**
 For difficult shots, use the paint brush as a prompt tool:
+
 1. Press **1** to activate foreground mode (green)
 2. Paint over the subject on a few key frames
 3. Press **2** to switch to background mode (red)
@@ -166,6 +174,7 @@ The entire pipeline is cancellable (Esc) and checkpointable — if interrupted, 
 ### 4. Review
 
 Switch between view modes to inspect results:
+
 - **COMP** — key over checkerboard
 - **FG** — check for green fringing
 - **MATTE** — inspect alpha quality
@@ -181,48 +190,48 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 
 ### Global
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl+R** | Run inference on selected clip |
-| **Ctrl+Shift+R** | Run all ready clips (batch) |
-| **Esc** | Stop / cancel current job |
-| **Ctrl+S** | Save session |
-| **Ctrl+O** | Open project |
-| **Ctrl+M** | Toggle mute (sound on/off) |
-| **Home** | Return to welcome screen |
-| **Del** | Remove selected clips |
-| **Q** | Toggle queue panel |
-| **F12** | Toggle debug console |
+| Shortcut         | Action                         |
+| ---------------- | ------------------------------ |
+| **Ctrl+R**       | Run inference on selected clip |
+| **Ctrl+Shift+R** | Run all ready clips (batch)    |
+| **Esc**          | Stop / cancel current job      |
+| **Ctrl+S**       | Save session                   |
+| **Ctrl+O**       | Open project                   |
+| **Ctrl+M**       | Toggle mute (sound on/off)     |
+| **Home**         | Return to welcome screen       |
+| **Del**          | Remove selected clips          |
+| **Q**            | Toggle queue panel             |
+| **F12**          | Toggle debug console           |
 
 ### Viewer
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl + scroll wheel** | Zoom in/out toward cursor (0.25x to 8.0x) |
-| **Shift + scroll wheel** | Horizontal pan (left/right) |
-| **Middle-click + drag** | Pan the image |
-| **Double-click** | Reset zoom to 100% |
+| Shortcut                 | Action                                    |
+| ------------------------ | ----------------------------------------- |
+| **Ctrl + scroll wheel**  | Zoom in/out toward cursor (0.25x to 8.0x) |
+| **Shift + scroll wheel** | Horizontal pan (left/right)               |
+| **Middle-click + drag**  | Pan the image                             |
+| **Double-click**         | Reset zoom to 100%                        |
 
 ### Timeline
 
-| Shortcut | Action |
-|----------|--------|
-| **Space** | Play / Pause |
-| **I** | Set in-point marker |
-| **O** | Set out-point marker |
-| **Alt+I** | Clear in/out range |
+| Shortcut  | Action               |
+| --------- | -------------------- |
+| **Space** | Play / Pause         |
+| **I**     | Set in-point marker  |
+| **O**     | Set out-point marker |
+| **Alt+I** | Clear in/out range   |
 
 ### Paint
 
-| Shortcut | Action |
-|----------|--------|
-| **1** | Foreground paint brush (green) |
-| **2** | Background paint brush (red) |
-| **C** | Cycle foreground brush color (green / blue) |
-| **Shift + drag up/down** | Resize brush |
-| **Alt + left-drag** | Draw straight line |
-| **Ctrl+Z** | Undo last stroke on current frame |
-| **Ctrl+C** | Clear all paint strokes |
+| Shortcut                 | Action                                      |
+| ------------------------ | ------------------------------------------- |
+| **1**                    | Foreground paint brush (green)              |
+| **2**                    | Background paint brush (red)                |
+| **C**                    | Cycle foreground brush color (green / blue) |
+| **Shift + drag up/down** | Resize brush                                |
+| **Alt + left-drag**      | Draw straight line                          |
+| **Ctrl+Z**               | Undo last stroke on current frame           |
+| **Ctrl+C**               | Clear all paint strokes                     |
 
 ---
 
@@ -230,25 +239,25 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 
 The view mode bar at the top of each viewport switches what the right viewer displays:
 
-| Mode | Source | What You See |
-|------|--------|-------------|
-| **INPUT** | `Input/` or `Frames/` | Original unprocessed footage |
-| **FG** | `Output/FG/` | Foreground with green spill removed |
-| **MATTE** | `Output/Matte/` | Alpha matte (white = opaque, black = transparent) |
-| **COMP** | `Output/Comp/` | Final key composited over checkerboard |
-| **PROCESSED** | `Output/Processed/` | Production RGBA — straight linear for Resolve/compositing |
+| Mode          | Source                | What You See                                              |
+| ------------- | --------------------- | --------------------------------------------------------- |
+| **INPUT**     | `Input/` or `Frames/` | Original unprocessed footage                              |
+| **FG**        | `Output/FG/`          | Foreground with green spill removed                       |
+| **MATTE**     | `Output/Matte/`       | Alpha matte (white = opaque, black = transparent)         |
+| **COMP**      | `Output/Comp/`        | Final key composited over checkerboard                    |
+| **PROCESSED** | `Output/Processed/`   | Production RGBA — straight linear for Resolve/compositing |
 
 ---
 
 ## Inference Controls
 
-| Control | Range | Default | Description |
-|---------|-------|---------|-------------|
-| **Color Space** | sRGB, Linear | sRGB | How CorridorKey interprets the input before inference |
-| **Despill Strength** | 0.0 – 1.0 | 1.0 | Green spill removal intensity |
-| **Despeckle** | 50 – 2000 px | ON, 400 px | Removes isolated artifacts smaller than threshold |
-| **Refiner Scale** | 0.0 – 3.0 | 1.0 | Edge refinement. 0 = disabled |
-| **Live Preview** | — | ON | Reprocess current frame when parameters change |
+| Control              | Range        | Default    | Description                                           |
+| -------------------- | ------------ | ---------- | ----------------------------------------------------- |
+| **Color Space**      | sRGB, Linear | sRGB       | How CorridorKey interprets the input before inference |
+| **Despill Strength** | 0.0 – 1.0    | 1.0        | Green spill removal intensity                         |
+| **Despeckle**        | 50 – 2000 px | ON, 400 px | Removes isolated artifacts smaller than threshold     |
+| **Refiner Scale**    | 0.0 – 3.0    | 1.0        | Edge refinement. 0 = disabled                         |
+| **Live Preview**     | —            | ON         | Reprocess current frame when parameters change        |
 
 **Color Space behavior**
 
@@ -264,25 +273,25 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 
 Each output channel can be individually enabled and set to EXR or PNG:
 
-| Output | Default | Format | Description |
-|--------|---------|--------|-------------|
-| **FG** | ON | EXR | Foreground RGB with spill removed |
-| **Matte** | ON | EXR | Single-channel alpha |
-| **Comp** | ON | PNG | Key over checkerboard (for review) |
-| **Processed** | ON | EXR | Full RGBA straight linear (for Resolve and compositing) |
+| Output        | Default | Format | Description                                             |
+| ------------- | ------- | ------ | ------------------------------------------------------- |
+| **FG**        | ON      | EXR    | Foreground RGB with spill removed                       |
+| **Matte**     | ON      | EXR    | Single-channel alpha                                    |
+| **Comp**      | ON      | PNG    | Key over checkerboard (for review)                      |
+| **Processed** | ON      | EXR    | Full RGBA straight linear (for Resolve and compositing) |
 
 ---
 
 ## Status Colors
 
-| Color | State | Meaning |
-|-------|-------|---------|
-| Orange | EXTRACTING | Video being extracted to image sequence |
-| Gray | RAW | Frames loaded, no alpha hint yet |
-| Blue | MASKED | Paint masks created (ready for VideoMaMa) |
-| Yellow | READY | Alpha hint available, ready for inference |
-| Green | COMPLETE | Inference finished, outputs available |
-| Red | ERROR | Processing failed — can retry |
+| Color  | State      | Meaning                                   |
+| ------ | ---------- | ----------------------------------------- |
+| Orange | EXTRACTING | Video being extracted to image sequence   |
+| Gray   | RAW        | Frames loaded, no alpha hint yet          |
+| Blue   | MASKED     | Paint masks created (ready for VideoMaMa) |
+| Yellow | READY      | Alpha hint available, ready for inference |
+| Green  | COMPLETE   | Inference finished, outputs available     |
+| Red    | ERROR      | Processing failed — can retry             |
 
 ---
 
@@ -321,12 +330,12 @@ Projects/
 
 Access via Edit > Preferences.
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Show tooltips** | ON | Helpful tooltips on all controls |
-| **UI sounds** | ON | Sound effects for actions |
-| **Copy source videos** | ON | Copy imports into project folder (OFF = reference in place) |
-| **Loop playback** | ON | Loop within in/out range during playback |
+| Setting                | Default | Description                                                 |
+| ---------------------- | ------- | ----------------------------------------------------------- |
+| **Show tooltips**      | ON      | Helpful tooltips on all controls                            |
+| **UI sounds**          | ON      | Sound effects for actions                                   |
+| **Copy source videos** | ON      | Copy imports into project folder (OFF = reference in place) |
+| **Loop playback**      | ON      | Loop within in/out range during playback                    |
 
 ---
 
@@ -351,25 +360,25 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 
 ### Windows / Linux (NVIDIA CUDA)
 
-| | Minimum | Recommended | Comfortable |
-|---|---------|-------------|-------------|
-| **VRAM** | 8 GB | 12 GB | 16 GB+ |
-| **GPU** | NVIDIA (CUDA) | Ampere+ (RTX 30xx) | Ada/Blackwell (RTX 40xx/50xx) |
+|          | Minimum       | Recommended        | Comfortable                   |
+| -------- | ------------- | ------------------ | ----------------------------- |
+| **VRAM** | 8 GB          | 12 GB              | 16 GB+                        |
+| **GPU**  | NVIDIA (CUDA) | Ampere+ (RTX 30xx) | Ada/Blackwell (RTX 40xx/50xx) |
 
 #### VRAM modes
 
-| Mode | VRAM usage | 4K speed | How it works |
-|------|-----------|----------|--------------|
-| **Speed** (≥12 GB) | ~8.7 GB | ~1.5s/frame | Full-frame refiner, full torch.compile |
-| **Low-VRAM** (<12 GB) | ~2.5 GB | ~1.6s/frame | 512×512 tiled refiner, selective compile |
+| Mode                  | VRAM usage | 4K speed    | How it works                             |
+| --------------------- | ---------- | ----------- | ---------------------------------------- |
+| **Speed** (≥12 GB)    | ~8.7 GB    | ~1.5s/frame | Full-frame refiner, full torch.compile   |
+| **Low-VRAM** (<12 GB) | ~2.5 GB    | ~1.6s/frame | 512×512 tiled refiner, selective compile |
 
 Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=speed|lowvram|auto`.
 
 ### macOS (Apple Silicon)
 
-| | Minimum | Recommended |
-|---|---------|-------------|
-| **Chip** | M1 (8 GB) | M1 Pro+ (16 GB+) |
+|             | Minimum       | Recommended                                      |
+| ----------- | ------------- | ------------------------------------------------ |
+| **Chip**    | M1 (8 GB)     | M1 Pro+ (16 GB+)                                 |
 | **Backend** | MPS (PyTorch) | MLX (auto-detected if corridorkey-mlx installed) |
 
 CorridorKey inference auto-selects the fastest available backend: MLX (1.5–2x faster) when `corridorkey-mlx` and a `.safetensors` checkpoint are present, otherwise PyTorch MPS. Override with `CORRIDORKEY_BACKEND=torch|mlx|auto`.
@@ -410,6 +419,7 @@ BiRefNet integration adapted from [Warwlock](https://github.com/Warwlock)'s [ups
 If you use or build on this project, please star this repo and credit the contributors <3
 
 Optional modules:
+
 - **SAM 2.1** ([facebookresearch/sam2](https://github.com/facebookresearch/sam2)) — Apache 2.0
 - **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
 - **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License
@@ -427,6 +437,7 @@ Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
 ## Installation
 
 **One-Click Install (Windows / macOS / Linux):**
+
 1. Clone or download this repository.
 2. The one-click path provisions and uses managed Python 3.11 automatically, so you do not need to pre-install Python just to use `1-install`.
 3. Run the installer for your platform:
@@ -436,12 +447,14 @@ Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
 5. To launch: double-click `2-start.bat` (Windows) or `./2-start.sh` (macOS/Linux).
 
 **Prerequisites:**
+
 - For the one-click installer: no preinstalled Python required
 - For manual installs: [Python 3.10–3.13](https://python.org) (3.14 is not yet supported)
 - **Windows/Linux:** NVIDIA GPU with CUDA support (8 GB+ VRAM recommended). Keep your driver current — the installer verifies the torch runtime and will stop with diagnostics instead of silently leaving you on the wrong backend.
 - **macOS:** Apple Silicon (M1+). CorridorKey inference runs natively via MLX (1.5–2x faster than MPS). GPU-intensive alpha generators (SAM2, GVM, VideoMaMa, MatAnyone2) run on MPS but are significantly slower — importing pre-made alpha mattes is recommended on Mac.
 
 **What the installer does:**
+
 - Checks for [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ compiler needed by OpenEXR) — offers to auto-install if missing
 - Installs [uv](https://docs.astral.sh/uv/) and provisions managed Python 3.11 for the installer path
 - Creates a `.venv` virtual environment in the project folder
@@ -453,6 +466,7 @@ Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
 - Creates a desktop shortcut (optional)
 
 **Updating:**
+
 - **Windows:** Double-click `3-update.bat`
 - **macOS / Linux:** `./3-update.sh`
 
@@ -524,6 +538,7 @@ Click **GVM AUTO** in the parameter panel. Works great for most green screen foo
 
 **Option B — Track Mask + MatAnyone2 / VideoMaMa:**
 For difficult shots, use the paint brush as a prompt tool:
+
 1. Press **1** to activate foreground mode (green)
 2. Paint over the subject on a few key frames
 3. Press **2** to switch to background mode (red)
@@ -562,6 +577,7 @@ The entire pipeline is cancellable (Esc) and checkpointable — if interrupted, 
 ### 4. Review
 
 Switch between view modes to inspect results:
+
 - **COMP** — key over checkerboard
 - **FG** — check for green fringing
 - **MATTE** — inspect alpha quality
@@ -577,48 +593,48 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 
 ### Global
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl+R** | Run inference on selected clip |
-| **Ctrl+Shift+R** | Run all ready clips (batch) |
-| **Esc** | Stop / cancel current job |
-| **Ctrl+S** | Save session |
-| **Ctrl+O** | Open project |
-| **Ctrl+M** | Toggle mute (sound on/off) |
-| **Home** | Return to welcome screen |
-| **Del** | Remove selected clips |
-| **Q** | Toggle queue panel |
-| **F12** | Toggle debug console |
+| Shortcut         | Action                         |
+| ---------------- | ------------------------------ |
+| **Ctrl+R**       | Run inference on selected clip |
+| **Ctrl+Shift+R** | Run all ready clips (batch)    |
+| **Esc**          | Stop / cancel current job      |
+| **Ctrl+S**       | Save session                   |
+| **Ctrl+O**       | Open project                   |
+| **Ctrl+M**       | Toggle mute (sound on/off)     |
+| **Home**         | Return to welcome screen       |
+| **Del**          | Remove selected clips          |
+| **Q**            | Toggle queue panel             |
+| **F12**          | Toggle debug console           |
 
 ### Viewer
 
-| Shortcut | Action |
-|----------|--------|
-| **Ctrl + scroll wheel** | Zoom in/out toward cursor (0.25x to 8.0x) |
-| **Shift + scroll wheel** | Horizontal pan (left/right) |
-| **Middle-click + drag** | Pan the image |
-| **Double-click** | Reset zoom to 100% |
+| Shortcut                 | Action                                    |
+| ------------------------ | ----------------------------------------- |
+| **Ctrl + scroll wheel**  | Zoom in/out toward cursor (0.25x to 8.0x) |
+| **Shift + scroll wheel** | Horizontal pan (left/right)               |
+| **Middle-click + drag**  | Pan the image                             |
+| **Double-click**         | Reset zoom to 100%                        |
 
 ### Timeline
 
-| Shortcut | Action |
-|----------|--------|
-| **Space** | Play / Pause |
-| **I** | Set in-point marker |
-| **O** | Set out-point marker |
-| **Alt+I** | Clear in/out range |
+| Shortcut  | Action               |
+| --------- | -------------------- |
+| **Space** | Play / Pause         |
+| **I**     | Set in-point marker  |
+| **O**     | Set out-point marker |
+| **Alt+I** | Clear in/out range   |
 
 ### Paint
 
-| Shortcut | Action |
-|----------|--------|
-| **1** | Foreground paint brush (green) |
-| **2** | Background paint brush (red) |
-| **C** | Cycle foreground brush color (green / blue) |
-| **Shift + drag up/down** | Resize brush |
-| **Alt + left-drag** | Draw straight line |
-| **Ctrl+Z** | Undo last stroke on current frame |
-| **Ctrl+C** | Clear all paint strokes |
+| Shortcut                 | Action                                      |
+| ------------------------ | ------------------------------------------- |
+| **1**                    | Foreground paint brush (green)              |
+| **2**                    | Background paint brush (red)                |
+| **C**                    | Cycle foreground brush color (green / blue) |
+| **Shift + drag up/down** | Resize brush                                |
+| **Alt + left-drag**      | Draw straight line                          |
+| **Ctrl+Z**               | Undo last stroke on current frame           |
+| **Ctrl+C**               | Clear all paint strokes                     |
 
 ---
 
@@ -626,25 +642,25 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 
 The view mode bar at the top of each viewport switches what the right viewer displays:
 
-| Mode | Source | What You See |
-|------|--------|-------------|
-| **INPUT** | `Input/` or `Frames/` | Original unprocessed footage |
-| **FG** | `Output/FG/` | Foreground with green spill removed |
-| **MATTE** | `Output/Matte/` | Alpha matte (white = opaque, black = transparent) |
-| **COMP** | `Output/Comp/` | Final key composited over checkerboard |
-| **PROCESSED** | `Output/Processed/` | Production RGBA — straight linear for Resolve/compositing |
+| Mode          | Source                | What You See                                              |
+| ------------- | --------------------- | --------------------------------------------------------- |
+| **INPUT**     | `Input/` or `Frames/` | Original unprocessed footage                              |
+| **FG**        | `Output/FG/`          | Foreground with green spill removed                       |
+| **MATTE**     | `Output/Matte/`       | Alpha matte (white = opaque, black = transparent)         |
+| **COMP**      | `Output/Comp/`        | Final key composited over checkerboard                    |
+| **PROCESSED** | `Output/Processed/`   | Production RGBA — straight linear for Resolve/compositing |
 
 ---
 
 ## Inference Controls
 
-| Control | Range | Default | Description |
-|---------|-------|---------|-------------|
-| **Color Space** | sRGB, Linear | sRGB | How CorridorKey interprets the input before inference |
-| **Despill Strength** | 0.0 – 1.0 | 1.0 | Green spill removal intensity |
-| **Despeckle** | 50 – 2000 px | ON, 400 px | Removes isolated artifacts smaller than threshold |
-| **Refiner Scale** | 0.0 – 3.0 | 1.0 | Edge refinement. 0 = disabled |
-| **Live Preview** | — | ON | Reprocess current frame when parameters change |
+| Control              | Range        | Default    | Description                                           |
+| -------------------- | ------------ | ---------- | ----------------------------------------------------- |
+| **Color Space**      | sRGB, Linear | sRGB       | How CorridorKey interprets the input before inference |
+| **Despill Strength** | 0.0 – 1.0    | 1.0        | Green spill removal intensity                         |
+| **Despeckle**        | 50 – 2000 px | ON, 400 px | Removes isolated artifacts smaller than threshold     |
+| **Refiner Scale**    | 0.0 – 3.0    | 1.0        | Edge refinement. 0 = disabled                         |
+| **Live Preview**     | —            | ON         | Reprocess current frame when parameters change        |
 
 **Color Space behavior**
 
@@ -660,25 +676,25 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 
 Each output channel can be individually enabled and set to EXR or PNG:
 
-| Output | Default | Format | Description |
-|--------|---------|--------|-------------|
-| **FG** | ON | EXR | Foreground RGB with spill removed |
-| **Matte** | ON | EXR | Single-channel alpha |
-| **Comp** | ON | PNG | Key over checkerboard (for review) |
-| **Processed** | ON | EXR | Full RGBA straight linear (for Resolve and compositing) |
+| Output        | Default | Format | Description                                             |
+| ------------- | ------- | ------ | ------------------------------------------------------- |
+| **FG**        | ON      | EXR    | Foreground RGB with spill removed                       |
+| **Matte**     | ON      | EXR    | Single-channel alpha                                    |
+| **Comp**      | ON      | PNG    | Key over checkerboard (for review)                      |
+| **Processed** | ON      | EXR    | Full RGBA straight linear (for Resolve and compositing) |
 
 ---
 
 ## Status Colors
 
-| Color | State | Meaning |
-|-------|-------|---------|
-| Orange | EXTRACTING | Video being extracted to image sequence |
-| Gray | RAW | Frames loaded, no alpha hint yet |
-| Blue | MASKED | Paint masks created (ready for VideoMaMa) |
-| Yellow | READY | Alpha hint available, ready for inference |
-| Green | COMPLETE | Inference finished, outputs available |
-| Red | ERROR | Processing failed — can retry |
+| Color  | State      | Meaning                                   |
+| ------ | ---------- | ----------------------------------------- |
+| Orange | EXTRACTING | Video being extracted to image sequence   |
+| Gray   | RAW        | Frames loaded, no alpha hint yet          |
+| Blue   | MASKED     | Paint masks created (ready for VideoMaMa) |
+| Yellow | READY      | Alpha hint available, ready for inference |
+| Green  | COMPLETE   | Inference finished, outputs available     |
+| Red    | ERROR      | Processing failed — can retry             |
 
 ---
 
@@ -717,12 +733,12 @@ Projects/
 
 Access via Edit > Preferences.
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| **Show tooltips** | ON | Helpful tooltips on all controls |
-| **UI sounds** | ON | Sound effects for actions |
-| **Copy source videos** | ON | Copy imports into project folder (OFF = reference in place) |
-| **Loop playback** | ON | Loop within in/out range during playback |
+| Setting                | Default | Description                                                 |
+| ---------------------- | ------- | ----------------------------------------------------------- |
+| **Show tooltips**      | ON      | Helpful tooltips on all controls                            |
+| **UI sounds**          | ON      | Sound effects for actions                                   |
+| **Copy source videos** | ON      | Copy imports into project folder (OFF = reference in place) |
+| **Loop playback**      | ON      | Loop within in/out range during playback                    |
 
 ---
 
@@ -747,25 +763,25 @@ Logs are written to `logs/backend/YYMMDD_HHMMSS_corridorkey.log`.
 
 ### Windows / Linux (NVIDIA CUDA)
 
-| | Minimum | Recommended | Comfortable |
-|---|---------|-------------|-------------|
-| **VRAM** | 8 GB | 12 GB | 16 GB+ |
-| **GPU** | NVIDIA (CUDA) | Ampere+ (RTX 30xx) | Ada/Blackwell (RTX 40xx/50xx) |
+|          | Minimum       | Recommended        | Comfortable                   |
+| -------- | ------------- | ------------------ | ----------------------------- |
+| **VRAM** | 8 GB          | 12 GB              | 16 GB+                        |
+| **GPU**  | NVIDIA (CUDA) | Ampere+ (RTX 30xx) | Ada/Blackwell (RTX 40xx/50xx) |
 
 #### VRAM modes
 
-| Mode | VRAM usage | 4K speed | How it works |
-|------|-----------|----------|--------------|
-| **Speed** (≥12 GB) | ~8.7 GB | ~1.5s/frame | Full-frame refiner, full torch.compile |
-| **Low-VRAM** (<12 GB) | ~2.5 GB | ~1.6s/frame | 512×512 tiled refiner, selective compile |
+| Mode                  | VRAM usage | 4K speed    | How it works                             |
+| --------------------- | ---------- | ----------- | ---------------------------------------- |
+| **Speed** (≥12 GB)    | ~8.7 GB    | ~1.5s/frame | Full-frame refiner, full torch.compile   |
+| **Low-VRAM** (<12 GB) | ~2.5 GB    | ~1.6s/frame | 512×512 tiled refiner, selective compile |
 
 Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=speed|lowvram|auto`.
 
 ### macOS (Apple Silicon)
 
-| | Minimum | Recommended |
-|---|---------|-------------|
-| **Chip** | M1 (8 GB) | M1 Pro+ (16 GB+) |
+|             | Minimum       | Recommended                                      |
+| ----------- | ------------- | ------------------------------------------------ |
+| **Chip**    | M1 (8 GB)     | M1 Pro+ (16 GB+)                                 |
 | **Backend** | MPS (PyTorch) | MLX (auto-detected if corridorkey-mlx installed) |
 
 CorridorKey inference auto-selects the fastest available backend: MLX (1.5–2x faster) when `corridorkey-mlx` and a `.safetensors` checkpoint are present, otherwise PyTorch MPS. Override with `CORRIDORKEY_BACKEND=torch|mlx|auto`.
@@ -805,6 +821,7 @@ FX graph cache from [99oblivius](https://github.com/99oblivius) ([CorridorKey-En
 If you use or build on this project, please star this repo and credit the contributors <3
 
 Optional modules:
+
 - **SAM 2.1** ([facebookresearch/sam2](https://github.com/facebookresearch/sam2)) — Apache 2.0
 - **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
 - **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) — CC BY-NC 4.0, model weights under Stability AI Community License

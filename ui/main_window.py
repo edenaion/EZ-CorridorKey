@@ -247,7 +247,23 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"EZ-CorridorKey {self._get_visible_build_id()}")
         self.setMinimumSize(1100, 650)
-        self.resize(1400, 800)
+
+        container_env = str(os.getenv("CORRIDORKEY_CONTAINER_MODE", "0")).strip().lower()
+        self._container_mode = container_env in {"1", "true", "yes", "on", "y"}
+        logger.info(
+            "MainWindow init: CORRIDORKEY_CONTAINER_MODE=%r -> container_mode=%s",
+            container_env,
+            self._container_mode,
+        )
+
+        if self._container_mode:
+            self.setMinimumSize(1100, 650)
+            logger.info("MainWindow init: fullscreen enabled for container mode")
+        else:
+            self._container_mode = False
+            self.resize(1400, 800)
+
+    
         self.setAcceptDrops(True)
 
         self._service = service or CorridorKeyService()
@@ -343,6 +359,19 @@ class MainWindow(QMainWindow):
         # Check for updates (non-blocking background thread)
         if os.environ.get("CORRIDORKEY_SKIP_UPDATE_CHECK") != "1":
             self._check_for_updates()
+
+        # Re-apply configured window mode after first layout pass.
+        QTimer.singleShot(0, self._ensure_window_mode)
+
+    def _ensure_window_mode(self) -> None:
+        """Keep the top-level window in configured startup mode."""
+        if getattr(self, "_container_mode", False):
+            if not self.isFullScreen():
+                self.showFullScreen()
+        else:
+            return
+        self.raise_()
+        self.activateWindow()
 
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
@@ -1312,6 +1341,7 @@ class MainWindow(QMainWindow):
         """Switch from welcome screen to the 3-panel workspace."""
         self._stack.setCurrentIndex(1)
         self._status_bar.show()
+        QTimer.singleShot(0, self._ensure_window_mode)
         # Sync IO tray divider and position queue overlay after layout settles
         QTimer.singleShot(0, self._sync_io_divider)
         QTimer.singleShot(0, self._position_queue_panel)
@@ -1355,6 +1385,7 @@ class MainWindow(QMainWindow):
                 pass
         self._stack.setCurrentIndex(0)
         self._status_bar.hide()
+        QTimer.singleShot(0, self._ensure_window_mode)
         self._welcome.refresh_recents()
         self._clips_dir = None
         self._current_clip = None
@@ -3365,10 +3396,13 @@ class MainWindow(QMainWindow):
         # Restore window geometry (clamped to current screen)
         if "geometry" in data:
             try:
-                g = data["geometry"]
-                self.setGeometry(g["x"], g["y"], g["width"], g["height"])
+                if not getattr(self, "_container_mode", False):
+                    g = data["geometry"]
+                    self.setGeometry(g["x"], g["y"], g["width"], g["height"])
             except Exception:
                 pass
+
+        QTimer.singleShot(0, self._ensure_window_mode)
 
         # Restore selected clip
         if "selected_clip" in data:
