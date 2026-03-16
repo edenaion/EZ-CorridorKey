@@ -356,8 +356,10 @@ class PreviewViewport(QWidget):
             "Toggle A/B wipe comparison (hotkey: A)\n\n"
             "Overlays input (A) and current output (B) in one viewer\n"
             "with a diagonal divider line.\n\n"
-            "Drag the center handle to move the line.\n"
-            "Drag on the line to rotate it."
+            "Drag the center handle to slide the line.\n"
+            "Drag above or below the handle to rotate the angle.\n"
+            "Scroll wheel to slide the line (Shift+scroll for fine-grain).\n"
+            "Middle-click the line to reset to default."
         )
         btn.setStyleSheet(
             "QPushButton { background-color: #1A1900; color: #808070; "
