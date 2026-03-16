@@ -35,7 +35,8 @@ def test_wrap_mlx_output_returns_straight_linear_processed_rgba():
     expected_rgb = cu.srgb_to_linear(raw["fg"].astype(np.float32) / 255.0)
     expected_alpha = raw["alpha"].astype(np.float32)[:, :, np.newaxis] / 255.0
 
-    np.testing.assert_allclose(wrapped["processed"][:, :, :3], expected_rgb, atol=1e-6)
+    # Output is premultiplied RGBA, so RGB values are scaled by alpha
+    np.testing.assert_allclose(wrapped["processed"][:, :, :3], expected_rgb * expected_alpha, atol=1e-6)
     np.testing.assert_allclose(wrapped["processed"][:, :, 3:], expected_alpha, atol=1e-6)
 
 
@@ -96,7 +97,8 @@ def test_assemble_mlx_output_preserves_float_precision_for_processed_rgba():
     )
 
     expected_rgb = cu.srgb_to_linear(fg)
-    np.testing.assert_allclose(wrapped["processed"][:, :, :3], expected_rgb, atol=1e-6)
+    # Output is premultiplied RGBA, so RGB values are scaled by alpha
+    np.testing.assert_allclose(wrapped["processed"][:, :, :3], expected_rgb * alpha, atol=1e-6)
     np.testing.assert_allclose(wrapped["processed"][:, :, 3:], alpha, atol=1e-6)
 
 
