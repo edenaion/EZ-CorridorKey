@@ -124,7 +124,7 @@ def _wrap_mlx_output(
       alpha:     [H,W,1] float32 0-1
       fg:        [H,W,3] float32 0-1 sRGB
       comp:      [H,W,3] float32 0-1 sRGB
-      processed: [H,W,4] float32 linear straight RGBA
+      processed: [H,W,4] float32 linear premultiplied RGBA
     """
     from CorridorKeyModule.core import color_utils as cu
 
@@ -173,8 +173,9 @@ def _wrap_mlx_output(
     comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha)
     comp_srgb = cu.linear_to_srgb(comp_lin)
 
-    # Build processed: [H,W,4] straight linear RGBA
-    processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
+    # Build processed: [H,W,4] premultiplied linear RGBA
+    fg_premul_lin = cu.premultiply(fg_despilled_lin, processed_alpha)
+    processed_rgba = np.concatenate([fg_premul_lin, processed_alpha], axis=-1)
 
     # Restore source detail on FG for display accuracy (MLX model colors
     # are lower fidelity than CUDA — blend original source back in on
@@ -247,7 +248,8 @@ def _assemble_mlx_output(
     comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha)
     comp_srgb = cu.linear_to_srgb(comp_lin)
 
-    processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
+    fg_premul_lin = cu.premultiply(fg_despilled_lin, processed_alpha)
+    processed_rgba = np.concatenate([fg_premul_lin, processed_alpha], axis=-1)
 
     # Restore source detail on FG for display accuracy (MLX model colors
     # are lower fidelity than CUDA — blend original source back in on
