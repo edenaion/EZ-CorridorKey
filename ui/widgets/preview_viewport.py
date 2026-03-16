@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import logging
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QImage
 
@@ -81,6 +81,9 @@ class PreviewViewport(QWidget):
             "color: #808070; font-size: 11px; padding-right: 8px; background: #0E0D00;"
         )
         top_bar.addWidget(self._clip_info)
+
+        # A/B wipe button — hidden by default, shown via add_ab_button()
+        self._ab_button: QPushButton | None = None
 
         layout.addWidget(self._top_bar)
 
@@ -339,6 +342,33 @@ class PreviewViewport(QWidget):
     def show_clip_info(self) -> None:
         """Show the clip info label."""
         self._clip_info.show()
+
+    def add_ab_button(self) -> QPushButton:
+        """Add an A/B wipe toggle button at the right edge of the top bar.
+
+        Returns the button so the parent can connect its signal.
+        """
+        btn = QPushButton("A/B")
+        btn.setCheckable(True)
+        btn.setFixedHeight(24)
+        btn.setMinimumWidth(36)
+        btn.setToolTip(
+            "Toggle A/B wipe comparison (hotkey: A)\n\n"
+            "Overlays input (A) and current output (B) in one viewer\n"
+            "with a diagonal divider line.\n\n"
+            "Drag the center handle to move the line.\n"
+            "Drag on the line to rotate it."
+        )
+        btn.setStyleSheet(
+            "QPushButton { background-color: #1A1900; color: #808070; "
+            "font-size: 10px; padding: 2px 6px; border: 1px solid #2A2910; }"
+            "QPushButton:checked { background-color: #FFF203; color: #000000; "
+            "font-weight: 700; border: none; }"
+            "QPushButton:hover { border-color: #454430; color: #E0E0E0; }"
+        )
+        self._top_bar.layout().addWidget(btn)
+        self._ab_button = btn
+        return btn
 
     def navigate_to_frame(self, stem_index: int) -> None:
         """Public method for external scrubber to drive navigation."""
