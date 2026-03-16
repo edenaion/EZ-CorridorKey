@@ -82,7 +82,7 @@ class DebugConsoleWidget(QWidget):
     """Floating debug console window with live log output."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent, Qt.Window | Qt.FramelessWindowHint)
+        super().__init__(parent, Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setWindowTitle("Console")
         self.setAttribute(Qt.WA_DeleteOnClose, False)
 

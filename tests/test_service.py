@@ -509,6 +509,97 @@ class TestWriteOutputs:
         # Should not raise
         svc._write_outputs(res, dirs, "frame_00000", "clip1", 0, cfg)
 
+    def test_fg_exr_is_linearized_before_write(self, tmp_clip_dir):
+        svc = CorridorKeyService()
+        from backend.frame_io import _srgb_to_linear
+        from backend.validators import ensure_output_dirs
+
+        dirs = ensure_output_dirs(tmp_clip_dir)
+        res = self._make_result_dict()
+        cfg = OutputConfig(
+            fg_format="exr",
+            matte_enabled=False,
+            comp_enabled=False,
+            processed_enabled=False,
+        )
+
+        writes: list[tuple[np.ndarray, str, str]] = []
+
+        def _capture(img, path, fmt, clip_name, frame_index, exr_compression="dwab"):
+            writes.append((img.copy(), path, fmt))
+
+        svc._write_image = _capture
+        svc._write_outputs(res, dirs, "frame_00000", "clip1", 0, cfg)
+
+        assert len(writes) == 1
+        img, path, fmt = writes[0]
+        expected_bgr = cv2.cvtColor(_srgb_to_linear(res["fg"]), cv2.COLOR_RGB2BGR)
+        assert fmt == "exr"
+        assert path.endswith(os.path.join("FG", "frame_00000.exr"))
+        np.testing.assert_allclose(img, expected_bgr, atol=1e-6)
+
+    def test_comp_exr_is_linearized_before_write(self, tmp_clip_dir):
+        svc = CorridorKeyService()
+        from backend.frame_io import _srgb_to_linear
+        from backend.validators import ensure_output_dirs
+
+        dirs = ensure_output_dirs(tmp_clip_dir)
+        res = self._make_result_dict()
+        cfg = OutputConfig(
+            fg_enabled=False,
+            matte_enabled=False,
+            comp_format="exr",
+            processed_enabled=False,
+        )
+
+        writes: list[tuple[np.ndarray, str, str]] = []
+
+        def _capture(img, path, fmt, clip_name, frame_index, exr_compression="dwab"):
+            writes.append((img.copy(), path, fmt))
+
+        svc._write_image = _capture
+        svc._write_outputs(res, dirs, "frame_00000", "clip1", 0, cfg)
+
+        assert len(writes) == 1
+        img, path, fmt = writes[0]
+        expected_bgr = cv2.cvtColor(_srgb_to_linear(res["comp"]), cv2.COLOR_RGB2BGR)
+        assert fmt == "exr"
+        assert path.endswith(os.path.join("Comp", "frame_00000.exr"))
+        np.testing.assert_allclose(img, expected_bgr, atol=1e-6)
+
+    def test_processed_exr_preserves_straight_linear_rgba(self, tmp_clip_dir):
+        svc = CorridorKeyService()
+        from backend.validators import ensure_output_dirs
+
+        dirs = ensure_output_dirs(tmp_clip_dir)
+        res = self._make_result_dict()
+        res["processed"] = np.zeros((4, 4, 4), dtype=np.float32)
+        res["processed"][:, :, 0] = 0.8
+        res["processed"][:, :, 1] = 0.4
+        res["processed"][:, :, 2] = 0.2
+        res["processed"][:, :, 3] = 0.25
+        cfg = OutputConfig(
+            fg_enabled=False,
+            matte_enabled=False,
+            comp_enabled=False,
+            processed_format="exr",
+        )
+
+        writes: list[tuple[np.ndarray, str, str]] = []
+
+        def _capture(img, path, fmt, clip_name, frame_index, exr_compression="dwab"):
+            writes.append((img.copy(), path, fmt))
+
+        svc._write_image = _capture
+        svc._write_outputs(res, dirs, "frame_00000", "clip1", 0, cfg)
+
+        assert len(writes) == 1
+        img, path, fmt = writes[0]
+        expected_bgra = cv2.cvtColor(res["processed"], cv2.COLOR_RGBA2BGRA)
+        assert fmt == "exr"
+        assert path.endswith(os.path.join("Processed", "frame_00000.exr"))
+        np.testing.assert_allclose(img, expected_bgra, atol=1e-6)
+
 
 # ── TestRunInference ──
 
@@ -788,6 +879,37 @@ class TestReprocessSingleFrame:
         svc._engine_pool = [MagicMock()]
         result = svc.reprocess_single_frame(sample_clip, InferenceParams(), 9999)
         assert result is None
+
+    def test_reprocess_forwards_status_during_engine_warmup(self, sample_clip):
+        svc = CorridorKeyService()
+        mock_engine = MagicMock()
+        mock_engine.process_frame.return_value = {
+            "fg": np.ones((4, 4, 3), dtype=np.float32),
+            "alpha": np.ones((4, 4, 1), dtype=np.float32),
+            "comp": np.ones((4, 4, 3), dtype=np.float32),
+            "processed": np.ones((4, 4, 4), dtype=np.float32),
+        }
+        statuses: list[str] = []
+
+        def _fake_get_engine_pool(on_status=None):
+            assert on_status is not None
+            on_status("Loading engine 1/1...")
+            return [mock_engine]
+
+        fake_img = np.zeros((4, 4, 3), dtype=np.float32)
+        fake_mask = np.ones((4, 4), dtype=np.float32)
+        with patch.object(svc, "_get_engine_pool", side_effect=_fake_get_engine_pool), patch(
+            "backend.service.read_image_frame", return_value=fake_img
+        ), patch("backend.service.read_mask_frame", return_value=fake_mask):
+            result = svc.reprocess_single_frame(
+                sample_clip,
+                InferenceParams(),
+                0,
+                on_status=statuses.append,
+            )
+
+        assert result is not None
+        assert statuses == ["Loading engine 1/1..."]
 
     def test_exr_sequence_honors_explicit_srgb_setting(self):
         svc = CorridorKeyService()

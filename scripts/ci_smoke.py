@@ -179,7 +179,7 @@ def run_smoke() -> None:
         app.processEvents()
         time.sleep(0.01)
 
-    if window.windowTitle() != "CORRIDORKEY":
+    if not window.windowTitle().startswith("EZ-CorridorKey"):
         raise RuntimeError(f"Unexpected main window title: {window.windowTitle()!r}")
 
     _print_step("opening preferences dialog")

@@ -236,12 +236,29 @@ class ClipEntry:
         """True when this clip's Frames/ were extracted from a source video."""
         return os.path.isfile(os.path.join(self.root_path, ".video_metadata.json"))
 
+    def _video_source_transfer(self) -> str:
+        """Best-effort source transfer string from extraction sidecar metadata."""
+        metadata_path = os.path.join(self.root_path, ".video_metadata.json")
+        if not os.path.isfile(metadata_path):
+            return ""
+        try:
+            import json
+            with open(metadata_path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except Exception:
+            return ""
+        source_probe = payload.get("source_probe", {})
+        return str(source_probe.get("color_transfer", "") or "").strip().lower()
+
     def should_default_input_linear(self) -> bool:
-        """Default Linear only for standalone EXR sequences, not extracted video EXRs."""
+        """Default Linear for standalone EXR or video-derived EXR tagged as linear."""
         return bool(
             self.input_asset is not None
             and self.input_asset.is_exr_sequence()
-            and not self.has_video_metadata()
+            and (
+                not self.has_video_metadata()
+                or self._video_source_transfer() == "linear"
+            )
         )
 
     @property
@@ -449,6 +466,13 @@ class ClipEntry:
         alpha_dir = os.path.join(self.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
             self.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+        else:
+            alpha_candidates = glob_module.glob(
+                os.path.join(self.root_path, "AlphaHint.*")
+            )
+            alpha_candidates = [c for c in alpha_candidates if _is_video_file(c)]
+            if alpha_candidates:
+                self.alpha_asset = ClipAsset(alpha_candidates[0], 'video')
 
         # VideoMaMa mask hint — directory OR video file
         mask_dir = os.path.join(self.root_path, "VideoMamaMaskHint")

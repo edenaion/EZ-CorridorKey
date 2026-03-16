@@ -171,16 +171,20 @@ class GPUMonitor(QObject):
         try:
             import psutil
             mem = psutil.virtual_memory()
-            total_gb = mem.total / (1024 ** 3)
-            used_gb = mem.used / (1024 ** 3)
-            free_gb = mem.available / (1024 ** 3)
+            total_bytes = int(mem.total)
+            free_bytes = int(mem.available)
+            used_bytes = max(0, total_bytes - free_bytes)
+            total_gb = total_bytes / (1024 ** 3)
+            used_gb = used_bytes / (1024 ** 3)
+            free_gb = free_bytes / (1024 ** 3)
+            usage_pct = (used_bytes / total_bytes * 100.0) if total_bytes > 0 else 0.0
             return {
                 "available": True,
                 "name": self._apple_chip_name or "Apple Silicon",
                 "total_gb": round(total_gb, 1),
                 "used_gb": round(used_gb, 1),
                 "free_gb": round(free_gb, 1),
-                "usage_pct": round(mem.percent, 1),
+                "usage_pct": round(usage_pct, 1),
             }
         except ImportError:
             logger.debug("psutil not available for Apple Silicon memory monitoring")
