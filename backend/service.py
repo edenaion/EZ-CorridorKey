@@ -275,9 +275,14 @@ class CorridorKeyService:
             service.run_inference(clip, params, on_progress=my_callback)
     """
 
+    # Model resolution options — user-facing setting.
+    # 2048 = full quality (matches OG CK), 1024 = faster / less memory.
+    VALID_MODEL_RESOLUTIONS = (1024, 2048)
+
     def __init__(self):
         self._engine_pool: list = []
         self._pool_size: int = 1
+        self._model_resolution: int = 2048  # default: full quality
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
@@ -325,6 +330,36 @@ class CorridorKeyService:
                     torch.cuda.empty_cache()
             except Exception:
                 logger.debug("CUDA cache clear skipped after SAM2 model switch", exc_info=True)
+
+    @property
+    def model_resolution(self) -> int:
+        """Current model inference resolution (1024 or 2048)."""
+        return self._model_resolution
+
+    def set_model_resolution(self, res: int) -> None:
+        """Set model inference resolution. Requires engine reload to take effect.
+
+        2048 = full quality (captures fine hair detail, matches original CK).
+        1024 = faster inference, lower memory, less fine detail.
+        """
+        if res not in self.VALID_MODEL_RESOLUTIONS:
+            logger.warning("Invalid model resolution %d, ignoring", res)
+            return
+        if res != self._model_resolution:
+            logger.info("Model resolution: %d -> %d (engine reload required)", self._model_resolution, res)
+            self._model_resolution = res
+            # Clear engine pool — next inference will rebuild at new resolution
+            for eng in self._engine_pool:
+                self._safe_offload(eng)
+            self._engine_pool.clear()
+            if self._active_model == _ActiveModel.INFERENCE:
+                self._active_model = _ActiveModel.NONE
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
 
     def set_pool_size(self, n: int) -> None:
         """Set the number of parallel inference engines.
@@ -583,7 +618,7 @@ class CorridorKeyService:
 
         backend = resolve_backend()
         opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
-        _img_size = 1024 if self._device == 'mps' else 2048
+        _img_size = self._model_resolution
 
         # MLX: unified memory, single engine only
         pool_size = 1 if backend == "mlx" else self._pool_size

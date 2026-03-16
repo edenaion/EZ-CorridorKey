@@ -56,7 +56,8 @@ from ui.widgets.preferences_dialog import (
     KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE,
     KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES,
     KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
-    get_setting_bool, get_setting_str,
+    KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION,
+    get_setting_bool, get_setting_str, get_setting_int,
 )
 from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
 from ui.workers.gpu_monitor import GPUMonitor
@@ -339,6 +340,7 @@ class MainWindow(QMainWindow):
         self._apply_tooltip_setting()
         self._apply_sound_setting()
         self._apply_tracker_model_setting()
+        self._apply_model_resolution_setting()
 
         # Check for updates (non-blocking background thread)
         if os.environ.get("CORRIDORKEY_SKIP_UPDATE_CHECK") != "1":
@@ -3503,6 +3505,7 @@ class MainWindow(QMainWindow):
             self._apply_sound_setting()
             self._apply_tracker_model_setting()
             self._apply_parallel_clips_setting()
+            self._apply_model_resolution_setting()
 
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
@@ -3537,6 +3540,11 @@ class MainWindow(QMainWindow):
         """Apply saved SAM2 tracker model preference to the backend service."""
         model_id = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
         self._service.set_sam2_model(model_id)
+
+    def _apply_model_resolution_setting(self) -> None:
+        """Apply saved model resolution preference to the backend service."""
+        res = get_setting_int(KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION)
+        self._service.set_model_resolution(res)
 
     def _apply_parallel_clips_setting(self) -> None:
         """Apply saved parallel clips preference to the GPU worker."""

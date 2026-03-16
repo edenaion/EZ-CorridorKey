@@ -23,6 +23,7 @@ KEY_COPY_SEQUENCES = "project/copy_image_sequences"
 KEY_EXR_COMPRESSION = "output/exr_compression"
 KEY_TRACKER_MODEL = "tracking/sam2_model"
 KEY_PARALLEL_CLIPS = "gpu/parallel_clips"
+KEY_MODEL_RESOLUTION = "inference/model_resolution"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
@@ -33,6 +34,7 @@ DEFAULT_LOOP_PLAYBACK = True
 DEFAULT_EXR_COMPRESSION = "dwab"
 DEFAULT_TRACKER_MODEL = "facebook/sam2.1-hiera-base-plus"
 DEFAULT_PARALLEL_CLIPS = 1
+DEFAULT_MODEL_RESOLUTION = 2048
 
 EXR_COMPRESSION_OPTIONS = [
     ("DWAB — Lossy, Smallest Files", "dwab"),
@@ -193,6 +195,31 @@ class PreferencesDialog(QDialog):
 
         layout.addWidget(output_group)
 
+        # Inference section
+        inference_group = QGroupBox("Inference")
+        inference_layout = QVBoxLayout(inference_group)
+
+        res_label = QLabel("Model resolution")
+        inference_layout.addWidget(res_label)
+
+        self._model_resolution_combo = QComboBox()
+        self._model_resolution_combo.addItem("2048 — Full Quality", 2048)
+        self._model_resolution_combo.addItem("1024 — Faster, Less Detail", 1024)
+        saved_res = get_setting_int(KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION)
+        idx = self._model_resolution_combo.findData(saved_res)
+        self._model_resolution_combo.setCurrentIndex(max(0, idx))
+        self._model_resolution_combo.setToolTip(
+            "Resolution the model processes internally before upscaling to your frame size.\n\n"
+            "2048: Full quality — captures fine hair strands and edge detail.\n"
+            "Matches the original CorridorKey quality. Recommended for final output.\n\n"
+            "1024: Faster inference with lower memory usage.\n"
+            "Fine hair detail may be lost. Good for previewing or lower-end hardware.\n\n"
+            "Changing this requires an engine reload (happens automatically)."
+        )
+        inference_layout.addWidget(self._model_resolution_combo)
+
+        layout.addWidget(inference_group)
+
         # Playback section
         play_group = QGroupBox("Playback")
         play_layout = QVBoxLayout(play_group)
@@ -347,6 +374,7 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
         s.setValue(KEY_EXR_COMPRESSION, self._exr_compression_combo.currentData())
         s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
+        s.setValue(KEY_MODEL_RESOLUTION, self._model_resolution_combo.currentData())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
