@@ -54,7 +54,7 @@ class GPUJobWorker(QThread):
 
     Parallel mode (max_workers > 1):
         INFERENCE jobs are submitted to a ThreadPoolExecutor so multiple
-        clips process concurrently.  The shared GPU lock in service.py
+        clips process concurrently.  The shared GPU lock in backend.service
         serializes model access while CPU pre/post-processing overlaps.
         Non-inference jobs (GVM, VideoMaMa, SAM2) drain the pool first,
         then run inline to respect model residency.

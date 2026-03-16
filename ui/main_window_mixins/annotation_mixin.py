@@ -71,31 +71,6 @@ class AnnotationMixin:
                 iv._split_view.update()
                 self._auto_save_annotations()
 
-    _mps_warning_acknowledged = False
-
-    def _warn_mps_slow(self, feature_name: str) -> bool:
-        """Show a one-time performance warning on MPS. Returns False if user cancels."""
-        if getattr(self._service, '_device', '') != 'mps':
-            return True
-        if AnnotationMixin._mps_warning_acknowledged:
-            return True
-        reply = QMessageBox.warning(
-            self,
-            f"{feature_name} — Mac Performance Warning",
-            "GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) "
-            "are very slow on Mac (Apple Silicon MPS).\n\n"
-            "This may take hours for longer clips and could freeze your system.\n\n"
-            "Recommendation: Import pre-made alpha mattes from After Effects, "
-            "DaVinci Resolve, or Nuke instead.\n\n"
-            "Continue anyway? (This warning won't appear again this session.)",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply == QMessageBox.Yes:
-            AnnotationMixin._mps_warning_acknowledged = True
-            return True
-        return False
-
     def _on_track_masks(self) -> None:
         """Preview SAM2 on the annotated frame, then confirm full tracking."""
         from ui.workers.gpu_job_worker import create_job_snapshot

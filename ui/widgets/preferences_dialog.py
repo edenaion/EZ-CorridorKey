@@ -448,7 +448,7 @@ class PreferencesDialog(QDialog):
             return
 
         # Linux: needs sudo, can't run from GUI — copy instructions to clipboard
-        if sys.platform not in ("win32", "darwin"):
+        if _sys.platform not in ("win32", "darwin"):
             help_text = get_ffmpeg_install_help()
             QApplication.clipboard().setText(help_text)
             QMessageBox.information(
@@ -459,7 +459,7 @@ class PreferencesDialog(QDialog):
             )
             return
 
-        if sys.platform == "win32":
+        if _sys.platform == "win32":
             confirm_msg = (
                 "CorridorKey will download and install a full bundled FFmpeg build into:\n\n"
                 f"{self._local_ffmpeg_dir}\n\n"

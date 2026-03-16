@@ -75,14 +75,6 @@ from ui.main_window_mixins import (
 
 logger = logging.getLogger(__name__)
 
-# TEMPORARY: keep a visible tester build identifier on the user-test
-# branch so remote testers can confirm they pulled the right build. Remove this
-# before merging the branch back into main.
-_SHOW_TESTER_BUILD_ID = True
-
-# Session file stored in clips dir (Codex: JSON sidecar)
-_SESSION_FILENAME = ".corridorkey_session.json"
-_SESSION_VERSION = 1
 
 
 class _Toast(QLabel):
@@ -255,6 +247,31 @@ class MainWindow(
     ExportMixin, SessionMixin, SettingsMixin,
 ):
     """CorridorKey main application window."""
+
+    _mps_warning_acknowledged = False
+
+    def _warn_mps_slow(self, feature_name: str) -> bool:
+        """Show a one-time performance warning on MPS. Returns False if user cancels."""
+        if getattr(self._service, '_device', '') != 'mps':
+            return True
+        if MainWindow._mps_warning_acknowledged:
+            return True
+        reply = QMessageBox.warning(
+            self,
+            f"{feature_name} — Mac Performance Warning",
+            "GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) "
+            "are very slow on Mac (Apple Silicon MPS).\n\n"
+            "This may take hours for longer clips and could freeze your system.\n\n"
+            "Recommendation: Import pre-made alpha mattes from After Effects, "
+            "DaVinci Resolve, or Nuke instead.\n\n"
+            "Continue anyway? (This warning won't appear again this session.)",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            MainWindow._mps_warning_acknowledged = True
+            return True
+        return False
 
     def __init__(self, service: CorridorKeyService | None = None,
                  store: RecentSessionsStore | None = None):
@@ -613,6 +630,10 @@ class MainWindow(
         """Display GPU name in the top bar."""
         short = name.replace("NVIDIA GeForce ", "").replace("NVIDIA ", "")
         self._gpu_label.setText(short)
+
+    def _show_toast(self, text: str, duration_ms: int = 4000) -> None:
+        """Show a non-blocking notification toast at the bottom of the window."""
+        _Toast(self, text, duration_ms)
 
     def _refresh_input_thumbnail(
         self,
