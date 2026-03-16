@@ -123,6 +123,9 @@ class PreferencesDialog(QDialog):
         self.setWindowTitle("Preferences")
         self.setMinimumWidth(520)
         self.setModal(True)
+        # Ctrl+, closes the dialog (toggle behavior matching F12 pattern)
+        from PySide6.QtGui import QShortcut, QKeySequence
+        QShortcut(QKeySequence("Ctrl+,"), self, self.reject)
         self._ffmpeg_repair_worker: _FFmpegRepairWorker | None = None
         self._local_ffmpeg_dir = get_local_ffmpeg_dir()
 
