@@ -117,9 +117,10 @@ class TestRunUpdateCrossPlatform:
         assert expected_script in args
 
     def test_actual_main_window_source_matches(self):
-        """Verify main_window.py _run_update has the os.name guard."""
+        """Verify _run_update has the os.name guard (in settings mixin)."""
         src_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "ui", "main_window.py"
+            os.path.dirname(os.path.dirname(__file__)),
+            "ui", "main_window_mixins", "settings_mixin.py",
         )
         with open(src_path, "r", encoding="utf-8") as f:
             source = f.read()
