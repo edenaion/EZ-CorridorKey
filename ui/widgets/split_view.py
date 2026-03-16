@@ -763,14 +763,12 @@ class SplitViewWidget(QWidget):
         """Ctrl+Wheel to zoom, plain wheel in wipe mode to slide divider."""
         mods = event.modifiers()
         # Scroll in wipe mode: slide the wipe line (up = A, down = B)
-        # Shift+scroll for fine-grain control
-        if self._wipe_mode and (not mods or mods == Qt.ShiftModifier):
+        # Shift+scroll for fine-grain (proportional to delta for smooth trackpads)
+        # Note: this intentionally captures Shift+scroll that normally does horizontal pan
+        if self._wipe_mode and mods in (Qt.KeyboardModifier(0), Qt.ShiftModifier):
             delta = event.angleDelta().y()
-            step = 0.01 if mods & Qt.ShiftModifier else 0.03
-            if delta > 0:
-                self._wipe_offset = min(0.5, self._wipe_offset + step)
-            elif delta < 0:
-                self._wipe_offset = max(-0.5, self._wipe_offset - step)
+            scale = 2000.0 if mods & Qt.ShiftModifier else 600.0
+            self._wipe_offset = max(-0.5, min(0.5, self._wipe_offset + delta / scale))
             self.update()
             return
         if mods & Qt.ControlModifier:

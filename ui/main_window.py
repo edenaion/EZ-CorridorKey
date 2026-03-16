@@ -284,6 +284,7 @@ class MainWindow(QMainWindow):
         # Debug console — created eagerly so log handler captures from startup
         from ui.widgets.debug_console import DebugConsoleWidget
         self._debug_console = DebugConsoleWidget()
+        self._prefs_dialog = None
 
         # Data model
         self._clip_model = ClipListModel()
@@ -398,8 +399,7 @@ class MainWindow(QMainWindow):
 
         # Edit menu
         edit_menu = menu_bar.addMenu("Edit")
-        prefs_action = edit_menu.addAction("Preferences...", self._show_preferences)
-        prefs_action.setShortcut("Ctrl+,")
+        self._prefs_action = edit_menu.addAction("Preferences...", self._show_preferences)
         edit_menu.addAction("Hotkeys...", self._show_hotkeys)
         edit_menu.addSeparator()
         edit_menu.addAction("Track Paint Masks", self._on_track_masks)
@@ -577,6 +577,7 @@ class MainWindow(QMainWindow):
         reg = self._shortcut_registry
         self._save_action.setShortcut(QKeySequence(reg.get_key("save_session")))
         self._open_action.setShortcut(QKeySequence(reg.get_key("open_project")))
+        self._prefs_action.setShortcut(QKeySequence(reg.get_key("preferences")))
 
     def _toggle_mute(self) -> None:
         """Toggle UI sounds on/off and show a brief overlay indicator."""
@@ -3559,7 +3560,7 @@ class MainWindow(QMainWindow):
 
     def _show_preferences(self) -> None:
         """Toggle the Preferences dialog (Ctrl+,)."""
-        if hasattr(self, '_prefs_dialog') and self._prefs_dialog is not None:
+        if self._prefs_dialog is not None:
             self._prefs_dialog.reject()
             return
         dlg = PreferencesDialog(self)
