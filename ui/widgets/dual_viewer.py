@@ -97,6 +97,10 @@ class DualViewerPanel(QWidget):
         self._output_viewer._split_view.zoom_changed.connect(self._on_zoom_changed)
         self._output_viewer.view_mode_changed.connect(self.output_mode_changed.emit)
 
+        # Refresh wipe overlay when output viewer decodes a new frame or switches mode
+        self._output_viewer._decoder.frame_decoded.connect(self._on_wipe_frame_ready)
+        self._input_viewer._decoder.frame_decoded.connect(self._on_wipe_frame_ready)
+
     @property
     def current_stem_index(self) -> int:
         """Current stem index for reprocess targeting."""
@@ -241,10 +245,6 @@ class DualViewerPanel(QWidget):
         self._input_viewer.navigate_to_frame(stem_index)
         self._output_viewer.navigate_to_frame(stem_index)
         self.frame_changed.emit(stem_index)
-        # In wipe mode, reload both layers after a short delay to let async decode finish
-        if self._wipe_active:
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(100, self._load_wipe_images)
 
     def toggle_playback(self) -> None:
         """Forward play/pause to the scrubber."""
@@ -290,6 +290,12 @@ class DualViewerPanel(QWidget):
         super().resizeEvent(event)
         if self._wipe_active:
             self._position_wipe_overlay()
+
+    @Slot(int, str, object)
+    def _on_wipe_frame_ready(self, stem_index: int, mode_value: str, qimage: object) -> None:
+        """A viewer decoded a frame — refresh wipe if active."""
+        if self._wipe_active:
+            self._load_wipe_images()
 
     def _load_wipe_images(self) -> None:
         """Load INPUT (A=left) and current output mode (B=right) into wipe overlay."""
