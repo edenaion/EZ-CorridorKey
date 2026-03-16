@@ -488,12 +488,26 @@ class PreviewViewport(QWidget):
     # ── Signal Handlers ──
 
     @Slot(str)
+    def set_view_mode(self, mode_value: str) -> None:
+        """Programmatically switch view mode (from hotkey or external call)."""
+        try:
+            mode = ViewMode(mode_value)
+        except ValueError:
+            return
+        btn = self._mode_bar._buttons.get(mode)
+        if btn and btn.isEnabled():
+            btn.setChecked(True)
+            self._on_mode_changed(mode_value)
+
     def _on_mode_changed(self, mode_value: str) -> None:
         """Handle view mode switch."""
         try:
             self._current_mode = ViewMode(mode_value)
         except ValueError:
             return
+        # Update button styles
+        for m, btn in self._mode_bar._buttons.items():
+            btn.setStyleSheet(self._mode_bar._button_style(m == self._current_mode))
         self.view_mode_changed.emit(mode_value)
 
         if self._current_stem_idx >= 0:

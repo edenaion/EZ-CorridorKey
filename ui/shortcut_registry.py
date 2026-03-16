@@ -56,6 +56,13 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("clear_annotations",  "Clear Paint Strokes",          "Paint",      "Ctrl+C",       "_confirm_clear_annotations"),
     # Viewer
     ShortcutDef("toggle_ab_wipe",     "Toggle A/B Wipe",              "Viewer",     "A",            "_toggle_ab_wipe"),
+    ShortcutDef("view_input",         "View: INPUT",                  "Viewer",     "F1",           "_view_mode_input"),
+    ShortcutDef("view_mask",          "View: MASK",                   "Viewer",     "F2",           "_view_mode_mask"),
+    ShortcutDef("view_alpha",         "View: ALPHA",                  "Viewer",     "F3",           "_view_mode_alpha"),
+    ShortcutDef("view_fg",            "View: FG",                     "Viewer",     "F4",           "_view_mode_fg"),
+    ShortcutDef("view_matte",         "View: MATTE",                  "Viewer",     "F5",           "_view_mode_matte"),
+    ShortcutDef("view_comp",          "View: COMP",                   "Viewer",     "F6",           "_view_mode_comp"),
+    ShortcutDef("view_proc",          "View: PROC",                   "Viewer",     "F7",           "_view_mode_proc"),
 ]
 
 # Category display order

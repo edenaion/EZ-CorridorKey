@@ -573,6 +573,27 @@ class MainWindow(QMainWindow):
         """Toggle A/B wipe comparison mode."""
         self._dual_viewer.toggle_wipe_mode()
 
+    def _view_mode_input(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("input")
+
+    def _view_mode_mask(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("mask")
+
+    def _view_mode_alpha(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("alpha")
+
+    def _view_mode_fg(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("fg")
+
+    def _view_mode_matte(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("matte")
+
+    def _view_mode_comp(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("comp")
+
+    def _view_mode_proc(self) -> None:
+        self._dual_viewer._output_viewer.set_view_mode("processed")
+
     def _on_escape(self) -> None:
         """Escape: cancel the current action — auto-detects what's running."""
         # 1. Exit annotation mode (no confirmation needed)
