@@ -51,6 +51,15 @@ class SplitViewWidget(QWidget):
         self._split_enabled = False
         self._divider_pos = 0.5  # normalized 0.0-1.0
 
+        # Wipe mode (A/B comparison — diagonal divider, A above/left, B below/right)
+        self._wipe_mode = False
+        self._wipe_angle = 45.0       # degrees, default diagonal. Range -90 to 90
+        self._wipe_offset = 0.0       # perpendicular offset from center (-0.5 to 0.5)
+        self._wipe_dragging: str | None = None  # "handle" or "line" or None
+        self._wipe_drag_start = QPointF()
+        self._wipe_drag_start_offset = 0.0
+        self._wipe_drag_start_angle = 45.0
+
         # Drag state
         self._dragging_divider = False
 
@@ -116,6 +125,18 @@ class SplitViewWidget(QWidget):
     def split_enabled(self) -> bool:
         return self._split_enabled
 
+    def set_wipe_mode(self, enabled: bool) -> None:
+        """Toggle A/B wipe comparison (diagonal divider, A above/left, B below/right)."""
+        self._wipe_mode = enabled
+        self._wipe_angle = 45.0
+        self._wipe_offset = 0.0
+        self._wipe_dragging = None
+        self.update()
+
+    @property
+    def wipe_mode(self) -> bool:
+        return self._wipe_mode
+
     def set_placeholder(self, text: str) -> None:
         self._placeholder = text
 
@@ -167,7 +188,9 @@ class SplitViewWidget(QWidget):
         # Background
         painter.fillRect(self.rect(), QColor("#0A0A00"))
 
-        if self._split_enabled and (self._left_image or self._right_image):
+        if self._wipe_mode and self._left_image and self._right_image:
+            self._paint_wipe(painter)
+        elif self._split_enabled and (self._left_image or self._right_image):
             self._paint_split(painter)
         elif self._single_image:
             self._paint_single(painter)
@@ -241,6 +264,112 @@ class SplitViewWidget(QWidget):
             (divider_x, h - handle_size),
         ]
         painter.drawPolygon(QPolygon([QPoint(x, y) for x, y in bot_points]))
+
+    # ── Wipe mode rendering ──
+
+    def _wipe_line_endpoints(self):
+        """Compute the wipe line endpoints from angle + offset.
+
+        Returns (QPointF start, QPointF end, QPointF center) in widget coords.
+        """
+        import math
+        w, h = self.width(), self.height()
+        cx, cy = w / 2.0, h / 2.0
+
+        # Offset shifts the line perpendicular to its direction
+        angle_rad = math.radians(self._wipe_angle)
+        perp_x = -math.sin(angle_rad)
+        perp_y = math.cos(angle_rad)
+        diag = math.sqrt(w * w + h * h)
+        offset_px = self._wipe_offset * diag
+
+        # Center of line shifted by offset
+        lx = cx + perp_x * offset_px
+        ly = cy + perp_y * offset_px
+
+        # Line direction (along the angle)
+        dx = math.cos(angle_rad)
+        dy = math.sin(angle_rad)
+
+        # Extend line well beyond viewport
+        ext = diag
+        p1 = QPointF(lx - dx * ext, ly - dy * ext)
+        p2 = QPointF(lx + dx * ext, ly + dy * ext)
+        center = QPointF(lx, ly)
+        return p1, p2, center
+
+    def _wipe_handle_rect(self, center: QPointF) -> QRectF:
+        """Return the center square handle rect (12x12)."""
+        s = 6.0
+        return QRectF(center.x() - s, center.y() - s, s * 2, s * 2)
+
+    def _paint_wipe(self, painter: QPainter) -> None:
+        """Draw A/B wipe comparison with diagonal divider."""
+        from PySide6.QtGui import QPolygonF, QPainterPath
+
+        w, h = self.width(), self.height()
+        p1, p2, center = self._wipe_line_endpoints()
+
+        # Build clip path for side A (above/left of line)
+        # The "above" side is determined by the perpendicular direction
+        import math
+        angle_rad = math.radians(self._wipe_angle)
+        perp_x = -math.sin(angle_rad)
+        perp_y = math.cos(angle_rad)
+
+        # Push the line's endpoints outward perpendicular to create a polygon
+        # covering side A (the "above" side = negative perpendicular direction)
+        far = max(w, h) * 2
+        a1 = QPointF(p1.x() - perp_x * far, p1.y() - perp_y * far)
+        a2 = QPointF(p2.x() - perp_x * far, p2.y() - perp_y * far)
+
+        side_a_poly = QPolygonF([p1, p2, a2, a1])
+        side_a_path = QPainterPath()
+        side_a_path.addPolygon(side_a_poly)
+
+        # Side A: INPUT image (above/left of line)
+        if self._left_image:
+            dest = self._image_rect(self._left_image)
+            painter.setClipPath(side_a_path)
+            painter.drawImage(dest, self._left_image)
+
+        # Side B: OUTPUT image (below/right of line) — everything NOT in side A
+        if self._right_image:
+            dest = self._image_rect(self._right_image)
+            full = QPainterPath()
+            full.addRect(QRectF(0, 0, w, h))
+            side_b_path = full - side_a_path
+            painter.setClipPath(side_b_path)
+            painter.drawImage(dest, self._right_image)
+
+        # Remove clip for divider drawing
+        painter.setClipping(False)
+
+        # Draw wipe line
+        pen = QPen(QColor("#FFF203"), self._DIVIDER_WIDTH)
+        painter.setPen(pen)
+        painter.drawLine(p1, p2)
+
+        # Draw center handle (filled square)
+        handle = self._wipe_handle_rect(center)
+        painter.setBrush(QColor("#FFF203"))
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(handle)
+
+        # Draw A/B labels near the line
+        painter.setPen(QColor("#FFF203"))
+        font = painter.font()
+        font.setPointSize(10)
+        font.setBold(True)
+        painter.setFont(font)
+
+        label_offset = 16
+        painter.drawText(
+            QPointF(center.x() - perp_x * label_offset - 4,
+                    center.y() - perp_y * label_offset + 4), "A")
+        painter.drawText(
+            QPointF(center.x() + perp_x * label_offset - 4,
+                    center.y() + perp_y * label_offset + 4), "B")
 
     def _paint_placeholder(self, painter: QPainter) -> None:
         """Draw placeholder text."""
@@ -387,7 +516,33 @@ class SplitViewWidget(QWidget):
 
     # ── Mouse Events ──
 
+    def _wipe_distance_to_line(self, pos: QPointF) -> float:
+        """Signed perpendicular distance from pos to the wipe line (pixels)."""
+        import math
+        angle_rad = math.radians(self._wipe_angle)
+        _, _, center = self._wipe_line_endpoints()
+        # Normal vector (perpendicular to line direction)
+        nx = -math.sin(angle_rad)
+        ny = math.cos(angle_rad)
+        return (pos.x() - center.x()) * nx + (pos.y() - center.y()) * ny
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        # Wipe mode: check handle and line hit
+        if event.button() == Qt.LeftButton and self._wipe_mode:
+            _, _, center = self._wipe_line_endpoints()
+            handle = self._wipe_handle_rect(center)
+            if handle.contains(event.position()):
+                self._wipe_dragging = "handle"
+                self._wipe_drag_start = event.position()
+                self._wipe_drag_start_offset = self._wipe_offset
+                return
+            dist = abs(self._wipe_distance_to_line(event.position()))
+            if dist < self._DIVIDER_HIT_ZONE:
+                self._wipe_dragging = "line"
+                self._wipe_drag_start = event.position()
+                self._wipe_drag_start_angle = self._wipe_angle
+                return
+
         if event.button() == Qt.LeftButton and self._split_enabled:
             # Check divider hit
             divider_x = self.width() * self._divider_pos
@@ -453,6 +608,45 @@ class SplitViewWidget(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         self._mouse_pos = event.position()
 
+        # Wipe mode dragging
+        if self._wipe_dragging == "handle":
+            # Translate line: move offset based on perpendicular mouse movement
+            import math
+            angle_rad = math.radians(self._wipe_angle)
+            nx = -math.sin(angle_rad)
+            ny = math.cos(angle_rad)
+            dx = event.position().x() - self._wipe_drag_start.x()
+            dy = event.position().y() - self._wipe_drag_start.y()
+            diag = math.sqrt(self.width() ** 2 + self.height() ** 2)
+            delta_offset = (dx * nx + dy * ny) / diag
+            self._wipe_offset = max(-0.5, min(0.5,
+                self._wipe_drag_start_offset + delta_offset))
+            self.update()
+            return
+        if self._wipe_dragging == "line":
+            # Rotate line: compute angle from mouse position relative to viewport center
+            import math
+            w, h = self.width(), self.height()
+            cx, cy = w / 2.0, h / 2.0
+            mx = event.position().x() - cx
+            my = event.position().y() - cy
+            # Angle of the line direction (tangent), not the normal
+            angle = math.degrees(math.atan2(my, mx))
+            self._wipe_angle = max(-90.0, min(90.0, angle))
+            self.update()
+            return
+
+        # Wipe mode cursor feedback
+        if self._wipe_mode and not self._panning:
+            _, _, center = self._wipe_line_endpoints()
+            handle = self._wipe_handle_rect(center)
+            if handle.contains(event.position()):
+                self.setCursor(Qt.SizeAllCursor)
+            elif abs(self._wipe_distance_to_line(event.position())) < self._DIVIDER_HIT_ZONE:
+                self.setCursor(Qt.OpenHandCursor)
+            elif not self._annotation_mode:
+                self.unsetCursor()
+
         if self._dragging_divider:
             self._divider_pos = max(0.05, min(0.95,
                 event.position().x() / self.width()))
@@ -511,6 +705,10 @@ class SplitViewWidget(QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if self._wipe_dragging:
+            self._wipe_dragging = None
+            return
+
         if self._dragging_divider:
             self._dragging_divider = False
             return

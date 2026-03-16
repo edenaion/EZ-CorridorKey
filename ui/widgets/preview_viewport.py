@@ -336,6 +336,10 @@ class PreviewViewport(QWidget):
         """Hide the clip info label (used on right panel to avoid duplication)."""
         self._clip_info.hide()
 
+    def show_clip_info(self) -> None:
+        """Show the clip info label."""
+        self._clip_info.show()
+
     def navigate_to_frame(self, stem_index: int) -> None:
         """Public method for external scrubber to drive navigation."""
         self._navigate_to(stem_index)

@@ -569,6 +569,10 @@ class MainWindow(QMainWindow):
         """Forward Space key to the scrubber's play/pause toggle."""
         self._dual_viewer.toggle_playback()
 
+    def _toggle_ab_wipe(self) -> None:
+        """Toggle A/B wipe comparison mode."""
+        self._dual_viewer.toggle_wipe_mode()
+
     def _on_escape(self) -> None:
         """Escape: cancel the current action — auto-detects what's running."""
         # 1. Exit annotation mode (no confirmation needed)

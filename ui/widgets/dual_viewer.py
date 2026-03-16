@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import os
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QPushButton
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QImage
 
@@ -39,6 +39,9 @@ class DualViewerPanel(QWidget):
 
         self._clip: ClipEntry | None = None
 
+        self._wipe_active = False
+        self._saved_splitter_sizes: list[int] = []
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -62,6 +65,28 @@ class DualViewerPanel(QWidget):
         self._viewer_splitter.setStretchFactor(1, 1)
 
         layout.addWidget(self._viewer_splitter, 1)
+
+        # A/B wipe button — floats in the top-center area above the splitter handle
+        self._ab_button = QPushButton("A/B")
+        self._ab_button.setCheckable(True)
+        self._ab_button.setFixedSize(40, 20)
+        self._ab_button.setToolTip(
+            "Toggle A/B wipe comparison (hotkey: A)\n\n"
+            "Overlays input (A) and output (B) in one viewer\n"
+            "with a diagonal divider line.\n\n"
+            "Drag the center handle to move the line.\n"
+            "Drag on the line to rotate it."
+        )
+        self._ab_button.setStyleSheet(
+            "QPushButton { background: #1A1900; color: #808070; border: 1px solid #333320; "
+            "font-size: 10px; font-weight: bold; border-radius: 2px; }"
+            "QPushButton:checked { background: #332E00; color: #FFF203; border-color: #FFF203; }"
+            "QPushButton:hover { border-color: #666650; }"
+        )
+        self._ab_button.clicked.connect(self.toggle_wipe_mode)
+        # Position the button absolutely — will be placed in resizeEvent
+        self._ab_button.setParent(self)
+        self._ab_button.raise_()
 
         # Shared scrubber at the bottom
         bottom = QHBoxLayout()
@@ -228,6 +253,10 @@ class DualViewerPanel(QWidget):
         self._input_viewer.navigate_to_frame(stem_index)
         self._output_viewer.navigate_to_frame(stem_index)
         self.frame_changed.emit(stem_index)
+        # In wipe mode, reload both layers after a short delay to let async decode finish
+        if self._wipe_active:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(100, self._load_wipe_images)
 
     def toggle_playback(self) -> None:
         """Forward play/pause to the scrubber."""
@@ -236,3 +265,72 @@ class DualViewerPanel(QWidget):
     @Slot(float)
     def _on_zoom_changed(self, zoom: float) -> None:
         self._zoom_label.setText(f"{int(zoom * 100)}%")
+
+    # ── A/B Wipe ──
+
+    def resizeEvent(self, event) -> None:
+        """Reposition the floating A/B button at the top-center of the splitter."""
+        super().resizeEvent(event)
+        if hasattr(self, '_ab_button'):
+            # Place at the top, centered on the splitter handle
+            splitter_sizes = self._viewer_splitter.sizes()
+            if splitter_sizes and sum(splitter_sizes) > 0:
+                left_w = splitter_sizes[0]
+            else:
+                left_w = self.width() // 2
+            btn_x = left_w - self._ab_button.width() // 2
+            btn_y = 5  # small top margin
+            self._ab_button.move(btn_x, btn_y)
+
+    def toggle_wipe_mode(self) -> None:
+        """Toggle A/B wipe comparison mode."""
+        self._wipe_active = not self._wipe_active
+        self._ab_button.setChecked(self._wipe_active)
+
+        if self._wipe_active:
+            # Save splitter state and hide input viewer
+            self._saved_splitter_sizes = self._viewer_splitter.sizes()
+
+            # Enable wipe on the output viewer's split view
+            sv = self._output_viewer._split_view
+            sv.set_wipe_mode(True)
+
+            # Load current INPUT frame as left image for wipe
+            self._load_wipe_images()
+
+            # Hide input viewer, give output viewer full width
+            self._input_viewer.hide()
+            self._viewer_splitter.setSizes([0, self.width()])
+
+            # Show clip info on output viewer (normally hidden in dual mode)
+            self._output_viewer.show_clip_info()
+        else:
+            # Disable wipe
+            sv = self._output_viewer._split_view
+            sv.set_wipe_mode(False)
+
+            # Restore side-by-side
+            self._input_viewer.show()
+            if self._saved_splitter_sizes:
+                self._viewer_splitter.setSizes(self._saved_splitter_sizes)
+            else:
+                self._viewer_splitter.setSizes([500, 500])
+
+            self._output_viewer.hide_clip_info()
+
+        # Reposition button
+        self.resizeEvent(None)
+
+    def _load_wipe_images(self) -> None:
+        """Load INPUT and current output mode images into the wipe viewer."""
+        if not self._wipe_active:
+            return
+        # Get the input image from the input viewer's decode cache
+        input_img = self._input_viewer._split_view._single_image
+        output_img = self._output_viewer._split_view._single_image
+
+        sv = self._output_viewer._split_view
+        if input_img:
+            sv.set_left_image(input_img)
+        if output_img:
+            sv.set_right_image(output_img)

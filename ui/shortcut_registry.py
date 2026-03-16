@@ -54,10 +54,12 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("cycle_fg_color",     "Cycle Foreground Color",       "Paint",      "C",            "_cycle_fg_color"),
     ShortcutDef("undo_annotation",    "Undo Paint Stroke",            "Paint",      "Ctrl+Z",       "_undo_annotation"),
     ShortcutDef("clear_annotations",  "Clear Paint Strokes",          "Paint",      "Ctrl+C",       "_confirm_clear_annotations"),
+    # Viewer
+    ShortcutDef("toggle_ab_wipe",     "Toggle A/B Wipe",              "Viewer",     "A",            "_toggle_ab_wipe"),
 ]
 
 # Category display order
-CATEGORY_ORDER = ["Global", "Timeline", "Playback", "Paint"]
+CATEGORY_ORDER = ["Global", "Timeline", "Playback", "Viewer", "Paint"]
 
 
 class ShortcutRegistry:
