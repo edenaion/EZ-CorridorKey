@@ -34,7 +34,12 @@ DEFAULT_LOOP_PLAYBACK = True
 DEFAULT_EXR_COMPRESSION = "dwab"
 DEFAULT_TRACKER_MODEL = "facebook/sam2.1-hiera-base-plus"
 DEFAULT_PARALLEL_CLIPS = 1
-DEFAULT_MODEL_RESOLUTION = 2048
+import platform as _platform
+import sys as _sys
+# MPS/MLX (Apple Silicon) defaults to 1024 — 2048 needs 20GB+ and is very slow.
+# CUDA defaults to 2048 (dedicated VRAM handles it fine).
+_is_apple_silicon = _sys.platform == "darwin" and _platform.machine() == "arm64"
+DEFAULT_MODEL_RESOLUTION = 1024 if _is_apple_silicon else 2048
 
 EXR_COMPRESSION_OPTIONS = [
     ("DWAB — Lossy, Smallest Files", "dwab"),
@@ -209,11 +214,13 @@ class PreferencesDialog(QDialog):
         idx = self._model_resolution_combo.findData(saved_res)
         self._model_resolution_combo.setCurrentIndex(max(0, idx))
         self._model_resolution_combo.setToolTip(
-            "Resolution the model processes internally before upscaling to your frame size.\n\n"
+            "Resolution the model processes internally before upscaling to your frame size.\n"
+            "Applies to all backends (CUDA, MPS, MLX, CPU).\n\n"
             "2048: Full quality — captures fine hair strands and edge detail.\n"
-            "Matches the original CorridorKey quality. Recommended for final output.\n\n"
+            "Matches the original CorridorKey quality. Recommended for CUDA with 8GB+ VRAM.\n"
+            "WARNING: Very slow on Apple Silicon (needs 20GB+ memory).\n\n"
             "1024: Faster inference with lower memory usage.\n"
-            "Fine hair detail may be lost. Good for previewing or lower-end hardware.\n\n"
+            "Fine hair detail may be lost. Recommended for Apple Silicon / low-VRAM GPUs.\n\n"
             "Changing this requires an engine reload (happens automatically)."
         )
         inference_layout.addWidget(self._model_resolution_combo)
