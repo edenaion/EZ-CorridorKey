@@ -1,72 +1,92 @@
-# ============================================================
-#  EZ-CorridorKey — docker compose
-#
-#  CPU:  docker compose up --build
-#  GPU:  docker compose up corridorkey-gpu --build
-#
-#  All options live in .env — edit that file, not this one.
-#  Open in browser: http://localhost:6080
-#
-#  First start extracts source + installs everything (few mins).
-#  Subsequent starts are instant.
-# ============================================================
-
-x-base: &base
-  build:
-    context: .
-    dockerfile: Dockerfile
-  ports:
-    - "6080:6080"   # noVNC GUI  → http://localhost:6080
-    - "6081:6081"   # filebrowser → http://localhost:6081
-    - "5900:5900"   # raw VNC (optional)
-  volumes:
-    # Full project — source, venv, models, outputs
-    - corridorkey_app:/app
-    # Uploads on a separate volume so clips survive if /app is wiped
-    - corridorkey_uploads:/app/ClipsForInference
-  environment:
-    - DISPLAY=:1
-    - QT_QPA_PLATFORM=xcb
-    - CORRIDORKEY_PYTHON_VERSION
-    - CORRIDORKEY_INSTALL_SAM2
-    - CORRIDORKEY_PREDOWNLOAD_SAM2
-    - CORRIDORKEY_INSTALL_GVM
-    - CORRIDORKEY_INSTALL_VIDEOMAMA
-    - CORRIDORKEY_OPT_MODE
-    - CORRIDORKEY_RESOLUTION
-  restart: unless-stopped
-  stdin_open: true
-  tty: true
-
 services:
-
-  # ── CPU / default ─────────────────────────────────────────
-  corridorkey:
-    <<: *base
+  corridorkey-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: corridorkey:cpu
-    container_name: corridorkey
+    container_name: corridorkey-cpu
+    ports:
+      - "6080:6080"
+      - "6081:6081"
+      - "5900:5900"
+    environment:
+      DISPLAY: ":1"
+      QT_QPA_PLATFORM: "xcb"
+      CORRIDORKEY_CONTAINER_MODE: "1"
+      CORRIDORKEY_RESOLUTION: "3840x2160x24"
+      CORRIDORKEY_PYTHON_VERSION: "3.11"
+      CORRIDORKEY_INSTALL_SAM2: "n"
+      CORRIDORKEY_PREDOWNLOAD_SAM2: "n"
+      CORRIDORKEY_INSTALL_GVM: "y"
+      CORRIDORKEY_INSTALL_VIDEOMAMA: "n"
+    volumes:
+      - corridorkey_install:/opt/corridorkey
+      - corridorkey_projects:/opt/corridorkey/Projects
+      - corridorkey_models_corridorkey:/opt/corridorkey/CorridorKeyModule/checkpoints
+      - corridorkey_models_gvm:/opt/corridorkey/gvm_core/weights
+      - corridorkey_models_videomama:/opt/corridorkey/VideoMaMaInferenceModule/checkpoints
+      - corridorkey_hf_cache:/root/.cache/huggingface/hub
+      - corridorkey_config:/root/.config/corridorkey
+      - corridorkey_logs:/opt/corridorkey/logs
+      - corridorkey_uploads:/opt/corridorkey/ClipsForInference
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
 
-  # ── NVIDIA GPU ────────────────────────────────────────────
   corridorkey-gpu:
-    <<: *base
+    profiles: ["gpu"]
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: corridorkey:gpu
     container_name: corridorkey-gpu
     runtime: nvidia
     environment:
-      - DISPLAY=:1
-      - QT_QPA_PLATFORM=xcb
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,display
-      - CORRIDORKEY_PYTHON_VERSION
-      - CORRIDORKEY_INSTALL_SAM2
-      - CORRIDORKEY_PREDOWNLOAD_SAM2
-      - CORRIDORKEY_INSTALL_GVM
-      - CORRIDORKEY_INSTALL_VIDEOMAMA
-      - CORRIDORKEY_OPT_MODE
-      - CORRIDORKEY_RESOLUTION
+      DISPLAY: ":1"
+      QT_QPA_PLATFORM: "xcb"
+      CORRIDORKEY_CONTAINER_MODE: "1"
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,display"
+      CORRIDORKEY_RESOLUTION: "1100x650x24"
+      CORRIDORKEY_PYTHON_VERSION: "3.11"
+      CORRIDORKEY_INSTALL_SAM2: "y"
+      CORRIDORKEY_PREDOWNLOAD_SAM2: "n"
+      CORRIDORKEY_INSTALL_GVM: "n"
+      CORRIDORKEY_INSTALL_VIDEOMAMA: "n"
+    ports:
+      - "6080:6080"
+      - "6081:6081"
+      - "5900:5900"
+    volumes:
+      - corridorkey_install:/opt/corridorkey
+      - corridorkey_projects:/opt/corridorkey/Projects
+      - corridorkey_models_corridorkey:/opt/corridorkey/CorridorKeyModule/checkpoints
+      - corridorkey_models_gvm:/opt/corridorkey/gvm_core/weights
+      - corridorkey_models_videomama:/opt/corridorkey/VideoMaMaInferenceModule/checkpoints
+      - corridorkey_hf_cache:/root/.cache/huggingface/hub
+      - corridorkey_config:/root/.config/corridorkey
+      - corridorkey_logs:/opt/corridorkey/logs
+      - corridorkey_uploads:/opt/corridorkey/ClipsForInference
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
 
 volumes:
-  corridorkey_app:
-    name: corridorkey_app
+  corridorkey_install:
+    name: corridorkey_install
+  corridorkey_projects:
+    name: corridorkey_projects
+  corridorkey_models_corridorkey:
+    name: corridorkey_models_corridorkey
+  corridorkey_models_gvm:
+    name: corridorkey_models_gvm
+  corridorkey_models_videomama:
+    name: corridorkey_models_videomama
+  corridorkey_hf_cache:
+    name: corridorkey_hf_cache
+  corridorkey_config:
+    name: corridorkey_config
+  corridorkey_logs:
+    name: corridorkey_logs
   corridorkey_uploads:
     name: corridorkey_uploads
