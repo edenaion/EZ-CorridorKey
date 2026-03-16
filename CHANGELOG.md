@@ -8,11 +8,11 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Added
 - **Source passthrough** for CUDA — preserves original pixels in confidently opaque interior regions. 1:1 quality with your input image. Proud of this one :)
-- **A/B wipe comparison viewer** (hotkey **A**) — diagonal split between input and output with draggable/rotatable divider line. Middle-click resets to default position.
-- **F1–F7 hotkeys** for instant view mode switching (INPUT, FG, MATTE, COMP, PROCESSED, ALPHA, A/B WIPE).
+- **A/B wipe comparison viewer** (hotkey **A**) — diagonal split between input and output with draggable/rotatable divider line. Scroll wheel slides the divider, Shift+scroll for fine-grain control. Middle-click resets to default position.
+- **F1–F7 hotkeys** for instant view mode switching (INPUT, MASK, ALPHA, FG, MATTE, COMP, PROC). Hotkeys shown in button tooltips.
+- **Ctrl+,** opens/closes Preferences (toggle, like F12 for debug console).
 - **Docker / noVNC browser mode** — run EZ-CorridorKey in a container with browser-based access. Contributed by [DCRepublic](https://github.com/DCRepublic).
 - **Model resolution setting** Exposed in Preferences — defaults to 1024 (Apple Silicon only) but users can now change to 2048 for CUDA quality parity at the cost of processing speed.
-
 
 ### Fixed
 - **Despill label** showing 1.0 instead of 0.5 on startup.
