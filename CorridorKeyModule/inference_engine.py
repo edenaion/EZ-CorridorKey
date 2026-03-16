@@ -530,8 +530,9 @@ class CorridorKeyEngine:
         # C. Convert to linear for output assembly.
         fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
 
-        # D. Pack straight linear RGBA for NLE/compositor interchange.
-        processed_rgba = np.concatenate([fg_despilled_lin, processed_alpha], axis=-1)
+        # D. Premultiply and pack linear RGBA for NLE/compositor interchange.
+        fg_premul_lin = cu.premultiply(fg_despilled_lin, processed_alpha)
+        processed_rgba = np.concatenate([fg_premul_lin, processed_alpha], axis=-1)
 
         # ----------------------------
         
