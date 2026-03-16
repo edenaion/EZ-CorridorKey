@@ -632,8 +632,13 @@ class SplitViewWidget(QWidget):
             my = event.position().y() - cy
             # Angle of the line direction (tangent), not the normal
             angle = math.degrees(math.atan2(my, mx))
-            # Clamp to -90..90 so A (left image) always stays on the left side
-            self._wipe_angle = max(-90.0, min(90.0, angle))
+            # Wrap into -90..90 so A (left image) always stays on the left side.
+            # atan2 returns -180..180; if past ±90, wrap to the nearest boundary.
+            if angle > 90.0:
+                angle = 90.0
+            elif angle < -90.0:
+                angle = -90.0
+            self._wipe_angle = angle
             self.update()
             return
 

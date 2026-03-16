@@ -351,7 +351,7 @@ class PreviewViewport(QWidget):
         btn = QPushButton("A/B")
         btn.setCheckable(True)
         btn.setFixedHeight(24)
-        btn.setMinimumWidth(36)
+        btn.setFixedWidth(50)
         btn.setToolTip(
             "Toggle A/B wipe comparison (hotkey: A)\n\n"
             "Overlays input (A) and current output (B) in one viewer\n"
