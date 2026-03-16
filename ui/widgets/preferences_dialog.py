@@ -145,7 +145,7 @@ class PreferencesDialog(QDialog):
         )
         ui_layout.addWidget(self._sounds_cb)
 
-        layout.addWidget(ui_group)
+        # (added to layout below in display order)
 
         # Project section
         proj_group = QGroupBox("Project")
@@ -174,7 +174,7 @@ class PreferencesDialog(QDialog):
         )
         proj_layout.addWidget(self._copy_sequences_cb)
 
-        layout.addWidget(proj_group)
+        # (added to layout below in display order)
 
         # Output section
         output_group = QGroupBox("Output")
@@ -198,7 +198,7 @@ class PreferencesDialog(QDialog):
         )
         output_layout.addWidget(self._exr_compression_combo)
 
-        layout.addWidget(output_group)
+        # (added to layout below in display order)
 
         # Inference section
         inference_group = QGroupBox("Inference")
@@ -225,7 +225,7 @@ class PreferencesDialog(QDialog):
         )
         inference_layout.addWidget(self._model_resolution_combo)
 
-        layout.addWidget(inference_group)
+        # (added to layout below in display order)
 
         # Playback section
         play_group = QGroupBox("Playback")
@@ -241,7 +241,7 @@ class PreferencesDialog(QDialog):
         )
         play_layout.addWidget(self._loop_cb)
 
-        layout.addWidget(play_group)
+        # (added to layout below in display order)
 
         # Tracking section
         tracking_group = QGroupBox("Tracking")
@@ -288,7 +288,7 @@ class PreferencesDialog(QDialog):
         cache_row.addWidget(open_cache_btn)
         tracking_layout.addLayout(cache_row)
 
-        layout.addWidget(tracking_group)
+        # (added to layout below in display order)
 
         ffmpeg_group = QGroupBox("Video Tools")
         ffmpeg_layout = QVBoxLayout(ffmpeg_group)
@@ -344,6 +344,14 @@ class PreferencesDialog(QDialog):
 
         ffmpeg_layout.addLayout(ffmpeg_btn_row)
 
+        # --- Layout order ---
+        # UI > Project > Playback > Tracking > Inference > Output > Video Tools
+        layout.addWidget(ui_group)
+        layout.addWidget(proj_group)
+        layout.addWidget(play_group)
+        layout.addWidget(tracking_group)
+        layout.addWidget(inference_group)
+        layout.addWidget(output_group)
         layout.addWidget(ffmpeg_group)
 
         layout.addStretch(1)
