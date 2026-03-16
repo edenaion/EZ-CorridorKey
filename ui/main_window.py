@@ -68,7 +68,8 @@ from ui.shortcut_registry import ShortcutRegistry
 
 from ui.main_window_mixins import (
     MenuMixin, ShortcutsMixin, ClipMixin, ImportMixin,
-    InferenceMixin, WorkerMixin, AnnotationMixin,
+    InferenceMixin, AlphaImportMixin, ModelRunMixin, CancelMixin,
+    WorkerMixin, AnnotationMixin,
     ExportMixin, SessionMixin, SettingsMixin,
 )
 
@@ -249,7 +250,8 @@ class _UpdateChecker(QThread):
 class MainWindow(
     QMainWindow,
     MenuMixin, ShortcutsMixin, ClipMixin, ImportMixin,
-    InferenceMixin, WorkerMixin, AnnotationMixin,
+    InferenceMixin, AlphaImportMixin, ModelRunMixin, CancelMixin,
+    WorkerMixin, AnnotationMixin,
     ExportMixin, SessionMixin, SettingsMixin,
 ):
     """CorridorKey main application window."""
