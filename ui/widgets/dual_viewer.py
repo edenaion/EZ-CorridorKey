@@ -40,7 +40,6 @@ class DualViewerPanel(QWidget):
         self._clip: ClipEntry | None = None
 
         self._wipe_active = False
-        self._saved_splitter_sizes: list[int] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -65,6 +64,13 @@ class DualViewerPanel(QWidget):
         self._viewer_splitter.setStretchFactor(1, 1)
 
         layout.addWidget(self._viewer_splitter, 1)
+
+        # A/B wipe overlay — sits ON TOP of the splitter, covers both viewer
+        # canvases without touching the top bars.  Hidden until activated.
+        from ui.widgets.split_view import SplitViewWidget
+        self._wipe_overlay = SplitViewWidget(parent=self)
+        self._wipe_overlay.set_wipe_mode(True)
+        self._wipe_overlay.hide()
 
         # A/B wipe button — lives in the input viewer's top bar, right edge
         self._ab_button = self._input_viewer.add_ab_button()
@@ -253,49 +259,46 @@ class DualViewerPanel(QWidget):
     def toggle_wipe_mode(self) -> None:
         """Toggle A/B wipe comparison mode.
 
-        Nothing above the viewer canvas changes — no top bar shifts,
-        no clip info show/hide.  Only the canvas rendering switches
-        between side-by-side and overlaid wipe.
+        Shows/hides a full-width overlay on top of both viewer canvases.
+        Nothing above the viewer (top bars, buttons) changes at all.
         """
         self._wipe_active = not self._wipe_active
         self._ab_button.setChecked(self._wipe_active)
 
-        sv = self._output_viewer._split_view
-
         if self._wipe_active:
-            # Save splitter sizes for restore
-            self._saved_splitter_sizes = self._viewer_splitter.sizes()
-
-            # Enable wipe on the output viewer's split view
-            sv.set_wipe_mode(True)
-
-            # Load INPUT as left image for the wipe overlay
             self._load_wipe_images()
-
-            # Hide input viewer canvas, expand output to full width
-            self._input_viewer.hide()
-            self._viewer_splitter.setSizes([0, self.width()])
+            self._position_wipe_overlay()
+            self._wipe_overlay.show()
+            self._wipe_overlay.raise_()
         else:
-            # Disable wipe
-            sv.set_wipe_mode(False)
+            self._wipe_overlay.hide()
 
-            # Restore side-by-side
-            self._input_viewer.show()
-            if self._saved_splitter_sizes:
-                self._viewer_splitter.setSizes(self._saved_splitter_sizes)
-            else:
-                self._viewer_splitter.setSizes([500, 500])
+    def _position_wipe_overlay(self) -> None:
+        """Position the wipe overlay to cover both viewer canvases (below top bars)."""
+        # Map the splitter's geometry to our coordinate system
+        # The overlay should cover the canvas area of both viewers
+        # (below the 30px top bars, above the scrubber)
+        splitter_geo = self._viewer_splitter.geometry()
+        top_bar_h = 30  # fixed top bar height
+        x = splitter_geo.x()
+        y = splitter_geo.y() + top_bar_h
+        w = splitter_geo.width()
+        h = splitter_geo.height() - top_bar_h
+        self._wipe_overlay.setGeometry(x, y, w, h)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self._wipe_active:
+            self._position_wipe_overlay()
 
     def _load_wipe_images(self) -> None:
-        """Load INPUT and current output mode images into the wipe viewer."""
+        """Load INPUT (A=left) and current output mode (B=right) into wipe overlay."""
         if not self._wipe_active:
             return
-        # Get the input image from the input viewer's decode cache
         input_img = self._input_viewer._split_view._single_image
         output_img = self._output_viewer._split_view._single_image
 
-        sv = self._output_viewer._split_view
         if input_img:
-            sv.set_left_image(input_img)
+            self._wipe_overlay.set_left_image(input_img)
         if output_img:
-            sv.set_right_image(output_img)
+            self._wipe_overlay.set_right_image(output_img)

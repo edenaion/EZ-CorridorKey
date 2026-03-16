@@ -51,9 +51,9 @@ class SplitViewWidget(QWidget):
         self._split_enabled = False
         self._divider_pos = 0.5  # normalized 0.0-1.0
 
-        # Wipe mode (A/B comparison — diagonal divider, A above/left, B below/right)
+        # Wipe mode (A/B comparison — diagonal divider, A=left, B=right)
         self._wipe_mode = False
-        self._wipe_angle = 45.0       # degrees, default diagonal. Range -90 to 90
+        self._wipe_angle = -45.0      # degrees, default: bottom-left to top-right. Range -90 to 90
         self._wipe_offset = 0.0       # perpendicular offset from center (-0.5 to 0.5)
         self._wipe_dragging: str | None = None  # "handle" or "line" or None
         self._wipe_drag_start = QPointF()
@@ -128,7 +128,7 @@ class SplitViewWidget(QWidget):
     def set_wipe_mode(self, enabled: bool) -> None:
         """Toggle A/B wipe comparison (diagonal divider, A above/left, B below/right)."""
         self._wipe_mode = enabled
-        self._wipe_angle = 45.0
+        self._wipe_angle = -45.0
         self._wipe_offset = 0.0
         self._wipe_dragging = None
         self.update()
@@ -632,6 +632,7 @@ class SplitViewWidget(QWidget):
             my = event.position().y() - cy
             # Angle of the line direction (tangent), not the normal
             angle = math.degrees(math.atan2(my, mx))
+            # Clamp to -90..90 so A (left image) always stays on the left side
             self._wipe_angle = max(-90.0, min(90.0, angle))
             self.update()
             return
