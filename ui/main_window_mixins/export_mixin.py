@@ -329,7 +329,9 @@ class ExportMixin:
         """Clear in/out markers (Alt+I)."""
         if not self._current_clip:
             return
-        self._dual_viewer._scrubber.clear_in_out()
+        # Use set_in_out instead of clear_in_out to avoid recursion:
+        # clear_in_out emits range_cleared which is connected back to this method.
+        self._dual_viewer._scrubber.set_in_out(None, None)
         self._current_clip.in_out_range = None
         save_in_out_range(self._current_clip.root_path, None)
         # Re-resolve state: removing in/out may drop READY -> RAW
@@ -367,6 +369,6 @@ class ExportMixin:
                 count += 1
         # Clear the scrubber if current clip was affected
         if self._current_clip:
-            self._dual_viewer._scrubber.clear_in_out()
+            self._dual_viewer._scrubber.set_in_out(None, None)
         self._refresh_button_state()
         logger.info(f"Reset in/out markers on {count} clips")
