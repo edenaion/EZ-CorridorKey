@@ -20,7 +20,7 @@ import shutil
 import sys
 import glob as glob_module
 
-from PySide6.QtWidgets import QMenu, QMessageBox
+from PySide6.QtWidgets import QMenu, QMessageBox, QFileDialog
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QAction, QDesktopServices
 
@@ -115,7 +115,21 @@ class IOTrayActionsMixin:
             clear_all_action.triggered.connect(lambda: self._clear_all_batch(selected))
             menu.addAction(clear_all_action)
 
+        # Set Output Directory — single clip only
+        menu.addSeparator()
+        output_dir_action = QAction("Set Output Directory...", self)
+        output_dir_action.setEnabled(not multi)
+        output_dir_action.triggered.connect(lambda: self._set_output_dir(clip))
+        menu.addAction(output_dir_action)
+
+        if clip.custom_output_dir:
+            clear_dir_action = QAction("Clear Output Directory Override", self)
+            clear_dir_action.setEnabled(not multi)
+            clear_dir_action.triggered.connect(lambda: self._clear_output_dir(clip))
+            menu.addAction(clear_dir_action)
+
         # Remove...
+        menu.addSeparator()
         label_remove = f"Remove ({n} clips)..." if multi else "Remove..."
         remove_action = QAction(label_remove, self)
         remove_action.triggered.connect(lambda: self._remove_dialog(selected))
@@ -148,7 +162,7 @@ class IOTrayActionsMixin:
                     menu.addSeparator()
 
         # Open containing folder (Output directory)
-        output_dir = os.path.join(clip.root_path, "Output")
+        output_dir = clip.output_dir
         if not os.path.isdir(output_dir):
             output_dir = clip.root_path
 
@@ -161,9 +175,30 @@ class IOTrayActionsMixin:
         from PySide6.QtGui import QCursor
         menu.exec(QCursor.pos())
 
+    def _set_output_dir(self, clip: ClipEntry) -> None:
+        """Prompt user to pick a custom output directory for this clip."""
+        from backend.project import save_custom_output_dir
+        start = clip.custom_output_dir or clip.output_dir
+        path = QFileDialog.getExistingDirectory(
+            self, f"Output Directory for '{clip.name}'", start,
+            QFileDialog.ShowDirsOnly,
+        )
+        if not path:
+            return
+        clip.custom_output_dir = path
+        save_custom_output_dir(clip.root_path, path)
+        logger.info(f"Set custom output dir for '{clip.name}': {path}")
+
+    def _clear_output_dir(self, clip: ClipEntry) -> None:
+        """Remove per-clip output directory override."""
+        from backend.project import save_custom_output_dir
+        clip.custom_output_dir = ""
+        save_custom_output_dir(clip.root_path, None)
+        logger.info(f"Cleared custom output dir for '{clip.name}'")
+
     def _open_export_folder(self, clip: ClipEntry) -> None:
         """Open the export/output folder for a clip."""
-        output_dir = os.path.join(clip.root_path, "Output")
+        output_dir = clip.output_dir
         if not os.path.isdir(output_dir):
             output_dir = clip.root_path
         if os.path.isdir(output_dir):

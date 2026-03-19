@@ -90,7 +90,7 @@ class InferenceMixin(ParallelInferenceMixin):
         """Sequential frame loop — exact extraction of original run_inference."""
         from .core import FrameResult, OutputConfig
         t_start = time.monotonic()
-        dirs = ensure_output_dirs(clip.root_path)
+        dirs = ensure_output_dirs(clip.output_dir)
         cfg = output_config or OutputConfig()
 
         self._write_manifest(dirs['root'], cfg, params)

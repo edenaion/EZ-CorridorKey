@@ -16,6 +16,7 @@ from .project import (
     is_video_file, is_image_file, VIDEO_FILE_FILTER,
     folder_has_image_sequence, count_sequence_frames,
     validate_sequence_stems, find_clip_by_source,
+    save_custom_output_dir, load_custom_output_dir,
 )
 from .project_media import (
     create_clip_from_sequence,
@@ -66,6 +67,8 @@ __all__ = [
     "count_sequence_frames",
     "validate_sequence_stems",
     "find_clip_by_source",
+    "save_custom_output_dir",
+    "load_custom_output_dir",
     "create_clip_from_sequence",
     "add_sequences_to_project",
     "create_project_from_media",

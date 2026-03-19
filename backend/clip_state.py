@@ -193,6 +193,7 @@ class ClipEntry:
     error_message: Optional[str] = None
     extraction_progress: float = 0.0  # 0.0 to 1.0 during EXTRACTING
     extraction_total: int = 0         # total frames expected during extraction
+    custom_output_dir: str = ""       # Per-clip output dir override (from clip.json)
     _processing: bool = field(default=False, repr=False)  # lock: watcher must not reclassify
 
     @property
@@ -230,6 +231,29 @@ class ClipEntry:
 
     @property
     def output_dir(self) -> str:
+        """Resolved output directory.  Priority: per-clip > global pref > default."""
+        # 1. Per-clip override (from clip.json)
+        if self.custom_output_dir:
+            return self.custom_output_dir
+        # 2. Global default from QSettings (Qt Core — no UI dependency)
+        try:
+            from PySide6.QtCore import QSettings
+            global_dir = QSettings().value("output/default_directory", "", type=str)
+            if global_dir:
+                # Use project/clip subfolders to prevent cross-project collision.
+                # v2: root_path = .../ProjectName/clips/ClipName
+                # v1: root_path = .../ProjectName (project IS the clip)
+                parent = os.path.dirname(self.root_path)
+                if os.path.basename(parent) == "clips":
+                    # v2 layout — go up one more to get project name
+                    project_name = os.path.basename(os.path.dirname(parent))
+                else:
+                    # v1 layout — root_path is the project dir itself
+                    project_name = os.path.basename(self.root_path)
+                return os.path.join(global_dir, project_name, self.name)
+        except Exception:
+            pass
+        # 3. Default: Output/ inside clip folder
         return os.path.join(self.root_path, "Output")
 
     def has_video_metadata(self) -> bool:
@@ -405,6 +429,10 @@ class ClipEntry:
         self.alpha_asset = None
         self.mask_asset = None
         self.source_type = "unknown"
+
+        # Load per-clip output dir override from clip.json
+        from .project import load_custom_output_dir
+        self.custom_output_dir = load_custom_output_dir(self.root_path)
 
         # Input asset — check new names first, fall back to legacy
         frames_dir = os.path.join(self.root_path, "Frames")

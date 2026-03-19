@@ -10,6 +10,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
     QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication,
+    QLineEdit, QFileDialog,
 )
 from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal
 
@@ -24,6 +25,7 @@ KEY_EXR_COMPRESSION = "output/exr_compression"
 KEY_TRACKER_MODEL = "tracking/sam2_model"
 KEY_PARALLEL_CLIPS = "gpu/parallel_clips"
 KEY_MODEL_RESOLUTION = "inference/model_resolution"
+KEY_OUTPUT_DIRECTORY = "output/default_directory"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
@@ -200,6 +202,38 @@ class PreferencesDialog(QDialog):
             "None: No compression, fastest write, largest files."
         )
         output_layout.addWidget(self._exr_compression_combo)
+
+        # Default output directory
+        dir_label = QLabel("Default output directory")
+        output_layout.addWidget(dir_label)
+
+        dir_row = QHBoxLayout()
+        self._output_dir_edit = QLineEdit()
+        self._output_dir_edit.setReadOnly(True)
+        self._output_dir_edit.setPlaceholderText("Default (inside project)")
+        saved_dir = get_setting_str(KEY_OUTPUT_DIRECTORY, "")
+        if saved_dir:
+            self._output_dir_edit.setText(saved_dir)
+        self._output_dir_edit.setToolTip(
+            "Global default directory for inference output.\n\n"
+            "When set, outputs go to:\n"
+            "  <this folder>/<ProjectName>/<ClipName>/FG, Matte, etc.\n\n"
+            "Leave empty to use the default (Output/ inside each clip).\n"
+            "Per-clip overrides (right-click → Set Output Directory) take priority."
+        )
+        dir_row.addWidget(self._output_dir_edit, 1)
+
+        browse_btn = QPushButton("Browse...")
+        browse_btn.setFixedWidth(80)
+        browse_btn.clicked.connect(self._browse_output_dir)
+        dir_row.addWidget(browse_btn)
+
+        clear_btn = QPushButton("Clear")
+        clear_btn.setFixedWidth(50)
+        clear_btn.clicked.connect(lambda: self._output_dir_edit.clear())
+        dir_row.addWidget(clear_btn)
+
+        output_layout.addLayout(dir_row)
 
         # (added to layout below in display order)
 
@@ -393,10 +427,21 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_EXR_COMPRESSION, self._exr_compression_combo.currentData())
         s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
         s.setValue(KEY_MODEL_RESOLUTION, self._model_resolution_combo.currentData())
+        s.setValue(KEY_OUTPUT_DIRECTORY, self._output_dir_edit.text().strip())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
         self.accept()
+
+    def _browse_output_dir(self) -> None:
+        """Open folder picker for default output directory."""
+        start = self._output_dir_edit.text() or ""
+        path = QFileDialog.getExistingDirectory(
+            self, "Select Default Output Directory", start,
+            QFileDialog.ShowDirsOnly,
+        )
+        if path:
+            self._output_dir_edit.setText(path)
 
     def _open_tracker_cache_dir(self) -> None:
         """Open the local cache folder where SAM2 checkpoints are stored."""

@@ -428,6 +428,27 @@ def load_in_out_range(clip_root: str):
     return None
 
 
+def save_custom_output_dir(clip_root: str, output_dir: str | None) -> None:
+    """Persist a custom output directory to clip.json.
+
+    Pass None or empty string to clear the override (revert to default).
+    """
+    data = read_clip_json(clip_root) or {}
+    if output_dir:
+        data["output_dir"] = output_dir
+    else:
+        data.pop("output_dir", None)
+    write_clip_json(clip_root, data)
+
+
+def load_custom_output_dir(clip_root: str) -> str:
+    """Load custom output directory from clip.json, or empty string if not set."""
+    data = _read_clip_or_project_json(clip_root)
+    if data and "output_dir" in data:
+        return str(data["output_dir"])
+    return ""
+
+
 def is_video_file(filename: str) -> bool:
     """Check if a filename has a video extension."""
     return os.path.splitext(filename)[1].lower() in _VIDEO_EXTS
