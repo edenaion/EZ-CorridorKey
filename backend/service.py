@@ -411,7 +411,7 @@ class CorridorKeyService:
     # --- Device & Engine Management ---
 
     def detect_device(self) -> str:
-        """Detect best available compute device (CUDA > MPS > CPU)."""
+        """Detect best available compute device (CUDA > MPS > DirectML > CPU)."""
         try:
             import torch
             if torch.cuda.is_available():
@@ -420,8 +420,27 @@ class CorridorKeyService:
                 self._device = 'mps'
                 logger.info("Apple MPS acceleration available")
             else:
-                self._device = 'cpu'
-                logger.warning("No GPU acceleration available — using CPU (will be very slow)")
+                # Check for AMD/Intel via DirectML (Windows only)
+                # Try onnxruntime-directml first, fall back to torch_directml presence
+                _dml_found = False
+                try:
+                    import onnxruntime as ort
+                    if "DmlExecutionProvider" in ort.get_available_providers():
+                        _dml_found = True
+                except ImportError:
+                    pass
+                if not _dml_found:
+                    try:
+                        import torch_directml  # noqa: F401
+                        _dml_found = True
+                    except ImportError:
+                        pass
+                if _dml_found:
+                    self._device = 'directml'
+                    logger.info("AMD/DirectML GPU detected — using ORT split engine")
+                else:
+                    self._device = 'cpu'
+                    logger.warning("No GPU acceleration available — using CPU (will be very slow)")
         except ImportError:
             self._device = 'cpu'
             logger.warning("PyTorch not installed — using CPU")
