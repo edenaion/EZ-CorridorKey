@@ -53,6 +53,9 @@ else
     echo "  If stuck, try: git stash && git pull && git stash pop"
 fi
 
+# Clean stale bytecode that can conflict after file moves/renames
+find . -type d -name __pycache__ -not -path './.venv/*' -exec rm -rf {} + 2>/dev/null || true
+
 # ── Step 2: Update dependencies ──
 echo "[2/3] Updating dependencies..."
 

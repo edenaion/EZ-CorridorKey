@@ -78,6 +78,13 @@ if exist "!UPDATE_EXTRACT!" rmdir /s /q "!UPDATE_EXTRACT!" >nul 2>&1
 
 :after_update
 
+REM Clean stale bytecode that can conflict after file moves/renames
+echo   Cleaning stale bytecache...
+for /d /r %%d in (__pycache__) do (
+    echo "%%d" | findstr /i /c:".venv" >nul 2>&1
+    if errorlevel 1 if exist "%%d" rmdir /s /q "%%d" >nul 2>&1
+)
+
 REM ── Step 1b: Ensure local tools are on PATH ──
 if exist "%~dp0tools\ffmpeg\bin\ffmpeg.exe" set "PATH=%~dp0tools\ffmpeg\bin;%PATH%"
 

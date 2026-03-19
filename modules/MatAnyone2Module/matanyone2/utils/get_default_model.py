@@ -19,10 +19,10 @@ def get_matanyone2_model(ckpt_path, device=None) -> MatAnyone2:
     # Load the network weights
     if device is not None:
         matanyone2 = MatAnyone2(cfg, single_object=True).to(device).eval()
-        model_weights = torch.load(cfg.weights, map_location=device)
+        model_weights = torch.load(cfg.weights, map_location=device, weights_only=True)
     else:  # if device is not specified, `.cuda()` by default
         matanyone2 = MatAnyone2(cfg, single_object=True).cuda().eval()
-        model_weights = torch.load(cfg.weights)
+        model_weights = torch.load(cfg.weights, weights_only=True)
         
     matanyone2.load_weights(model_weights)
 
