@@ -191,6 +191,33 @@ _DIAGNOSTICS: list[Diagnostic] = [
         ],
         tags=["compile", "msvc"],
     ),
+    # ── AMD / DirectML ────────────────────────────────────────────
+    Diagnostic(
+        id="amd-directml",
+        title="AMD GPU Detected — DirectML Mode Active",
+        pattern=re.compile(r"directml", re.IGNORECASE),
+        explanation=(
+            "Your AMD GPU is running via the DirectML ORT engine. "
+            "CorridorKey's chroma keying (backbone + refiner) will use your GPU. "
+            "Some NVIDIA-exclusive features (GVM, VideoMaMa, torch.compile) are "
+            "not available — use manual alpha hints for those workflows."
+        ),
+        steps=[
+            "Ensure both ONNX files exist before processing:\n"
+            "    CorridorKeyModule/checkpoints/CorridorKey_backbone.onnx\n"
+            "    CorridorKeyModule/checkpoints/CorridorKey_refiner.onnx\n"
+            "If missing, run: python export_to_onnx.py",
+            "First inference pass will be slow — DirectML compiles GPU shaders\n"
+            "on the first run. Subsequent passes will be faster.",
+            "If the app crashes on first run, check the terminal for\n"
+            "DML_TENSOR_DIMENSION_COUNT_MAX errors and report them.",
+            "For best performance, close other GPU-heavy apps\n"
+            "(games, browsers with hardware acceleration) before processing.",
+            "GVM and VideoMaMa require CUDA — use manual alpha hints\n"
+            "instead for those clips.",
+        ],
+        tags=["amd", "directml", "ort"],
+    ),
     # ── CPU-only PyTorch installed (wrong wheel) ─────────────────
     Diagnostic(
         id="pytorch-cpu-wheel",
@@ -346,14 +373,22 @@ def run_startup_diagnostics(device: str) -> list[StartupIssue]:
     """
     issues: list[StartupIssue] = []
 
-    # 1. CPU-only device
+    # 1. CPU-only device — skip warning if AMD/DirectML is active
     if device == "cpu":
         diag = next((d for d in _DIAGNOSTICS if d.id == "gpu-required"), None)
         if diag:
             detail = _get_torch_detail()
             issues.append(StartupIssue(diag, detail))
 
+    # 1c. AMD/DirectML — show informational tips (not an error, just a heads-up)
+    if device == "directml":
+        diag = next((d for d in _DIAGNOSTICS if d.id == "amd-directml"), None)
+        if diag:
+            detail = _get_amd_detail()
+            issues.append(StartupIssue(diag, detail))
+
     # 1b. GPU present but PyTorch is CPU-only wheel (+cpu)
+    # Skip this check entirely on DirectML — CPU-only torch is expected and correct.
     if device == "cpu":
         try:
             import torch
@@ -417,6 +452,34 @@ def _get_torch_detail() -> str:
         return f"PyTorch {ver}, CUDA toolkit: {cuda}"
     except ImportError:
         return "PyTorch is not installed"
+
+
+def _get_amd_detail() -> str:
+    """Build a one-line detail string about the AMD/DirectML setup."""
+    try:
+        import onnxruntime as ort
+        ort_ver = ort.__version__
+        providers = ort.get_available_providers()
+        gpu_name = "Unknown AMD GPU"
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "(Get-WmiObject Win32_VideoController | Select-Object -First 1).Name"],
+                capture_output=True, text=True, timeout=5,
+            )
+            name = result.stdout.strip()
+            if name:
+                gpu_name = name
+        except Exception:
+            pass
+        dml_active = "DmlExecutionProvider" in providers
+        return (
+            f"{gpu_name} — onnxruntime {ort_ver}, "
+            f"DirectML {'active' if dml_active else 'NOT detected'}"
+        )
+    except ImportError:
+        return "onnxruntime-directml not installed"
 
 
 # ── Dialog ────────────────────────────────────────────────────────────
