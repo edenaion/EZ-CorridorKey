@@ -287,14 +287,18 @@ class ClipEntry:
 
     @property
     def has_outputs(self) -> bool:
-        """Check if output directory exists with content."""
-        out = self.output_dir
-        if not os.path.isdir(out):
-            return False
-        for subdir in ("FG", "Matte", "Comp", "Processed"):
-            d = os.path.join(out, subdir)
-            if os.path.isdir(d) and os.listdir(d):
-                return True
+        """Check if any output location has content (current or default)."""
+        dirs_to_check = [self.output_dir]
+        default = os.path.join(self.root_path, "Output")
+        if default not in dirs_to_check:
+            dirs_to_check.append(default)
+        for out in dirs_to_check:
+            if not os.path.isdir(out):
+                continue
+            for subdir in ("FG", "Matte", "Comp", "Processed"):
+                d = os.path.join(out, subdir)
+                if os.path.isdir(d) and os.listdir(d):
+                    return True
         return False
 
     def completed_frame_count(self) -> int:

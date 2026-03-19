@@ -253,6 +253,40 @@ class IOTrayActionsMixin:
             self.clip_clicked.emit(clips[0])
         logger.info(f"Cleared masks for {len(clips)} clip(s)")
 
+    @staticmethod
+    def _all_output_dirs(clip: ClipEntry) -> list[str]:
+        """Return all possible output directories for a clip (current + default).
+
+        Ensures clearing/checking covers both the resolved output_dir and the
+        built-in default location, so frames are never orphaned when the user
+        changes the output directory setting.
+        """
+        dirs = [clip.output_dir]
+        default = os.path.join(clip.root_path, "Output")
+        if default not in dirs:
+            dirs.append(default)
+        return dirs
+
+    @staticmethod
+    def _clear_output_files(output_dir: str) -> int:
+        """Remove all output frames and manifest from a single output directory.
+
+        Returns the number of files deleted.
+        """
+        cleared = 0
+        for subdir in ("FG", "Matte", "Comp", "Processed"):
+            d = os.path.join(output_dir, subdir)
+            if os.path.isdir(d):
+                for f in os.listdir(d):
+                    fpath = os.path.join(d, f)
+                    if os.path.isfile(fpath):
+                        os.remove(fpath)
+                        cleared += 1
+        manifest = os.path.join(output_dir, ".corridorkey_manifest.json")
+        if os.path.isfile(manifest):
+            os.remove(manifest)
+        return cleared
+
     def _clear_all_batch(self, clips: list[ClipEntry]) -> None:
         """Delete masks, alpha hints, and outputs for one or more clips."""
         names = ", ".join(c.name for c in clips[:3])
@@ -286,18 +320,9 @@ class IOTrayActionsMixin:
                     os.remove(candidate)
             clip.alpha_asset = None
 
-            # Outputs
-            output_dir = clip.output_dir
-            for subdir in ("FG", "Matte", "Comp", "Processed"):
-                d = os.path.join(output_dir, subdir)
-                if os.path.isdir(d):
-                    for f in os.listdir(d):
-                        fpath = os.path.join(d, f)
-                        if os.path.isfile(fpath):
-                            os.remove(fpath)
-            manifest = os.path.join(output_dir, ".corridorkey_manifest.json")
-            if os.path.isfile(manifest):
-                os.remove(manifest)
+            # Outputs — clear all possible locations (current + default)
+            for output_dir in self._all_output_dirs(clip):
+                self._clear_output_files(output_dir)
 
             clip.find_assets()
             self._model.update_clip_state(clip.name, clip.state)
@@ -355,24 +380,13 @@ class IOTrayActionsMixin:
 
         total_cleared = 0
         for clip in clips:
-            output_dir = clip.output_dir
-            cleared = 0
-            for subdir in ("FG", "Matte", "Comp", "Processed"):
-                d = os.path.join(output_dir, subdir)
-                if os.path.isdir(d):
-                    for f in os.listdir(d):
-                        fpath = os.path.join(d, f)
-                        if os.path.isfile(fpath):
-                            os.remove(fpath)
-                            cleared += 1
-            manifest = os.path.join(output_dir, ".corridorkey_manifest.json")
-            if os.path.isfile(manifest):
-                os.remove(manifest)
+            # Clear all possible locations (current + default) so nothing is orphaned
+            for output_dir in self._all_output_dirs(clip):
+                total_cleared += self._clear_output_files(output_dir)
 
             if clip.state == ClipState.COMPLETE:
                 clip.state = ClipState.READY
                 self._model.update_clip_state(clip.name, ClipState.READY)
-            total_cleared += cleared
 
         self._model.layoutChanged.emit()
         # Re-select first affected clip so the viewer rebuilds its FrameIndex
