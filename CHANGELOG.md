@@ -4,6 +4,19 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Custom output directory** — set a global default output location in Preferences, or override per-clip via right-click > Set Output Directory. Priority: per-clip > global > default (inside project).
+
+### Fixed
+- **PyTorch 2.6+ compatibility** — `torch.load` now uses `weights_only=True` to prevent `No module named 'torch.utils.serialization'` errors.
+- **Update script** — cleans stale `__pycache__` after pull to prevent bytecode conflicts from refactored file moves.
+- **Split view panels** now fit images to their own width.
+- **Recursion loop** in `_clear_in_out` signal cycle broken.
+
+---
+
 ## [1.8.0] - 2026-03-16 — A/B Wipe, View Hotkeys, Docker, Model Resolution
 
 ### Added

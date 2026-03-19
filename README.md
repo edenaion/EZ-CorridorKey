@@ -180,7 +180,7 @@ Switch between view modes to inspect results:
 - **MATTE** — inspect alpha quality
 - **PROCESSED** — production RGBA
 
-Outputs are written to the project's `Output/` subdirectories during inference.
+Outputs are written to the project's `Output/` subdirectories during inference (configurable — see [Custom Output Directory](#custom-output-directory)).
 
 ---
 
@@ -333,12 +333,24 @@ Projects/
 
 Access via Edit > Preferences.
 
-| Setting                | Default | Description                                                 |
-| ---------------------- | ------- | ----------------------------------------------------------- |
-| **Show tooltips**      | ON      | Helpful tooltips on all controls                            |
-| **UI sounds**          | ON      | Sound effects for actions                                   |
-| **Copy source videos** | ON      | Copy imports into project folder (OFF = reference in place) |
-| **Loop playback**      | ON      | Loop within in/out range during playback                    |
+| Setting                      | Default            | Description                                                 |
+| ---------------------------- | ------------------ | ----------------------------------------------------------- |
+| **Show tooltips**            | ON                 | Helpful tooltips on all controls                            |
+| **UI sounds**                | ON                 | Sound effects for actions                                   |
+| **Copy source videos**       | ON                 | Copy imports into project folder (OFF = reference in place) |
+| **Loop playback**            | ON                 | Loop within in/out range during playback                    |
+| **Default output directory** | (inside project)   | Global output location — outputs go to `<dir>/<Project>/<Clip>/` |
+
+### Custom Output Directory
+
+By default, inference output is written to `Output/` inside each clip folder. You can redirect output:
+
+- **Global**: Preferences > Output > Default output directory
+- **Per-clip**: Right-click a clip > Set Output Directory
+
+Priority: per-clip override > global preference > default.
+
+When using a global directory, outputs are organized as `<dir>/<ProjectName>/<ClipName>/FG/`, `Matte/`, etc. to prevent collisions between projects.
 
 ---
 
