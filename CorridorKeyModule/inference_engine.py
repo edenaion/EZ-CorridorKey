@@ -308,7 +308,7 @@ class CorridorKeyEngine:
         _diag("Step 3: torch.load checkpoint...")
         self._status("Loading checkpoint weights...")
         t0 = _time.monotonic()
-        checkpoint = torch.load(self.checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(self.checkpoint_path, map_location=self.device, weights_only=True)
         state_dict = checkpoint.get('state_dict', checkpoint)
         _diag(f"Step 3 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"Checkpoint loaded: {_time.monotonic() - t0:.1f}s")
