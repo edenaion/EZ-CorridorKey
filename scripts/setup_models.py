@@ -45,11 +45,11 @@ def _data_root() -> Path:
     except Exception:
         pass
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "CorridorKey"
+        return Path.home() / "Library" / "Application Support" / "EZ-CorridorKey"
     elif sys.platform == "win32":
-        return Path(os.environ.get("APPDATA", Path.home())) / "CorridorKey"
+        return Path(os.environ.get("APPDATA", Path.home())) / "EZ-CorridorKey"
     else:
-        return Path.home() / ".local" / "share" / "CorridorKey"
+        return Path.home() / ".local" / "share" / "EZ-CorridorKey"
 
 
 PROJECT_ROOT = _data_root()

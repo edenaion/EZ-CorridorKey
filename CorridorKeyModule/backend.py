@@ -43,13 +43,13 @@ def _resolve_checkpoint_dir() -> str:
     # Fallback: platform default
     if sys.platform == "darwin":
         data_root = os.path.join(os.path.expanduser("~"), "Library",
-                                 "Application Support", "CorridorKey")
+                                 "Application Support", "EZ-CorridorKey")
     elif sys.platform == "win32":
         data_root = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")),
-                                 "CorridorKey")
+                                 "EZ-CorridorKey")
     else:
         data_root = os.path.join(os.path.expanduser("~"), ".local", "share",
-                                 "CorridorKey")
+                                 "EZ-CorridorKey")
 
     ckpt_dir = os.path.join(data_root, "CorridorKeyModule", "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
