@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # TEMPORARY: keep a visible tester build identifier on the user-test
 # branch so remote testers can confirm they pulled the right build. Remove this
 # before merging the branch back into main.
-_SHOW_TESTER_BUILD_ID = True
+_SHOW_TESTER_BUILD_ID = False
 
 
 class SettingsMixin:
@@ -160,7 +160,7 @@ class SettingsMixin:
             "<p><b>Special Thanks</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
-            '<a href="https://www.edzisk.com">Ed Zisk</a> — GUI, workflow, SFX, QA<br>'
+            '<a href="https://www.edzisk.com">Ed Zisk</a> — Maintainer, GUI, workflow, SFX, QA<br>'
             '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo<br>'
             '<a href="https://github.com/Raiden129">Jhe Kim</a> — Hiera optimization<br>'
             '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization<br>'

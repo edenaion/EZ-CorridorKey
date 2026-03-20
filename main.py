@@ -124,6 +124,14 @@ def run_gui() -> int:
     from backend import CorridorKeyService
 
     app = create_app()
+
+    # First-launch setup: download model checkpoints if missing
+    from ui.widgets.setup_wizard import needs_setup, SetupWizard
+    if needs_setup():
+        wizard = SetupWizard()
+        if wizard.exec() == SetupWizard.Rejected:
+            return 0
+
     service = CorridorKeyService()
     store = RecentSessionsStore()
     store.prune_missing()
@@ -222,4 +230,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
     sys.exit(main())

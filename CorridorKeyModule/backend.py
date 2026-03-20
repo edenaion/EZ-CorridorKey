@@ -17,7 +17,34 @@ logger = logging.getLogger(__name__)
 
 from .inference_engine import INFERENCE_DEFAULTS as _D
 
-CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
+_BUNDLED_CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
+
+def _resolve_checkpoint_dir() -> str:
+    """Return the writable checkpoint directory.
+
+    In development mode (not frozen), this is CorridorKeyModule/checkpoints/.
+    In a frozen PyInstaller build, the bundle is read-only so we use a
+    platform-appropriate data directory that mirrors the same structure.
+    """
+    if not getattr(sys, "frozen", False):
+        return _BUNDLED_CHECKPOINT_DIR
+
+    # Frozen: use writable app data directory
+    if sys.platform == "darwin":
+        data_root = os.path.join(os.path.expanduser("~"), "Library",
+                                 "Application Support", "CorridorKey")
+    elif sys.platform == "win32":
+        data_root = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")),
+                                 "CorridorKey")
+    else:
+        data_root = os.path.join(os.path.expanduser("~"), ".local", "share",
+                                 "CorridorKey")
+
+    ckpt_dir = os.path.join(data_root, "CorridorKeyModule", "checkpoints")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    return ckpt_dir
+
+CHECKPOINT_DIR = _resolve_checkpoint_dir()
 TORCH_EXT = ".pth"
 MLX_EXT = ".safetensors"
 DEFAULT_IMG_SIZE = 2048

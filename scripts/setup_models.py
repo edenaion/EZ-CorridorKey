@@ -26,7 +26,26 @@ import sys
 import urllib.request
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_SCRIPT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _data_root() -> Path:
+    """Writable root for model downloads.
+
+    In dev mode: project root (checkpoints live in CorridorKeyModule/checkpoints/).
+    In frozen PyInstaller builds: platform app-data directory.
+    """
+    if not getattr(sys, "frozen", False):
+        return _SCRIPT_ROOT
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "CorridorKey"
+    elif sys.platform == "win32":
+        return Path(os.environ.get("APPDATA", Path.home())) / "CorridorKey"
+    else:
+        return Path.home() / ".local" / "share" / "CorridorKey"
+
+
+PROJECT_ROOT = _data_root()
 HF_CACHE_DIR = Path.home() / ".cache" / "huggingface" / "hub"
 
 # MLX checkpoint served from GitHub Releases (not HuggingFace)
