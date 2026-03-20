@@ -16,8 +16,8 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox,
-    QPushButton, QProgressBar, QWidget, QScrollArea,
-    QFrame,
+    QPushButton, QProgressBar, QWidget,
+    QFrame, QLineEdit, QFileDialog,
 )
 from PySide6.QtCore import Qt, Signal, QThread, QObject
 from PySide6.QtGui import QFont
@@ -34,15 +34,31 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def _data_root() -> Path:
-    if not getattr(sys, "frozen", False):
-        return _project_root()
+def _default_install_dir() -> Path:
+    """Platform-appropriate default location for model data."""
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / "CorridorKey"
     elif sys.platform == "win32":
         return Path(os.environ.get("APPDATA", Path.home())) / "CorridorKey"
     else:
         return Path.home() / ".local" / "share" / "CorridorKey"
+
+
+def _data_root() -> Path:
+    """Writable data root where models are stored.
+
+    Dev mode: project root. Frozen: user-chosen dir (QSettings) or platform default.
+    """
+    if not getattr(sys, "frozen", False):
+        return _project_root()
+    try:
+        from PySide6.QtCore import QSettings
+        saved = QSettings().value("app/install_path", "", type=str)
+        if saved and os.path.isdir(saved):
+            return Path(saved)
+    except Exception:
+        pass
+    return _default_install_dir()
 
 
 def _checkpoint_dir() -> Path:
@@ -274,11 +290,18 @@ class _ModelRow(QWidget):
 
         info = QVBoxLayout()
         info.setSpacing(2)
-        label = QLabel(f"<b>{model['label']}</b>")
-        label.setStyleSheet("color: #FFFFFF;")
+        label = QLabel(model["label"])
+        label_font = QFont()
+        label_font.setBold(True)
+        label_font.setPointSize(13)
+        label.setFont(label_font)
+        label.setStyleSheet("color: #FFFFFF; background: transparent;")
         info.addWidget(label)
         desc = QLabel(f"{model['description']}  ({model['size']})")
-        desc.setStyleSheet("color: #999999; font-size: 11px;")
+        desc_font = QFont()
+        desc_font.setPointSize(11)
+        desc.setFont(desc_font)
+        desc.setStyleSheet("color: #999999; background: transparent;")
         info.addWidget(desc)
         layout.addLayout(info, 1)
 
@@ -350,10 +373,10 @@ class SetupWizard(QDialog):
         layout.setSpacing(16)
         layout.setContentsMargins(28, 28, 28, 28)
 
-        title = QLabel("Welcome to EZ-CorridorKey")
+        title = QLabel('Welcome to <span style="color:#FFF203;">EZ</span><span style="color:#4CAF50;">-</span><span style="color:#FFF203;">Corridor</span><span style="color:#4CAF50;">Key</span>')
         title.setFont(QFont("Open Sans", 18, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("color: #FFF203;")
+        title.setStyleSheet("color: #FFFFFF;")
         layout.addWidget(title)
 
         subtitle = QLabel(
@@ -367,24 +390,54 @@ class SetupWizard(QDialog):
 
         layout.addSpacing(8)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background: transparent; }")
-        model_container = QWidget()
-        model_container.setStyleSheet("background: transparent;")
-        model_layout = QVBoxLayout(model_container)
-        model_layout.setSpacing(4)
-        model_layout.setContentsMargins(0, 0, 0, 0)
+        # Install path picker
+        loc_label = QLabel("Install path:")
+        loc_label.setStyleSheet("color: #CCCCCC;")
+        layout.addWidget(loc_label)
+
+        loc_row = QHBoxLayout()
+        loc_row.setSpacing(8)
+        self._loc_edit = QLineEdit(str(_default_install_dir()))
+        self._loc_edit.setStyleSheet(
+            "QLineEdit { background: #1a1a18; color: #fff; border: 1px solid #444; "
+            "border-radius: 4px; padding: 6px; }"
+        )
+        self._loc_edit.setReadOnly(True)
+        loc_row.addWidget(self._loc_edit, 1)
+
+        browse_btn = QPushButton("Browse...")
+        browse_btn.setStyleSheet(
+            "QPushButton { color: #ccc; border: 1px solid #555; padding: 6px 14px; "
+            "border-radius: 4px; }"
+            "QPushButton:hover { color: #fff; border-color: #888; }"
+        )
+        browse_btn.clicked.connect(self._on_browse_location)
+        loc_row.addWidget(browse_btn)
+        layout.addLayout(loc_row)
+
+        layout.addSpacing(8)
 
         for model in MODELS:
             row = _ModelRow(model)
             self._rows[model["key"]] = row
-            model_layout.addWidget(row)
+            layout.addWidget(row)
 
-        model_layout.addStretch()
-        scroll.setWidget(model_container)
-        layout.addWidget(scroll, 1)
+        layout.addStretch()
+
+        # Divider + desktop shortcut
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setStyleSheet("color: #333;")
+        layout.addWidget(divider)
+
+        self._shortcut_check = QCheckBox("Create Desktop shortcut")
+        self._shortcut_check.setChecked(True)
+        self._shortcut_check.setStyleSheet(
+            "QCheckBox { color: #4CAF50; }"
+            "QCheckBox::indicator:checked { background: #4CAF50; border: 1px solid #4CAF50; border-radius: 2px; }"
+            "QCheckBox::indicator { border: 1px solid #555; border-radius: 2px; width: 14px; height: 14px; }"
+        )
+        layout.addWidget(self._shortcut_check)
 
         self._overall_label = QLabel("")
         self._overall_label.setAlignment(Qt.AlignCenter)
@@ -420,6 +473,13 @@ class SetupWizard(QDialog):
 
         layout.addLayout(btn_layout)
 
+    def _on_browse_location(self):
+        path = QFileDialog.getExistingDirectory(
+            self, "Choose Install Location", self._loc_edit.text()
+        )
+        if path:
+            self._loc_edit.setText(path)
+
     def _on_cancel(self):
         if self._downloading:
             # Signal cancel but let thread finish gracefully
@@ -437,8 +497,14 @@ class SetupWizard(QDialog):
             self.accept()
             return
 
+        # Save chosen install directory
+        install_dir = self._loc_edit.text()
+        from PySide6.QtCore import QSettings
+        QSettings().setValue("app/install_path", install_dir)
+
         self._downloading = True
         self._install_btn.setEnabled(False)
+        self._loc_edit.setEnabled(False)
         for row in self._rows.values():
             row.checkbox.setEnabled(False)
 
@@ -493,6 +559,10 @@ class SetupWizard(QDialog):
             )
             self._overall_label.setStyleSheet("color: #F44336;")
 
+        # Create desktop shortcut if requested
+        if self._shortcut_check.isChecked():
+            self._create_desktop_shortcut()
+
         self._install_btn.setText("Continue")
         self._install_btn.setEnabled(True)
         try:
@@ -502,6 +572,45 @@ class SetupWizard(QDialog):
         self._install_btn.clicked.connect(self.accept)
 
         self._cancel_btn.setVisible(False)
+
+    def _create_desktop_shortcut(self):
+        """Create a desktop shortcut/alias to the .app bundle."""
+        try:
+            if not getattr(sys, "frozen", False):
+                return
+            desktop = Path.home() / "Desktop"
+            if not desktop.is_dir():
+                return
+
+            if sys.platform == "darwin":
+                # macOS: create a symlink to the .app on the Desktop
+                app_path = Path(sys.executable).resolve().parent.parent.parent
+                link = desktop / app_path.name
+                if link.exists() or link.is_symlink():
+                    link.unlink()
+                link.symlink_to(app_path)
+                logger.info("Desktop shortcut created: %s -> %s", link, app_path)
+            elif sys.platform == "win32":
+                # Windows: create a .lnk shortcut via PowerShell
+                import subprocess
+                app_exe = sys.executable
+                icon = Path(sys._MEIPASS) / "ui" / "theme" / "corridorkey.ico"
+                lnk = desktop / "CorridorKey.lnk"
+                ps_cmd = (
+                    f'$ws = New-Object -ComObject WScript.Shell; '
+                    f'$s = $ws.CreateShortcut("{lnk}"); '
+                    f'$s.TargetPath = "{app_exe}"; '
+                    f'$s.IconLocation = "{icon},0"; '
+                    f'$s.Description = "CorridorKey - AI Green Screen"; '
+                    f'$s.Save()'
+                )
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", ps_cmd],
+                    capture_output=True, timeout=10,
+                )
+                logger.info("Desktop shortcut created: %s", lnk)
+        except Exception as e:
+            logger.warning("Failed to create desktop shortcut: %s", e)
 
     def closeEvent(self, event):
         """Block close while downloading — user must use Cancel button."""

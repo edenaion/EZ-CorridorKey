@@ -23,13 +23,24 @@ def _resolve_checkpoint_dir() -> str:
     """Return the writable checkpoint directory.
 
     In development mode (not frozen), this is CorridorKeyModule/checkpoints/.
-    In a frozen PyInstaller build, the bundle is read-only so we use a
-    platform-appropriate data directory that mirrors the same structure.
+    In a frozen PyInstaller build, checks QSettings for user-chosen install
+    directory, falling back to platform-appropriate app data.
     """
     if not getattr(sys, "frozen", False):
         return _BUNDLED_CHECKPOINT_DIR
 
-    # Frozen: use writable app data directory
+    # Frozen: check user-chosen directory first
+    try:
+        from PySide6.QtCore import QSettings
+        saved = QSettings().value("app/install_path", "", type=str)
+        if saved and os.path.isdir(saved):
+            ckpt_dir = os.path.join(saved, "CorridorKeyModule", "checkpoints")
+            os.makedirs(ckpt_dir, exist_ok=True)
+            return ckpt_dir
+    except Exception:
+        pass
+
+    # Fallback: platform default
     if sys.platform == "darwin":
         data_root = os.path.join(os.path.expanduser("~"), "Library",
                                  "Application Support", "CorridorKey")

@@ -24,7 +24,10 @@ datas = [
     # Theme QSS, fonts, and icon
     (os.path.join(ROOT, 'ui', 'theme', 'corridor_theme.qss'), os.path.join('ui', 'theme')),
     (os.path.join(ROOT, 'ui', 'theme', 'corridorkey.png'), os.path.join('ui', 'theme')),
+    (os.path.join(ROOT, 'ui', 'theme', 'corridorkey.svg'), os.path.join('ui', 'theme')),
     (os.path.join(ROOT, 'ui', 'theme', 'icons'), os.path.join('ui', 'theme', 'icons')),
+    # UI sounds (.wav files)
+    (os.path.join(ROOT, 'ui', 'sounds'), os.path.join('ui', 'sounds')),
     # setup_models.py needed by the first-launch wizard
     (os.path.join(ROOT, 'scripts', 'setup_models.py'), 'scripts'),
 ]

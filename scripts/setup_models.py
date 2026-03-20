@@ -33,10 +33,17 @@ def _data_root() -> Path:
     """Writable root for model downloads.
 
     In dev mode: project root (checkpoints live in CorridorKeyModule/checkpoints/).
-    In frozen PyInstaller builds: platform app-data directory.
+    In frozen PyInstaller builds: user-chosen install path (QSettings) or platform default.
     """
     if not getattr(sys, "frozen", False):
         return _SCRIPT_ROOT
+    try:
+        from PySide6.QtCore import QSettings
+        saved = QSettings().value("app/install_path", "", type=str)
+        if saved and os.path.isdir(saved):
+            return Path(saved)
+    except Exception:
+        pass
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / "CorridorKey"
     elif sys.platform == "win32":
