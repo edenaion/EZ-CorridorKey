@@ -10,7 +10,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
     QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication,
-    QLineEdit, QFileDialog,
+    QLineEdit, QFileDialog, QScrollArea, QWidget, QFrame,
 )
 from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal
 
@@ -131,7 +131,27 @@ class PreferencesDialog(QDialog):
         self._ffmpeg_repair_worker: _FFmpegRepairWorker | None = None
         self._local_ffmpeg_dir = get_local_ffmpeg_dir()
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setSpacing(8)
+        outer.setContentsMargins(0, 0, 0, 8)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("""
+            QScrollArea { background: transparent; }
+            QScrollBar:vertical {
+                background: #1a1a18; width: 8px; margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: #444; border-radius: 4px; min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover { background: #666; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
+        """)
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
         layout.setSpacing(12)
 
         # UI section
@@ -224,12 +244,12 @@ class PreferencesDialog(QDialog):
         dir_row.addWidget(self._output_dir_edit, 1)
 
         browse_btn = QPushButton("Browse...")
-        browse_btn.setFixedWidth(80)
+        browse_btn.setMinimumWidth(80)
         browse_btn.clicked.connect(self._browse_output_dir)
         dir_row.addWidget(browse_btn)
 
         clear_btn = QPushButton("Clear")
-        clear_btn.setFixedWidth(50)
+        clear_btn.setMinimumWidth(60)
         clear_btn.clicked.connect(lambda: self._output_dir_edit.clear())
         dir_row.addWidget(clear_btn)
 
@@ -412,10 +432,12 @@ class PreferencesDialog(QDialog):
         layout.addWidget(models_group)
         layout.addWidget(ffmpeg_group)
 
-        layout.addStretch(1)
+        scroll.setWidget(scroll_content)
+        outer.addWidget(scroll, 1)
 
-        # Buttons
+        # Buttons (outside scroll area, always visible at bottom)
         btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(12, 0, 12, 0)
         btn_layout.addStretch(1)
 
         self._cancel_btn = QPushButton("Cancel")
@@ -427,7 +449,7 @@ class PreferencesDialog(QDialog):
         self._ok_btn.clicked.connect(self._save_and_accept)
         btn_layout.addWidget(self._ok_btn)
 
-        layout.addLayout(btn_layout)
+        outer.addLayout(btn_layout)
         self._refresh_ffmpeg_status()
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
