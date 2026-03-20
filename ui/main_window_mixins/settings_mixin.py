@@ -236,6 +236,14 @@ class SettingsMixin:
         self._update_btn.setVisible(True)
 
     def _run_update(self) -> None:
+        import sys as _sys
+        if getattr(_sys, "frozen", False):
+            self._run_frozen_update()
+        else:
+            self._run_script_update()
+
+    def _run_script_update(self) -> None:
+        """Update via 3-update.sh / 3-update.bat (CLI/dev installs)."""
         reply = QMessageBox.question(
             self, "Update EZ-CorridorKey",
             "This will save your session, close the app, and run the updater.\n"
@@ -245,9 +253,7 @@ class SettingsMixin:
         )
         if reply != QMessageBox.Yes:
             return
-        # Save session before closing
         self._auto_save_session()
-        # Launch update script --relaunch detached, then quit
         import subprocess
         root = os.path.dirname(os.path.dirname(__file__))
         if os.name == "nt":
@@ -264,3 +270,181 @@ class SettingsMixin:
             )
         from PySide6.QtWidgets import QApplication
         QApplication.instance().quit()
+
+    def _run_frozen_update(self) -> None:
+        """Update a frozen .app/.exe by downloading from GitHub Releases."""
+        import sys as _sys
+        reply = QMessageBox.question(
+            self, "Update EZ-CorridorKey",
+            "This will download the latest version, replace the current app,\n"
+            "and relaunch automatically.\n\n"
+            "Your session will be saved. Continue?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        self._auto_save_session()
+
+        from PySide6.QtWidgets import QProgressDialog
+        progress = QProgressDialog(
+            "Downloading update...", "Cancel", 0, 100, self
+        )
+        progress.setWindowTitle("Updating EZ-CorridorKey")
+        progress.setMinimumWidth(400)
+        progress.setModal(True)
+        progress.show()
+
+        import urllib.request
+        import json
+        import tempfile
+        import zipfile
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        try:
+            # Determine asset name by platform
+            if _sys.platform == "darwin":
+                asset_name = "CorridorKey-macos-arm64.zip"
+            elif _sys.platform == "win32":
+                asset_name = "CorridorKey-windows-x64.zip"
+            else:
+                QMessageBox.warning(
+                    self, "Update",
+                    "Automatic updates are not supported on this platform.\n"
+                    "Please download the latest release from GitHub."
+                )
+                progress.close()
+                return
+
+            # Fetch latest release info from GitHub API
+            api_url = (
+                "https://api.github.com/repos/edenaion/EZ-CorridorKey"
+                "/releases/latest"
+            )
+            req = urllib.request.Request(
+                api_url, headers={"User-Agent": "CorridorKey"}
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                release = json.loads(resp.read().decode("utf-8"))
+
+            # Find the asset download URL
+            download_url = None
+            for asset in release.get("assets", []):
+                if asset["name"] == asset_name:
+                    download_url = asset["browser_download_url"]
+                    break
+
+            if not download_url:
+                QMessageBox.warning(
+                    self, "Update",
+                    f"No {asset_name} found in the latest release.\n"
+                    f"Release: {release.get('tag_name', 'unknown')}\n\n"
+                    "Please download manually from GitHub."
+                )
+                progress.close()
+                return
+
+            # Download to temp file
+            tmp_dir = Path(tempfile.mkdtemp(prefix="corridorkey_update_"))
+            zip_path = tmp_dir / asset_name
+
+            def _report(block_num, block_size, total_size):
+                if progress.wasCanceled():
+                    raise InterruptedError("Download cancelled")
+                if total_size > 0:
+                    pct = min(100, (block_num * block_size * 100) // total_size)
+                    progress.setValue(pct)
+                    progress.setLabelText(
+                        f"Downloading update... "
+                        f"{block_num * block_size // (1024*1024)}/"
+                        f"{total_size // (1024*1024)} MB"
+                    )
+                from PySide6.QtWidgets import QApplication
+                QApplication.processEvents()
+
+            urllib.request.urlretrieve(
+                download_url, str(zip_path), reporthook=_report
+            )
+
+            progress.setLabelText("Installing update...")
+            progress.setValue(95)
+            QApplication.processEvents()
+
+            # Extract zip
+            extract_dir = tmp_dir / "extracted"
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(extract_dir)
+
+            if _sys.platform == "darwin":
+                # Find the .app inside extracted dir
+                new_app = None
+                for item in extract_dir.iterdir():
+                    if item.suffix == ".app" and item.is_dir():
+                        new_app = item
+                        break
+
+                if not new_app:
+                    raise FileNotFoundError("No .app found in downloaded archive")
+
+                # Current .app location
+                current_app = Path(_sys.executable).resolve().parent.parent.parent
+                old_backup = current_app.with_name(current_app.name + ".old")
+
+                # Swap: current → .old, new → current
+                if old_backup.exists():
+                    shutil.rmtree(old_backup)
+                current_app.rename(old_backup)
+                shutil.move(str(new_app), str(current_app))
+
+                # Make executable
+                main_exe = current_app / "Contents" / "MacOS" / "CorridorKey"
+                if main_exe.exists():
+                    main_exe.chmod(0o755)
+
+                # Relaunch
+                subprocess.Popen(
+                    ["open", str(current_app)],
+                    start_new_session=True,
+                )
+
+                # Clean up old backup in background
+                shutil.rmtree(old_backup, ignore_errors=True)
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+            elif _sys.platform == "win32":
+                # Windows: extract, write a bat script to swap after exit
+                new_exe_dir = None
+                for item in extract_dir.iterdir():
+                    if item.is_dir():
+                        new_exe_dir = item
+                        break
+
+                current_dir = Path(_sys.executable).resolve().parent
+                swap_script = tmp_dir / "swap_update.bat"
+                swap_script.write_text(
+                    f'@echo off\n'
+                    f'timeout /t 2 /nobreak >nul\n'
+                    f'xcopy /s /e /y "{new_exe_dir}\\*" "{current_dir}\\"\n'
+                    f'start "" "{_sys.executable}"\n'
+                    f'rmdir /s /q "{tmp_dir}"\n',
+                    encoding="utf-8",
+                )
+                subprocess.Popen(
+                    ["cmd", "/c", str(swap_script)],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                )
+
+            progress.setValue(100)
+            progress.close()
+            QApplication.instance().quit()
+
+        except InterruptedError:
+            progress.close()
+        except Exception as e:
+            progress.close()
+            QMessageBox.critical(
+                self, "Update Failed",
+                f"Could not update automatically:\n\n{e}\n\n"
+                "Please download the latest release manually from GitHub."
+            )
