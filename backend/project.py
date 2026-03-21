@@ -37,16 +37,46 @@ _app_dir: str | None = None
 
 
 def set_app_dir(path: str) -> None:
-    """Set the application directory. Called once at startup by main.py."""
+    """Set the application directory. Called at startup by main.py.
+
+    In frozen builds, called twice: first with exe dir, then with
+    get_data_dir() (user-chosen install path) so projects_root() resolves correctly.
+    """
     global _app_dir
     _app_dir = path
+
+
+def get_data_dir() -> str:
+    """Return the user-data root for models and projects.
+
+    Dev mode: project root (same as _app_dir).
+    Frozen: QSettings app/install_path, falling back to platform default.
+    """
+    if not getattr(sys, 'frozen', False):
+        if _app_dir:
+            return _app_dir
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Frozen: read user-chosen install path
+    try:
+        from PySide6.QtCore import QSettings
+        saved = QSettings().value("app/install_path", "", type=str)
+        if saved and os.path.isdir(saved):
+            return saved
+    except Exception:
+        pass
+    # Platform default
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "EZ-CorridorKey")
+    elif sys.platform == "darwin":
+        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "EZ-CorridorKey")
+    return os.path.join(os.path.expanduser("~"), ".local", "share", "EZ-CorridorKey")
 
 
 def projects_root() -> str:
     """Return the Projects root directory, creating it if needed.
 
     In dev mode: {repo_root}/Projects/
-    In frozen mode: {exe_dir}/Projects/
+    In frozen mode: {install_path}/Projects/ (set via get_data_dir() at startup)
     """
     if _app_dir:
         root = os.path.join(_app_dir, "Projects")

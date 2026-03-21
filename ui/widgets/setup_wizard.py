@@ -47,18 +47,15 @@ def _default_install_dir() -> Path:
 def _data_root() -> Path:
     """Writable data root where models are stored.
 
-    Dev mode: project root. Frozen: user-chosen dir (QSettings) or platform default.
+    Dev mode: project root. Frozen: delegates to backend.project.get_data_dir().
     """
     if not getattr(sys, "frozen", False):
         return _project_root()
     try:
-        from PySide6.QtCore import QSettings
-        saved = QSettings().value("app/install_path", "", type=str)
-        if saved and os.path.isdir(saved):
-            return Path(saved)
-    except Exception:
-        pass
-    return _default_install_dir()
+        from backend.project import get_data_dir
+        return Path(get_data_dir())
+    except ImportError:
+        return _default_install_dir()
 
 
 def _checkpoint_dir() -> Path:

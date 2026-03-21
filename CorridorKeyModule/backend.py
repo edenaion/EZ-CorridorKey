@@ -23,37 +23,18 @@ def _resolve_checkpoint_dir() -> str:
     """Return the writable checkpoint directory.
 
     In development mode (not frozen), this is CorridorKeyModule/checkpoints/.
-    In a frozen PyInstaller build, checks QSettings for user-chosen install
-    directory, falling back to platform-appropriate app data.
+    In a frozen PyInstaller build, delegates to backend.project.get_data_dir()
+    for the user-chosen install path.
     """
     if not getattr(sys, "frozen", False):
         return _BUNDLED_CHECKPOINT_DIR
-
-    # Frozen: check user-chosen directory first
     try:
-        from PySide6.QtCore import QSettings
-        saved = QSettings().value("app/install_path", "", type=str)
-        if saved and os.path.isdir(saved):
-            ckpt_dir = os.path.join(saved, "CorridorKeyModule", "checkpoints")
-            os.makedirs(ckpt_dir, exist_ok=True)
-            return ckpt_dir
-    except Exception:
-        pass
-
-    # Fallback: platform default
-    if sys.platform == "darwin":
-        data_root = os.path.join(os.path.expanduser("~"), "Library",
-                                 "Application Support", "EZ-CorridorKey")
-    elif sys.platform == "win32":
-        data_root = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")),
-                                 "EZ-CorridorKey")
-    else:
-        data_root = os.path.join(os.path.expanduser("~"), ".local", "share",
-                                 "EZ-CorridorKey")
-
-    ckpt_dir = os.path.join(data_root, "CorridorKeyModule", "checkpoints")
-    os.makedirs(ckpt_dir, exist_ok=True)
-    return ckpt_dir
+        from backend.project import get_data_dir
+        ckpt_dir = os.path.join(get_data_dir(), "CorridorKeyModule", "checkpoints")
+        os.makedirs(ckpt_dir, exist_ok=True)
+        return ckpt_dir
+    except ImportError:
+        return _BUNDLED_CHECKPOINT_DIR
 
 CHECKPOINT_DIR = _resolve_checkpoint_dir()
 TORCH_EXT = ".pth"

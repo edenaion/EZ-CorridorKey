@@ -1,7 +1,7 @@
-"""QApplication setup with Corridor Digital brand theme and bundled fonts.
+"""QApplication setup with EZSCAPE brand theme and bundled fonts.
 
 Fonts:
-  - Gagarin: Logo / brand mark text (Corridor Digital identity font)
+  - Gagarin: Logo / brand mark text (identity font)
   - Open Sans: All secondary / body UI text (default app font)
 """
 from __future__ import annotations
@@ -83,6 +83,27 @@ def _configure_runtime_backends() -> None:
         logger.debug(f"OpenCV thread tuning skipped: {exc}")
 
 
+def _migrate_legacy_settings() -> None:
+    """One-time migration from old QSettings path to new one.
+
+    Old: HKCU\\Software\\Corridor Digital\\CorridorKey
+    New: HKCU\\Software\\EZSCAPE\\EZ-CorridorKey
+    """
+    from PySide6.QtCore import QSettings
+    new = QSettings()  # Uses current org/app (EZSCAPE / EZ-CorridorKey)
+    if new.value("_migrated_from_legacy", False, type=bool):
+        return
+    old = QSettings("Corridor Digital", "CorridorKey")
+    old_keys = old.allKeys()
+    if not old_keys:
+        return
+    for key in old_keys:
+        if not new.contains(key):
+            new.setValue(key, old.value(key))
+    new.setValue("_migrated_from_legacy", True)
+    logger.info("Migrated %d settings from Corridor Digital/CorridorKey", len(old_keys))
+
+
 def create_app(argv: list[str] | None = None) -> QApplication:
     """Create and configure the QApplication with brand theming.
 
@@ -94,11 +115,13 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     _configure_runtime_backends()
 
     app = QApplication(argv)
-    # Keep the internal settings key stable; use the display name for
-    # user-facing platform chrome like the macOS app menu.
-    app.setApplicationName("CorridorKey")
+    app.setApplicationName("EZ-CorridorKey")
     app.setApplicationDisplayName("EZ-CorridorKey")
-    app.setOrganizationName("Corridor Digital")
+    app.setOrganizationName("EZSCAPE")
+
+    # One-time migration from old registry path
+    # (Corridor Digital\CorridorKey → EZSCAPE\EZ-CorridorKey)
+    _migrate_legacy_settings()
 
     # ── Font loading (frozen-build aware) ──
     if getattr(sys, 'frozen', False):

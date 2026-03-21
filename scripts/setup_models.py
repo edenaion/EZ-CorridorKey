@@ -33,10 +33,17 @@ def _data_root() -> Path:
     """Writable root for model downloads.
 
     In dev mode: project root (checkpoints live in CorridorKeyModule/checkpoints/).
-    In frozen PyInstaller builds: user-chosen install path (QSettings) or platform default.
+    In frozen PyInstaller builds: delegates to backend.project.get_data_dir().
+    Falls back to standalone logic when backend is not importable (script run directly).
     """
     if not getattr(sys, "frozen", False):
         return _SCRIPT_ROOT
+    try:
+        from backend.project import get_data_dir
+        return Path(get_data_dir())
+    except ImportError:
+        pass
+    # Standalone fallback (script run outside frozen app)
     try:
         from PySide6.QtCore import QSettings
         saved = QSettings().value("app/install_path", "", type=str)

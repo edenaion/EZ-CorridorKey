@@ -132,6 +132,12 @@ def run_gui() -> int:
         if wizard.exec() == SetupWizard.Rejected:
             return 0
 
+    # Frozen builds: point projects at the user-chosen install directory
+    # (same location as model checkpoints) instead of the exe directory.
+    if getattr(sys, 'frozen', False):
+        from backend.project import get_data_dir, set_app_dir
+        set_app_dir(get_data_dir())
+
     service = CorridorKeyService()
     store = RecentSessionsStore()
     store.prune_missing()
