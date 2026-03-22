@@ -6,8 +6,7 @@
 #
 # Output: dist/CorridorKey/CorridorKey.exe
 #
-# Post-build: copy CorridorKeyModule/checkpoints/*.pth into
-#   dist/CorridorKey/CorridorKeyModule/checkpoints/
+# Checkpoints are NOT bundled — the setup wizard downloads them on first launch.
 
 $ErrorActionPreference = "Stop"
 
@@ -34,44 +33,25 @@ if (Test-Path "build\CorridorKey") {
 
 # Build
 Write-Host "Building with PyInstaller..."
-pyinstaller corridorkey.spec --noconfirm
+pyinstaller corridorkey-windows.spec --noconfirm
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: PyInstaller build failed" -ForegroundColor Red
     exit 1
 }
 
-# Create checkpoint directory placeholder
-$ckptDir = "dist\CorridorKey\CorridorKeyModule\checkpoints"
-if (-not (Test-Path $ckptDir)) {
-    New-Item -ItemType Directory -Path $ckptDir -Force | Out-Null
-}
-
-# Copy checkpoint if available
-$srcCkpt = "CorridorKeyModule\checkpoints"
-if (Test-Path $srcCkpt) {
-    $pthFiles = Get-ChildItem "$srcCkpt\*.pth"
-    if ($pthFiles.Count -gt 0) {
-        Write-Host "Copying checkpoint(s)..."
-        Copy-Item "$srcCkpt\*.pth" $ckptDir
-    } else {
-        Write-Host "WARNING: No .pth checkpoint found in $srcCkpt" -ForegroundColor Yellow
-        Write-Host "  You must manually place the checkpoint in: $ckptDir"
-    }
-} else {
-    Write-Host "WARNING: Checkpoint directory not found: $srcCkpt" -ForegroundColor Yellow
-}
-
 # Summary
 $exePath = "dist\CorridorKey\CorridorKey.exe"
 if (Test-Path $exePath) {
     $size = (Get-Item $exePath).Length / 1MB
+    $distSize = (Get-ChildItem -Recurse "dist\CorridorKey" | Measure-Object -Property Length -Sum).Sum / 1MB
     Write-Host ""
     Write-Host "=== Build Complete ===" -ForegroundColor Green
     Write-Host "  Executable: $exePath ($([math]::Round($size, 1)) MB)"
-    Write-Host "  Checkpoint: $ckptDir"
+    Write-Host "  Total dist: $([math]::Round($distSize, 0)) MB"
     Write-Host ""
-    Write-Host "To run: .\dist\CorridorKey\CorridorKey.exe"
+    Write-Host "  Checkpoints will be downloaded on first launch via setup wizard."
+    Write-Host "  To run: .\dist\CorridorKey\CorridorKey.exe"
 } else {
     Write-Host "ERROR: Build output not found" -ForegroundColor Red
     exit 1

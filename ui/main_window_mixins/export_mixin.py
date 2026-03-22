@@ -252,15 +252,27 @@ class ExportMixin:
         if not out_path:
             return
 
-        # Determine frame pattern from first file
-        frames = sorted(os.listdir(source_dir))
+        # Determine frame pattern from actual files
+        frames = sorted([f for f in os.listdir(source_dir)
+                         if os.path.splitext(f)[1].lower()
+                         in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff')])
         if not frames:
+            QMessageBox.warning(self, "No Frames", "No image frames found in output directory.")
             return
 
-        # Detect pattern (frame_000000.png -> frame_%06d.png)
+        # Detect pattern from first filename (e.g. frame_000000.png -> frame_%06d.png)
+        import re
         first = frames[0]
         ext = os.path.splitext(first)[1]
-        pattern = f"frame_%06d{ext}"
+        m = re.match(r'^(.*?)(\d+)(\.\w+)$', first)
+        if m:
+            prefix, digits, suffix = m.group(1), m.group(2), m.group(3)
+            pattern = f"{prefix}%0{len(digits)}d{suffix}"
+            # Detect start number (may not be 0)
+            start_number = int(digits)
+        else:
+            pattern = f"frame_%06d{ext}"
+            start_number = 0
 
         self._status_bar.set_message(f"Exporting {clip.name}...")
 
@@ -270,6 +282,7 @@ class ExportMixin:
                 out_path=out_path,
                 fps=fps,
                 pattern=pattern,
+                start_number=start_number,
             )
             self._status_bar.set_message("")
             QMessageBox.information(

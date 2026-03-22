@@ -20,6 +20,7 @@ def stitch_video(
     pattern: str = "frame_%06d.png",
     codec: str = "libx264",
     crf: int = 18,
+    start_number: int = 0,
     on_progress: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
 ) -> None:
@@ -32,6 +33,7 @@ def stitch_video(
         pattern: Frame filename pattern.
         codec: Video codec (libx264, libx265, etc.).
         crf: Quality (0-51, lower = better).
+        start_number: First frame number in the sequence.
         on_progress: Callback(current_frame, total_frames).
         cancel_event: Set to cancel stitching.
 
@@ -50,7 +52,7 @@ def stitch_video(
     cmd = [
         ffmpeg,
         "-framerate", str(fps),
-        "-start_number", "0",
+        "-start_number", str(start_number),
         "-i", in_dir + "/" + pattern,
         "-c:v", codec,
         "-crf", str(crf),
@@ -59,7 +61,7 @@ def stitch_video(
         "-y",
     ]
 
-    logger.info(f"Stitching video: {in_dir} -> {out_path}")
+    logger.info(f"Stitching video: {' '.join(cmd)}")
 
     proc = subprocess.Popen(
         cmd,
@@ -71,9 +73,12 @@ def stitch_video(
     )
 
     frame_re = re.compile(r"frame=\s*(\d+)")
+    stderr_lines: list[str] = []
 
     try:
         for line in proc.stderr:
+            stderr_lines.append(line.rstrip())
+
             if cancel_event and cancel_event.is_set():
                 try:
                     proc.stdin.write("q\n")
@@ -96,6 +101,9 @@ def stitch_video(
         raise RuntimeError("FFmpeg stitching timed out")
 
     if proc.returncode != 0 and not (cancel_event and cancel_event.is_set()):
-        raise RuntimeError(f"FFmpeg stitching failed with code {proc.returncode}")
+        # Last few stderr lines usually contain the actual error
+        tail = "\n".join(stderr_lines[-10:]) if stderr_lines else "(no output)"
+        logger.error(f"FFmpeg stitching failed (exit {proc.returncode}):\n{tail}")
+        raise RuntimeError(f"FFmpeg stitching failed:\n{tail}")
 
     logger.info(f"Video stitched: {out_path}")
