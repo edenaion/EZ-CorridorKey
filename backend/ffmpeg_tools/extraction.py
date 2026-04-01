@@ -95,10 +95,10 @@ def _recompress_to_dwab(
     EXR compression preference (PIZ/ZIP/etc.) applies only to inference
     output written by service.py._write_image().
 
-    Launches a standalone subprocess to do the heavy lifting so the
-    parent process (and its GIL / Qt event loop) stay completely free.
-    The subprocess uses multiprocessing internally and prints progress
-    lines to stdout which we parse for the callback.
+    In frozen (PyInstaller) builds, runs in-process with a ThreadPoolExecutor
+    because sys.executable points to the app .exe, not a Python interpreter.
+    In dev mode, spawns a subprocess with ProcessPoolExecutor for full GIL
+    bypass.
     """
     marker = os.path.join(out_dir, ".dwab_done")
     if os.path.isfile(marker):
@@ -110,13 +110,69 @@ def _recompress_to_dwab(
     if total == 0:
         return
 
-    # Locate the Python interpreter from the same venv
+    if getattr(sys, "frozen", False):
+        _recompress_inprocess(out_dir, exr_files, total, marker,
+                              on_progress, cancel_event)
+    else:
+        _recompress_subprocess(out_dir, exr_files, total, marker,
+                               on_progress, cancel_event)
+
+
+def _recompress_inprocess(
+    out_dir: str,
+    exr_files: list[str],
+    total: int,
+    marker: str,
+    on_progress: Optional[Callable[[int, int], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
+) -> None:
+    """DWAB recompress using in-process ThreadPoolExecutor (frozen builds)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+    from backend.frame_io import recompress_exr
+
+    logger.info(f"Recompressing {total} EXR frames to DWAB (in-process)...")
+    workers = max(1, min((os.cpu_count() or 4) // 2, 16))
+    done = 0
+
+    def _do_one(fname: str) -> bool:
+        src = os.path.join(out_dir, fname)
+        tmp = src + ".tmp"
+        ok = recompress_exr(src, tmp, compression="dwab")
+        if ok:
+            os.replace(tmp, src)
+        elif os.path.isfile(tmp):
+            os.remove(tmp)
+        return ok
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {pool.submit(_do_one, f): f for f in exr_files}
+        for fut in as_completed(futs):
+            if cancel_event and cancel_event.is_set():
+                pool.shutdown(wait=False, cancel_futures=True)
+                logger.info("DWAB recompression cancelled")
+                return
+            fut.result()
+            done += 1
+            if on_progress:
+                on_progress(done, total)
+
+    with open(marker, 'w') as f:
+        f.write("done")
+    logger.info(f"DWAB recompression complete: {total} frames")
+
+
+def _recompress_subprocess(
+    out_dir: str,
+    exr_files: list[str],
+    total: int,
+    marker: str,
+    on_progress: Optional[Callable[[int, int], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
+) -> None:
+    """DWAB recompress using a subprocess with ProcessPoolExecutor (dev mode)."""
     python = sys.executable
 
-    # Write a temp script file.  ProcessPoolExecutor on Windows uses the
-    # "spawn" start method which re-imports __main__ — this only works
-    # from a real .py file, not from ``python -c``.
-    import tempfile
     script_content = r'''
 import os, sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -187,8 +243,6 @@ if __name__ == "__main__":
     print("DONE", flush=True)
 '''
 
-    # Write to a temp .py file next to the output dir (same drive avoids
-    # cross-device issues).  Cleaned up after completion.
     script_path = os.path.join(out_dir, "_dwab_recompress.py")
     with open(script_path, 'w') as f:
         f.write(script_content)
@@ -203,7 +257,6 @@ if __name__ == "__main__":
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
 
-    # Read stdout in a background thread so cancel checks aren't blocked
     import queue as _queue
     line_q: _queue.Queue[str | None] = _queue.Queue()
 
@@ -251,7 +304,6 @@ if __name__ == "__main__":
         logger.error("DWAB recompression subprocess timed out")
         return
     finally:
-        # Always clean up temp script
         try:
             os.remove(script_path)
         except OSError:
@@ -263,7 +315,6 @@ if __name__ == "__main__":
                      f"{stderr_out[:500]}")
         return
 
-    # Mark completion so resume doesn't redo
     with open(marker, 'w') as f:
         f.write("done")
     logger.info(f"DWAB recompression complete: {total} frames")

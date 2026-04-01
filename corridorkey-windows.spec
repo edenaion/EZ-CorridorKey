@@ -38,52 +38,163 @@ fonts_dir = os.path.join(ROOT, 'ui', 'theme', 'fonts')
 if os.path.isdir(fonts_dir):
     datas.append((fonts_dir, os.path.join('ui', 'theme', 'fonts')))
 
-# Hidden imports needed for dynamic loading
+# ---------------------------------------------------------------------------
+# Hidden imports — everything the app needs at runtime
+# ---------------------------------------------------------------------------
 hiddenimports = [
+    # ── Qt / GUI ──
     'PySide6.QtWidgets',
     'PySide6.QtCore',
     'PySide6.QtGui',
     'PySide6.QtMultimedia',
+
+    # ── Core libs ──
     'cv2',
     'numpy',
+    'PIL',
+    'psutil',
+    'pynvml',
+    'huggingface_hub',
+    'safetensors',
+    'filelock',
+
+    # ── ML frameworks ──
+    'torch',
+    'torchvision',
+    'torchvision.transforms',
+    'timm',                          # CorridorKey GreenFormer backbone
+    'timm.layers',
+    'einops',                        # BiRefNet + VideoMaMa tensor ops
+    'kornia',                        # BiRefNet laplacian filter
+    'kornia.filters',
+
+    # ── transformers (BiRefNet + VideoMaMa) ──
+    'transformers',
+    'transformers.modeling_utils',   # PreTrainedModel
+    'transformers.configuration_utils',  # PretrainedConfig
+    'transformers.models.auto',      # AutoModelForImageSegmentation
+    'transformers.image_processing_utils',
+
+    # ── diffusers (GVM + VideoMaMa pipelines) ──
+    'diffusers',
+    'diffusers.models',
+    'diffusers.schedulers',
+    'diffusers.pipelines',
+    'diffusers.image_processor',
+    'diffusers.loaders',
+
+    # ── peft (GVM LoRA) ──
+    'peft',
+
+    # ── Video I/O (GVM) ──
+    'av',
+    'pims',
+
+    # ── MatAnyone2 ──
+    'omegaconf',
+
+    # ── Backend modules ──
     'backend',
     'backend.service',
+    'backend.service.core',
+    'backend.service.helpers',
     'backend.clip_state',
     'backend.job_queue',
     'backend.validators',
     'backend.errors',
     'backend.project',
+    'backend.frame_io',
+    'backend.natural_sort',
     'backend.ffmpeg_tools',
     'backend.ffmpeg_tools.discovery',
     'backend.ffmpeg_tools.extraction',
     'backend.ffmpeg_tools.probe',
     'backend.ffmpeg_tools.stitching',
+    'backend.ffmpeg_tools.color',
+
+    # ── UI modules ──
     'ui',
     'ui.app',
     'ui.main_window',
-    'backend.natural_sort',
     'ui.preview.frame_index',
     'ui.preview.display_transform',
     'ui.preview.async_decoder',
-    'pynvml',              # GPU monitoring (nvidia-ml-py)
-    'psutil',              # System memory reporting
-    'huggingface_hub',     # Model downloads in setup wizard
+
+    # ── Inference modules ──
+    'CorridorKeyModule',
+    'CorridorKeyModule.inference_engine',
+    'CorridorKeyModule.backend',
+    'CorridorKeyModule.core',
+    'CorridorKeyModule.core.model_transformer',
+    'CorridorKeyModule.core.color_utils',
+    'modules.BiRefNetModule',
+    'modules.BiRefNetModule.wrapper',
+    'gvm_core',
+    'gvm_core.wrapper',
+    'VideoMaMaInferenceModule',
+    'VideoMaMaInferenceModule.pipeline',
+    'VideoMaMaInferenceModule.inference',
 ]
 
-# Try to collect MatAnyone2Module
-for dynamic_pkg in ('modules.MatAnyone2Module', 'MatAnyone2Module'):
+# ---------------------------------------------------------------------------
+# Collect submodules for large packages with lazy/dynamic imports
+# ---------------------------------------------------------------------------
+_collect_subs = [
+    'transformers',
+    'diffusers',
+    'timm',
+    'triton',
+    'kornia',
+    'safetensors',
+    'peft',
+    'modules.BiRefNetModule',
+    'modules.MatAnyone2Module',
+    'MatAnyone2Module',
+]
+
+for pkg in _collect_subs:
     try:
-        hiddenimports += collect_submodules(dynamic_pkg)
-        datas += collect_data_files(dynamic_pkg)
+        hiddenimports += collect_submodules(pkg)
     except Exception:
         pass
 
-# Collect triton-windows for torch.compile support
-try:
-    hiddenimports += collect_submodules('triton')
-    datas += collect_data_files('triton')
-except Exception:
-    pass
+# Collect data files for packages that need them
+_collect_data = [
+    'transformers',
+    'diffusers',
+    'triton',
+    'timm',
+    'modules.BiRefNetModule',
+    'modules.MatAnyone2Module',
+    'MatAnyone2Module',
+]
+
+for pkg in _collect_data:
+    try:
+        datas += collect_data_files(pkg)
+    except Exception:
+        pass
+
+# BiRefNet checkpoint configs (needed for model loading)
+for variant in ('BiRefNet-matting', 'BiRefNet_HR'):
+    ckpt_dir = os.path.join(ROOT, 'modules', 'BiRefNetModule', 'checkpoints', variant)
+    if os.path.isdir(ckpt_dir):
+        datas.append((ckpt_dir, os.path.join('modules', 'BiRefNetModule', 'checkpoints', variant)))
+
+# CorridorKeyModule core (model code)
+ck_core = os.path.join(ROOT, 'CorridorKeyModule', 'core')
+if os.path.isdir(ck_core):
+    datas.append((ck_core, os.path.join('CorridorKeyModule', 'core')))
+
+# GVM pipeline code
+gvm_dir = os.path.join(ROOT, 'gvm_core', 'gvm')
+if os.path.isdir(gvm_dir):
+    datas.append((gvm_dir, os.path.join('gvm_core', 'gvm')))
+
+# VideoMaMa pipeline code
+vmm_dir = os.path.join(ROOT, 'VideoMaMaInferenceModule')
+if os.path.isdir(vmm_dir):
+    datas.append((vmm_dir, 'VideoMaMaInferenceModule'))
 
 # Windows icon
 ico_path = os.path.join(ROOT, 'ui', 'theme', 'corridorkey.ico')
@@ -91,7 +202,7 @@ icon_path = ico_path if os.path.exists(ico_path) else None
 
 a = Analysis(
     [os.path.join(ROOT, 'main.py')],
-    pathex=[ROOT],
+    pathex=[ROOT, os.path.join(ROOT, 'modules')],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
@@ -107,8 +218,6 @@ a = Analysis(
         'jupyter',
         'IPython',
         'notebook',
-        'scipy.spatial',
-        'scipy.sparse',
         # macOS-only
         'corridorkey_mlx',
     ],

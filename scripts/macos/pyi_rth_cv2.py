@@ -1,15 +1,18 @@
-"""PyInstaller runtime hook — fix cv2 recursive import in macOS .app bundle.
+"""PyInstaller runtime hook — cv2 fixes for frozen builds (macOS).
 
-opencv-python-headless ships a bootstrap __init__.py that calls
-importlib.import_module("cv2") to load the native extension. In a PyInstaller
-BUNDLE this finds the bootstrap __init__.py again, causing infinite recursion.
+1. Set OPENCV_IO_ENABLE_OPENEXR before cv2 initializes (must be in env
+   before the native module loads, or EXR codec stays disabled forever).
 
-Fix: pre-import the native cv2.abi3.so directly into sys.modules["cv2"] before
-the bootstrap __init__.py gets a chance to run.
+2. Pre-import cv2.abi3.so to avoid recursive import: opencv-python-headless
+   ships a bootstrap __init__.py that calls importlib.import_module("cv2")
+   which in a frozen build finds itself again → infinite recursion.
 """
 import importlib.util
 import os
 import sys
+
+# Must be set before cv2 native module initializes
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
 
 def _preload_cv2_native():

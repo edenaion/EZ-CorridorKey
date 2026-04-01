@@ -58,9 +58,7 @@ modules/BiRefNetModule/checkpoints/*
 !modules/BiRefNetModule/checkpoints/.gitkeep
 
 # Dev docs (local only)
-dev-docs/research/
-dev-docs/COMMIT-LOG.md
-dev-docs/TODO.md
+dev-docs/
 
 # Dev tools (local only, not shipped)
 .agent/
@@ -79,3 +77,18 @@ bench_vram_report.json
 .tmp/
 Projects/
 reports/
+
+# Private task/config files
+TASKS.md
+verify-tasklist.md
+.verify/
+.serena/
+
+# Test scripts & output (may contain local paths)
+test_*.py
+test_output/
+
+# Build artifacts
+build/
+dist/
+*.exe
