@@ -349,13 +349,9 @@ class CorridorKeyEngine:
         _diag(f"Step 4 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"State dict loaded: {_time.monotonic() - t0:.1f}s")
 
-        # Enable TF32 tensor cores for FP32 matmuls (Ampere+).
-        torch.set_float32_matmul_precision('high')
-        logger.info("TF32 matmul precision set to 'high'")
-
-        # Disable cuDNN benchmark to prevent workspace memory allocation (2-5 GB).
-        torch.backends.cudnn.benchmark = False
-        logger.info("cuDNN benchmark disabled (saves 2-5 GB workspace)")
+        # TF32 and cuDNN benchmark settings are now applied at app startup
+        # in ui/app.py::_configure_runtime_backends() so they take effect
+        # before the first inference, not just after lazy model load.
 
         # Step 5: Hiera attention patch
         self._status("Patching attention blocks...")

@@ -389,10 +389,7 @@ class InferenceMixin:
             self._active_job_id = first_job_id
 
         if not self._gpu_worker.isRunning():
-            if sys.platform == "win32":
-                self._gpu_worker.start(QThread.LowPriority)
-            else:
-                self._gpu_worker.start()
+            self._gpu_worker.start(QThread.HighPriority)
         else:
             self._gpu_worker.wake()
 

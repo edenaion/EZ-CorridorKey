@@ -41,6 +41,18 @@ def _configure_runtime_backends() -> None:
     os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
     os.environ["QT_QUICK_BACKEND"] = "software"
 
+    # ── CUDA / cuDNN global settings ──
+    # These must be set once before any inference.  Previously they lived inside
+    # CorridorKeyEngine._load_model() which only runs lazily on first inference,
+    # so the first batch of frames ran without TF32 tensor-core acceleration.
+    try:
+        import torch
+        torch.set_float32_matmul_precision('high')
+        torch.backends.cudnn.benchmark = False
+        logger.info("CUDA globals: TF32 precision='high', cuDNN benchmark=off")
+    except ImportError:
+        pass  # torch not installed – CPU-only environment
+
     if sys.platform != "win32":
         return
 
@@ -75,6 +87,22 @@ def _configure_runtime_backends() -> None:
                          ctypes.get_last_error())
     except Exception as exc:
         logger.debug("Power throttling opt-out skipped: %s", exc)
+
+    # Raise process priority so Windows doesn't starve our GPU worker thread
+    # when the window loses foreground focus.  ABOVE_NORMAL (0x8000) is a mild
+    # bump — enough to keep CPU-side frame I/O feeding the GPU, without
+    # impacting system responsiveness the way HIGH/REALTIME would.
+    # The EcoQoS opt-out above only works on Win11; this covers Win10.
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000
+        if kernel32.SetPriorityClass(kernel32.GetCurrentProcess(),
+                                     ABOVE_NORMAL_PRIORITY_CLASS):
+            logger.info("Process priority set to ABOVE_NORMAL")
+        else:
+            logger.debug("SetPriorityClass failed: %s", ctypes.get_last_error())
+    except Exception as exc:
+        logger.debug("Priority class adjustment skipped: %s", exc)
 
     try:
         import cv2

@@ -10,6 +10,7 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Custom output directory** — set a global default output location in Preferences, or override per-clip via right-click > Set Output Directory. Priority: per-clip > global > default (inside project).
 
 ### Fixed
+- **Slow inference when window loses focus** ([#68](https://github.com/edenaion/EZ-CorridorKey/issues/68)) — GPU worker thread was started at `LowPriority` on Windows, causing CPU starvation when the app lost foreground focus. Fixed by raising worker thread to `HighPriority` and setting process to `ABOVE_NORMAL_PRIORITY_CLASS` (covers Win10 where EcoQoS opt-out is unavailable). TF32/cuDNN settings also moved to app startup for immediate effect.
 - **PyTorch 2.6+ compatibility** — `torch.load` now uses `weights_only=True` to prevent `No module named 'torch.utils.serialization'` errors.
 - **Update script** — cleans stale `__pycache__` after pull to prevent bytecode conflicts from refactored file moves.
 - **Split view panels** now fit images to their own width.
