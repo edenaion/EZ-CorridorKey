@@ -17,7 +17,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 
 # Project root
-ROOT = os.path.dirname(os.path.abspath(SPEC))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(SPEC)))
 
 # Data files to bundle
 datas = [
