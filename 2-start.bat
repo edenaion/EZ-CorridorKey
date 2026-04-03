@@ -1,5 +1,5 @@
 @echo off
-TITLE CorridorKey
+TITLE EZ-CorridorKey
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\activate.bat" (
