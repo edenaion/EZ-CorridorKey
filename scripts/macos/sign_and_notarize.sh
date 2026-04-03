@@ -48,37 +48,38 @@ if [ -z "${INSTALLER_IDENTITY:-}" ]; then
     INSTALLER_IDENTITY=$(security find-identity -v | grep "Developer ID Installer" | head -1 | sed 's/.*"\(.*\)".*/\1/' || true)
 fi
 
-# --- Step 1: Sign the .app (bottom-up, skip data files) ---
+# --- Step 1: Sign the .app (bottom-up, then deep-sign top level) ---
 echo ""
 echo "=== Step 1: Code Signing ==="
 
-# Sign inner shared libraries and frameworks first (bottom-up)
+# Sign inner shared libraries and frameworks first (bottom-up).
+# This ensures nested code objects are signed before the top-level
+# bundle, which Apple requires for valid signatures.
 echo "Signing inner dylibs and .so files..."
-find "$APP_PATH/Contents" \( -name "*.dylib" -o -name "*.so" -o -name "*.framework" \) -print0 | \
+find "$APP_PATH/Contents" \( -name "*.dylib" -o -name "*.so" \) -print0 | \
     xargs -0 -n1 codesign --force --options runtime \
         --entitlements "$ENTITLEMENTS" \
         --sign "$SIGN_IDENTITY" 2>&1 || true
 
-# Sign embedded executables
+# Sign embedded executables (skip data files)
 echo "Signing embedded executables..."
 find "$APP_PATH/Contents/MacOS" -type f -perm +111 ! -name "*.pth" ! -name "*.pt" \
-    ! -name "*.safetensors" ! -name "*.bin" ! -name "*.json" ! -name "*.txt" \
-    ! -name "*.png" ! -name "*.jpg" ! -name "*.css" ! -name "*.qss" \
-    ! -name "*.ttf" ! -name "*.otf" ! -name "*.wav" ! -name "*.svg" \
+    ! -name "*.safetensors" ! -name "*.bin" \
     -print0 | \
     xargs -0 -n1 codesign --force --options runtime \
         --entitlements "$ENTITLEMENTS" \
         --sign "$SIGN_IDENTITY" 2>&1 || true
 
-# Sign the top-level .app bundle (without --deep to avoid data files)
-echo "Signing top-level .app..."
-codesign --force --options runtime \
+# Deep-sign the top-level .app bundle.
+# Must run locally (not over SSH) — requires GUI security agent.
+echo "Signing top-level .app (deep)..."
+codesign --deep --force --options runtime \
     --entitlements "$ENTITLEMENTS" \
     --sign "$SIGN_IDENTITY" \
     "$APP_PATH"
 
 echo "Verifying signature..."
-codesign --verify --strict "$APP_PATH"
+codesign --verify --deep --strict "$APP_PATH"
 echo "Signature OK"
 
 # --- Step 2: Notarize ---
