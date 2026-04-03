@@ -2,7 +2,7 @@
 ; Dark theme matching EZSCAPE brand identity
 ;
 ; Prerequisites:
-;   1. Build frozen exe: pyinstaller corridorkey-windows.spec --noconfirm
+;   1. Build frozen exe: pyinstaller installers/corridorkey-windows.spec --noconfirm
 ;   2. Compile: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" scripts\windows\installer.iss
 ;
 ; Output: dist\EZ-CorridorKey-Setup-{version}.exe

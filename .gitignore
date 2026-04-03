@@ -80,9 +80,13 @@ reports/
 
 # Private task/config files
 TASKS.md
+tasks.md
 verify-tasklist.md
 .verify/
 .serena/
+
+# Benchmark results (local test output)
+bench_results*.json
 
 # Test scripts & output (may contain local paths)
 test_*.py
@@ -92,3 +96,9 @@ test_output/
 build/
 dist/
 *.exe
+
+# Build & signing scripts (internal, not distributed)
+docs/
+scripts/build_macos.sh
+scripts/build_windows.ps1
+scripts/macos/sign_and_notarize.sh

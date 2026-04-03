@@ -33,13 +33,11 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 **Don't want to deal with Python, git, or the command line?** Download the full installer for free:
 
-> **[Download EZ-CorridorKey Installer](https://ezscape.gumroad.com/l/ez-corridorkey)** — Windows `.exe` and macOS `.pkg` available at the EZSCAPE Gumroad (free, email only).
+> **[Download EZ-CorridorKey Installer](https://ezscape.gumroad.com/l/ez-corridorkey)** — Windows `.exe` and macOS `.pkg` available at the EZSCAPE Gumroad.
 
 The installer includes everything — Python runtime, AI models, GPU libraries — no setup required. Just install and run.
 
-### Developer / CLI Install (Windows / macOS / Linux)
-
-If you prefer to manage your own Python environment or want to contribute:
+### Terminal (CLI) Install (Windows / macOS / Linux)
 
 1. Clone or download this repository.
 2. The one-click path provisions and uses managed Python 3.11 automatically, so you do not need to pre-install Python just to use `1-install`.
@@ -71,9 +69,9 @@ If you prefer to manage your own Python environment or want to contribute:
 **Updating:**
 
 - **Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app — it downloads a lightweight patch (~230 MB) and relaunches.
-- **Developer / CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git (or downloads a ZIP if git isn't available).
+- **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git (or downloads a ZIP if git isn't available).
 
-> **Note:** The update ZIP on GitHub Releases (`CorridorKey-windows-x64.zip`) is for Desktop App Installer users only — it patches an existing installation. Developer/CLI users should continue using `3-update.bat` / `3-update.sh`.
+> **Note:** The update ZIP on GitHub Releases (`CorridorKey-windows-x64.zip`) is for Desktop App Installer users only — it patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
 
 ### Alternate Installation: Docker
 
