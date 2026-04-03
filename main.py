@@ -63,12 +63,20 @@ def get_base_dir() -> str:
 
 
 def get_app_dir() -> str:
-    """Get the application directory (where the .exe lives in frozen mode).
+    """Get the application directory for user-facing paths (logs, sessions, etc.).
 
-    Use this for user-facing paths (logs, sessions, etc.).
+    On macOS frozen builds, /Applications is read-only so we use
+    ~/Library/Application Support/EZ-CorridorKey instead.
+    On Windows frozen builds, returns the .exe directory (user-writable).
     Use get_base_dir() for bundled resources (checkpoints, QSS, fonts).
     """
     if getattr(sys, 'frozen', False):
+        if sys.platform == 'darwin':
+            support = os.path.join(
+                os.path.expanduser('~'), 'Library', 'Application Support', 'EZ-CorridorKey'
+            )
+            os.makedirs(support, exist_ok=True)
+            return support
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
