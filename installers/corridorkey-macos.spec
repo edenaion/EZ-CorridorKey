@@ -2,7 +2,7 @@
 """PyInstaller spec for CorridorKey — macOS .app bundle.
 
 Usage:
-    pyinstaller corridorkey-macos.spec --noconfirm
+    pyinstaller installers/corridorkey-macos.spec --noconfirm
 
 Notes:
     - Builds a .app bundle for macOS (Apple Silicon / arm64)

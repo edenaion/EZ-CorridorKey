@@ -2,7 +2,7 @@
 """PyInstaller spec for CorridorKey — Windows .exe bundle.
 
 Usage:
-    pyinstaller corridorkey-windows.spec --noconfirm
+    pyinstaller installers/corridorkey-windows.spec --noconfirm
 
 Notes:
     - Builds a one-folder .exe for Windows (x64)
