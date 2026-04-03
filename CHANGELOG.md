@@ -6,15 +6,28 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [Unreleased]
 
+---
+
+## [1.9.0] - 2026-04-03 — Windows Installer, macOS App, Custom Output
+
 ### Added
-- **Custom output directory** — set a global default output location in Preferences, or override per-clip via right-click > Set Output Directory. Priority: per-clip > global > default (inside project).
+- **Windows installer** — one-click `.exe` installer with dark-themed setup wizard, desktop shortcut, and Start Menu entry. Requires NVIDIA GPU (GTX 10-series or newer).
+- **macOS app bundle** — native `.app` with first-launch setup wizard, code signed and notarized.
+- **First-launch setup wizard** — choose install location, select which AI models to download, and create a desktop shortcut.
+- **Download Models in Preferences** — download or update AI model weights without reinstalling.
+- **Custom output directory** — set a global default output location in Preferences, or override per-clip via right-click > Set Output Directory.
+- **Auto-update for installed apps** — check for updates and download new versions directly from the app.
 
 ### Fixed
-- **Slow inference when window loses focus** ([#68](https://github.com/edenaion/EZ-CorridorKey/issues/68)) — GPU worker thread was started at `LowPriority` on Windows, causing CPU starvation when the app lost foreground focus. Fixed by raising worker thread to `HighPriority` and setting process to `ABOVE_NORMAL_PRIORITY_CLASS` (covers Win10 where EcoQoS opt-out is unavailable). TF32/cuDNN settings also moved to app startup for immediate effect.
-- **PyTorch 2.6+ compatibility** — `torch.load` now uses `weights_only=True` to prevent `No module named 'torch.utils.serialization'` errors.
-- **Update script** — cleans stale `__pycache__` after pull to prevent bytecode conflicts from refactored file moves.
+- **Crash on video import** ([#70](https://github.com/edenaion/EZ-CorridorKey/issues/70), [#63](https://github.com/edenaion/EZ-CorridorKey/issues/63), [#65](https://github.com/edenaion/EZ-CorridorKey/issues/65), [#51](https://github.com/edenaion/EZ-CorridorKey/issues/51)) — app crashed with a stack overflow (`0xc00000fd` in `pyside6.abi3.dll`) when importing any video file. Root cause: `clear_in_out()` emitted a Qt signal connected back to itself, creating infinite recursion through PySide6's C++ signal dispatch. On Linux this surfaced as a `RecursionError`; on Windows the native stack overflowed before Python could intervene. Affected all platforms.
+- **Slow inference when window loses focus** ([#68](https://github.com/edenaion/EZ-CorridorKey/issues/68)) — GPU worker thread was started at `LowPriority` on Windows, causing CPU starvation when the app lost foreground focus. Fixed by raising worker thread to `HighPriority` and setting process to `ABOVE_NORMAL_PRIORITY_CLASS`.
+- **PyTorch 2.6+ compatibility** — resolved `torch.load` errors on newer PyTorch versions.
 - **Split view panels** now fit images to their own width.
-- **Recursion loop** in `_clear_in_out` signal cycle broken.
+- **Update script** — prevents stale cache conflicts after updates.
+
+### Changed
+- **EZSCAPE branding** — updated branding and unified install paths across platforms.
+- **Major codebase refactor** — restructured core modules for maintainability and performance.
 
 ---
 
