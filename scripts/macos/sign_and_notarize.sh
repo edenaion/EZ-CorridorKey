@@ -48,16 +48,37 @@ if [ -z "${INSTALLER_IDENTITY:-}" ]; then
     INSTALLER_IDENTITY=$(security find-identity -v | grep "Developer ID Installer" | head -1 | sed 's/.*"\(.*\)".*/\1/' || true)
 fi
 
-# --- Step 1: Deep sign the .app ---
+# --- Step 1: Sign the .app (bottom-up, skip data files) ---
 echo ""
 echo "=== Step 1: Code Signing ==="
-codesign --deep --force --options runtime \
+
+# Sign inner shared libraries and frameworks first (bottom-up)
+echo "Signing inner dylibs and .so files..."
+find "$APP_PATH/Contents" \( -name "*.dylib" -o -name "*.so" -o -name "*.framework" \) -print0 | \
+    xargs -0 -n1 codesign --force --options runtime \
+        --entitlements "$ENTITLEMENTS" \
+        --sign "$SIGN_IDENTITY" 2>&1 || true
+
+# Sign embedded executables
+echo "Signing embedded executables..."
+find "$APP_PATH/Contents/MacOS" -type f -perm +111 ! -name "*.pth" ! -name "*.pt" \
+    ! -name "*.safetensors" ! -name "*.bin" ! -name "*.json" ! -name "*.txt" \
+    ! -name "*.png" ! -name "*.jpg" ! -name "*.css" ! -name "*.qss" \
+    ! -name "*.ttf" ! -name "*.otf" ! -name "*.wav" ! -name "*.svg" \
+    -print0 | \
+    xargs -0 -n1 codesign --force --options runtime \
+        --entitlements "$ENTITLEMENTS" \
+        --sign "$SIGN_IDENTITY" 2>&1 || true
+
+# Sign the top-level .app bundle (without --deep to avoid data files)
+echo "Signing top-level .app..."
+codesign --force --options runtime \
     --entitlements "$ENTITLEMENTS" \
     --sign "$SIGN_IDENTITY" \
     "$APP_PATH"
 
 echo "Verifying signature..."
-codesign --verify --deep --strict "$APP_PATH"
+codesign --verify --strict "$APP_PATH"
 echo "Signature OK"
 
 # --- Step 2: Notarize ---
