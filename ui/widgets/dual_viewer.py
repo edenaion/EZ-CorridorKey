@@ -147,7 +147,10 @@ class DualViewerPanel(QWidget):
             if total > 0:
                 self._scrubber.set_in_out(0, total - 1)
             else:
-                self._scrubber.clear_in_out()
+                # Use set_in_out(None, None) instead of clear_in_out() to avoid
+                # triggering the range_cleared signal → _clear_in_out recursion loop.
+                # (Fixes stack overflow crash on EXTRACTING clips — 0xc00000fd)
+                self._scrubber.set_in_out(None, None)
 
     def load_preview_from_file(self, file_path: str, clip_name: str, frame_index: int) -> None:
         """Forward worker preview to the output viewer."""
