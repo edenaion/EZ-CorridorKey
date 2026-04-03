@@ -11,7 +11,7 @@
 #define MyAppVersion "1.9.0"
 #define MyAppPublisher "EZscape"
 #define MyAppURL "https://ezscape.space"
-#define MyAppExeName "CorridorKey.exe"
+#define MyAppExeName "EZ-CorridorKey.exe"
 
 [Setup]
 AppId={{E7A3F1B2-9C4D-4E5F-8A6B-1C2D3E4F5A6B}
@@ -47,7 +47,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "..\..\dist\CorridorKey\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\dist\EZ-CorridorKey\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

@@ -113,7 +113,7 @@ def should_exclude(rel_path: Path) -> bool:
 
 def build_update_zip(dist_dir: Path, output_path: Path) -> None:
     """Build the update zip from the PyInstaller dist directory."""
-    source = dist_dir / "CorridorKey"
+    source = dist_dir / "EZ-CorridorKey"
     if not source.is_dir():
         print(f"ERROR: {source} does not exist. Run PyInstaller first.")
         sys.exit(1)
@@ -135,9 +135,9 @@ def build_update_zip(dist_dir: Path, output_path: Path) -> None:
                     excluded_size += full_path.stat().st_size
                     continue
 
-                # Write into zip under CorridorKey/ prefix so extraction
-                # produces a CorridorKey/ folder (matches updater expectation)
-                arc_name = Path("CorridorKey") / rel_path
+                # Write into zip under EZ-CorridorKey/ prefix so extraction
+                # produces a EZ-CorridorKey/ folder (matches updater expectation)
+                arc_name = Path("EZ-CorridorKey") / rel_path
                 zf.write(full_path, arc_name)
                 included += 1
                 included_size += full_path.stat().st_size

@@ -398,7 +398,7 @@ class SettingsMixin:
                 shutil.move(str(new_app), str(current_app))
 
                 # Make executable
-                main_exe = current_app / "Contents" / "MacOS" / "CorridorKey"
+                main_exe = current_app / "Contents" / "MacOS" / "EZ-CorridorKey"
                 if main_exe.exists():
                     main_exe.chmod(0o755)
 

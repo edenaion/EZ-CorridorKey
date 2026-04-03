@@ -139,21 +139,21 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='CorridorKey',
+    name='EZ-CorridorKey',
 )
 
 app = BUNDLE(
     coll,
-    name='CorridorKey.app',
+    name='EZ-CorridorKey.app',
     icon=icon_path,
-    bundle_identifier='com.corridordigital.corridorkey',
+    bundle_identifier='com.ezscape.ez-corridorkey',
     info_plist={
-        'CFBundleName': 'CorridorKey',
+        'CFBundleName': 'EZ-CorridorKey',
         'CFBundleDisplayName': 'EZ-CorridorKey',
-        'CFBundleIdentifier': 'com.corridordigital.corridorkey',
+        'CFBundleIdentifier': 'com.ezscape.ez-corridorkey',
         'CFBundleVersion': '1.9.0',
         'CFBundleShortVersionString': '1.9.0',
-        'CFBundleExecutable': 'CorridorKey',
+        'CFBundleExecutable': 'EZ-CorridorKey',
         'CFBundlePackageType': 'APPL',
         'LSMinimumSystemVersion': '12.0',
         'NSHighResolutionCapable': True,
