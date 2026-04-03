@@ -117,7 +117,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='CorridorKey',
+    name='EZ-CorridorKey',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
