@@ -305,7 +305,13 @@ class SettingsMixin:
         try:
             # Determine asset name by platform
             if _sys.platform == "darwin":
-                asset_name = "CorridorKey-macos-arm64.zip"
+                QMessageBox.information(
+                    self, "Update",
+                    "macOS auto-update is not yet supported.\n"
+                    "Please download the latest .pkg from Gumroad or GitHub."
+                )
+                progress.close()
+                return
             elif _sys.platform == "win32":
                 asset_name = "CorridorKey-windows-x64.zip"
             else:

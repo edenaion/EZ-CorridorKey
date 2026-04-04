@@ -61,10 +61,18 @@ hiddenimports = [
     'huggingface_hub',  # Model downloads in setup wizard
 ]
 
-# Try to collect corridorkey-mlx if installed
+# Collect corridorkey-mlx and MLX framework (Apple Silicon acceleration)
+for mlx_pkg in ('corridorkey_mlx', 'mlx', 'mlx.core', 'mlx.nn'):
+    try:
+        hiddenimports += collect_submodules(mlx_pkg)
+        datas += collect_data_files(mlx_pkg)
+    except Exception:
+        pass
+
+# mlx-metal GPU kernels (separate package)
 try:
-    hiddenimports += collect_submodules('corridorkey_mlx')
-    datas += collect_data_files('corridorkey_mlx')
+    hiddenimports += collect_submodules('mlx_metal')
+    datas += collect_data_files('mlx_metal')
 except Exception:
     pass
 

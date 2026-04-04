@@ -62,15 +62,24 @@ def get_base_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
 
+def is_portable() -> bool:
+    """True when a 'portable.txt' marker exists next to the executable."""
+    if getattr(sys, 'frozen', False):
+        return os.path.isfile(os.path.join(os.path.dirname(sys.executable), 'portable.txt'))
+    return False
+
+
 def get_app_dir() -> str:
     """Get the application directory for user-facing paths (logs, sessions, etc.).
 
-    On macOS frozen builds, /Applications is read-only so we use
-    ~/Library/Application Support/EZ-CorridorKey instead.
-    On Windows frozen builds, returns the .exe directory (user-writable).
+    Portable mode: all data stays next to the .exe (USB-stick friendly).
+    macOS frozen: /Applications is read-only → ~/Library/Application Support/EZ-CorridorKey.
+    Windows frozen: returns the .exe directory (user-writable).
     Use get_base_dir() for bundled resources (checkpoints, QSS, fonts).
     """
     if getattr(sys, 'frozen', False):
+        if is_portable():
+            return os.path.dirname(sys.executable)
         if sys.platform == 'darwin':
             support = os.path.join(
                 os.path.expanduser('~'), 'Library', 'Application Support', 'EZ-CorridorKey'

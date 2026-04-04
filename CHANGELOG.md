@@ -12,6 +12,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Added
 - **Windows installer** — one-click `.exe` installer with dark-themed setup wizard, desktop shortcut, and Start Menu entry. Requires NVIDIA GPU (GTX 10-series or newer).
+- **Windows portable** — standalone ZIP, no installer or registry. Unzip to a USB stick or any folder and run. All data (models, projects, logs) stays next to the exe.
 - **macOS app bundle** — native `.app` with first-launch setup wizard, code signed and notarized.
 - **First-launch setup wizard** — choose install location, select which AI models to download, and create a desktop shortcut.
 - **Download Models in Preferences** — download or update AI model weights without reinstalling.

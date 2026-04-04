@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass, asdict
 
@@ -21,6 +22,11 @@ _FILENAME = "recent_sessions.json"
 
 def _config_dir() -> str:
     """Platform-appropriate config directory for app-level settings."""
+    # Portable: config lives next to the exe
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(sys.executable)
+        if os.path.isfile(os.path.join(exe_dir, 'portable.txt')):
+            return os.path.join(exe_dir, 'config')
     if os.name == "nt":
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
         return os.path.join(base, "CorridorKey")

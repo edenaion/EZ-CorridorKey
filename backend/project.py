@@ -49,6 +49,7 @@ def set_app_dir(path: str) -> None:
 def get_data_dir() -> str:
     """Return the user-data root for models and projects.
 
+    Portable mode: everything lives next to the .exe.
     Dev mode: project root (same as _app_dir).
     Frozen: QSettings app/install_path, falling back to platform default.
     """
@@ -56,6 +57,10 @@ def get_data_dir() -> str:
         if _app_dir:
             return _app_dir
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Portable: all data next to the exe
+    exe_dir = os.path.dirname(sys.executable)
+    if os.path.isfile(os.path.join(exe_dir, 'portable.txt')):
+        return exe_dir
     # Frozen: read user-chosen install path
     try:
         from PySide6.QtCore import QSettings

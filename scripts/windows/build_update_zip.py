@@ -154,7 +154,7 @@ def main():
     dist_dir = project_root / "dist"
     output = dist_dir / "CorridorKey-windows-x64.zip"
 
-    print(f"Building update zip from: {dist_dir / 'CorridorKey'}")
+    print(f"Building update zip from: {dist_dir / 'EZ-CorridorKey'}")
     print(f"Output: {output}")
     print()
     build_update_zip(dist_dir, output)
