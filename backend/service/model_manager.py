@@ -198,7 +198,16 @@ class ModelManagerMixin:
 
         from CorridorKeyModule.backend import create_engine, resolve_backend
 
-        backend = resolve_backend()
+        # Read user's backend preference (macOS: auto/mlx/torch)
+        requested_backend = None
+        try:
+            from PySide6.QtCore import QSettings
+            requested_backend = QSettings().value("inference/backend", "auto", type=str)
+            if requested_backend == "auto":
+                requested_backend = None  # let resolve_backend auto-detect
+        except Exception:
+            pass
+        backend = resolve_backend(requested_backend)
         opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
         _img_size = self._model_resolution
 

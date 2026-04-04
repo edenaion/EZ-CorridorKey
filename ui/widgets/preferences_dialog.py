@@ -25,6 +25,7 @@ KEY_EXR_COMPRESSION = "output/exr_compression"
 KEY_TRACKER_MODEL = "tracking/sam2_model"
 KEY_PARALLEL_CLIPS = "gpu/parallel_clips"
 KEY_MODEL_RESOLUTION = "inference/model_resolution"
+KEY_INFERENCE_BACKEND = "inference/backend"
 KEY_OUTPUT_DIRECTORY = "output/default_directory"
 
 # Defaults
@@ -282,6 +283,28 @@ class PreferencesDialog(QDialog):
         )
         inference_layout.addWidget(self._model_resolution_combo)
 
+        # Backend selector (macOS only — choose MLX or PyTorch MPS)
+        self._backend_combo = None
+        if _is_apple_silicon:
+            backend_label = QLabel("Processing backend")
+            inference_layout.addWidget(backend_label)
+
+            self._backend_combo = QComboBox()
+            self._backend_combo.addItem("Auto — MLX if available, otherwise MPS", "auto")
+            self._backend_combo.addItem("MLX — Apple Metal acceleration (recommended)", "mlx")
+            self._backend_combo.addItem("MPS — PyTorch Metal Performance Shaders", "torch")
+            saved_backend = get_setting_str(KEY_INFERENCE_BACKEND, "auto")
+            idx = self._backend_combo.findData(saved_backend)
+            self._backend_combo.setCurrentIndex(max(0, idx))
+            self._backend_combo.setToolTip(
+                "Choose the inference backend for Apple Silicon.\n\n"
+                "MLX: Native Apple Metal — fastest on M1/M2/M3/M4.\n"
+                "MPS: PyTorch Metal Performance Shaders — compatible fallback.\n"
+                "Auto: Uses MLX if installed, otherwise falls back to MPS.\n\n"
+                "Changing this requires an engine reload (happens automatically)."
+            )
+            inference_layout.addWidget(self._backend_combo)
+
         # (added to layout below in display order)
 
         # Playback section
@@ -470,6 +493,8 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_EXR_COMPRESSION, self._exr_compression_combo.currentData())
         s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
         s.setValue(KEY_MODEL_RESOLUTION, self._model_resolution_combo.currentData())
+        if self._backend_combo is not None:
+            s.setValue(KEY_INFERENCE_BACKEND, self._backend_combo.currentData())
         s.setValue(KEY_OUTPUT_DIRECTORY, self._output_dir_edit.text().strip())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
