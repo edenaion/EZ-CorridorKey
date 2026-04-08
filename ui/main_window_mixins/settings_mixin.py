@@ -179,7 +179,7 @@ class SettingsMixin:
         # 1. Relative to this file (dev / editable install)
         # 2. Frozen exe root (PyInstaller _MEIPASS)
         candidates = [
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "pyproject.toml"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml"),
         ]
         if getattr(sys, 'frozen', False):
             candidates.append(os.path.join(sys._MEIPASS, "pyproject.toml"))
