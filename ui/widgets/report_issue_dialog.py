@@ -33,17 +33,13 @@ _MAX_URL_LENGTH = 7500  # stay well under 8192 to avoid 414 errors
 
 def _get_app_version() -> str:
     """Read app version from pyproject.toml (single source of truth)."""
-    try:
-        from importlib.metadata import version
-        return version("corridorkey")
-    except Exception:
-        pass
     import tomllib
-    candidates = [
-        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml"),
-    ]
+    candidates = []
     if getattr(sys, 'frozen', False):
         candidates.append(os.path.join(sys._MEIPASS, "pyproject.toml"))
+    candidates.append(
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml")
+    )
     for path in candidates:
         try:
             with open(path, "rb") as f:
