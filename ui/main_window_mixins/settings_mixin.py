@@ -169,20 +169,13 @@ class SettingsMixin:
     # ── Update Check ──────────────────────────────────────────
 
     def _get_local_version(self) -> str:
-        try:
-            from importlib.metadata import version
-            return version("corridorkey")
-        except Exception:
-            pass
         import tomllib
-        # Try multiple candidate locations for pyproject.toml:
-        # 1. Relative to this file (dev / editable install)
-        # 2. Frozen exe root (PyInstaller _MEIPASS)
-        candidates = [
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml"),
-        ]
+        candidates = []
         if getattr(sys, 'frozen', False):
             candidates.append(os.path.join(sys._MEIPASS, "pyproject.toml"))
+        candidates.append(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml")
+        )
         for path in candidates:
             try:
                 with open(path, "rb") as f:
