@@ -50,25 +50,32 @@ def stitch_video(
                         if f.lower().endswith(('.png', '.jpg', '.jpeg', '.exr'))])
 
     # Auto-detect codec/pixel format from output extension
-    is_webm = out_path.lower().endswith('.webm')
-    if is_webm:
+    ext = os.path.splitext(out_path)[1].lower()
+    is_webm = ext == '.webm'
+    is_mov = ext == '.mov'
+    is_exr = pattern.lower().endswith('.exr')
+
+    if is_mov:
+        codec = "prores_ks"
+        pix_fmt = "yuva444p10le"
+    elif is_webm:
         codec = "libvpx-vp9"
-        pix_fmt = "yuva420p"  # alpha channel support
+        pix_fmt = "yuva420p"
     else:
         pix_fmt = "yuv420p"
 
-    cmd = [
-        ffmpeg,
-        "-framerate", str(fps),
-        "-start_number", str(start_number),
-        "-i", in_dir + "/" + pattern,
-        "-c:v", codec,
-        "-crf", str(crf),
-        "-pix_fmt", pix_fmt,
-    ]
-    # VP9 needs -b:v 0 for constant quality mode (CRF alone is ignored)
+    # EXR frames are linear float — tell FFmpeg to apply sRGB gamma
+    cmd = [ffmpeg, "-framerate", str(fps), "-start_number", str(start_number)]
+    if is_exr:
+        cmd.extend(["-apply_trc", "iec61966_2_1"])
+    cmd.extend(["-i", in_dir + "/" + pattern, "-c:v", codec])
+    if is_mov:
+        cmd.extend(["-profile:v", "4444", "-qscale:v", "9", "-vendor", "apl0"])
+    else:
+        cmd.extend(["-crf", str(crf)])
+    cmd.extend(["-pix_fmt", pix_fmt])
     if is_webm:
-        cmd.extend(["-b:v", "0"])
+        cmd.extend(["-b:v", "0", "-auto-alt-ref", "0", "-deadline", "good", "-row-mt", "1"])
     cmd.extend([out_path, "-y"])
 
     logger.info(f"Stitching video: {' '.join(cmd)}")

@@ -12,7 +12,12 @@ Notes:
 """
 import os
 import sys
+import tomllib
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+# Single source of truth for version
+with open(os.path.join(SPECPATH, '..', 'pyproject.toml'), 'rb') as _f:
+    APP_VERSION = tomllib.load(_f)['project']['version']
 
 block_cipher = None
 
@@ -30,6 +35,8 @@ datas = [
     (os.path.join(ROOT, 'ui', 'sounds'), os.path.join('ui', 'sounds')),
     # setup_models.py needed by the first-launch wizard
     (os.path.join(ROOT, 'scripts', 'setup_models.py'), 'scripts'),
+    # pyproject.toml for runtime version detection
+    (os.path.join(ROOT, 'pyproject.toml'), '.'),
 ]
 
 # Add fonts directory if it exists
@@ -159,8 +166,8 @@ app = BUNDLE(
         'CFBundleName': 'EZ-CorridorKey',
         'CFBundleDisplayName': 'EZ-CorridorKey',
         'CFBundleIdentifier': 'com.ezscape.ez-corridorkey',
-        'CFBundleVersion': '1.9.0',
-        'CFBundleShortVersionString': '1.9.0',
+        'CFBundleVersion': APP_VERSION,
+        'CFBundleShortVersionString': APP_VERSION,
         'CFBundleExecutable': 'EZ-CorridorKey',
         'CFBundlePackageType': 'APPL',
         'LSMinimumSystemVersion': '12.0',

@@ -244,14 +244,19 @@ class ExportMixin:
         exports_dir = os.path.join(clip.root_path, "_EXPORTS")
         os.makedirs(exports_dir, exist_ok=True)
 
-        # Processed has alpha — default to WebM (VP9 with transparency)
+        # Processed has alpha — default to ProRes 4444 (editor-compatible)
         is_processed = subdir_name.lower() == "processed"
         if is_processed:
-            default_name = f"{clip.name}_{subdir_name}_export.webm"
-            file_filter = "WebM Video with Alpha (*.webm);;MP4 Video (*.mp4);;All Files (*)"
+            default_name = f"{clip.name}_{subdir_name}_export.mov"
+            file_filter = (
+                "MOV ProRes 4444 with Alpha (*.mov);;"
+                "WebM VP9 with Alpha (*.webm);;"
+                "MP4 Video (*.mp4);;"
+                "All Files (*)"
+            )
         else:
             default_name = f"{clip.name}_{subdir_name}_export.mp4"
-            file_filter = "MP4 Video (*.mp4);;WebM Video (*.webm);;All Files (*)"
+            file_filter = "MP4 Video (*.mp4);;MOV ProRes (*.mov);;WebM Video (*.webm);;All Files (*)"
 
         default_path = os.path.join(exports_dir, default_name)
         out_path, _ = QFileDialog.getSaveFileName(
@@ -380,8 +385,8 @@ class ExportMixin:
             child.setCheckState(0, Qt.Checked)
 
             combo = QComboBox()
-            combo.addItems(["WebM (alpha)", "MP4"])
-            combo.setCurrentIndex(0 if is_processed else 1)
+            combo.addItems(["MOV ProRes 4444 (alpha)", "WebM VP9 (alpha)", "MP4"])
+            combo.setCurrentIndex(0 if is_processed else 2)
             tree.setItemWidget(child, 1, combo)
             format_combos[(clip.name, subdir)] = combo
 
@@ -404,8 +409,13 @@ class ExportMixin:
                 child = parent_node.child(ci)
                 if child.text(0) == subdir and child.checkState(0) == Qt.Checked:
                     combo = format_combos.get((clip.name, subdir))
-                    use_webm = combo is not None and "WebM" in combo.currentText()
-                    ext = ".webm" if use_webm else ".mp4"
+                    fmt_text = combo.currentText() if combo else ""
+                    if "MOV" in fmt_text:
+                        ext = ".mov"
+                    elif "WebM" in fmt_text:
+                        ext = ".webm"
+                    else:
+                        ext = ".mp4"
                     exports_dir = os.path.join(clip.root_path, "_EXPORTS")
                     os.makedirs(exports_dir, exist_ok=True)
                     out_path = os.path.join(exports_dir, f"{clip.name}_{subdir}_export{ext}")

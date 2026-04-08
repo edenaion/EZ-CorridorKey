@@ -276,7 +276,7 @@ class MainWindow(
     def __init__(self, service: CorridorKeyService | None = None,
                  store: RecentSessionsStore | None = None):
         super().__init__()
-        self.setWindowTitle(f"EZ-CorridorKey {self._get_visible_build_id()}")
+        self.setWindowTitle("EZ-CorridorKey")
         self.setMinimumSize(1100, 650)
 
         container_env = str(os.getenv("CORRIDORKEY_CONTAINER_MODE", "0")).strip().lower()

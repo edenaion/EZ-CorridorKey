@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 
 from PySide6.QtWidgets import QWidget, QLabel, QMessageBox
 from PySide6.QtCore import Qt, Slot, QSettings
@@ -140,23 +141,14 @@ class SettingsMixin:
 
     def _show_about(self) -> None:
         app_version = self._get_local_version()
-        build_id = self._get_visible_build_id()
-        tester_note = ""
-        if _SHOW_TESTER_BUILD_ID:
-            tester_note = (
-                "<p><b>Temporary tester build identifier.</b><br>"
-                "Remove before merging this branch back to main.</p>"
-            )
         box = QMessageBox(self)
         box.setWindowTitle("About EZ-CorridorKey")
         box.setTextFormat(Qt.RichText)
         box.setText(
-            f"<h2>EZ-CorridorKey {build_id}</h2>"
+            f"<h2>EZ-CorridorKey v{app_version}</h2>"
             "<p>AI Green Screen Keyer<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"
-            f"<p>Package version: v{app_version}</p>"
-            f"{tester_note}"
             "<p><b>Special Thanks</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
@@ -181,15 +173,23 @@ class SettingsMixin:
             from importlib.metadata import version
             return version("corridorkey")
         except Exception:
+            pass
+        import tomllib
+        # Try multiple candidate locations for pyproject.toml:
+        # 1. Relative to this file (dev / editable install)
+        # 2. Frozen exe root (PyInstaller _MEIPASS)
+        candidates = [
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "pyproject.toml"),
+        ]
+        if getattr(sys, 'frozen', False):
+            candidates.append(os.path.join(sys._MEIPASS, "pyproject.toml"))
+        for path in candidates:
             try:
-                import tomllib
-                pyproject = os.path.join(
-                    os.path.dirname(os.path.dirname(__file__)), "pyproject.toml"
-                )
-                with open(pyproject, "rb") as f:
+                with open(path, "rb") as f:
                     return tomllib.load(f)["project"]["version"]
             except Exception:
-                return "0.0.0"
+                continue
+        return "0.0.0"
 
     def _get_git_short_hash(self) -> str:
         try:

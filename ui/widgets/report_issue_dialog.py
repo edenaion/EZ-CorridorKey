@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import platform
+import sys
 from urllib.parse import quote
 
 from PySide6.QtCore import QUrl
@@ -27,30 +28,29 @@ from PySide6.QtWidgets import (
 logger = logging.getLogger(__name__)
 
 _GITHUB_ISSUES_URL = "https://github.com/edenaion/EZ-CorridorKey/issues/new"
-try:
-    from importlib.metadata import version as _pkg_version
-    _APP_VERSION = _pkg_version("corridorkey")
-except Exception:
-    _APP_VERSION = "unknown"
 _MAX_URL_LENGTH = 7500  # stay well under 8192 to avoid 414 errors
 
 
 def _get_app_version() -> str:
-    """Read app version from installed metadata or pyproject.toml."""
+    """Read app version from pyproject.toml (single source of truth)."""
     try:
         from importlib.metadata import version
         return version("corridorkey")
     except Exception:
+        pass
+    import tomllib
+    candidates = [
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml"),
+    ]
+    if getattr(sys, 'frozen', False):
+        candidates.append(os.path.join(sys._MEIPASS, "pyproject.toml"))
+    for path in candidates:
         try:
-            import tomllib
-            pyproject = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                "pyproject.toml",
-            )
-            with open(pyproject, "rb") as f:
+            with open(path, "rb") as f:
                 return tomllib.load(f)["project"]["version"]
         except Exception:
-            return "unknown"
+            continue
+    return "unknown"
 
 
 class ReportIssueDialog(QDialog):
