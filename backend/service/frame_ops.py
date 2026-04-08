@@ -15,6 +15,7 @@ import numpy as np
 from ..clip_state import ClipAsset, ClipEntry
 from ..errors import FrameReadError, JobCancelledError
 from ..frame_io import (
+    _linear_to_srgb,
     _srgb_to_linear,
     decode_video_mask_frame,
     read_video_frame_at,
@@ -196,10 +197,21 @@ class FrameOpsMixin:
             self._write_image(comp_bgr, comp_path, cfg.comp_format, clip_name, frame_index,
                               exr_compression=cfg.exr_compression)
 
-        # Processed (RGBA straight linear)
+        # Processed (RGBA — linear premul for EXR, sRGB straight for PNG)
         if cfg.processed_enabled and 'processed' in res:
-            proc_rgba = res['processed']
-            proc_bgra = cv2.cvtColor(proc_rgba, cv2.COLOR_RGBA2BGRA)
+            proc_rgba = res['processed']  # [H,W,4] premultiplied linear float
+            if cfg.processed_format == "exr":
+                proc_bgra = cv2.cvtColor(proc_rgba, cv2.COLOR_RGBA2BGRA)
+            else:
+                # PNG needs sRGB straight alpha, not premultiplied linear.
+                # Un-premultiply, convert linear→sRGB, recombine with alpha.
+                rgb_premul = proc_rgba[:, :, :3]
+                alpha = proc_rgba[:, :, 3:4]
+                safe_alpha = np.where(alpha > 1e-6, alpha, 1.0)
+                rgb_straight = rgb_premul / safe_alpha
+                rgb_srgb = _linear_to_srgb(np.clip(rgb_straight, 0.0, 1.0))
+                proc_srgb = np.concatenate([rgb_srgb, alpha], axis=-1)
+                proc_bgra = cv2.cvtColor(proc_srgb, cv2.COLOR_RGBA2BGRA)
             proc_path = os.path.join(dirs['processed'], f"{input_stem}.{cfg.processed_format}")
             self._write_image(proc_bgra, proc_path, cfg.processed_format, clip_name, frame_index,
                               exr_compression=cfg.exr_compression)
