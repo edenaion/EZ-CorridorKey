@@ -97,8 +97,13 @@ build/
 dist/
 *.exe
 
-# Build & signing scripts (internal, not distributed)
+# Build, signing & installer scripts (internal, not distributed)
 docs/
 scripts/build_macos.sh
 scripts/build_windows.ps1
 scripts/macos/sign_and_notarize.sh
+scripts/windows/installer*.iss
+scripts/windows/wizard-*.bmp
+scripts/windows/build_portable_zip.py
+scripts/windows/build_update_zip.py
+scripts/azure/
