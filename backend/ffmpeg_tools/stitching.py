@@ -28,11 +28,11 @@ def stitch_video(
 
     Args:
         in_dir: Directory containing frame images.
-        out_path: Output video file path.
+        out_path: Output video file path (.mp4 or .webm).
         fps: Frame rate.
         pattern: Frame filename pattern.
-        codec: Video codec (libx264, libx265, etc.).
-        crf: Quality (0-51, lower = better).
+        codec: Video codec (libx264, libx265, libvpx-vp9, etc.).
+        crf: Quality (0-51 for x264, 0-63 for VP9; lower = better).
         start_number: First frame number in the sequence.
         on_progress: Callback(current_frame, total_frames).
         cancel_event: Set to cancel stitching.
@@ -49,6 +49,14 @@ def stitch_video(
     total_frames = len([f for f in os.listdir(in_dir)
                         if f.lower().endswith(('.png', '.jpg', '.jpeg', '.exr'))])
 
+    # Auto-detect codec/pixel format from output extension
+    is_webm = out_path.lower().endswith('.webm')
+    if is_webm:
+        codec = "libvpx-vp9"
+        pix_fmt = "yuva420p"  # alpha channel support
+    else:
+        pix_fmt = "yuv420p"
+
     cmd = [
         ffmpeg,
         "-framerate", str(fps),
@@ -56,10 +64,12 @@ def stitch_video(
         "-i", in_dir + "/" + pattern,
         "-c:v", codec,
         "-crf", str(crf),
-        "-pix_fmt", "yuv420p",
-        out_path,
-        "-y",
+        "-pix_fmt", pix_fmt,
     ]
+    # VP9 needs -b:v 0 for constant quality mode (CRF alone is ignored)
+    if is_webm:
+        cmd.extend(["-b:v", "0"])
+    cmd.extend([out_path, "-y"])
 
     logger.info(f"Stitching video: {' '.join(cmd)}")
 

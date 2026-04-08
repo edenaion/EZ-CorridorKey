@@ -24,6 +24,7 @@ class MenuMixin:
 
         file_menu.addSeparator()
         file_menu.addAction("Export Video...", self._on_export_video)
+        file_menu.addAction("Export All Videos", self._on_export_all_videos)
         file_menu.addSeparator()
         file_menu.addAction("Return to Home", self._return_to_welcome)
         file_menu.addAction("Exit", self.close)

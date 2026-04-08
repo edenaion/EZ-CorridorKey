@@ -5,8 +5,8 @@ import os
 import shutil
 import sys
 
-from PySide6.QtWidgets import QMessageBox, QFileDialog
-from PySide6.QtCore import Slot, QThread
+from PySide6.QtWidgets import QMessageBox, QFileDialog, QProgressDialog
+from PySide6.QtCore import Slot, QThread, Qt
 
 from backend import ClipEntry, ClipState
 from backend.clip_state import ClipAsset
@@ -243,11 +243,20 @@ class ExportMixin:
         subdir_name = os.path.basename(source_dir)
         exports_dir = os.path.join(clip.root_path, "_EXPORTS")
         os.makedirs(exports_dir, exist_ok=True)
-        default_name = f"{clip.name}_{subdir_name}_export.mp4"
+
+        # Processed has alpha — default to WebM (VP9 with transparency)
+        is_processed = subdir_name.lower() == "processed"
+        if is_processed:
+            default_name = f"{clip.name}_{subdir_name}_export.webm"
+            file_filter = "WebM Video with Alpha (*.webm);;MP4 Video (*.mp4);;All Files (*)"
+        else:
+            default_name = f"{clip.name}_{subdir_name}_export.mp4"
+            file_filter = "MP4 Video (*.mp4);;WebM Video (*.webm);;All Files (*)"
+
         default_path = os.path.join(exports_dir, default_name)
         out_path, _ = QFileDialog.getSaveFileName(
             self, "Export Video", default_path,
-            "MP4 Video (*.mp4);;All Files (*)",
+            file_filter,
         )
         if not out_path:
             return
@@ -297,6 +306,175 @@ class ExportMixin:
                 self, "Export Failed",
                 f"Failed to export video:\n{e}",
             )
+
+    # ── Batch Export Video ──
+
+    def _on_export_all_videos(self) -> None:
+        """Show selection dialog, then export chosen clip outputs as video.
+
+        Processed → WebM (VP9 alpha), everything else → MP4.
+        Writes to each clip's _EXPORTS/ folder.
+        """
+        from backend.ffmpeg_tools import read_video_metadata, stitch_video, require_ffmpeg_install
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QDialogButtonBox, QTreeWidget, QTreeWidgetItem, QLabel, QComboBox
+        import re
+
+        try:
+            require_ffmpeg_install(require_probe=True)
+        except RuntimeError as exc:
+            QMessageBox.critical(self, "FFmpeg Unavailable", str(exc))
+            return
+
+        complete_clips = [c for c in self._clip_model.clips if c.state == ClipState.COMPLETE]
+        if not complete_clips:
+            QMessageBox.information(self, "Nothing to Export", "No COMPLETE clips to export.")
+            return
+
+        # Gather all available exports
+        available: list[tuple[ClipEntry, str, str]] = []  # (clip, src_dir, subdir)
+        for clip in complete_clips:
+            output_dir = clip.output_dir
+            if not os.path.isdir(output_dir):
+                continue
+            for subdir in sorted(os.listdir(output_dir)):
+                src = os.path.join(output_dir, subdir)
+                if os.path.isdir(src) and os.listdir(src):
+                    available.append((clip, src, subdir))
+
+        if not available:
+            QMessageBox.information(self, "Nothing to Export", "No output frames found.")
+            return
+
+        # ── Selection Dialog ──
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Export All Videos")
+        dlg.setMinimumWidth(450)
+        layout = QVBoxLayout(dlg)
+
+        layout.addWidget(QLabel("Select which outputs to export as video:"))
+
+        tree = QTreeWidget()
+        tree.setHeaderLabels(["Clip / Output", "Format", "Frames"])
+        tree.setRootIsDecorated(True)
+        tree.setColumnWidth(0, 260)
+        tree.setColumnWidth(1, 120)
+
+        format_combos: dict[tuple[str, str], QComboBox] = {}  # (clip_name, subdir) → combo
+        clip_nodes: dict[str, QTreeWidgetItem] = {}
+        for clip, src, subdir in available:
+            if clip.name not in clip_nodes:
+                node = QTreeWidgetItem(tree, [clip.name, "", ""])
+                node.setFlags(node.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
+                node.setCheckState(0, Qt.Checked)
+                clip_nodes[clip.name] = node
+
+            frame_count = len([
+                f for f in os.listdir(src)
+                if os.path.splitext(f)[1].lower()
+                in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff')
+            ])
+            is_processed = subdir.lower() == "processed"
+
+            child = QTreeWidgetItem(clip_nodes[clip.name], [subdir, "", str(frame_count)])
+            child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
+            child.setCheckState(0, Qt.Checked)
+
+            combo = QComboBox()
+            combo.addItems(["WebM (alpha)", "MP4"])
+            combo.setCurrentIndex(0 if is_processed else 1)
+            tree.setItemWidget(child, 1, combo)
+            format_combos[(clip.name, subdir)] = combo
+
+        tree.expandAll()
+        layout.addWidget(tree)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        # Collect checked items with user-selected format
+        selected: list[tuple[ClipEntry, str, str, str]] = []
+        for clip, src, subdir in available:
+            parent_node = clip_nodes[clip.name]
+            for ci in range(parent_node.childCount()):
+                child = parent_node.child(ci)
+                if child.text(0) == subdir and child.checkState(0) == Qt.Checked:
+                    combo = format_combos.get((clip.name, subdir))
+                    use_webm = combo is not None and "WebM" in combo.currentText()
+                    ext = ".webm" if use_webm else ".mp4"
+                    exports_dir = os.path.join(clip.root_path, "_EXPORTS")
+                    os.makedirs(exports_dir, exist_ok=True)
+                    out_path = os.path.join(exports_dir, f"{clip.name}_{subdir}_export{ext}")
+                    selected.append((clip, src, out_path, subdir))
+
+        if not selected:
+            return
+
+        # ── Export with progress ──
+        progress = QProgressDialog(
+            "Exporting videos...", "Cancel", 0, len(selected), self,
+        )
+        progress.setWindowTitle("Batch Export")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+
+        exported = []
+        failed = []
+        for i, (clip, src, out_path, subdir) in enumerate(selected):
+            if progress.wasCanceled():
+                break
+            progress.setLabelText(f"Exporting {clip.name} / {subdir}...")
+            progress.setValue(i)
+
+            metadata = read_video_metadata(clip.root_path)
+            fps = metadata.get("fps", 24.0) if metadata else 24.0
+
+            frames = sorted(
+                f for f in os.listdir(src)
+                if os.path.splitext(f)[1].lower()
+                in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff')
+            )
+            if not frames:
+                continue
+
+            first = frames[0]
+            m = re.match(r'^(.*?)(\d+)(\.\w+)$', first)
+            if m:
+                prefix, digits, suffix = m.group(1), m.group(2), m.group(3)
+                pattern = f"{prefix}%0{len(digits)}d{suffix}"
+                start_number = int(digits)
+            else:
+                fext = os.path.splitext(first)[1]
+                pattern = f"frame_%06d{fext}"
+                start_number = 0
+
+            try:
+                stitch_video(
+                    in_dir=src, out_path=out_path, fps=fps,
+                    pattern=pattern, start_number=start_number,
+                )
+                exported.append(f"{clip.name}/{subdir}")
+            except Exception as e:
+                logger.error(f"Batch export failed for {clip.name}/{subdir}: {e}")
+                failed.append(f"{clip.name}/{subdir}: {e}")
+
+        progress.setValue(len(selected))
+
+        summary = f"Exported {len(exported)} video(s)."
+        if failed:
+            summary += f"\n\n{len(failed)} failed:\n" + "\n".join(failed[:5])
+        if exported:
+            from ui.sounds.audio_manager import UIAudio
+            UIAudio.frame_extract_done()
+            QMessageBox.information(self, "Batch Export Complete", summary)
+        elif failed:
+            from ui.sounds.audio_manager import UIAudio
+            UIAudio.error()
+            QMessageBox.warning(self, "Batch Export", summary)
 
     # ── View Controls ──
 
