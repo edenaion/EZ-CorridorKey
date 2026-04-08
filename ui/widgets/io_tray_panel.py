@@ -99,9 +99,9 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
         self._input_scroll = QScrollArea()
         self._input_scroll.setObjectName("trayScroll")
-        self._input_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self._input_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._input_scroll.setWidgetResizable(False)
+        self._input_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._input_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._input_scroll.setWidgetResizable(True)
 
         self._input_canvas = ThumbnailCanvas(thumbnail_kind="input")
         self._input_canvas.card_clicked.connect(self._on_single_click)
@@ -125,9 +125,9 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
         self._export_scroll = QScrollArea()
         self._export_scroll.setObjectName("trayScroll")
-        self._export_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self._export_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._export_scroll.setWidgetResizable(False)
+        self._export_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._export_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self._export_scroll.setWidgetResizable(True)
 
         self._export_canvas = ThumbnailCanvas(
             show_manifest_tooltip=True,
@@ -146,6 +146,7 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         self._tray_splitter.setSizes([500, 500])
         self._tray_splitter.setStretchFactor(0, 1)
         self._tray_splitter.setStretchFactor(1, 1)
+        self._tray_splitter.splitterMoved.connect(self._on_splitter_moved)
 
         layout.addWidget(self._tray_splitter)
 
@@ -154,6 +155,11 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         self._model.dataChanged.connect(self._on_data_changed)
         self._model.layoutChanged.connect(self._rebuild)
         self._model.clip_count_changed.connect(lambda _: self._rebuild())
+
+    def _on_splitter_moved(self, pos: int, index: int) -> None:
+        """Force canvas reflow when the INPUT/EXPORTS splitter moves."""
+        self._input_canvas._reflow()
+        self._export_canvas._reflow()
 
     # ── + ADD button ──
 

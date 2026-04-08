@@ -1,4 +1,4 @@
-"""Thumbnail canvas widget — custom-painted horizontal strip of clip cards.
+"""Thumbnail canvas widget — wrapping grid of clip cards with vertical scroll.
 
 Extracted from io_tray_panel.py for maintainability.
 """
@@ -23,10 +23,11 @@ _STATE_COLORS: dict[ClipState, str] = {
 
 
 class ThumbnailCanvas(QWidget):
-    """Custom-painted horizontal strip of clip thumbnail cards.
+    """Wrapping grid of clip thumbnail cards with vertical scroll.
 
-    Each card is CARD_WIDTH wide and shows: thumbnail, clip name, state badge,
-    and frame count. Mouse clicks emit card_clicked with the ClipEntry.
+    Cards flow left-to-right, top-to-bottom, wrapping into rows based on
+    available width. A vertical scrollbar appears when rows exceed the
+    visible height.
     """
 
     card_clicked = Signal(object)  # ClipEntry (single left-click)
@@ -37,6 +38,7 @@ class ThumbnailCanvas(QWidget):
     folder_icon_clicked = Signal(object)  # ClipEntry (folder icon click)
 
     CARD_WIDTH = 130
+    CARD_HEIGHT = 110
     CARD_SPACING = 4
     CARD_PADDING = 6
     THUMB_W = 110
@@ -56,8 +58,9 @@ class ThumbnailCanvas(QWidget):
         self._selected_names: set[str] = set()
         self._hovered_name: str | None = None
         self._thumb_cache: dict[str, QImage] = {}  # name → scaled thumbnail
+        self._cols = 1  # current number of columns in the grid
         self.setMouseTracking(True)
-        self.setMinimumHeight(100)
+        self.setMinimumHeight(self.CARD_HEIGHT)
 
     def set_clips(self, clips: list[ClipEntry], model: ClipListModel) -> None:
         """Update the displayed clips and trigger repaint."""
@@ -69,8 +72,26 @@ class ThumbnailCanvas(QWidget):
                                  if k in new_names}
         self._clips = list(clips)
         self._model = model
-        total_w = max(1, len(clips) * (self.CARD_WIDTH + self.CARD_SPACING))
-        self.setFixedWidth(total_w)
+        self._reflow()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._reflow()
+
+    def _reflow(self) -> None:
+        """Recompute grid layout: wrap cards into rows, set min height for vertical scroll."""
+        parent_scroll = self.parent()
+        if parent_scroll and hasattr(parent_scroll, 'viewport'):
+            avail_w = parent_scroll.viewport().width()
+        else:
+            avail_w = self.width()
+        if avail_w < self.CARD_WIDTH:
+            avail_w = self.CARD_WIDTH + self.CARD_SPACING
+        self._cols = max(1, avail_w // (self.CARD_WIDTH + self.CARD_SPACING))
+        rows = max(1, (len(self._clips) + self._cols - 1) // self._cols) if self._clips else 1
+        row_h = self.CARD_HEIGHT + self.CARD_SPACING
+        total_h = max(self.CARD_HEIGHT, rows * row_h)
+        self.setMinimumHeight(total_h)
         self.update()
 
     def set_selected(self, name: str | None) -> None:
@@ -86,6 +107,14 @@ class ThumbnailCanvas(QWidget):
             self._selected_names = set(names)
             self.update()
 
+    def _card_rect_for(self, index: int) -> QRect:
+        """Return the QRect for card at the given index in the grid."""
+        col = index % self._cols
+        row = index // self._cols
+        x = col * (self.CARD_WIDTH + self.CARD_SPACING)
+        y = row * (self.CARD_HEIGHT + self.CARD_SPACING)
+        return QRect(x, y, self.CARD_WIDTH, self.CARD_HEIGHT)
+
     def paintEvent(self, event) -> None:
         if not self._clips:
             return
@@ -94,8 +123,7 @@ class ThumbnailCanvas(QWidget):
         p.setRenderHint(QPainter.Antialiasing, False)
 
         for i, clip in enumerate(self._clips):
-            x = i * (self.CARD_WIDTH + self.CARD_SPACING)
-            card_rect = QRect(x, 0, self.CARD_WIDTH, self.height())
+            card_rect = self._card_rect_for(i)
 
             # Skip cards not in the visible region
             if not card_rect.intersects(event.rect()):
@@ -232,9 +260,10 @@ class ThumbnailCanvas(QWidget):
             p.drawText(icon_rect, Qt.AlignCenter, "\U0001F4C2")
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        clip = self._card_at(event.position().x())
+        pos = event.position().toPoint()
+        clip, _ = self._card_at(pos)
         name = clip.name if clip else None
-        self._hover_pos = event.position().toPoint()
+        self._hover_pos = pos
         if name != self._hovered_name:
             self._hovered_name = name
         self.update()
@@ -246,57 +275,53 @@ class ThumbnailCanvas(QWidget):
 
     def _folder_icon_rect(self, clip_index: int) -> QRect:
         """Return the folder icon QRect for a given card index."""
-        x = clip_index * (self.CARD_WIDTH + self.CARD_SPACING)
-        return QRect(x + self.CARD_PADDING, self.CARD_PADDING, 18, 18)
+        r = self._card_rect_for(clip_index)
+        return QRect(r.x() + self.CARD_PADDING, r.y() + self.CARD_PADDING, 18, 18)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        pos = event.position().toPoint()
         if event.button() == Qt.LeftButton and self._clips:
-            clip = self._card_at(event.position().x())
+            clip, idx = self._card_at(pos)
             if clip:
                 # Check folder icon click (export cards only)
-                if self._show_manifest_tooltip:
-                    idx = int(event.position().x() // (self.CARD_WIDTH + self.CARD_SPACING))
-                    if self._folder_icon_rect(idx).contains(event.position().toPoint()):
+                if self._show_manifest_tooltip and idx is not None:
+                    if self._folder_icon_rect(idx).contains(pos):
                         self.folder_icon_clicked.emit(clip)
                         return
                 from ui.sounds.audio_manager import UIAudio
                 UIAudio.click()
                 if event.modifiers() & Qt.ShiftModifier:
-                    # Shift+click: range select from anchor to this clip
                     self.shift_select_requested.emit(clip)
                 elif event.modifiers() & Qt.ControlModifier:
-                    # Ctrl+click: toggle in/out of multi-selection
                     self.multi_select_toggled.emit(clip)
                 else:
-                    # Plain click: single-select
                     self.card_clicked.emit(clip)
         elif event.button() == Qt.RightButton and self._clips:
-            clip = self._card_at(event.position().x())
+            clip, _ = self._card_at(pos)
             if clip:
                 self.context_menu_requested.emit(clip)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton and self._clips:
-            clip = self._card_at(event.position().x())
+            clip, _ = self._card_at(event.position().toPoint())
             if clip:
                 self.card_double_clicked.emit(clip)
 
     def sizeHint(self) -> QSize:
-        w = max(1, len(self._clips) * (self.CARD_WIDTH + self.CARD_SPACING))
-        return QSize(w, 100)
+        return QSize(self.CARD_WIDTH, self.CARD_HEIGHT)
 
-    def _card_at(self, x: float) -> ClipEntry | None:
-        """Return the ClipEntry under the given x position, or None."""
+    def _card_at(self, pos) -> tuple[ClipEntry | None, int | None]:
+        """Return (ClipEntry, index) under the given point, or (None, None)."""
         if not self._clips:
-            return None
-        idx = int(x // (self.CARD_WIDTH + self.CARD_SPACING))
-        if 0 <= idx < len(self._clips):
-            return self._clips[idx]
-        return None
+            return None, None
+        for i in range(len(self._clips)):
+            if self._card_rect_for(i).contains(pos):
+                return self._clips[i], i
+        return None, None
 
     def event(self, ev: QEvent) -> bool:
         if ev.type() == QEvent.ToolTip and self._show_manifest_tooltip:
-            clip = self._card_at(ev.position().x())
+            clip, _ = self._card_at(ev.position().toPoint())
             tip = _format_manifest_tooltip(clip) if clip else ""
             if tip:
                 QToolTip.showText(ev.globalPosition().toPoint(), tip, self)
