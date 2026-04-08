@@ -10,7 +10,7 @@
 #define MyAppName "EZ-CorridorKey"
 #define MyAppVersion "1.9.0"
 #define MyAppPublisher "EZscape"
-#define MyAppURL "https://ezscape.space"
+#define MyAppURL "https://www.ezscape.space"
 #define MyAppExeName "EZ-CorridorKey.exe"
 
 [Setup]
@@ -58,7 +58,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 [Messages]
 WelcomeLabel2=This will install [name/ver] on your computer.%n%nAI-powered green screen keying for VFX artists.%n%nRequires an NVIDIA GPU (GTX 10-series or newer).
-FinishedLabel={#MyAppName} has been installed.%n%nOn first launch, the setup wizard will download the AI model (~383 MB).
+FinishedLabel={#MyAppName} has been installed.%n%nOn first launch, the setup wizard will download the AI model (~383 MB).%n
 
 [Code]
 const
@@ -69,6 +69,10 @@ const
   TEXT_LIGHT   = $D2C8C8;
   TEXT_DIM     = $6E6464;
 
+var
+  EzscapeLink: TNewStaticText;
+  DiscordLink: TNewStaticText;
+
 procedure LinkClick(Sender: TObject);
 var
   ErrorCode: Integer;
@@ -76,7 +80,7 @@ begin
   if TNewStaticText(Sender).Tag = 1 then
     ShellExec('open', 'https://discord.gg/2fgZNKyNza', '', '', SW_SHOW, ewNoWait, ErrorCode)
   else
-    ShellExec('open', 'https://ezscape.space', '', '', SW_SHOW, ewNoWait, ErrorCode);
+    ShellExec('open', 'https://www.ezscape.space', '', '', SW_SHOW, ewNoWait, ErrorCode);
 end;
 
 procedure InitializeWizard();
@@ -167,33 +171,43 @@ begin
   WizardForm.Bevel.Visible := False;
   WizardForm.Bevel1.Visible := False;
 
-  // Clickable Discord link on finished page
-  with TNewStaticText.Create(WizardForm.FinishedPage) do
-  begin
-    Parent := WizardForm.FinishedPage;
-    Left := WizardForm.FinishedLabel.Left;
-    Top := WizardForm.FinishedLabel.Top + WizardForm.FinishedLabel.Height + 16;
-    Caption := 'Join EZSCAPE Discord';
-    Font.Color := NEON_GREEN;
-    Font.Style := [fsUnderline];
-    Font.Size := 9;
-    Cursor := crHand;
-    Tag := 1;  // Discord
-    OnClick := @LinkClick;
-  end;
+  // Create links (positioned later in CurPageChanged when layout is final)
+  EzscapeLink := TNewStaticText.Create(WizardForm.FinishedPage);
+  EzscapeLink.Parent := WizardForm.FinishedPage;
+  EzscapeLink.Left := WizardForm.FinishedLabel.Left;
+  EzscapeLink.Caption := 'EZSCAPE — GPU-powered plugins for VFX and more';
+  EzscapeLink.Font.Color := $00A5FF;
+  EzscapeLink.Font.Style := [fsUnderline];
+  EzscapeLink.Font.Size := 9;
+  EzscapeLink.Cursor := crHand;
+  EzscapeLink.Tag := 2;
+  EzscapeLink.OnClick := @LinkClick;
 
-  // Copyright + website link
-  with TNewStaticText.Create(WizardForm.FinishedPage) do
+  DiscordLink := TNewStaticText.Create(WizardForm.FinishedPage);
+  DiscordLink.Parent := WizardForm.FinishedPage;
+  DiscordLink.Left := WizardForm.FinishedLabel.Left;
+  DiscordLink.Caption := 'Join EZSCAPE Discord';
+  DiscordLink.Font.Color := $FF7B5E;
+  DiscordLink.Font.Style := [fsUnderline];
+  DiscordLink.Font.Size := 9;
+  DiscordLink.Cursor := crHand;
+  DiscordLink.Tag := 1;
+  DiscordLink.OnClick := @LinkClick;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpFinished then
   begin
-    Parent := WizardForm.FinishedPage;
-    Left := WizardForm.FinishedLabel.Left;
-    Top := WizardForm.FinishedLabel.Top + WizardForm.FinishedLabel.Height + 42;
-    Caption := #169 + ' EZscape  |  ezscape.space';
-    Font.Color := TEXT_DIM;
-    Font.Size := 8;
-    Cursor := crHand;
-    Tag := 2;  // Website
-    OnClick := @LinkClick;
+    // RunList is a full-page-height checklist — shrink to fit 1 item
+    WizardForm.RunList.Height := ScaleY(24);
+
+    // Position links below the now-compact RunList
+    EzscapeLink.Top := WizardForm.RunList.Top + WizardForm.RunList.Height + ScaleY(12);
+    EzscapeLink.BringToFront;
+
+    DiscordLink.Top := EzscapeLink.Top + EzscapeLink.Height + ScaleY(6);
+    DiscordLink.BringToFront;
   end;
 end;
 
