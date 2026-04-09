@@ -31,9 +31,9 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 ### Desktop App Installer (recommended)
 
-**Don't want to deal with Python, git, or the command line?** Starting with v1.9.0, a full Windows installer and portable exe are available — as well as a macOS `.pkg`. Entirely optional and free — donations help support active development:
+**Don't want to deal with Python, git, or the command line?** Starting with v1.9.0, a full Windows installer and portable exe are available — as well as a macOS `.pkg`. Entirely optional and free — donations help support active development.
 
-> **[Download / Donate at Gumroad](https://edenaion.gumroad.com/)** — Windows `.exe` installer, Windows portable `.zip`, and macOS `.pkg`.
+> **Desktop installer downloads coming soon.** Windows `.exe` installer, Windows portable `.zip`, and macOS `.pkg` will be available shortly.
 
 The installer includes everything — Python runtime, AI models, GPU libraries — no setup required. Just install and run.
 
