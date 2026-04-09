@@ -6,7 +6,7 @@ A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopue
 
 This GUI replaces the CLI drag-and-drop workflow with a complete desktop application while preserving 100% backward compatibility (`python main.py --cli` still runs the original wizard).
 
-![EZ-CorridorKey](dev-docs/guides/screenshots/EZ-CorridorKey_Inference_Done.jpg)
+![EZ-CorridorKey](docs/screenshots/EZ-CorridorKey_Inference_Done.jpg)
 
 [![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#bytebase/star-history&Date)
 
@@ -418,7 +418,7 @@ Alpha generators (SAM2, GVM, VideoMaMa, MatAnyone2) always run on PyTorch MPS â€
 
 EZ-CorridorKey's optimizations (Hiera FlashAttention, TF32 tensor cores, torch.compile, tiled refiner) produce output identical to upstream CorridorKey within float32 noise floor â€” verified across PSNR, SSIM, MS-SSIM, LPIPS, and DeltaE 2000.
 
-![Quality Comparison](dev-docs/guides/screenshots/quality_comparison_v1.5.0.png)
+![Quality Comparison](docs/screenshots/quality_comparison_v1.5.0.png)
 
 ---
 
