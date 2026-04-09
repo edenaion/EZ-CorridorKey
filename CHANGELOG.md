@@ -8,7 +8,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [1.9.0] - 2026-04-03 — Windows Installer, macOS App, Custom Output
+## [1.9.0] - 2026-04-09 — Windows Installer, macOS App, Export Overhaul
 
 ### Added
 - **Windows installer** — one-click `.exe` installer with dark-themed setup wizard, desktop shortcut, and Start Menu entry. Requires NVIDIA GPU (GTX 10-series or newer).
@@ -18,17 +18,31 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Download Models in Preferences** — download or update AI model weights without reinstalling.
 - **Custom output directory** — set a global default output location in Preferences, or override per-clip via right-click > Set Output Directory.
 - **Auto-update for installed apps** — check for updates and download new versions directly from the app.
+- **WebM alpha video export** — export keyed output as WebM with VP9 alpha transparency for web and motion graphics workflows.
+- **ProRes 4444 alpha video export** — export keyed output as ProRes 4444 with embedded alpha channel for professional NLE workflows.
+- **Batch export dialog** — select multiple clips, choose export formats (WebM/MP4) per output, view frame counts, and monitor progress.
+- **MLX/MPS backend toggle** — macOS Preferences now lets you switch between MLX and MPS backends without restarting.
 
 ### Fixed
 - **Crash on video import** ([#70](https://github.com/edenaion/EZ-CorridorKey/issues/70), [#63](https://github.com/edenaion/EZ-CorridorKey/issues/63), [#65](https://github.com/edenaion/EZ-CorridorKey/issues/65), [#51](https://github.com/edenaion/EZ-CorridorKey/issues/51)) — app crashed with a stack overflow (`0xc00000fd` in `pyside6.abi3.dll`) when importing any video file. Root cause: `clear_in_out()` emitted a Qt signal connected back to itself, creating infinite recursion through PySide6's C++ signal dispatch. On Linux this surfaced as a `RecursionError`; on Windows the native stack overflowed before Python could intervene. Affected all platforms.
 - **Slow inference when window loses focus** ([#68](https://github.com/edenaion/EZ-CorridorKey/issues/68)) — GPU worker thread was started at `LowPriority` on Windows, causing CPU starvation when the app lost foreground focus. Fixed by raising worker thread to `HighPriority` and setting process to `ABOVE_NORMAL_PRIORITY_CLASS`.
+- **Processed PNG output dark/semi-transparent** — missing linear→sRGB conversion when writing Processed output as PNG.
+- **Version detection in frozen builds** — version now reads directly from pyproject.toml, fixing incorrect version display in installed apps.
+- **Installer finished page** — fixed Discord and website links, updated EZSCAPE branding.
 - **PyTorch 2.6+ compatibility** — resolved `torch.load` errors on newer PyTorch versions.
 - **Split view panels** now fit images to their own width.
 - **Update script** — prevents stale cache conflicts after updates.
 
 ### Changed
-- **EZSCAPE branding** — updated branding and unified install paths across platforms.
+- **I/O tray grid layout** — thumbnail cards now wrap into a responsive grid with vertical scrolling instead of a single horizontal row.
+- **EZ-CorridorKey branding** — all references, filenames, and install paths updated from `CorridorKey` to `EZ-CorridorKey`.
 - **Major codebase refactor** — restructured core modules for maintainability and performance.
+
+### Important
+- **Fresh install required** — due to the codebase refactor, existing Desktop App installations cannot use the in-app updater for this release. Please download and install v1.9.0 fresh. The in-app updater will return for future patch releases (v1.9.1+).
+
+### Known Issues
+- **MLX FG output can be blocky** — on macOS with the MLX backend, the FG (foreground) output may produce blocky/artifacted results. Workaround: disable FG output and use Matte + Processed outputs instead. CUDA users are not affected.
 
 ---
 

@@ -306,7 +306,7 @@ class SettingsMixin:
                 progress.close()
                 return
             elif _sys.platform == "win32":
-                asset_name = "CorridorKey-windows-x64.zip"
+                asset_name = "EZ-CorridorKey-windows-x64.zip"
             else:
                 QMessageBox.warning(
                     self, "Update",

@@ -1,6 +1,6 @@
 # EZ-CorridorKey **v1.9.0**
 
-> **Latest release: [v1.9.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.9.0)** — Windows installer, macOS app bundle, custom output directory, crash fixes. See the [full changelog](CHANGELOG.md).
+> **Latest release: [v1.9.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.9.0)** — Windows installer, macOS app, WebM/ProRes alpha export, batch export, codebase refactor. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -31,9 +31,9 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 ### Desktop App Installer (recommended)
 
-**Don't want to deal with Python, git, or the command line?** Download the full installer for free:
+**Don't want to deal with Python, git, or the command line?** Starting with v1.9.0, a full Windows installer and portable exe are available — as well as a macOS `.pkg`. Entirely optional and free — donations help support active development:
 
-> **[Download EZ-CorridorKey Installer](https://ezscape.gumroad.com/l/ez-corridorkey)** — Windows `.exe` and macOS `.pkg` available at the EZSCAPE Gumroad.
+> **[Download / Donate at Gumroad](https://edenaion.gumroad.com/)** — Windows `.exe` installer, Windows portable `.zip`, and macOS `.pkg`.
 
 The installer includes everything — Python runtime, AI models, GPU libraries — no setup required. Just install and run.
 
@@ -68,10 +68,10 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 
 **Updating:**
 
-- **Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app — it downloads a lightweight patch (~230 MB) and relaunches.
+- **Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app — it downloads a lightweight patch and relaunches. **Note:** v1.9.0 requires a fresh install due to a major codebase refactor. The in-app updater will return for future patch releases (v1.9.1+).
 - **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git (or downloads a ZIP if git isn't available).
 
-> **Note:** The update ZIP on GitHub Releases (`CorridorKey-windows-x64.zip`) is for Desktop App Installer users only — it patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
+> **Note:** The update ZIP on GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) is for Desktop App Installer users only — it patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
 
 ### Alternate Installation: Docker
 
@@ -410,6 +410,8 @@ CorridorKey inference auto-selects the fastest available backend: MLX (1.5–2x 
 
 Alpha generators (SAM2, GVM, VideoMaMa, MatAnyone2) always run on PyTorch MPS — no MLX ports exist for these models. For best Mac experience, import pre-made alpha mattes from After Effects, DaVinci Resolve, or Nuke.
 
+> **Known issue:** MLX FG output can produce blocky/artifacted results. Disable FG output and use Matte + Processed outputs instead. CUDA users are not affected.
+
 ---
 
 ## Quality Verification
@@ -422,8 +424,9 @@ EZ-CorridorKey's optimizations (Hiera FlashAttention, TF32 tensor cores, torch.c
 
 ## Security
 
-All installer scripts are open-source and readable in this repository. Independent VirusTotal scans for the current release:
+All installer scripts are open-source and readable in this repository. The Windows installer and portable exe are digitally signed via Azure Trusted Signing. Independent VirusTotal scans for the current release:
 
+- [**EZ-CorridorKey.exe** (v1.9.0) — 1/65 detections](https://www.virustotal.com/gui/file/ae0cca77755fd58a623ec19ed23e8915178e7059a5089e2e3a4ac5b76dc51ab8) (Bkav Pro heuristic false positive — common with PyInstaller-bundled apps)
 - [**1-install.bat** (v1.6.0) — 0 detections](https://www.virustotal.com/gui/file/c88b68b2fdc429de8bd70a5dde182486c788fcdc34eb508a4a137373d1ddb1bc)
 
 ---
