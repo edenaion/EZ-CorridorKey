@@ -10,6 +10,8 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [1.9.0] - 2026-04-09 — Windows Installer, macOS App, Export Overhaul
 
+> **Fresh install required** — due to the codebase refactor, existing Desktop App installations cannot use the in-app updater for this release. Please download and install v1.9.0 fresh. The in-app updater will return for future patch releases (v1.9.1+).
+
 ### Added
 - **Windows installer** — one-click `.exe` installer with dark-themed setup wizard, desktop shortcut, and Start Menu entry. Requires NVIDIA GPU (GTX 10-series or newer).
 - **Windows portable** — standalone ZIP, no installer or registry. Unzip to a USB stick or any folder and run. All data (models, projects, logs) stays next to the exe.
@@ -37,9 +39,6 @@ All notable changes to EZ-CorridorKey are documented here.
 - **I/O tray grid layout** — thumbnail cards now wrap into a responsive grid with vertical scrolling instead of a single horizontal row.
 - **EZ-CorridorKey branding** — all references, filenames, and install paths updated from `CorridorKey` to `EZ-CorridorKey`.
 - **Major codebase refactor** — restructured core modules for maintainability and performance.
-
-### Important
-- **Fresh install required** — due to the codebase refactor, existing Desktop App installations cannot use the in-app updater for this release. Please download and install v1.9.0 fresh. The in-app updater will return for future patch releases (v1.9.1+).
 
 ### Known Issues
 - **MLX FG output can be blocky** — on macOS with the MLX backend, the FG (foreground) output may produce blocky/artifacted results. Workaround: disable FG output and use Matte + Processed outputs instead. CUDA users are not affected.

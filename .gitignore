@@ -59,6 +59,7 @@ modules/BiRefNetModule/checkpoints/*
 
 # Dev docs (local only)
 dev-docs/
+patches/
 
 # Dev tools (local only, not shipped)
 .agent/
@@ -98,7 +99,6 @@ dist/
 *.exe
 
 # Build, signing & installer scripts (internal, not distributed)
-docs/
 scripts/build_macos.sh
 scripts/build_windows.ps1
 scripts/macos/sign_and_notarize.sh
