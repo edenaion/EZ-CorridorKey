@@ -1,7 +1,7 @@
-"""QApplication setup with Corridor Digital brand theme and bundled fonts.
+"""QApplication setup with EZSCAPE brand theme and bundled fonts.
 
 Fonts:
-  - Gagarin: Logo / brand mark text (Corridor Digital identity font)
+  - Gagarin: Logo / brand mark text (identity font)
   - Open Sans: All secondary / body UI text (default app font)
 """
 from __future__ import annotations
@@ -41,6 +41,18 @@ def _configure_runtime_backends() -> None:
     os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
     os.environ["QT_QUICK_BACKEND"] = "software"
 
+    # ── CUDA / cuDNN global settings ──
+    # These must be set once before any inference.  Previously they lived inside
+    # CorridorKeyEngine._load_model() which only runs lazily on first inference,
+    # so the first batch of frames ran without TF32 tensor-core acceleration.
+    try:
+        import torch
+        torch.set_float32_matmul_precision('high')
+        torch.backends.cudnn.benchmark = False
+        logger.info("CUDA globals: TF32 precision='high', cuDNN benchmark=off")
+    except ImportError:
+        pass  # torch not installed – CPU-only environment
+
     if sys.platform != "win32":
         return
 
@@ -76,11 +88,48 @@ def _configure_runtime_backends() -> None:
     except Exception as exc:
         logger.debug("Power throttling opt-out skipped: %s", exc)
 
+    # Raise process priority so Windows doesn't starve our GPU worker thread
+    # when the window loses foreground focus.  ABOVE_NORMAL (0x8000) is a mild
+    # bump — enough to keep CPU-side frame I/O feeding the GPU, without
+    # impacting system responsiveness the way HIGH/REALTIME would.
+    # The EcoQoS opt-out above only works on Win11; this covers Win10.
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000
+        if kernel32.SetPriorityClass(kernel32.GetCurrentProcess(),
+                                     ABOVE_NORMAL_PRIORITY_CLASS):
+            logger.info("Process priority set to ABOVE_NORMAL")
+        else:
+            logger.debug("SetPriorityClass failed: %s", ctypes.get_last_error())
+    except Exception as exc:
+        logger.debug("Priority class adjustment skipped: %s", exc)
+
     try:
         import cv2
         cv2.setNumThreads(1)
     except Exception as exc:
         logger.debug(f"OpenCV thread tuning skipped: {exc}")
+
+
+def _migrate_legacy_settings() -> None:
+    """One-time migration from old QSettings path to new one.
+
+    Old: HKCU\\Software\\Corridor Digital\\CorridorKey
+    New: HKCU\\Software\\EZSCAPE\\EZ-CorridorKey
+    """
+    from PySide6.QtCore import QSettings
+    new = QSettings()  # Uses current org/app (EZSCAPE / EZ-CorridorKey)
+    if new.value("_migrated_from_legacy", False, type=bool):
+        return
+    old = QSettings("Corridor Digital", "CorridorKey")
+    old_keys = old.allKeys()
+    if not old_keys:
+        return
+    for key in old_keys:
+        if not new.contains(key):
+            new.setValue(key, old.value(key))
+    new.setValue("_migrated_from_legacy", True)
+    logger.info("Migrated %d settings from Corridor Digital/CorridorKey", len(old_keys))
 
 
 def create_app(argv: list[str] | None = None) -> QApplication:
@@ -94,11 +143,13 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     _configure_runtime_backends()
 
     app = QApplication(argv)
-    # Keep the internal settings key stable; use the display name for
-    # user-facing platform chrome like the macOS app menu.
-    app.setApplicationName("CorridorKey")
+    app.setApplicationName("EZ-CorridorKey")
     app.setApplicationDisplayName("EZ-CorridorKey")
-    app.setOrganizationName("Corridor Digital")
+    app.setOrganizationName("EZSCAPE")
+
+    # One-time migration from old registry path
+    # (Corridor Digital\CorridorKey → EZSCAPE\EZ-CorridorKey)
+    _migrate_legacy_settings()
 
     # ── Font loading (frozen-build aware) ──
     if getattr(sys, 'frozen', False):

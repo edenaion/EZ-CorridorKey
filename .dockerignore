@@ -1,0 +1,41 @@
+# Model weights — downloaded at runtime, not needed in build
+*.pth
+*.safetensors
+*.bin
+*.onnx
+*.pt
+gvm_core/weights/
+VideoMaMaInferenceModule/weights/
+CorridorKeyModule/*.pth
+
+# Python artifacts
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Dev/test files
+dev-docs/
+tests/
+.claude/
+.git/
+*.exr
+*.png
+*.jpg
+*.jpeg
+*.mp4
+*.mov
+*.avi
+Projects/
+bench_results*.json
+scripts/test_cuda_output.txt
+_test_*.png
+
+# Docker itself
+docker/.env
+
+# OS junk
+.DS_Store
+Thumbs.db

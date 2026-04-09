@@ -17,7 +17,26 @@ logger = logging.getLogger(__name__)
 
 from .inference_engine import INFERENCE_DEFAULTS as _D
 
-CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
+_BUNDLED_CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
+
+def _resolve_checkpoint_dir() -> str:
+    """Return the writable checkpoint directory.
+
+    In development mode (not frozen), this is CorridorKeyModule/checkpoints/.
+    In a frozen PyInstaller build, delegates to backend.project.get_data_dir()
+    for the user-chosen install path.
+    """
+    if not getattr(sys, "frozen", False):
+        return _BUNDLED_CHECKPOINT_DIR
+    try:
+        from backend.project import get_data_dir
+        ckpt_dir = os.path.join(get_data_dir(), "CorridorKeyModule", "checkpoints")
+        os.makedirs(ckpt_dir, exist_ok=True)
+        return ckpt_dir
+    except ImportError:
+        return _BUNDLED_CHECKPOINT_DIR
+
+CHECKPOINT_DIR = _resolve_checkpoint_dir()
 TORCH_EXT = ".pth"
 MLX_EXT = ".safetensors"
 DEFAULT_IMG_SIZE = 2048

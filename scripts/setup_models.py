@@ -26,7 +26,40 @@ import sys
 import urllib.request
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_SCRIPT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _data_root() -> Path:
+    """Writable root for model downloads.
+
+    In dev mode: project root (checkpoints live in CorridorKeyModule/checkpoints/).
+    In frozen PyInstaller builds: delegates to backend.project.get_data_dir().
+    Falls back to standalone logic when backend is not importable (script run directly).
+    """
+    if not getattr(sys, "frozen", False):
+        return _SCRIPT_ROOT
+    try:
+        from backend.project import get_data_dir
+        return Path(get_data_dir())
+    except ImportError:
+        pass
+    # Standalone fallback (script run outside frozen app)
+    try:
+        from PySide6.QtCore import QSettings
+        saved = QSettings().value("app/install_path", "", type=str)
+        if saved and os.path.isdir(saved):
+            return Path(saved)
+    except Exception:
+        pass
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "EZ-CorridorKey"
+    elif sys.platform == "win32":
+        return Path(os.environ.get("APPDATA", Path.home())) / "EZ-CorridorKey"
+    else:
+        return Path.home() / ".local" / "share" / "EZ-CorridorKey"
+
+
+PROJECT_ROOT = _data_root()
 HF_CACHE_DIR = Path.home() / ".cache" / "huggingface" / "hub"
 
 # MLX checkpoint served from GitHub Releases (not HuggingFace)

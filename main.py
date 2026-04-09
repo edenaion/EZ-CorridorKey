@@ -62,13 +62,30 @@ def get_base_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
 
-def get_app_dir() -> str:
-    """Get the application directory (where the .exe lives in frozen mode).
+def is_portable() -> bool:
+    """True when a 'portable.txt' marker exists next to the executable."""
+    if getattr(sys, 'frozen', False):
+        return os.path.isfile(os.path.join(os.path.dirname(sys.executable), 'portable.txt'))
+    return False
 
-    Use this for user-facing paths (logs, sessions, etc.).
+
+def get_app_dir() -> str:
+    """Get the application directory for user-facing paths (logs, sessions, etc.).
+
+    Portable mode: all data stays next to the .exe (USB-stick friendly).
+    macOS frozen: /Applications is read-only → ~/Library/Application Support/EZ-CorridorKey.
+    Windows frozen: returns the .exe directory (user-writable).
     Use get_base_dir() for bundled resources (checkpoints, QSS, fonts).
     """
     if getattr(sys, 'frozen', False):
+        if is_portable():
+            return os.path.dirname(sys.executable)
+        if sys.platform == 'darwin':
+            support = os.path.join(
+                os.path.expanduser('~'), 'Library', 'Application Support', 'EZ-CorridorKey'
+            )
+            os.makedirs(support, exist_ok=True)
+            return support
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -124,6 +141,20 @@ def run_gui() -> int:
     from backend import CorridorKeyService
 
     app = create_app()
+
+    # First-launch setup: download model checkpoints if missing
+    from ui.widgets.setup_wizard import needs_setup, SetupWizard
+    if needs_setup():
+        wizard = SetupWizard()
+        if wizard.exec() == SetupWizard.Rejected:
+            return 0
+
+    # Frozen builds: point projects at the user-chosen install directory
+    # (same location as model checkpoints) instead of the exe directory.
+    if getattr(sys, 'frozen', False):
+        from backend.project import get_data_dir, set_app_dir
+        set_app_dir(get_data_dir())
+
     service = CorridorKeyService()
     store = RecentSessionsStore()
     store.prune_missing()
@@ -222,4 +253,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
     sys.exit(main())

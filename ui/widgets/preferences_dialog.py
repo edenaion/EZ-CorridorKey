@@ -10,6 +10,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
     QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication,
+    QLineEdit, QFileDialog, QScrollArea, QWidget, QFrame,
 )
 from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal
 
@@ -24,6 +25,8 @@ KEY_EXR_COMPRESSION = "output/exr_compression"
 KEY_TRACKER_MODEL = "tracking/sam2_model"
 KEY_PARALLEL_CLIPS = "gpu/parallel_clips"
 KEY_MODEL_RESOLUTION = "inference/model_resolution"
+KEY_INFERENCE_BACKEND = "inference/backend"
+KEY_OUTPUT_DIRECTORY = "output/default_directory"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
@@ -129,7 +132,27 @@ class PreferencesDialog(QDialog):
         self._ffmpeg_repair_worker: _FFmpegRepairWorker | None = None
         self._local_ffmpeg_dir = get_local_ffmpeg_dir()
 
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setSpacing(8)
+        outer.setContentsMargins(0, 0, 0, 8)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("""
+            QScrollArea { background: transparent; }
+            QScrollBar:vertical {
+                background: #1a1a18; width: 8px; margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: #444; border-radius: 4px; min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover { background: #666; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }
+        """)
+        scroll_content = QWidget()
+        layout = QVBoxLayout(scroll_content)
         layout.setSpacing(12)
 
         # UI section
@@ -201,6 +224,38 @@ class PreferencesDialog(QDialog):
         )
         output_layout.addWidget(self._exr_compression_combo)
 
+        # Default output directory
+        dir_label = QLabel("Default output directory")
+        output_layout.addWidget(dir_label)
+
+        dir_row = QHBoxLayout()
+        self._output_dir_edit = QLineEdit()
+        self._output_dir_edit.setReadOnly(True)
+        self._output_dir_edit.setPlaceholderText("Default (inside project)")
+        saved_dir = get_setting_str(KEY_OUTPUT_DIRECTORY, "")
+        if saved_dir:
+            self._output_dir_edit.setText(saved_dir)
+        self._output_dir_edit.setToolTip(
+            "Global default directory for inference output.\n\n"
+            "When set, outputs go to:\n"
+            "  <this folder>/<ProjectName>/<ClipName>/FG, Matte, etc.\n\n"
+            "Leave empty to use the default (Output/ inside each clip).\n"
+            "Per-clip overrides (right-click → Set Output Directory) take priority."
+        )
+        dir_row.addWidget(self._output_dir_edit, 1)
+
+        browse_btn = QPushButton("Browse...")
+        browse_btn.setMinimumWidth(80)
+        browse_btn.clicked.connect(self._browse_output_dir)
+        dir_row.addWidget(browse_btn)
+
+        clear_btn = QPushButton("Clear")
+        clear_btn.setMinimumWidth(60)
+        clear_btn.clicked.connect(lambda: self._output_dir_edit.clear())
+        dir_row.addWidget(clear_btn)
+
+        output_layout.addLayout(dir_row)
+
         # (added to layout below in display order)
 
         # Inference section
@@ -227,6 +282,28 @@ class PreferencesDialog(QDialog):
             "Changing this requires an engine reload (happens automatically)."
         )
         inference_layout.addWidget(self._model_resolution_combo)
+
+        # Backend selector (macOS only — choose MLX or PyTorch MPS)
+        self._backend_combo = None
+        if _is_apple_silicon:
+            backend_label = QLabel("Processing backend")
+            inference_layout.addWidget(backend_label)
+
+            self._backend_combo = QComboBox()
+            self._backend_combo.addItem("Auto — MLX if available, otherwise MPS", "auto")
+            self._backend_combo.addItem("MLX — Apple Metal acceleration (recommended)", "mlx")
+            self._backend_combo.addItem("MPS — PyTorch Metal Performance Shaders", "torch")
+            saved_backend = get_setting_str(KEY_INFERENCE_BACKEND, "auto")
+            idx = self._backend_combo.findData(saved_backend)
+            self._backend_combo.setCurrentIndex(max(0, idx))
+            self._backend_combo.setToolTip(
+                "Choose the inference backend for Apple Silicon.\n\n"
+                "MLX: Native Apple Metal — fastest on M1/M2/M3/M4.\n"
+                "MPS: PyTorch Metal Performance Shaders — compatible fallback.\n"
+                "Auto: Uses MLX if installed, otherwise falls back to MPS.\n\n"
+                "Changing this requires an engine reload (happens automatically)."
+            )
+            inference_layout.addWidget(self._backend_combo)
 
         # (added to layout below in display order)
 
@@ -293,6 +370,26 @@ class PreferencesDialog(QDialog):
 
         # (added to layout below in display order)
 
+        # ── Models ──
+        models_group = QGroupBox("Models")
+        models_layout = QVBoxLayout(models_group)
+
+        models_info = QLabel(
+            "Download or re-download model checkpoints. "
+            "Already-installed models are skipped automatically."
+        )
+        models_info.setWordWrap(True)
+        models_info.setStyleSheet("color: #999980; font-size: 11px;")
+        models_layout.addWidget(models_info)
+
+        self._download_models_btn = QPushButton("Download Models...")
+        self._download_models_btn.setToolTip(
+            "Open the model download dialog to install or repair "
+            "CorridorKey, MLX, SAM2, GVM, and VideoMaMa checkpoints."
+        )
+        self._download_models_btn.clicked.connect(self._on_download_models)
+        models_layout.addWidget(self._download_models_btn)
+
         ffmpeg_group = QGroupBox("Video Tools")
         ffmpeg_layout = QVBoxLayout(ffmpeg_group)
 
@@ -348,19 +445,22 @@ class PreferencesDialog(QDialog):
         ffmpeg_layout.addLayout(ffmpeg_btn_row)
 
         # --- Layout order ---
-        # UI > Project > Playback > Tracking > Inference > Output > Video Tools
+        # UI > Project > Playback > Tracking > Inference > Output > Models > Video Tools
         layout.addWidget(ui_group)
         layout.addWidget(proj_group)
         layout.addWidget(play_group)
         layout.addWidget(tracking_group)
         layout.addWidget(inference_group)
         layout.addWidget(output_group)
+        layout.addWidget(models_group)
         layout.addWidget(ffmpeg_group)
 
-        layout.addStretch(1)
+        scroll.setWidget(scroll_content)
+        outer.addWidget(scroll, 1)
 
-        # Buttons
+        # Buttons (outside scroll area, always visible at bottom)
         btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(12, 0, 12, 0)
         btn_layout.addStretch(1)
 
         self._cancel_btn = QPushButton("Cancel")
@@ -372,7 +472,7 @@ class PreferencesDialog(QDialog):
         self._ok_btn.clicked.connect(self._save_and_accept)
         btn_layout.addWidget(self._ok_btn)
 
-        layout.addLayout(btn_layout)
+        outer.addLayout(btn_layout)
         self._refresh_ffmpeg_status()
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
@@ -393,10 +493,23 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_EXR_COMPRESSION, self._exr_compression_combo.currentData())
         s.setValue(KEY_TRACKER_MODEL, self._tracker_model_combo.currentData())
         s.setValue(KEY_MODEL_RESOLUTION, self._model_resolution_combo.currentData())
+        if self._backend_combo is not None:
+            s.setValue(KEY_INFERENCE_BACKEND, self._backend_combo.currentData())
+        s.setValue(KEY_OUTPUT_DIRECTORY, self._output_dir_edit.text().strip())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
         self.accept()
+
+    def _browse_output_dir(self) -> None:
+        """Open folder picker for default output directory."""
+        start = self._output_dir_edit.text() or ""
+        path = QFileDialog.getExistingDirectory(
+            self, "Select Default Output Directory", start,
+            QFileDialog.ShowDirsOnly,
+        )
+        if path:
+            self._output_dir_edit.setText(path)
 
     def _open_tracker_cache_dir(self) -> None:
         """Open the local cache folder where SAM2 checkpoints are stored."""
@@ -433,6 +546,13 @@ class PreferencesDialog(QDialog):
         if parent is not None and hasattr(parent, "_status_bar"):
             parent._status_bar.set_message(message)
 
+    def _on_download_models(self) -> None:
+        """Open the model download dialog (same UI as the first-launch wizard)."""
+        from ui.widgets.setup_wizard import SetupWizard
+        dialog = SetupWizard(parent=self)
+        dialog.setWindowTitle("Download Models")
+        dialog.exec()
+
     def _on_repair_ffmpeg(self) -> None:
         """Repair FFmpeg on Windows or show manual install guidance elsewhere."""
         from backend.ffmpeg_tools import get_ffmpeg_install_help, validate_ffmpeg_install
@@ -448,7 +568,7 @@ class PreferencesDialog(QDialog):
             return
 
         # Linux: needs sudo, can't run from GUI — copy instructions to clipboard
-        if sys.platform not in ("win32", "darwin"):
+        if _sys.platform not in ("win32", "darwin"):
             help_text = get_ffmpeg_install_help()
             QApplication.clipboard().setText(help_text)
             QMessageBox.information(
@@ -459,7 +579,7 @@ class PreferencesDialog(QDialog):
             )
             return
 
-        if sys.platform == "win32":
+        if _sys.platform == "win32":
             confirm_msg = (
                 "CorridorKey will download and install a full bundled FFmpeg build into:\n\n"
                 f"{self._local_ffmpeg_dir}\n\n"

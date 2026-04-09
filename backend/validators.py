@@ -139,19 +139,21 @@ def validate_write(
         raise WriteFailureError(clip_name, frame_index, path)
 
 
-def ensure_output_dirs(clip_root: str) -> dict[str, str]:
-    """Create output subdirectories for a clip and return their paths.
+def ensure_output_dirs(output_root: str) -> dict[str, str]:
+    """Create output subdirectories and return their paths.
+
+    Args:
+        output_root: The resolved output directory (e.g. clip.output_dir).
 
     Returns:
         Dict with keys: 'root', 'fg', 'matte', 'comp', 'processed'
     """
-    out_root = os.path.join(clip_root, "Output")
     dirs = {
-        'root': out_root,
-        'fg': os.path.join(out_root, "FG"),
-        'matte': os.path.join(out_root, "Matte"),
-        'comp': os.path.join(out_root, "Comp"),
-        'processed': os.path.join(out_root, "Processed"),
+        'root': output_root,
+        'fg': os.path.join(output_root, "FG"),
+        'matte': os.path.join(output_root, "Matte"),
+        'comp': os.path.join(output_root, "Comp"),
+        'processed': os.path.join(output_root, "Processed"),
     }
     for d in dirs.values():
         os.makedirs(d, exist_ok=True)
