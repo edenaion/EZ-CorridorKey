@@ -33,7 +33,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 **Don't want to deal with Python, git, or the command line?** Starting with v1.9.0, a full Windows installer and portable exe are available — as well as a macOS `.pkg`. Entirely optional and free — donations help support active development.
 
-> **Desktop installer downloads coming soon.** Windows `.exe` installer, Windows portable `.zip`, and macOS `.pkg` will be available shortly.
+[![Download on Gumroad](https://img.shields.io/badge/Download-Gumroad-ff90e8?style=for-the-badge&logo=gumroad&logoColor=white)](https://edenaion.gumroad.com/l/EZ-CorridorKey?layout=profile)
 
 The installer includes everything — Python runtime, AI models, GPU libraries — no setup required. Just install and run.
 
