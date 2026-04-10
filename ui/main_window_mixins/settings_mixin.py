@@ -306,7 +306,8 @@ class SettingsMixin:
                 progress.close()
                 return
             elif _sys.platform == "win32":
-                asset_name = "EZ-CorridorKey-windows-x64.zip"
+                asset_platform = "Windows-x64"
+                asset_ext = "zip"
             else:
                 QMessageBox.warning(
                     self, "Update",
@@ -327,6 +328,11 @@ class SettingsMixin:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 release = json.loads(resp.read().decode("utf-8"))
 
+            # Build versioned asset name: EZ-CorridorKey-{ver}-{Platform}-{arch}.{ext}
+            tag = release.get("tag_name", "")
+            ver = tag.lstrip("v") if tag else "unknown"
+            asset_name = f"EZ-CorridorKey-{ver}-{asset_platform}.{asset_ext}"
+
             # Find the asset download URL
             download_url = None
             for asset in release.get("assets", []):
@@ -338,7 +344,7 @@ class SettingsMixin:
                 QMessageBox.warning(
                     self, "Update",
                     f"No {asset_name} found in the latest release.\n"
-                    f"Release: {release.get('tag_name', 'unknown')}\n\n"
+                    f"Release: {tag or 'unknown'}\n\n"
                     "Please download manually from GitHub."
                 )
                 progress.close()

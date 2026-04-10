@@ -12,8 +12,9 @@ Notes:
 """
 import os
 import sys
+import sysconfig
 import tomllib
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 # Single source of truth for version
 with open(os.path.join(SPECPATH, '..', 'pyproject.toml'), 'rb') as _f:
@@ -44,6 +45,23 @@ datas = [
 fonts_dir = os.path.join(ROOT, 'ui', 'theme', 'fonts')
 if os.path.isdir(fonts_dir):
     datas.append((fonts_dir, os.path.join('ui', 'theme', 'fonts')))
+
+# Python include headers (Python.h etc.) — needed by Triton's TCC compiler
+# to build driver.c and kernel launchers in frozen builds.  ~1.8 MB.
+python_include_dir = sysconfig.get_paths()['include']
+if os.path.isdir(python_include_dir):
+    datas.append((python_include_dir, 'python_include'))
+
+# Ensure dist-info metadata for packages that use importlib.metadata at runtime.
+# - triton-windows: entry_points.txt defines backend discovery (nvidia, amd).
+#   Without this, triton finds 0 backends → "0 active drivers" error.
+# - diffusers deps: importlib.metadata.PackageNotFoundError without these.
+for _meta_pkg in ['triton-windows', 'requests', 'regex', 'filelock', 'numpy',
+                   'huggingface-hub', 'safetensors', 'importlib-metadata']:
+    try:
+        datas += copy_metadata(_meta_pkg)
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------------
 # Hidden imports — everything the app needs at runtime
@@ -217,6 +235,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[
         os.path.join(ROOT, 'scripts', 'windows', 'pyi_rth_cv2.py'),
+        os.path.join(ROOT, 'scripts', 'windows', 'pyi_rth_triton.py'),
     ],
     excludes=[
         # Not needed in GUI app

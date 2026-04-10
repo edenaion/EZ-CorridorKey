@@ -351,15 +351,18 @@ class GreenFormer(nn.Module):
         # Refiner outputs DELTA LOGITS
         if self.use_refiner and self.refiner is not None:
             delta_logits = self.refiner(rgb, coarse_pred)
-            if refiner_scale is not None:
-                if torch.is_tensor(refiner_scale):
-                    refiner_scale = refiner_scale.to(device=delta_logits.device, dtype=delta_logits.dtype)
-                delta_logits = delta_logits * refiner_scale
         else:
             delta_logits = torch.zeros_like(coarse_pred)
 
         delta_alpha = delta_logits[:, 0:1]
         delta_fg = delta_logits[:, 1:4]
+
+        # Refiner scale only affects alpha edges — FG always gets full
+        # correction to prevent Hiera attention-window block artifacts.
+        if refiner_scale is not None:
+            if torch.is_tensor(refiner_scale):
+                refiner_scale = refiner_scale.to(device=delta_alpha.device, dtype=delta_alpha.dtype)
+            delta_alpha = delta_alpha * refiner_scale
 
         # Residual Addition in Logit Space
         alpha_final_logits = alpha_logits_up + delta_alpha

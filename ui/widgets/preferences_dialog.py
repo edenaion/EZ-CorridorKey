@@ -12,7 +12,32 @@ from PySide6.QtWidgets import (
     QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication,
     QLineEdit, QFileDialog, QScrollArea, QWidget, QFrame,
 )
-from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal
+from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal, QEvent
+
+
+class _WheelGuard(QWidget):
+    """Event filter that blocks wheel events on unfocused widgets."""
+
+    _singleton = None
+
+    @classmethod
+    def instance(cls):
+        if cls._singleton is None:
+            cls._singleton = cls()
+        return cls._singleton
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Wheel and not obj.hasFocus():
+            event.ignore()
+            return True
+        return False
+
+
+def _no_scroll_wheel(widget: QWidget) -> QWidget:
+    """Prevent mouse-wheel from changing value unless widget is clicked first."""
+    widget.setFocusPolicy(Qt.StrongFocus)
+    widget.installEventFilter(_WheelGuard.instance())
+    return widget
 
 
 # QSettings keys
@@ -209,7 +234,7 @@ class PreferencesDialog(QDialog):
         exr_label = QLabel("EXR compression")
         output_layout.addWidget(exr_label)
 
-        self._exr_compression_combo = QComboBox()
+        self._exr_compression_combo = _no_scroll_wheel(QComboBox())
         saved_compression = get_setting_str(KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION)
         for label, value in EXR_COMPRESSION_OPTIONS:
             self._exr_compression_combo.addItem(label, value)
@@ -265,7 +290,7 @@ class PreferencesDialog(QDialog):
         res_label = QLabel("Model resolution")
         inference_layout.addWidget(res_label)
 
-        self._model_resolution_combo = QComboBox()
+        self._model_resolution_combo = _no_scroll_wheel(QComboBox())
         self._model_resolution_combo.addItem("2048 — Full Quality", 2048)
         self._model_resolution_combo.addItem("1024 — Faster, Less Detail", 1024)
         saved_res = get_setting_int(KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION)
@@ -289,7 +314,7 @@ class PreferencesDialog(QDialog):
             backend_label = QLabel("Processing backend")
             inference_layout.addWidget(backend_label)
 
-            self._backend_combo = QComboBox()
+            self._backend_combo = _no_scroll_wheel(QComboBox())
             self._backend_combo.addItem("Auto — MLX if available, otherwise MPS", "auto")
             self._backend_combo.addItem("MLX — Apple Metal acceleration (recommended)", "mlx")
             self._backend_combo.addItem("MPS — PyTorch Metal Performance Shaders", "torch")
@@ -330,7 +355,7 @@ class PreferencesDialog(QDialog):
         tracking_label = QLabel("SAM2 model")
         tracking_layout.addWidget(tracking_label)
 
-        self._tracker_model_combo = QComboBox()
+        self._tracker_model_combo = _no_scroll_wheel(QComboBox())
         saved_model = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
         for label, size, model_id in TRACKER_MODEL_OPTIONS:
             self._tracker_model_combo.addItem(f"{label}  ({size})", model_id)

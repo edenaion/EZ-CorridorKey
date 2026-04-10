@@ -10,6 +10,7 @@ Usage:
     python scripts/setup_models.py --sam2 large       # SAM2 Large (898MB)
     python scripts/setup_models.py --gvm               # Optional (~6GB)
     python scripts/setup_models.py --videomama          # Optional (~37GB)
+    python scripts/setup_models.py --matanyone2         # Optional (~141MB)
     python scripts/setup_models.py --all                # Everything
     python scripts/setup_models.py --check              # Status report
 """
@@ -103,6 +104,14 @@ MODELS = {
             "check_file": "stable-video-diffusion-img2vid-xt/model_index.json",
         },
     },
+}
+
+MATANYONE2_CHECKPOINT = {
+    "url": "https://github.com/pq-yang/MatAnyone2/releases/download/v1.0.0/matanyone2.pth",
+    "filename": "matanyone2.pth",
+    "local_dir": PROJECT_ROOT / "modules" / "MatAnyone2Module" / "checkpoints",
+    "size_human": "141 MB",
+    "size_bytes": 141_429_115,
 }
 
 SAM2_MODELS = {
@@ -386,6 +395,54 @@ def download_sam2_model(name: str) -> bool:
     return download_sam2(name)
 
 
+def is_matanyone2_installed() -> bool:
+    """Check if the MatAnyone2 checkpoint is already present."""
+    return (MATANYONE2_CHECKPOINT["local_dir"] / MATANYONE2_CHECKPOINT["filename"]).is_file()
+
+
+def download_matanyone2() -> bool:
+    """Download the MatAnyone2 checkpoint from GitHub Releases."""
+    cfg = MATANYONE2_CHECKPOINT
+    local_dir = cfg["local_dir"]
+    local_dir.mkdir(parents=True, exist_ok=True)
+    dest = local_dir / cfg["filename"]
+
+    if dest.is_file():
+        print(f"  [OK] MatAnyone2 checkpoint already installed")
+        return True
+
+    if not check_disk_space(cfg["size_bytes"], local_dir):
+        usage = shutil.disk_usage(local_dir)
+        free_gb = usage.free / (1024**3)
+        print(f"  [ERROR] Not enough disk space for MatAnyone2 ({cfg['size_human']})")
+        print(f"  Available: {free_gb:.1f} GB")
+        return False
+
+    print(f"  Downloading MatAnyone2 checkpoint ({cfg['size_human']})...")
+    tmp_dest = dest.with_suffix(".pth.tmp")
+    try:
+        def _progress(block_num, block_size, total_size):
+            downloaded = block_num * block_size
+            if total_size > 0:
+                pct = min(100, downloaded * 100 // total_size)
+                mb = downloaded / (1024 * 1024)
+                total_mb = total_size / (1024 * 1024)
+                print(f"\r  {mb:.0f}/{total_mb:.0f} MB ({pct}%)", end="", flush=True)
+
+        urllib.request.urlretrieve(cfg["url"], str(tmp_dest), reporthook=_progress)
+        print()  # newline after progress
+
+        tmp_dest.rename(dest)
+        print(f"  Saved to: {dest}")
+        return True
+    except Exception as e:
+        print(f"\n  [ERROR] Download failed: {e}")
+        print(f"  Manual download: {cfg['url']}")
+        print(f"  Place in: {local_dir}/")
+        tmp_dest.unlink(missing_ok=True)
+        return False
+
+
 def check_all():
     """Print status of all models."""
     print("\nModel Status:")
@@ -402,6 +459,12 @@ def check_all():
             for f in files:
                 size_mb = os.path.getsize(f) / (1024**2)
                 print(f"       -> {os.path.basename(f)} ({size_mb:.0f} MB)")
+
+    # MatAnyone2 checkpoint
+    ma2_installed = is_matanyone2_installed()
+    ma2_mark = "[OK]" if ma2_installed else "[--]"
+    ma2_status = "INSTALLED" if ma2_installed else "NOT INSTALLED"
+    print(f"  {ma2_mark} matanyone2   {MATANYONE2_CHECKPOINT['size_human']:>8s}  {ma2_status} (optional)")
 
     # MLX checkpoint (Apple Silicon only, but show status on all platforms)
     mlx_installed = is_mlx_installed()
@@ -439,6 +502,7 @@ def main():
     )
     parser.add_argument("--gvm", action="store_true", help="Download GVM weights (~6GB, optional)")
     parser.add_argument("--videomama", action="store_true", help="Download VideoMaMa weights (~37GB, optional)")
+    parser.add_argument("--matanyone2", action="store_true", help="Download MatAnyone2 weights (~141MB, optional)")
     parser.add_argument("--all", action="store_true", help="Download all models")
     parser.add_argument("--check", action="store_true", help="Check installation status")
     args = parser.parse_args()
@@ -446,20 +510,22 @@ def main():
     mlx_flag = getattr(args, 'corridorkey_mlx', False)
 
     # Default to --check if no flags
-    if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.all, args.check]):
+    if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.all, args.check]):
         args.check = True
 
     if args.check:
         check_all()
-        if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.all]):
+        if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.all]):
             return
 
     targets = []
     sam2_targets: list[str] = []
     download_mlx = False
+    download_ma2 = False
     if args.all:
         targets = list(MODELS.keys())
         sam2_targets = list(SAM2_MODELS.keys())
+        download_ma2 = True
         # --all on Apple Silicon auto-includes MLX weights
         if sys.platform == "darwin" and platform.machine() == "arm64":
             download_mlx = True
@@ -468,6 +534,8 @@ def main():
             targets.append("corridorkey")
         if mlx_flag:
             download_mlx = True
+        if args.matanyone2:
+            download_ma2 = True
         if args.sam2:
             if args.sam2 == "all":
                 sam2_targets = list(SAM2_MODELS.keys())
@@ -478,10 +546,10 @@ def main():
         if args.videomama:
             targets.append("videomama")
 
-    if not targets and not sam2_targets and not download_mlx:
+    if not targets and not sam2_targets and not download_mlx and not download_ma2:
         return
 
-    total_targets = len(targets) + len(sam2_targets) + (1 if download_mlx else 0)
+    total_targets = len(targets) + len(sam2_targets) + (1 if download_mlx else 0) + (1 if download_ma2 else 0)
     print(f"\nDownloading {total_targets} model(s)...\n")
     results = {}
     for name in targets:
@@ -491,6 +559,10 @@ def main():
     if download_mlx:
         print("[corridorkey-mlx]")
         results["corridorkey-mlx"] = download_corridorkey_mlx()
+        print()
+    if download_ma2:
+        print("[matanyone2]")
+        results["matanyone2"] = download_matanyone2()
         print()
     for name in sam2_targets:
         result_key = f"sam2-{name}"

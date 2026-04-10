@@ -25,8 +25,8 @@ INFERENCE_DEFAULTS = {
     "despeckle_dilation": 25,
     "despeckle_blur": 5,
     "source_passthrough": True,
-    "edge_erode_px": 3,
-    "edge_blur_px": 7,
+    "edge_erode_px": None,
+    "edge_blur_px": None,
 }
 
 def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
@@ -391,6 +391,21 @@ class CorridorKeyEngine:
 
             try:
                 import triton  # noqa: F401
+                # Frozen builds: if triton_windows .dist-info was missing,
+                # the runtime hook flagged it.  Patch the backends dict now.
+                if os.environ.get('_TRITON_PATCH_BACKENDS') == '1':
+                    from triton.backends import backends, Backend, _find_concrete_subclasses
+                    from triton.backends.driver import DriverBase
+                    from triton.backends.compiler import BaseBackend
+                    if 'nvidia' not in backends:
+                        import triton.backends.nvidia.compiler as _nv_compiler
+                        import triton.backends.nvidia.driver as _nv_driver
+                        backends['nvidia'] = Backend(
+                            _find_concrete_subclasses(_nv_compiler, BaseBackend),
+                            _find_concrete_subclasses(_nv_driver, DriverBase),
+                        )
+                        logger.info("Patched triton backends: nvidia registered")
+                    del os.environ['_TRITON_PATCH_BACKENDS']
             except Exception as e:
                 self._use_compile = False
                 logger.warning(f"Triton unavailable, skipping torch.compile: {type(e).__name__}: {e}")
@@ -484,14 +499,14 @@ class CorridorKeyEngine:
              img_resized = cv2.resize(image, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
 
         mask_resized = cv2.resize(mask_linear, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
-        
+
         if mask_resized.ndim == 2:
             mask_resized = mask_resized[:, :, np.newaxis]
-            
+
         # 3. Normalize (ImageNet)
         # Model expects sRGB input normalized
         img_norm = (img_resized - self.mean) / self.std
-        
+
         # 4. Prepare Tensor
         inp_np = np.concatenate([img_norm, mask_resized], axis=-1) # [H, W, 4]
         inp_t = torch.from_numpy(inp_np.transpose((2, 0, 1))).float().unsqueeze(0).to(self.device)
@@ -539,7 +554,7 @@ class CorridorKeyEngine:
         # B. Despill FG
         # res_fg is sRGB (with source passthrough blended in where applicable).
         fg_despilled = cu.despill(res_fg, green_limit_mode='average', strength=despill_strength)
-        
+
         # C. Convert to linear for output assembly.
         fg_despilled_lin = cu.srgb_to_linear(fg_despilled)
 
