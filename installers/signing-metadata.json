@@ -1,5 +1,0 @@
-{
-  "Endpoint": "https://eus.codesigning.azure.net/",
-  "CodeSigningAccountName": "EZSCAPE",
-  "CertificateProfileName": "EZSCAPE-PUBLIC"
-}

@@ -32,7 +32,7 @@ class ExportMixin:
 
         if not self._extract_worker.isRunning():
             if sys.platform == "win32":
-                self._extract_worker.start(QThread.LowPriority)
+                self._extract_worker.start(QThread.HighPriority)
             else:
                 self._extract_worker.start()
 
@@ -77,7 +77,7 @@ class ExportMixin:
             return
         if not self._extract_worker.isRunning():
             if sys.platform == "win32":
-                self._extract_worker.start(QThread.LowPriority)
+                self._extract_worker.start(QThread.HighPriority)
             else:
                 self._extract_worker.start()
         count = 0
