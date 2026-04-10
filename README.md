@@ -1,6 +1,6 @@
-# EZ-CorridorKey **v1.9.0**
+# EZ-CorridorKey **v1.9.1**
 
-> **Latest release: [v1.9.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.9.0)** — Windows installer, macOS app, WebM/ProRes alpha export, batch export, codebase refactor. See the [full changelog](CHANGELOG.md).
+> **Latest release: [v1.9.1](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.9.1)** — Frozen build performance, MLX macOS packaging, UX fixes. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -68,7 +68,7 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 
 **Updating:**
 
-- **Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app — it downloads a lightweight patch and relaunches. **Note:** v1.9.0 requires a fresh install due to a major codebase refactor. The in-app updater will return for future patch releases (v1.9.1+).
+- **Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app — it downloads a lightweight patch and relaunches.
 - **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git (or downloads a ZIP if git isn't available).
 
 > **Note:** The update ZIP on GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) is for Desktop App Installer users only — it patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
