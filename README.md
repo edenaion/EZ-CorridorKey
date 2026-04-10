@@ -426,7 +426,7 @@ EZ-CorridorKey's optimizations (Hiera FlashAttention, TF32 tensor cores, torch.c
 
 All installer scripts are open-source and readable in this repository. The Windows installer and portable exe are digitally signed via Azure Trusted Signing. Independent VirusTotal scans for the current release:
 
-- [**EZ-CorridorKey.exe** (v1.9.0) — 1/65 detections](https://www.virustotal.com/gui/file/ae0cca77755fd58a623ec19ed23e8915178e7059a5089e2e3a4ac5b76dc51ab8) (Bkav Pro heuristic false positive — common with PyInstaller-bundled apps)
+- [**EZ-CorridorKey-1.9.1-Windows-x64-Setup.exe** — VirusTotal scan](https://www.virustotal.com/gui/file-analysis/OWVkMGEwYTI1ZGI1YmUxNWU3N2IwOWRmOWNhZWQ4NWM6MTc3NTg2MzQ2MA==)
 - [**1-install.bat** (v1.6.0) — 0 detections](https://www.virustotal.com/gui/file/c88b68b2fdc429de8bd70a5dde182486c788fcdc34eb508a4a137373d1ddb1bc)
 
 ---
