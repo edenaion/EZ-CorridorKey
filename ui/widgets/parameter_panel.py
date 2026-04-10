@@ -8,6 +8,35 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QEvent
 
+
+def _no_scroll_wheel(widget: QWidget) -> QWidget:
+    """Prevent mouse-wheel from changing value unless widget is focused.
+
+    Users scrolling the panel accidentally change sliders/spinboxes.
+    StrongFocus means the widget only accepts wheel events after a click.
+    """
+    widget.setFocusPolicy(Qt.StrongFocus)
+    widget.installEventFilter(_WheelGuard.instance())
+    return widget
+
+
+class _WheelGuard(QWidget):
+    """Event filter that ignores wheel events on unfocused widgets."""
+
+    _singleton = None
+
+    @classmethod
+    def instance(cls):
+        if cls._singleton is None:
+            cls._singleton = cls()
+        return cls._singleton
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Wheel and not obj.hasFocus():
+            event.ignore()
+            return True
+        return False
+
 from backend import InferenceParams, OutputConfig
 
 
@@ -237,7 +266,7 @@ class ParameterPanel(QWidget):
         # Despill Strength (slider 0-10 → 0.0-1.0)
         self._despill_label = QLabel("Despill: 0.5")
         inf_layout.addWidget(self._despill_label)
-        self._despill_slider = QSlider(Qt.Horizontal)
+        self._despill_slider = _no_scroll_wheel(QSlider(Qt.Horizontal))
         self._despill_slider.setRange(0, 10)
         self._despill_slider.setValue(5)
         self._despill_slider.setToolTip(
@@ -259,7 +288,7 @@ class ParameterPanel(QWidget):
         )
         self._despeckle_check.stateChanged.connect(self._on_despeckle_toggled)
         despeckle_row.addWidget(self._despeckle_check)
-        self._despeckle_size = QSpinBox()
+        self._despeckle_size = _no_scroll_wheel(QSpinBox())
         self._despeckle_size.setRange(50, 2000)
         self._despeckle_size.setValue(400)
         self._despeckle_size.setSuffix("px")
@@ -275,7 +304,7 @@ class ParameterPanel(QWidget):
         # Refiner Scale (slider 0-30 → 0.0-3.0)
         self._refiner_label = QLabel("Refiner: 1.0")
         inf_layout.addWidget(self._refiner_label)
-        self._refiner_slider = QSlider(Qt.Horizontal)
+        self._refiner_slider = _no_scroll_wheel(QSlider(Qt.Horizontal))
         self._refiner_slider.setRange(0, 30)
         self._refiner_slider.setValue(10)
         self._refiner_slider.setToolTip(

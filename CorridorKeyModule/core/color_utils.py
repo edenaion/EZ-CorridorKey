@@ -286,7 +286,7 @@ def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
         
     return result_alpha
 
-def source_passthrough(original_srgb, model_fg_srgb, alpha, erode_px=3, blur_px=7):
+def source_passthrough(original_srgb, model_fg_srgb, alpha, erode_px=None, blur_px=None):
     """
     Blend original source pixels into the model's foreground prediction.
 
@@ -295,20 +295,35 @@ def source_passthrough(original_srgb, model_fg_srgb, alpha, erode_px=3, blur_px=
     so they retain full quality.  Near edges (where alpha transitions), we use
     the model's predicted foreground which handles green-screen separation.
 
+    Erosion and blur values scale with image resolution to prevent visible
+    seams at attention window boundaries, especially on 4K+ footage.
+
     Args:
         original_srgb: [H, W, 3] float32 sRGB, original frame.
         model_fg_srgb: [H, W, 3] float32 sRGB, model's predicted foreground.
         alpha:         [H, W, 1] or [H, W] float32 (0-1), predicted alpha matte.
         erode_px:      Pixels to erode the interior mask inward from the edge.
-                       Creates a safety buffer so we never use original pixels
-                       right at the boundary where green spill may exist.
+                       None = auto-scale based on resolution.
         blur_px:       Gaussian blur radius for the transition band.
-                       Controls how smoothly we blend from original → model fg.
+                       None = auto-scale based on resolution.
 
     Returns:
         [H, W, 3] float32 sRGB, blended foreground.
     """
     import cv2
+
+    h, w = original_srgb.shape[:2]
+    long_edge = max(h, w)
+
+    # Scale erosion and blur proportional to resolution.
+    # Reference: 1080p (1920px) → erode 5, blur 11
+    #            4K   (3840px) → erode 10, blur 23
+    #            8K   (7680px) → erode 20, blur 45
+    scale = long_edge / 1920.0
+    if erode_px is None:
+        erode_px = max(3, int(round(5 * scale)))
+    if blur_px is None:
+        blur_px = max(7, int(round(11 * scale))) | 1  # ensure odd
 
     # Work with 2D alpha
     a = alpha[:, :, 0] if alpha.ndim == 3 else alpha
@@ -329,7 +344,7 @@ def source_passthrough(original_srgb, model_fg_srgb, alpha, erode_px=3, blur_px=
     # Smooth the transition so there's no visible seam between
     # original pixels and model-predicted pixels.
     if blur_px > 0:
-        ks = blur_px * 2 + 1
+        ks = blur_px | 1  # ensure odd
         interior = cv2.GaussianBlur(interior, (ks, ks), 0)
 
     # Expand to 3-channel for broadcasting

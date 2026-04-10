@@ -95,10 +95,10 @@ def _recompress_to_dwab(
     EXR compression preference (PIZ/ZIP/etc.) applies only to inference
     output written by service.py._write_image().
 
-    In frozen (PyInstaller) builds, runs in-process with a ThreadPoolExecutor
-    because sys.executable points to the app .exe, not a Python interpreter.
-    In dev mode, spawns a subprocess with ProcessPoolExecutor for full GIL
-    bypass.
+    In frozen (PyInstaller) builds, uses multiprocessing.ProcessPoolExecutor
+    with spawn start method (requires freeze_support() in main.py).
+    In dev mode, spawns a standalone subprocess for full GIL bypass.
+    Both paths keep the parent process (and its Qt event loop) completely free.
     """
     marker = os.path.join(out_dir, ".dwab_done")
     if os.path.isfile(marker):
@@ -111,14 +111,64 @@ def _recompress_to_dwab(
         return
 
     if getattr(sys, "frozen", False):
-        _recompress_inprocess(out_dir, exr_files, total, marker,
-                              on_progress, cancel_event)
+        _recompress_multiprocess(out_dir, exr_files, total, marker,
+                                 on_progress, cancel_event)
     else:
         _recompress_subprocess(out_dir, exr_files, total, marker,
                                on_progress, cancel_event)
 
 
-def _recompress_inprocess(
+def _recompress_one_exr(args: tuple) -> bool:
+    """Recompress a single EXR file to DWAB. Runs in a child process."""
+    src, tmp = args
+    try:
+        os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+        import cv2
+        import numpy as np
+        import OpenEXR
+        import Imath
+        img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
+        if img is None:
+            return False
+        HALF = Imath.Channel(Imath.PixelType(Imath.PixelType.HALF))
+        h, w = img.shape[:2]
+        hdr = OpenEXR.Header(w, h)
+        hdr['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+        if img.ndim == 2:
+            hdr['channels'] = {'Y': HALF}
+            out = OpenEXR.OutputFile(tmp, hdr)
+            out.writePixels({'Y': img.astype(np.float16).tobytes()})
+            out.close()
+        elif img.ndim == 3 and img.shape[2] == 3:
+            hdr['channels'] = {'R': HALF, 'G': HALF, 'B': HALF}
+            out = OpenEXR.OutputFile(tmp, hdr)
+            out.writePixels({
+                'R': img[:, :, 2].astype(np.float16).tobytes(),
+                'G': img[:, :, 1].astype(np.float16).tobytes(),
+                'B': img[:, :, 0].astype(np.float16).tobytes(),
+            })
+            out.close()
+        elif img.ndim == 3 and img.shape[2] == 4:
+            hdr['channels'] = {'R': HALF, 'G': HALF, 'B': HALF, 'A': HALF}
+            out = OpenEXR.OutputFile(tmp, hdr)
+            out.writePixels({
+                'R': img[:, :, 2].astype(np.float16).tobytes(),
+                'G': img[:, :, 1].astype(np.float16).tobytes(),
+                'B': img[:, :, 0].astype(np.float16).tobytes(),
+                'A': img[:, :, 3].astype(np.float16).tobytes(),
+            })
+            out.close()
+        else:
+            return False
+        os.replace(tmp, src)
+        return True
+    except Exception:
+        if os.path.isfile(tmp):
+            os.remove(tmp)
+        return False
+
+
+def _recompress_multiprocess(
     out_dir: str,
     exr_files: list[str],
     total: int,
@@ -126,27 +176,25 @@ def _recompress_inprocess(
     on_progress: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
 ) -> None:
-    """DWAB recompress using in-process ThreadPoolExecutor (frozen builds)."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
-    from backend.frame_io import recompress_exr
+    """DWAB recompress using ProcessPoolExecutor (frozen builds).
 
-    logger.info(f"Recompressing {total} EXR frames to DWAB (in-process)...")
+    Uses multiprocessing with spawn start method so each worker is a real
+    child process — no GIL contention with the parent Qt event loop.
+    Requires multiprocessing.freeze_support() in main.py (already present).
+    """
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    logger.info(f"Recompressing {total} EXR frames to DWAB (multiprocess)...")
     workers = max(1, min((os.cpu_count() or 4) // 2, 16))
     done = 0
 
-    def _do_one(fname: str) -> bool:
-        src = os.path.join(out_dir, fname)
-        tmp = src + ".tmp"
-        ok = recompress_exr(src, tmp, compression="dwab")
-        if ok:
-            os.replace(tmp, src)
-        elif os.path.isfile(tmp):
-            os.remove(tmp)
-        return ok
+    ctx = multiprocessing.get_context("spawn")
+    work = [(os.path.join(out_dir, f), os.path.join(out_dir, f + ".tmp"))
+            for f in exr_files]
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futs = {pool.submit(_do_one, f): f for f in exr_files}
+    with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as pool:
+        futs = {pool.submit(_recompress_one_exr, item): item for item in work}
         for fut in as_completed(futs):
             if cancel_event and cancel_event.is_set():
                 pool.shutdown(wait=False, cancel_futures=True)

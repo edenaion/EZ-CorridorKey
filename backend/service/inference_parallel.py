@@ -80,6 +80,10 @@ class ParallelInferenceMixin:
         if on_status:
             on_status("Compiling (first frame may take a minute)...")
         warmup_done = threading.Event()
+        # t_steady marks when the first frame finishes (after Triton JIT).
+        # fps/ETA are computed from this point, not t_start, so the one-time
+        # compilation cost doesn't pollute the displayed rate.
+        t_steady: list[float | None] = [None]
 
         # --- Worker threads (each bound to one engine) ---
         def worker(engine_idx: int) -> None:
@@ -110,6 +114,7 @@ class ParallelInferenceMixin:
                     out_q.put((frame_idx, stem, res, None))
                     if not warmup_done.is_set():
                         warmup_done.set()
+                        t_steady[0] = time.monotonic()
                         if on_status:
                             on_status("")
                 except Exception as e:
@@ -230,8 +235,14 @@ class ParallelInferenceMixin:
                     if on_progress and (now - t_last_progress > 0.1 or written == range_count):
                         elapsed = now - t_start
                         timing_kw: dict[str, float] = {"elapsed": elapsed}
-                        if processed_count_box[0] > 0:
-                            fps = processed_count_box[0] / elapsed
+                        # Use t_steady (after first frame) for fps/ETA so the
+                        # one-time Triton JIT cost doesn't drag down the rate.
+                        t_fps_base = t_steady[0] or t_start
+                        steady_elapsed = now - t_fps_base
+                        # Frames completed after warmup (first frame is warmup)
+                        steady_count = max(0, processed_count_box[0] - 1)
+                        if steady_count > 0 and steady_elapsed > 0:
+                            fps = steady_count / steady_elapsed
                             remaining = range_count - written
                             timing_kw["fps"] = fps
                             if fps > 0:
@@ -244,8 +255,11 @@ class ParallelInferenceMixin:
             if on_progress:
                 final_elapsed = time.monotonic() - t_start
                 final_kw: dict[str, float] = {"elapsed": final_elapsed, "eta_seconds": 0.0}
-                if processed_count_box[0] > 0:
-                    final_kw["fps"] = processed_count_box[0] / final_elapsed
+                t_fps_base = t_steady[0] or t_start
+                steady_elapsed = time.monotonic() - t_fps_base
+                steady_count = max(0, processed_count_box[0] - 1)
+                if steady_count > 0 and steady_elapsed > 0:
+                    final_kw["fps"] = steady_count / steady_elapsed
                 on_progress(clip.name, range_count, range_count, **final_kw)
 
         # Launch all threads

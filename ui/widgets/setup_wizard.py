@@ -107,6 +107,14 @@ MODELS += [
         "default_checked": False,
     },
     {
+        "key": "matanyone2",
+        "label": "MatAnyone2 Alpha Generator",
+        "size": "141 MB",
+        "required": False,
+        "description": "Matting-based AI alpha from brush prompts",
+        "default_checked": True,
+    },
+    {
         "key": "videomama",
         "label": "VideoMaMa Alpha Generator",
         "size": "~37 GB",
@@ -206,6 +214,8 @@ class _DownloadWorker(QThread):
             return setup_models.download_sam2_model("base-plus")
         elif key == "gvm":
             return setup_models.download_model("gvm")
+        elif key == "matanyone2":
+            return setup_models.download_matanyone2()
         elif key == "videomama":
             return setup_models.download_model("videomama")
         return False
@@ -414,12 +424,25 @@ class SetupWizard(QDialog):
 
         layout.addSpacing(8)
 
+        # Scrollable model list — labels always display full width
+        from PySide6.QtWidgets import QScrollArea
+        model_container = QWidget()
+        model_layout = QVBoxLayout(model_container)
+        model_layout.setContentsMargins(0, 0, 0, 0)
+        model_layout.setSpacing(4)
         for model in MODELS:
             row = _ModelRow(model)
             self._rows[model["key"]] = row
-            layout.addWidget(row)
+            model_layout.addWidget(row)
+        model_layout.addStretch()
 
-        layout.addStretch()
+        scroll = QScrollArea()
+        scroll.setWidget(model_container)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: transparent; }"
+                             "QWidget { background: transparent; }")
+        layout.addWidget(scroll, 1)
 
         # Divider + desktop shortcut
         divider = QFrame()
