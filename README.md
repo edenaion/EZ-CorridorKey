@@ -453,7 +453,7 @@ All installer scripts are open-source and readable in this repository. The Windo
 
 ## Contributing & Support
 
-EZ-CorridorKey is a labor of love — built and maintained by one man from Brooklyn, for the VFX community. If this tool saves you time on a project, consider paying it forward:
+EZ-CorridorKey is a labor of love — built and maintained by one man from Brooklyn for the VFX community. If this tool saves you time on a project, consider paying it forward:
 
 [![Ko-Fi](https://img.shields.io/badge/Ko--fi-Support%20Development-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/edenaion)
 [![EZSCAPE Plugins](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-000000?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yIDEyaDE4TTEyIDJjLTMgMy41LTUgNy01IDEwczIgNi41IDUgMTBjMy0zLjUgNS03IDUtMTBzLTItNi41LTUtMTAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==&logoColor=white)](https://www.ezscape.space)
