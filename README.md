@@ -455,6 +455,6 @@ Optional modules:
 - **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) — Apache 2.0
 - **BiRefNet** ([ZhengPeng7/BiRefNet](https://github.com/ZhengPeng7/BiRefNet)) — MIT
 
-Join EZSCAPE Discord for EZ-CorridorKey troubleshooting: https://discord.gg/6kgxHUfA
+Join EZSCAPE Discord for EZ-CorridorKey troubleshooting: https://discord.gg/TyxNjcWeF3
 
 Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm

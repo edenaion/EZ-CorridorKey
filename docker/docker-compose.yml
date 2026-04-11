@@ -6,9 +6,9 @@ services:
     image: corridorkey:cpu
     container_name: corridorkey-cpu
     ports:
-      - "6080:6080"
-      - "6081:6081"
-      - "5900:5900"
+      - "127.0.0.1:6080:6080"
+      - "127.0.0.1:6081:6081"
+      - "127.0.0.1:5900:5900"
     environment:
       DISPLAY: ":1"
       QT_QPA_PLATFORM: "xcb"
@@ -54,9 +54,9 @@ services:
       CORRIDORKEY_INSTALL_GVM: "n"
       CORRIDORKEY_INSTALL_VIDEOMAMA: "n"
     ports:
-      - "6080:6080"
-      - "6081:6081"
-      - "5900:5900"
+      - "127.0.0.1:6080:6080"
+      - "127.0.0.1:6081:6081"
+      - "127.0.0.1:5900:5900"
     volumes:
       - corridorkey_install:/opt/corridorkey
       - corridorkey_projects:/opt/corridorkey/Projects
