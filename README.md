@@ -104,7 +104,7 @@ For Linux users or remote/cloud setups, EZ-CorridorKey can run inside Docker wit
 | CORRIDORKEY                                        RTX 5090  ## 4GB|
 +------+------------------------+---------------------+--------------+
 |      |      241 frames - RAW | IN|FG|MATTE[COMP]PROC| ALPHA GEN    |
-|  Q   |                       |                      |  GVM AUTO    |
+|  Q   |                       |                      |  GVM/BIREFNET|
 |  U   +-----------------------+----------------------+  MATANYONE2  |
 |      |                       |                      |  VIDEOMAMA   |
 |  E   |                       |                      |  EXPORT MASK |
