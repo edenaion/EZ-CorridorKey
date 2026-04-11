@@ -1,5 +1,11 @@
 # EZ-CorridorKey **v1.9.1**
 
+[![Release](https://img.shields.io/github/v/release/edenaion/EZ-CorridorKey?style=flat-square&label=Release)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
+[![Stars](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
+[![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-blue?style=flat-square)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/TyxNjcWeF3)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)]()
+
 > **Latest release: [v1.9.1](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.9.1)** — Frozen build performance, MLX macOS packaging, UX fixes. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
@@ -8,7 +14,18 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 ![EZ-CorridorKey](docs/screenshots/EZ-CorridorKey_Inference_Done.jpg)
 
-[![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#bytebase/star-history&Date)
+### Contents
+
+- [Installation](#installation) — Desktop installer, CLI setup, Docker
+- [Application Layout](#application-layout) — UI overview
+- [Quick Start](#quick-start) — Import, generate alpha, run inference
+- [Keyboard Shortcuts](#keyboard-shortcuts) — Full hotkey reference
+- [View Modes](#view-modes) — Output channel switching
+- [Inference Controls](#inference-controls) — Parameters and output formats
+- [Hardware Requirements](#hardware-requirements) — VRAM, GPU, and platform info
+- [Contributing](#contributing--support) — How to help and get help
+
+[![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
 
 | Capability          | CLI (Upstream)              | GUI (This Project)                                   |
 | ------------------- | --------------------------- | ---------------------------------------------------- |
@@ -429,6 +446,31 @@ All installer scripts are open-source and readable in this repository. The Windo
 - [**EZ-CorridorKey-1.9.1-Windows-x64-Setup.exe** — VirusTotal scan](https://www.virustotal.com/gui/file-analysis/OWVkMGEwYTI1ZGI1YmUxNWU3N2IwOWRmOWNhZWQ4NWM6MTc3NTg2MzQ2MA==)
 - [**1-install.bat** (v1.6.0) — 0 detections](https://www.virustotal.com/gui/file/c88b68b2fdc429de8bd70a5dde182486c788fcdc34eb508a4a137373d1ddb1bc)
 
+> **Third-party models:** The core CorridorKey checkpoint (`CorridorKey.pth`) is the only model we can vouch for. Optional models (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) are downloaded from their respective authors' repositories — use them at your own discretion.
+
+---
+
+## Contributing & Support
+
+EZ-CorridorKey is a labor of love — built and maintained by one man from Brooklyn, for the VFX community. If this tool saves you time on a project, consider paying it forward:
+
+[![Ko-Fi](https://img.shields.io/badge/Ko--fi-Support%20Development-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/edenaion)
+[![EZSCAPE Plugins](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-000000?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yIDEyaDE4TTEyIDJjLTMgMy41LTUgNy01IDEwczIgNi41IDUgMTBjMy0zLjUgNS03IDUtMTBzLTItNi41LTUtMTAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==&logoColor=white)](https://www.ezscape.space)
+[![RunPod](https://img.shields.io/badge/RunPod-Cloud%20GPU-673AB7?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNS0xMC01LTEwIDV6TTIgMTJsMTAgNSAxMC01LTEwLTUtMTAgNXoiLz48L3N2Zz4=&logoColor=white)](https://runpod.io?ref=2k18fmnh)
+
+- **Star this repo** if you find it useful -- it helps others discover the project
+- **Purchase a plugin** -- I pour my heart into [EZSCAPE plugins](https://www.ezscape.space)
+- **Report bugs** via [GitHub Issues](https://github.com/edenaion/EZ-CorridorKey/issues)
+- **Contribute code** -- see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
+- **Security issues** -- see [SECURITY.md](SECURITY.md) for responsible disclosure
+
+Need GPU compute for inference? [RunPod](https://runpod.io?ref=2k18fmnh) offers on-demand cloud GPUs — great for batch processing large shoots without tying up your local machine. Using my referral link will enable me to build more tools for all!
+
+### Community
+
+[![Discord - EZSCAPE](https://img.shields.io/badge/EZSCAPE-Support%20%26%20Chill-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/TyxNjcWeF3)
+[![Discord - Corridor Creates](https://img.shields.io/badge/Corridor%20Creates-Community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/zvwUrdWXJm)
+
 ---
 
 ## Licensing & Attribution
@@ -437,17 +479,21 @@ This project wraps [Niko Pueringer's CorridorKey](https://github.com/nikopuering
 
 GUI/SFX/Workflow/QA/Maintenance by [Ed Zisk](https://www.edzisk.com).
 
-Logo by [Sara Ann Stewart](https://www.instagram.com/sarastewartwork).
-Hiera optimization by [Jhe Kim](https://github.com/Raiden129).
-Tiling optimization by [MarcelLieb](https://github.com/MarcelLieb).
-MLX Apple Silicon backend by [Cristopher Yates](https://github.com/cmoyates) ([corridorkey-mlx](https://github.com/cmoyates/corridorkey-mlx)).
-FX graph cache from [99oblivius](https://github.com/99oblivius) ([CorridorKey-Engine](https://github.com/99oblivius/CorridorKey-Engine)).
-BiRefNet integration adapted from [Warwlock](https://github.com/Warwlock)'s [upstream PR](https://github.com/edenaion/EZ-CorridorKey/pull/10).
-Docker / noVNC browser mode by [DCRepublic](https://github.com/DCRepublic).
+<details>
+<summary><strong>Contributors</strong></summary>
 
-If you use or build on this project, please star this repo and credit the contributors <3
+- Logo by [Sara Ann Stewart](https://www.instagram.com/sarastewartwork)
+- Hiera optimization by [Jhe Kim](https://github.com/Raiden129)
+- Tiling optimization by [MarcelLieb](https://github.com/MarcelLieb)
+- MLX Apple Silicon backend by [Cristopher Yates](https://github.com/cmoyates) ([corridorkey-mlx](https://github.com/cmoyates/corridorkey-mlx))
+- FX graph cache from [99oblivius](https://github.com/99oblivius) ([CorridorKey-Engine](https://github.com/99oblivius/CorridorKey-Engine))
+- BiRefNet integration adapted from [Warwlock](https://github.com/Warwlock)'s [upstream PR](https://github.com/edenaion/EZ-CorridorKey/pull/10)
+- Docker / noVNC browser mode by [DCRepublic](https://github.com/DCRepublic)
 
-Optional modules:
+</details>
+
+<details>
+<summary><strong>Optional modules & licenses</strong></summary>
 
 - **SAM 2.1** ([facebookresearch/sam2](https://github.com/facebookresearch/sam2)) — Apache 2.0
 - **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) — CC BY-NC-SA 4.0
@@ -455,6 +501,6 @@ Optional modules:
 - **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) — Apache 2.0
 - **BiRefNet** ([ZhengPeng7/BiRefNet](https://github.com/ZhengPeng7/BiRefNet)) — MIT
 
-Join EZSCAPE Discord for EZ-CorridorKey troubleshooting: https://discord.gg/TyxNjcWeF3
+</details>
 
-Join the Corridor Creates Discord: https://discord.gg/zvwUrdWXJm
+If you use or build on this project, please star this repo and credit the contributors.
