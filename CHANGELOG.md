@@ -6,6 +6,17 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [Unreleased]
 
+### Added
+- **SECURITY.md** — vulnerability disclosure policy with GitHub private advisory and email contact.
+- **CONTRIBUTING.md** — contributor guidelines adapted from upstream, covering dev setup, PR workflow, and code style.
+
+### Fixed
+- **Docker: unauthenticated services** — VNC now requires a password (was `-nopw`), filebrowser now requires login (was `--noauth`).
+- **Docker: ports bound to all interfaces** — all exposed ports (5900, 6080, 6081) now bind to `127.0.0.1` only, preventing LAN/WAN access.
+
+### Changed
+- Updated EZSCAPE Discord link in README.
+
 ---
 
 ## [1.9.0] - 2026-04-09 — Windows Installer, macOS App, Export Overhaul
