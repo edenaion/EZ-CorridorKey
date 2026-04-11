@@ -140,8 +140,9 @@ The recompression runs in a separate process so the UI stays fully responsive du
 
 Your clip starts in **RAW** state (gray badge). You need an alpha hint before running inference.
 
-**Option A — GVM Auto (one-click):**
-Click **GVM AUTO** in the parameter panel. Works great for most green screen footage with people.
+**Option A — One-click alpha generators:**
+- **BiRefNet** (recommended) — click **BIREFNET** in the parameter panel. Fast, accurate, and works well on a wide range of footage.
+- **GVM Auto** — click **GVM AUTO** in the parameter panel. Works great for most green screen footage with people.
 
 **Option B — Track Mask + MatAnyone2 / VideoMaMa:**
 For difficult shots, use the paint brush as a prompt tool:
