@@ -2,7 +2,6 @@ from scripts.detect_windows_torch_index import (
     CPU_URL,
     CU126_URL,
     CU128_URL,
-    CU130_URL,
     choose_index_url,
     detect,
     find_nvidia_smi,
@@ -44,10 +43,34 @@ def test_parse_cuda_version_from_non_english_cuda_line():
 
 
 def test_choose_index_url_maps_supported_cuda_ranges():
-    assert choose_index_url("13.0")[0] == CU130_URL
+    """Drivers reporting CUDA 12.6+ (including CUDA 13.x) all resolve
+    to cu128 in 1.9.2+, because cu128 wheels ship Pascal-through-
+    Blackwell kernels and run on the entire CUDA 12.6-13.x driver
+    range. Older 12.0-12.5 drivers fall back to cu126."""
+    # CUDA 13.x drivers — cu128 (NOT cu130; cu130 dropped Pascal support).
+    assert choose_index_url("13.0")[0] == CU128_URL
+    assert choose_index_url("13.5")[0] == CU128_URL
+    # CUDA 12.6+ — cu128.
     assert choose_index_url("12.8")[0] == CU128_URL
+    assert choose_index_url("12.6")[0] == CU128_URL
+    # CUDA 12.0-12.5 — older cu126 fallback.
+    assert choose_index_url("12.5")[0] == CU126_URL
     assert choose_index_url("12.1")[0] == CU126_URL
     assert choose_index_url("12.0")[0] == CU126_URL
+
+
+def test_choose_index_url_never_returns_cu130_string():
+    """Hard guard: cu130 must never be returned by the auto-installer
+    matrix. Its absence is the entire reason GTX 10-series GPUs work
+    on shipped builds. If this assertion ever fails, Pascal users will
+    crash on the very next release."""
+    for cuda_ver in ("13.0", "13.1", "13.5", "12.9", "12.8", "12.7", "12.6"):
+        url, label, _ = choose_index_url(cuda_ver)
+        assert "cu130" not in url, (
+            f"cu130 wheel resurfaced for CUDA {cuda_ver}: {url}. "
+            "This breaks Pascal GPUs. See test docstring."
+        )
+        assert "cu130" not in label.lower()
 
 
 def test_choose_index_url_falls_back_for_unsupported_cuda():

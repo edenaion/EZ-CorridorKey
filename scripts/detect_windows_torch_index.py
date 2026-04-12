@@ -14,10 +14,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-CU130_URL = "https://download.pytorch.org/whl/cu130"
 CU128_URL = "https://download.pytorch.org/whl/cu128"
 CU126_URL = "https://download.pytorch.org/whl/cu126"
 CPU_URL = "https://download.pytorch.org/whl/cpu"
+
+# NOTE: cu130 wheels were dropped from the auto-installer matrix in
+# 1.9.2 because they ship without sm_60/61/70 kernels — meaning Pascal
+# (GTX 10-series) GPUs crash with "no kernel image is available" at
+# inference time. cu128 wheels run on every NVIDIA driver from CUDA
+# 12.6 up through CUDA 13.x and cover Pascal through Blackwell, so
+# they are now the canonical wheel for any modern NVIDIA driver.
 
 _VERSION_RE = re.compile(r"(\d+\.\d+)")
 
@@ -127,6 +133,14 @@ def parse_cuda_version(text: str) -> str | None:
 
 
 def choose_index_url(cuda_version: str | None) -> tuple[str, str, str]:
+    """Pick the PyTorch wheel index for a given driver-reported CUDA version.
+
+    cu128 is the canonical wheel: it ships kernels for sm_60 (Pascal)
+    through sm_120 (Blackwell) and runs on any NVIDIA driver from CUDA
+    12.6 through CUDA 13.x. cu130 was deliberately dropped here in
+    1.9.2 because it omits Pascal kernels and breaks GTX 10-series
+    users. cu126 stays as a fallback for older drivers (CUDA 12.0-12.5).
+    """
     if not cuda_version:
         return CPU_URL, "CPU-only PyTorch", "Could not determine CUDA version from nvidia-smi; installing CPU-only PyTorch."
 
@@ -137,10 +151,14 @@ def choose_index_url(cuda_version: str | None) -> tuple[str, str, str]:
     except Exception:
         return CPU_URL, "CPU-only PyTorch", f"Could not parse CUDA version '{cuda_version}'; installing CPU-only PyTorch."
 
+    # CUDA 13.x drivers: cu128 wheels are forward-compatible and
+    # preserve Pascal support, so they win over cu130.
     if major >= 13:
-        return CU130_URL, "PyTorch CUDA 13.0 wheels", ""
+        return CU128_URL, "PyTorch CUDA 12.8 wheels (covers Pascal-Blackwell)", ""
+    # CUDA 12.6+ drivers: same wheel.
     if major == 12 and minor >= 6:
         return CU128_URL, "PyTorch CUDA 12.8 wheels", ""
+    # CUDA 12.0-12.5 drivers: fall back to the older cu126 wheel.
     if major == 12:
         return CU126_URL, "PyTorch CUDA 12.6 wheels", ""
     return (
