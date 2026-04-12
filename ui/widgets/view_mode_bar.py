@@ -63,7 +63,23 @@ _MODE_TOOLTIPS: dict[ViewMode, str] = {
 
 
 class ViewModeBar(QWidget):
-    """Horizontal bar of toggle buttons for preview view modes."""
+    """Horizontal bar of toggle buttons for preview view modes.
+
+    Button visual state has three tiers:
+
+    * **Disabled** — clip contains zero frames for this mode. Unclickable.
+    * **Dim** — clip has frames for this mode but not at the current stem.
+      Still clickable so the user can switch and see the placeholder.
+    * **Normal / Active** — clip has a frame for this mode at the current
+      stem. Active (selected) mode is highlighted in brand yellow.
+
+    Callers update availability at two granularities:
+
+    * :meth:`set_available_modes` — clip-level: enable/disable based on which
+      modes have *any* frames in the whole clip.
+    * :meth:`set_current_stem_availability` — per-stem: dim the enabled
+      buttons whose mode has no frame at the currently displayed stem.
+    """
 
     mode_changed = Signal(str)  # emits ViewMode.value
 
@@ -78,6 +94,9 @@ class ViewModeBar(QWidget):
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
         self._buttons: dict[ViewMode, QPushButton] = {}
+        # Tracks whether the current stem has a frame for this mode. Used
+        # by _refresh_button_style to decide between "normal" and "dim".
+        self._stem_present: dict[ViewMode, bool] = {m: True for m in ViewMode}
 
         for i, mode in enumerate(ViewMode):
             btn = QPushButton(_MODE_LABELS[mode])
@@ -99,10 +118,14 @@ class ViewModeBar(QWidget):
 
 
     def set_available_modes(self, modes: list[ViewMode]) -> None:
-        """Enable buttons for modes that have frames."""
+        """Enable buttons for modes that have frames anywhere in the clip."""
         mode_set = set(modes)
         for mode, btn in self._buttons.items():
             btn.setEnabled(mode in mode_set)
+            # Clip-level re-eval resets per-stem tracking: assume present
+            # until the caller tells us otherwise via the per-stem API.
+            self._stem_present[mode] = mode in mode_set
+            self._refresh_button_style(mode)
 
         # If current mode is unavailable, switch to the most useful fallback.
         current = self.current_mode()
@@ -117,6 +140,23 @@ class ViewModeBar(QWidget):
             self._buttons[first].setChecked(True)
             self._on_mode_clicked(list(ViewMode).index(first))
 
+    def set_current_stem_availability(self, modes_with_current_frame) -> None:
+        """Per-stem dim update.
+
+        Called on every scrub. Modes that are clip-level enabled but whose
+        current stem has no frame get dimmed (still clickable). Modes with
+        a frame at the current stem render normally. Disabled modes are
+        unaffected.
+
+        Args:
+            modes_with_current_frame: Iterable of :class:`ViewMode` values
+                that have a frame at the currently displayed stem.
+        """
+        present_set = set(modes_with_current_frame)
+        for mode in self._buttons:
+            self._stem_present[mode] = mode in present_set
+            self._refresh_button_style(mode)
+
     def current_mode(self) -> ViewMode:
         """Return the currently selected ViewMode."""
         checked_id = self._button_group.checkedId()
@@ -126,17 +166,32 @@ class ViewModeBar(QWidget):
 
     def _on_mode_clicked(self, button_id: int) -> None:
         mode = list(ViewMode)[button_id]
-        # Update button styles
-        for m, btn in self._buttons.items():
-            btn.setStyleSheet(self._button_style(m == mode))
+        # Refresh all buttons — active state changed, stem_present unchanged.
+        for m in self._buttons:
+            self._refresh_button_style(m)
         self.mode_changed.emit(mode.value)
 
+    def _refresh_button_style(self, mode: ViewMode) -> None:
+        """Re-apply stylesheet for one button based on active + stem_present."""
+        btn = self._buttons[mode]
+        is_active = (self.current_mode() == mode)
+        stem_present = self._stem_present.get(mode, True)
+        btn.setStyleSheet(self._button_style(is_active, stem_present=stem_present))
+
     @staticmethod
-    def _button_style(active: bool) -> str:
+    def _button_style(active: bool, stem_present: bool = True) -> str:
         if active:
             return (
                 "QPushButton { background-color: #FFF203; color: #000000; "
                 "font-weight: 700; font-size: 10px; padding: 2px 6px; border: none; }"
+            )
+        if not stem_present:
+            # Enabled (clickable) but no frame at current stem — dimmed.
+            return (
+                "QPushButton { background-color: #141300; color: #4A4A35; "
+                "font-size: 10px; padding: 2px 6px; border: 1px solid #1F1E08; }"
+                "QPushButton:hover { border-color: #2A2910; color: #606050; }"
+                "QPushButton:disabled { color: #2A2A20; border-color: #141300; }"
             )
         return (
             "QPushButton { background-color: #1A1900; color: #808070; "

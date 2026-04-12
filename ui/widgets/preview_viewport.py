@@ -385,17 +385,16 @@ class PreviewViewport(QWidget):
         self._navigate_to(stem_index)
 
     def _update_clip_info(self, clip: ClipEntry) -> None:
-        """Update the clip info label with resolution, frame count, and type."""
+        """Update the clip info label with frame count, dimensions, and state."""
         parts = []
         asset = clip.input_asset
         if asset:
-            # Frame count
             parts.append(f"{asset.frame_count} frames")
-            # Asset type
-            if asset.asset_type == "video":
-                parts.append("video")
-            else:
-                parts.append("sequence")
+            # Prefer dimensions over the asset_type string — "1920x1080" is
+            # far more useful than a fixed "sequence"/"video" label.
+            dims = asset.get_dimensions()
+            if dims:
+                parts.append(f"{dims[0]}x{dims[1]}")
         parts.append(clip.state.value)
         self._clip_info.setText("  \u00B7  ".join(parts))  # middle dot separator
 
@@ -428,6 +427,15 @@ class PreviewViewport(QWidget):
         if self._scrubber:
             self._scrubber.set_frame(stem_index)
         self.frame_changed.emit(stem_index)
+
+        # Dim mode buttons that don't have a frame at this stem, so the user
+        # can see at a glance which outputs exist for the current position.
+        present = {
+            mode for mode in ViewMode
+            if self._frame_index.has_frame(mode, stem_index)
+        }
+        self._mode_bar.set_current_stem_availability(present)
+
         self._request_frame(stem_index, self._current_mode)
 
         # If split view, also load input frame for left side
@@ -514,9 +522,11 @@ class PreviewViewport(QWidget):
             self._current_mode = ViewMode(mode_value)
         except ValueError:
             return
-        # Update button styles
-        for m, btn in self._mode_bar._buttons.items():
-            btn.setStyleSheet(self._mode_bar._button_style(m == self._current_mode))
+        # Ask the mode bar to re-render all buttons. It preserves the
+        # per-stem dim state it already knows about, so switching modes
+        # doesn't clobber the dim-on-missing-frame visual.
+        for m in self._mode_bar._buttons:
+            self._mode_bar._refresh_button_style(m)
         self.view_mode_changed.emit(mode_value)
 
         if self._current_stem_idx >= 0:
