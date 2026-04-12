@@ -406,3 +406,165 @@ def _get_torch_detail() -> str:
         return f"PyTorch {ver}, CUDA toolkit: {cuda}"
     except ImportError:
         return "PyTorch is not installed"
+
+
+# ── Context-aware diagnostic step resolution ────────────────────────
+#
+# The static ``Diagnostic.steps`` lists were written for developers
+# running from a git clone with a venv. That guidance is actively wrong
+# for users on the Windows / macOS installer (they have no ``.venv`` to
+# activate) and for users without an NVIDIA GPU (no amount of pip-
+# installing a different torch wheel will help). This resolver returns
+# the right steps for the current runtime instead of always echoing the
+# dev-mode defaults.
+
+
+def _runtime_context() -> dict:
+    """Snapshot the bits of runtime state that affect diagnostic advice."""
+    import sys
+
+    ctx = {
+        "is_frozen": bool(getattr(sys, "frozen", False)),
+        "platform": sys.platform,
+        "has_nvidia": False,
+    }
+    # NVIDIA GPU presence check — intentionally uses pynvml (driver-level)
+    # rather than torch.cuda.is_available() because we may be handling a
+    # broken torch install where cuda.is_available() returns False for
+    # reasons unrelated to the actual hardware.
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        ctx["has_nvidia"] = pynvml.nvmlDeviceGetCount() > 0
+        pynvml.nvmlShutdown()
+    except Exception:
+        pass
+    return ctx
+
+
+def _steps_no_nvidia_gpu() -> list[str]:
+    """Shared step block for any torch/CUDA issue when no NVIDIA card is
+    present. Stops the user from chasing pip reinstalls that cannot
+    possibly help them."""
+    return [
+        "EZ-CorridorKey requires an NVIDIA GPU.\n"
+        "There is no CPU fallback for the keying models.",
+        "Check that your computer has an NVIDIA graphics card\n"
+        "(GeForce RTX, GTX, Quadro, or similar).",
+        "Install the latest NVIDIA driver from:\n"
+        "    https://www.nvidia.com/Download/index.aspx",
+        "Open a terminal and run:\n"
+        "    nvidia-smi\n"
+        "If this command is not found, the driver is not installed.",
+        "If you do not have an NVIDIA GPU, EZ-CorridorKey's\n"
+        "AI pipelines cannot run on this machine.",
+    ]
+
+
+def _steps_frozen_reinstall(reason: str) -> list[str]:
+    """Shared step block for installer-build users: reinstalling the
+    official build is the correct remedy, not pip."""
+    return [
+        f"{reason}",
+        "Download the latest installer from:\n"
+        "    https://github.com/edenaion/EZ-CorridorKey/releases/latest",
+        "Run the installer over your existing install —\n"
+        "your projects and settings will be preserved.",
+        "If the problem persists after reinstalling, please\n"
+        "click Report Issue on GitHub so we can investigate.",
+    ]
+
+
+def _resolve_gpu_required(ctx: dict, base: list[str]) -> list[str]:
+    if not ctx["has_nvidia"]:
+        return _steps_no_nvidia_gpu()
+    if ctx["is_frozen"]:
+        return _steps_frozen_reinstall(
+            "Your installer build could not detect CUDA, but an NVIDIA\n"
+            "GPU is present. This usually means the bundled PyTorch is\n"
+            "corrupted or the NVIDIA driver is too old."
+        )
+    return base  # dev mode + NVIDIA → original venv instructions
+
+
+def _resolve_pytorch_cpu_wheel(ctx: dict, base: list[str]) -> list[str]:
+    if not ctx["has_nvidia"]:
+        return _steps_no_nvidia_gpu()
+    if ctx["is_frozen"]:
+        return _steps_frozen_reinstall(
+            "A CPU-only PyTorch wheel was detected in your installer\n"
+            "build. This should not happen in a shipped release."
+        )
+    return base
+
+
+def _resolve_triton_missing(ctx: dict, base: list[str]) -> list[str]:
+    if ctx["is_frozen"]:
+        # Triton is optional (torch.compile speedup); in a frozen build
+        # this is a build-time packaging miss, not something the user
+        # can fix themselves. Downgrade the instructions to "safe to
+        # ignore" + Report Issue.
+        return [
+            "This warning is safe to ignore — inference will still\n"
+            "work, it just falls back to eager mode (slightly slower).",
+            "If you see this in an installer build, please click\n"
+            "Report Issue on GitHub so we can investigate the package.",
+        ]
+    return base  # dev mode → original venv instructions
+
+
+def _resolve_six_metapath(ctx: dict, base: list[str]) -> list[str]:
+    if not ctx["has_nvidia"]:
+        return _steps_no_nvidia_gpu()
+    if ctx["is_frozen"]:
+        return _steps_frozen_reinstall(
+            "A protobuf/grpc compatibility error was hit inside the\n"
+            "frozen build. This should not happen in a shipped release."
+        )
+    return base
+
+
+def _resolve_missing_checkpoint(ctx: dict, base: list[str]) -> list[str]:
+    if ctx["is_frozen"]:
+        return [
+            "Model weights are downloaded by the first-run Setup\n"
+            "Wizard. If you dismissed it, reopen the app and follow\n"
+            "the setup prompts to fetch CorridorKey.pth (~383 MB).",
+            "If the wizard does not appear, go to:\n"
+            "    Edit > Preferences > Re-run Setup Wizard",
+            "If the download fails, please click Report Issue on\n"
+            "GitHub with your system info.",
+        ]
+    return base
+
+
+# Maps diagnostic id → resolver function. Entries are optional: if a
+# diagnostic has no resolver we fall through to ``Diagnostic.steps``.
+_STEP_RESOLVERS = {
+    "gpu-required": _resolve_gpu_required,
+    "pytorch-cpu-wheel": _resolve_pytorch_cpu_wheel,
+    "triton-missing": _resolve_triton_missing,
+    "six-metapath-importer": _resolve_six_metapath,
+    "missing-checkpoint": _resolve_missing_checkpoint,
+}
+
+
+def resolve_steps(diag: Diagnostic) -> list[str]:
+    """Return the fix steps for *diag* tailored to the current runtime.
+
+    Dialogs should call this instead of reading ``diag.steps`` directly
+    so that users on the installer build never see dev-mode guidance
+    like "activate the virtual environment" (which fails on frozen
+    builds) and users without an NVIDIA GPU never see pip install
+    commands (which cannot fix their situation).
+    """
+    handler = _STEP_RESOLVERS.get(diag.id)
+    if handler is None:
+        return diag.steps
+    try:
+        ctx = _runtime_context()
+        resolved = handler(ctx, diag.steps)
+        return resolved or diag.steps
+    except Exception as exc:
+        logger.warning("Diagnostic step resolver failed for %s: %s", diag.id, exc)
+        return diag.steps
