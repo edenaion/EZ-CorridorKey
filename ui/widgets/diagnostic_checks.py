@@ -282,6 +282,38 @@ _DIAGNOSTICS: list[Diagnostic] = [
         ],
         tags=["python", "version"],
     ),
+    # ── Pascal GPU on cu130 wheel (1.9.1 → 1.9.2 upgrade path) ───
+    Diagnostic(
+        id="pascal-cu130-mismatch",
+        title="Older NVIDIA GPU Detected — Reinstall Required",
+        # Pattern is unused at runtime — this diagnostic is only fired
+        # by run_startup_diagnostics, not by error-text matching. The
+        # regex is intentionally a no-match so a stray error message
+        # can never trigger it accidentally.
+        pattern=re.compile(r"(?!.*)", re.DOTALL),
+        explanation=(
+            "Your NVIDIA GPU is from the Pascal generation (GeForce GTX "
+            "10-series, Titan X/Xp, or older Quadro). The PyTorch build "
+            "currently installed in this app does not include the "
+            "GPU kernels needed for your card, so AI keying will fail "
+            "at inference time with a CUDA error. EZ-CorridorKey 1.9.2 "
+            "ships a new PyTorch build that supports your GPU, but the "
+            "in-app updater intentionally does not replace the heavy "
+            "runtime files — you need to download the full installer "
+            "once to upgrade them."
+        ),
+        steps=[
+            "Download the latest installer from:\n"
+            "    https://github.com/edenaion/EZ-CorridorKey/releases/latest",
+            "Run the installer over your existing install —\n"
+            "your projects, settings, and model weights are preserved.",
+            "After reinstalling, future updates will work normally\n"
+            "via Help > Check for Updates.",
+            "If you do not want to reinstall, EZ-CorridorKey cannot\n"
+            "use your GPU on this version. AI keying will not work.",
+        ],
+        tags=["pascal", "gpu", "cuda", "upgrade"],
+    ),
     # ── CUDA out of memory ────────────────────────────────────────
     Diagnostic(
         id="cuda-oom",
@@ -326,6 +358,74 @@ class StartupIssue:
     """A non-fatal issue detected during application startup."""
     diagnostic: Diagnostic
     detail: str  # extra context (e.g. detected PyTorch version)
+
+
+def _pascal_cu130_mismatch() -> tuple[bool, str]:
+    """Detect a Pascal GPU paired with a cu13x torch wheel.
+
+    Returns ``(is_mismatch, detail_string)``. ``is_mismatch`` is True
+    when *all* of the following are true:
+
+      * torch can be imported,
+      * torch was built against CUDA 13.x (i.e. ``torch.version.cuda``
+        starts with "13."),
+      * an NVIDIA GPU is present and reachable,
+      * the device's compute capability is below (7, 0) — i.e. Pascal
+        (sm_60 / sm_61) or older.
+
+    Every step is wrapped in try/except so a broken or missing torch
+    can never crash startup. The function is the safety guard for the
+    1.9.1 → 1.9.2 in-app upgrade path: existing Pascal users keep
+    their cu130 wheel after a code-only update and would otherwise
+    silently crash the next time they run inference.
+    """
+    try:
+        import torch
+    except Exception:
+        return False, ""
+
+    try:
+        cuda_str = (torch.version.cuda or "").strip()
+    except Exception:
+        return False, ""
+    if not cuda_str.startswith("13."):
+        return False, ""
+
+    try:
+        if not torch.cuda.is_available():
+            return False, ""
+    except Exception:
+        return False, ""
+
+    try:
+        device_count = torch.cuda.device_count()
+    except Exception:
+        return False, ""
+    if device_count <= 0:
+        return False, ""
+
+    # Inspect device 0 — if a user has multiple GPUs and one is Pascal
+    # and another isn't, we still want to flag it because inference
+    # picks device 0 by default.
+    try:
+        cap = torch.cuda.get_device_capability(0)
+        name = torch.cuda.get_device_name(0)
+    except Exception:
+        return False, ""
+
+    if not isinstance(cap, tuple) or len(cap) != 2:
+        return False, ""
+
+    if cap >= (7, 0):
+        # Turing or newer — fully supported by cu130 wheels.
+        return False, ""
+
+    detail = (
+        f"Detected {name} (compute capability {cap[0]}.{cap[1]}) "
+        f"with PyTorch CUDA {cuda_str}. cu13x wheels do not include "
+        f"sm_{cap[0]}{cap[1]} kernels."
+    )
+    return True, detail
 
 
 def run_startup_diagnostics(device: str) -> list[StartupIssue]:
@@ -378,6 +478,28 @@ def run_startup_diagnostics(device: str) -> list[StartupIssue]:
                 diag,
                 f"Detected Python {vi.major}.{vi.minor}.{vi.micro}",
             ))
+
+    # 2b. Pascal GPU detected with a cu13x torch wheel — the 1.9.1 →
+    # 1.9.2 upgrade path leaves existing cu130 runtimes in place, so a
+    # GTX 10-series user who clicks "Check for Updates" will still
+    # crash later when inference runs. Catch them at startup with a
+    # clear "download the full installer" advisory rather than letting
+    # them hit "no kernel image is available" mid-job.
+    #
+    # The detection helper is fully defensive — wrapped in try/except
+    # at every layer — but we belt-and-suspenders the call site too so
+    # any unexpected failure here can't break startup for any user.
+    try:
+        is_mismatch, mismatch_detail = _pascal_cu130_mismatch()
+        if is_mismatch:
+            diag = next(
+                (d for d in _DIAGNOSTICS if d.id == "pascal-cu130-mismatch"),
+                None,
+            )
+            if diag:
+                issues.append(StartupIssue(diag, mismatch_detail))
+    except Exception as exc:
+        logger.warning("Pascal/cu130 startup check failed: %s", exc)
 
     # 3. FFmpeg missing, too old, or invalid build
     try:
