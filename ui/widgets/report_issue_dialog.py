@@ -96,7 +96,13 @@ def _detect_install_method() -> str:
         if parent == probe:
             break
         probe = parent
-    return f"Source ({venv_tag})"
+    # No .git directory in any ancestor. The overwhelmingly common way
+    # to end up here is the user downloading the GitHub source .zip (or
+    # a release source tarball) and running 1-install.bat against it.
+    # Flag it as such so triage can recommend switching to a git clone,
+    # where the updater uses a clean git pull instead of the robocopy
+    # fallback in 3-update.bat/sh.
+    return f"GitHub source zip (no .git, {venv_tag})"
 
 
 class ReportIssueDialog(QDialog):

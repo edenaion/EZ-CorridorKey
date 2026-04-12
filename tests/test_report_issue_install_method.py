@@ -22,6 +22,39 @@ class TestInstallMethodDetection:
         assert "git clone" in result
         assert "venv" in result
 
+    def test_github_source_zip_no_git(self, tmp_path, monkeypatch):
+        """Source install without .git/ (the GitHub source zip path) should
+        be labeled distinctly so triage can recommend git clone. We point
+        __file__ at a sandbox that has no .git/ anywhere up the chain and
+        verify the function walks out cleanly.
+        """
+        # Build a fake project tree and place an ``import as`` stand-in
+        # for __file__. The detection function walks the real __file__'s
+        # ancestors, so monkeypatch the module-global that it reads.
+        fake_widget_dir = tmp_path / "fake_proj" / "ui" / "widgets"
+        fake_widget_dir.mkdir(parents=True)
+        fake_file = fake_widget_dir / "report_issue_dialog.py"
+        fake_file.write_text("# stub for detection test")
+
+        # There must be NO .git/ anywhere up the chain. tmp_path is a
+        # fresh fixture so that's already true, but assert it.
+        probe = fake_widget_dir
+        while True:
+            assert not (probe / ".git").exists()
+            parent = probe.parent
+            if parent == probe:
+                break
+            probe = parent
+
+        import ui.widgets.report_issue_dialog as mod
+        monkeypatch.setattr(mod, "__file__", str(fake_file))
+        # Ensure sys.frozen is not set so we take the dev branch.
+        monkeypatch.delattr(sys, "frozen", raising=False)
+
+        result = mod._detect_install_method()
+        assert "GitHub source zip" in result
+        assert "no .git" in result
+
     def test_frozen_windows_installer(self, tmp_path):
         """Frozen sys.frozen=True + _internal sibling → Windows Installer."""
         exe_dir = tmp_path / "EZ-CorridorKey"
