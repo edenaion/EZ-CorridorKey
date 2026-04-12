@@ -115,9 +115,48 @@ class ClipAsset:
     path: str
     asset_type: str  # 'sequence' or 'video'
     frame_count: int = 0
+    # Cached (width, height) after first probe. None until probed.
+    _dimensions: Optional[tuple] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self):
         self._calculate_length()
+
+    def get_dimensions(self) -> Optional[tuple]:
+        """Return (width, height) of the asset, or None if it can't be probed.
+
+        Results are cached after the first successful probe. For videos, opens
+        via OpenCV to read frame dimensions. For image sequences, reads the
+        first frame's header. Probe failures are cached as None and retried
+        on subsequent calls only if the asset object is re-created.
+        """
+        if self._dimensions is not None:
+            return self._dimensions
+        try:
+            if self.asset_type == 'video':
+                import cv2
+                cap = cv2.VideoCapture(self.path)
+                if cap.isOpened():
+                    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    cap.release()
+                    if w > 0 and h > 0:
+                        self._dimensions = (w, h)
+                        return self._dimensions
+            elif self.asset_type == 'sequence':
+                files = self.get_frame_files()
+                if not files:
+                    return None
+                first = os.path.join(self.path, files[0])
+                # Use cv2.imread with IMREAD_UNCHANGED to support EXR/PNG/TIFF.
+                import cv2
+                img = cv2.imread(first, cv2.IMREAD_UNCHANGED)
+                if img is not None:
+                    h, w = img.shape[:2]
+                    self._dimensions = (int(w), int(h))
+                    return self._dimensions
+        except Exception as e:
+            logger.debug(f"ClipAsset.get_dimensions failed for {self.path}: {e}")
+        return None
 
     def _calculate_length(self):
         if self.asset_type == 'sequence':
