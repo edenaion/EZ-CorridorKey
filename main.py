@@ -105,7 +105,13 @@ def setup_logging(level: str = "INFO") -> None:
     fmt = "%(asctime)s [%(levelname)-7s] %(name)s: %(message)s"
 
     # Console handler — respects --log-level
-    console = logging.StreamHandler()
+    # Force UTF-8 so non-ASCII paths (e.g. Chinese characters) don't crash
+    # on Windows cp1252 consoles.
+    import io
+    utf8_stream = io.TextIOWrapper(
+        sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True,
+    ) if hasattr(sys.stderr, "buffer") else sys.stderr
+    console = logging.StreamHandler(utf8_stream)
     console.setLevel(log_level)
     console.setFormatter(logging.Formatter(fmt, datefmt="%H:%M:%S"))
 
@@ -117,7 +123,7 @@ def setup_logging(level: str = "INFO") -> None:
     log_path = os.path.join(log_dir, f"{session_ts}_corridorkey.log")
 
     file_handler = logging.handlers.RotatingFileHandler(
-        log_path, maxBytes=50 * 1024 * 1024, backupCount=3,
+        log_path, maxBytes=50 * 1024 * 1024, backupCount=3, encoding="utf-8",
     )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S"))

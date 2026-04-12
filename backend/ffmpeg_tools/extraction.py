@@ -302,6 +302,7 @@ if __name__ == "__main__":
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8", errors="replace",
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
 
@@ -498,6 +499,7 @@ def extract_frames(
             stderr=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8", errors="replace",
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
 

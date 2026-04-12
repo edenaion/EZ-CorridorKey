@@ -321,10 +321,16 @@ class ThumbnailCanvas(QWidget):
 
     def event(self, ev: QEvent) -> bool:
         if ev.type() == QEvent.ToolTip and self._show_manifest_tooltip:
-            clip, _ = self._card_at(ev.position().toPoint())
+            # QHelpEvent: older PySide6 uses pos()/globalPos(),
+            # newer versions use position()/globalPosition().
+            local_pos = (ev.position().toPoint()
+                         if hasattr(ev, 'position') else ev.pos())
+            global_pos = (ev.globalPosition().toPoint()
+                          if hasattr(ev, 'globalPosition') else ev.globalPos())
+            clip, _ = self._card_at(local_pos)
             tip = _format_manifest_tooltip(clip) if clip else ""
             if tip:
-                QToolTip.showText(ev.globalPosition().toPoint(), tip, self)
+                QToolTip.showText(global_pos, tip, self)
             else:
                 QToolTip.hideText()
             return True
