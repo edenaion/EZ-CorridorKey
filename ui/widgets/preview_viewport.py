@@ -319,9 +319,16 @@ class PreviewViewport(QWidget):
         asset_type = clip.input_asset.asset_type if clip.input_asset else "sequence"
         video_path = clip.input_asset.path if (clip.input_asset and asset_type == "video") else None
         seq_dir = clip.input_asset.path if (clip.input_asset and asset_type == "sequence") else None
+        # Resolve output_dir via ClipEntry so per-clip and global "Default
+        # Output Directory" overrides are honored. Falls back to
+        # ``{clip_root}/Output`` when no override is set.
+        try:
+            output_dir = clip.output_dir
+        except Exception:
+            output_dir = None
         return build_frame_index(
             clip.root_path, asset_type, video_path=video_path,
-            input_sequence_dir=seq_dir,
+            input_sequence_dir=seq_dir, output_dir=output_dir,
         )
 
     def show_placeholder(self, text: str = "No clip selected") -> None:

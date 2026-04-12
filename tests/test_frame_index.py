@@ -109,3 +109,52 @@ class TestFrameIndex:
         assert not idx.has_frame(ViewMode.INPUT, -1)
         assert not idx.has_frame(ViewMode.INPUT, 1)
         assert idx.get_path(ViewMode.INPUT, 5) is None
+
+    def test_output_dir_override(self, tmp_path):
+        """Regression for GitHub #86: when clip.output_dir is overridden via
+        a global 'Default Output Directory' preference, inference writes
+        FG/Matte/Comp/Processed to that external location. The preview
+        viewport must read from the same location, not from
+        ``clip_root/Output``.
+        """
+        clip_root = os.path.join(tmp_path, "Clip")
+        os.makedirs(os.path.join(clip_root, "Input"), exist_ok=True)
+        for stem in ("frame_001", "frame_002"):
+            open(os.path.join(clip_root, "Input", f"{stem}.exr"), "w").close()
+
+        # Simulate frames written to an external output dir (e.g. F:/Tests/...).
+        external_out = os.path.join(tmp_path, "ExternalOutputs", "Proj", "Clip")
+        for sub in ("FG", "Matte", "Comp", "Processed"):
+            os.makedirs(os.path.join(external_out, sub), exist_ok=True)
+            for stem in ("frame_001", "frame_002"):
+                ext = ".png" if sub == "Comp" else ".exr"
+                open(os.path.join(external_out, sub, f"{stem}{ext}"), "w").close()
+
+        # Put a stale empty Output/ next to the clip_root to make sure we are
+        # NOT reading from it.
+        for sub in ("FG", "Matte", "Comp", "Processed"):
+            os.makedirs(os.path.join(clip_root, "Output", sub), exist_ok=True)
+
+        idx = build_frame_index(clip_root, output_dir=external_out)
+
+        # Input still resolved against clip_root
+        assert idx.has_frame(ViewMode.INPUT, 0)
+
+        # Output modes resolved against the override, not clip_root/Output
+        for mode in (ViewMode.FG, ViewMode.MATTE, ViewMode.COMP, ViewMode.PROCESSED):
+            path = idx.get_path(mode, 0)
+            assert path is not None, f"{mode} missing from override dir"
+            assert external_out in path
+            assert os.path.join(clip_root, "Output") not in path
+
+    def test_output_dir_defaults_to_clip_root_output(self, tmp_path):
+        """When no output_dir is passed, falls back to clip_root/Output
+        (legacy behavior for callers that pre-date the override parameter).
+        """
+        clip_root = self._make_clip_dir(tmp_path, {
+            ViewMode.INPUT: ["frame_001"],
+            ViewMode.COMP: ["frame_001"],
+        })
+        idx = build_frame_index(clip_root)  # no output_dir
+        assert idx.has_frame(ViewMode.COMP, 0)
+        assert os.path.join(clip_root, "Output", "Comp") in idx.get_path(ViewMode.COMP, 0)
