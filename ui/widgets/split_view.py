@@ -12,23 +12,36 @@ Hit-test precedence: divider drag > pan > annotation > zoom (Codex finding).
 Annotation mode: hotkey 1/2 activates green/red brush. Left-click draws
 strokes in image-pixel coordinates. Shift+drag resizes brush.
 """
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, Signal, QPointF, QRectF
 from PySide6.QtGui import (
-    QPainter, QPen, QColor, QImage, QMouseEvent, QWheelEvent,
-    QCursor,
+    QPainter,
+    QPen,
+    QColor,
+    QImage,
+    QMouseEvent,
+    QWheelEvent,
 )
 
 from ui.widgets.annotation_overlay import (
-    AnnotationModel, paint_annotations, paint_brush_cursor,
-    paint_resize_indicator, paint_annotation_hud,
+    AnnotationModel,
+    paint_annotations,
+    paint_brush_cursor,
+    paint_resize_indicator,
+    paint_annotation_hud,
 )
 from ui.widgets.wipe_controller import (
-    wipe_line_endpoints, wipe_handle_rect, wipe_distance_to_line,
-    paint_wipe, handle_wipe_press, handle_wipe_drag,
-    wipe_cursor_for_pos, handle_wipe_scroll,
+    wipe_line_endpoints,
+    wipe_handle_rect,
+    wipe_distance_to_line,
+    paint_wipe,
+    handle_wipe_press,
+    handle_wipe_drag,
+    wipe_cursor_for_pos,
+    handle_wipe_scroll,
 )
 
 
@@ -36,7 +49,7 @@ class SplitViewWidget(QWidget):
     """Image display with optional split view, zoom, and pan."""
 
     zoom_changed = Signal(float)  # current zoom level
-    stroke_finished = Signal()    # emitted when an annotation stroke completes
+    stroke_finished = Signal()  # emitted when an annotation stroke completes
 
     # Divider hit zone (pixels from divider line)
     _DIVIDER_HIT_ZONE = 8
@@ -58,8 +71,8 @@ class SplitViewWidget(QWidget):
 
         # Wipe mode (A/B comparison — diagonal divider, A=left, B=right)
         self._wipe_mode = False
-        self._wipe_angle = -45.0      # degrees, default: bottom-left to top-right. Range -90 to 90
-        self._wipe_offset = 0.0       # perpendicular offset from center (-0.5 to 0.5)
+        self._wipe_angle = -45.0  # degrees, default: bottom-left to top-right. Range -90 to 90
+        self._wipe_offset = 0.0  # perpendicular offset from center (-0.5 to 0.5)
         self._wipe_dragging: str | None = None  # "handle" or "line" or None
         self._wipe_drag_start = QPointF()
         self._wipe_drag_start_offset = 0.0
@@ -96,7 +109,7 @@ class SplitViewWidget(QWidget):
         self._resize_start_y: float = 0.0
         self._resize_start_radius: float = 0.0
         self._mouse_pos: QPointF = QPointF()  # last known mouse position (display)
-        self._straight_line: bool = False    # Alt+click straight-line mode
+        self._straight_line: bool = False  # Alt+click straight-line mode
         self._line_anchor: tuple[float, float] | None = None  # anchor in image-pixel coords
 
     # ── Public API ──
@@ -262,6 +275,7 @@ class SplitViewWidget(QWidget):
         ]
         from PySide6.QtGui import QPolygon
         from PySide6.QtCore import QPoint
+
         painter.drawPolygon(QPolygon([QPoint(x, y) for x, y in top_points]))
 
         # Bottom triangle
@@ -277,8 +291,7 @@ class SplitViewWidget(QWidget):
 
     def _wipe_line_endpoints(self):
         """Compute the wipe line endpoints from angle + offset."""
-        return wipe_line_endpoints(
-            self.width(), self.height(), self._wipe_angle, self._wipe_offset)
+        return wipe_line_endpoints(self.width(), self.height(), self._wipe_angle, self._wipe_offset)
 
     def _wipe_handle_rect(self, center: QPointF, hit=False) -> QRectF:
         """Return the center square handle rect. hit=True returns 2x hitbox."""
@@ -288,9 +301,12 @@ class SplitViewWidget(QWidget):
         """Draw A/B wipe comparison with diagonal divider."""
         paint_wipe(
             painter,
-            self.width(), self.height(),
-            self._wipe_angle, self._wipe_offset,
-            self._left_image, self._right_image,
+            self.width(),
+            self.height(),
+            self._wipe_angle,
+            self._wipe_offset,
+            self._left_image,
+            self._right_image,
             self._image_rect,
             self._DIVIDER_WIDTH,
         )
@@ -347,7 +363,8 @@ class SplitViewWidget(QWidget):
         painter.fillRect(text_rect.adjusted(-8, -2, 8, 2), QColor(0, 0, 0, 140))
         painter.setPen(QColor("#FF8C00"))
         painter.drawText(
-            text_rect, Qt.AlignCenter,
+            text_rect,
+            Qt.AlignCenter,
             f"{pct}%  ({current}/{self._extraction_total} frames)",
         )
 
@@ -382,12 +399,17 @@ class SplitViewWidget(QWidget):
             radius_display = self._brush_radius * dest.width() / iw
             if self._resizing_brush:
                 paint_resize_indicator(
-                    painter, self._mouse_pos, radius_display,
-                    self._brush_radius, self._annotation_mode,
+                    painter,
+                    self._mouse_pos,
+                    radius_display,
+                    self._brush_radius,
+                    self._annotation_mode,
                 )
             else:
                 paint_brush_cursor(
-                    painter, self._mouse_pos, radius_display,
+                    painter,
+                    self._mouse_pos,
+                    radius_display,
                     self._annotation_mode,
                 )
 
@@ -465,16 +487,18 @@ class SplitViewWidget(QWidget):
     def _wipe_distance_to_line(self, pos: QPointF) -> float:
         """Signed perpendicular distance from pos to the wipe line (pixels)."""
         return wipe_distance_to_line(
-            pos, self.width(), self.height(),
-            self._wipe_angle, self._wipe_offset)
+            pos, self.width(), self.height(), self._wipe_angle, self._wipe_offset
+        )
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         # Wipe mode: check handle and line hit
         if event.button() == Qt.LeftButton and self._wipe_mode:
             drag_type, drag_start, start_offset, start_angle = handle_wipe_press(
                 event.position(),
-                self.width(), self.height(),
-                self._wipe_angle, self._wipe_offset,
+                self.width(),
+                self.height(),
+                self._wipe_angle,
+                self._wipe_offset,
                 self._DIVIDER_HIT_ZONE,
             )
             if drag_type is not None:
@@ -492,9 +516,11 @@ class SplitViewWidget(QWidget):
                 return
 
         # Annotation: Shift+left-click = brush resize
-        if (event.button() == Qt.LeftButton
-                and self._annotation_mode
-                and event.modifiers() & Qt.ShiftModifier):
+        if (
+            event.button() == Qt.LeftButton
+            and self._annotation_mode
+            and event.modifiers() & Qt.ShiftModifier
+        ):
             self._resizing_brush = True
             self._resize_start_y = event.position().y()
             self._resize_start_radius = self._brush_radius
@@ -502,10 +528,12 @@ class SplitViewWidget(QWidget):
             return
 
         # Annotation: Alt+left-click = straight line
-        if (event.button() == Qt.LeftButton
-                and self._annotation_mode
-                and self._annotation_model is not None
-                and event.modifiers() & Qt.AltModifier):
+        if (
+            event.button() == Qt.LeftButton
+            and self._annotation_mode
+            and self._annotation_model is not None
+            and event.modifiers() & Qt.AltModifier
+        ):
             pos = self._display_to_image(event.position())
             if pos is not None:
                 self._drawing = True
@@ -513,7 +541,8 @@ class SplitViewWidget(QWidget):
                 self._line_anchor = pos
                 self._annotation_model.start_stroke(
                     self._annotation_stem_idx,
-                    pos[0], pos[1],
+                    pos[0],
+                    pos[1],
                     self._annotation_mode,
                     self._brush_radius,
                 )
@@ -521,16 +550,19 @@ class SplitViewWidget(QWidget):
                 return
 
         # Annotation: left-click = start freehand drawing
-        if (event.button() == Qt.LeftButton
-                and self._annotation_mode
-                and self._annotation_model is not None):
+        if (
+            event.button() == Qt.LeftButton
+            and self._annotation_mode
+            and self._annotation_model is not None
+        ):
             pos = self._display_to_image(event.position())
             if pos is not None:
                 self._drawing = True
                 self._straight_line = False
                 self._annotation_model.start_stroke(
                     self._annotation_stem_idx,
-                    pos[0], pos[1],
+                    pos[0],
+                    pos[1],
                     self._annotation_mode,
                     self._brush_radius,
                 )
@@ -566,7 +598,8 @@ class SplitViewWidget(QWidget):
                 self._wipe_drag_start,
                 self._wipe_drag_start_offset,
                 self._wipe_drag_start_angle,
-                self.width(), self.height(),
+                self.width(),
+                self.height(),
                 self._wipe_angle,
             )
             if self._wipe_dragging == "handle":
@@ -580,8 +613,10 @@ class SplitViewWidget(QWidget):
         if self._wipe_mode and not self._panning:
             cursor = wipe_cursor_for_pos(
                 event.position(),
-                self.width(), self.height(),
-                self._wipe_angle, self._wipe_offset,
+                self.width(),
+                self.height(),
+                self._wipe_angle,
+                self._wipe_offset,
                 self._DIVIDER_HIT_ZONE,
             )
             if cursor is not None:
@@ -590,8 +625,7 @@ class SplitViewWidget(QWidget):
                 self.unsetCursor()
 
         if self._dragging_divider:
-            self._divider_pos = max(0.05, min(0.95,
-                event.position().x() / self.width()))
+            self._divider_pos = max(0.05, min(0.95, event.position().x() / self.width()))
             self.update()
             return
 
@@ -696,7 +730,8 @@ class SplitViewWidget(QWidget):
         if self._wipe_mode and mods in (Qt.KeyboardModifier(0), Qt.ShiftModifier):
             delta = event.angleDelta().y()
             self._wipe_offset = handle_wipe_scroll(
-                delta, bool(mods & Qt.ShiftModifier), self._wipe_offset)
+                delta, bool(mods & Qt.ShiftModifier), self._wipe_offset
+            )
             self.update()
             return
         if mods & Qt.ControlModifier:

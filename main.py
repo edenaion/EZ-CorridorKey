@@ -5,9 +5,11 @@ Usage:
     python main.py --gui        # Launch GUI explicitly
     python main.py --cli        # Run CLI wizard (original clip_manager.py)
 """
+
 from __future__ import annotations
 
 import os
+
 # Enable OpenEXR support in OpenCV — must be set before cv2 is imported anywhere
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
@@ -56,7 +58,7 @@ def get_base_dir() -> str:
     In frozen build: returns sys._MEIPASS (PyInstaller temp dir) for bundled
     resources, or the executable's directory for user files.
     """
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         # Running as PyInstaller bundle
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
@@ -64,8 +66,8 @@ def get_base_dir() -> str:
 
 def is_portable() -> bool:
     """True when a 'portable.txt' marker exists next to the executable."""
-    if getattr(sys, 'frozen', False):
-        return os.path.isfile(os.path.join(os.path.dirname(sys.executable), 'portable.txt'))
+    if getattr(sys, "frozen", False):
+        return os.path.isfile(os.path.join(os.path.dirname(sys.executable), "portable.txt"))
     return False
 
 
@@ -77,12 +79,12 @@ def get_app_dir() -> str:
     Windows frozen: returns the .exe directory (user-writable).
     Use get_base_dir() for bundled resources (checkpoints, QSS, fonts).
     """
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         if is_portable():
             return os.path.dirname(sys.executable)
-        if sys.platform == 'darwin':
+        if sys.platform == "darwin":
             support = os.path.join(
-                os.path.expanduser('~'), 'Library', 'Application Support', 'EZ-CorridorKey'
+                os.path.expanduser("~"), "Library", "Application Support", "EZ-CorridorKey"
             )
             os.makedirs(support, exist_ok=True)
             return support
@@ -92,6 +94,26 @@ def get_app_dir() -> str:
 
 # Ensure project root is on path
 sys.path.insert(0, get_base_dir())
+
+
+def _try_setup_rocm_env() -> None:
+    """Best-effort ROCm env before torch-heavy work; never raises."""
+    log = logging.getLogger(__name__)
+    try:
+        from device_utils import setup_rocm_env
+
+        setup_rocm_env()
+    except ImportError:
+        pass
+    except Exception:
+        if not log.handlers and not logging.root.handlers:
+            _early = logging.StreamHandler(sys.stderr)
+            _early.setLevel(logging.DEBUG)
+            _early.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+            log.addHandler(_early)
+            log.setLevel(logging.DEBUG)
+            log.propagate = False
+        log.debug("ROCm environment setup skipped", exc_info=True)
 
 
 def setup_logging(level: str = "INFO") -> None:
@@ -117,7 +139,9 @@ def setup_logging(level: str = "INFO") -> None:
     log_path = os.path.join(log_dir, f"{session_ts}_corridorkey.log")
 
     file_handler = logging.handlers.RotatingFileHandler(
-        log_path, maxBytes=50 * 1024 * 1024, backupCount=3,
+        log_path,
+        maxBytes=50 * 1024 * 1024,
+        backupCount=3,
     )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S"))
@@ -144,6 +168,7 @@ def run_gui() -> int:
 
     # First-launch setup: download model checkpoints if missing
     from ui.widgets.setup_wizard import needs_setup, SetupWizard
+
     if needs_setup():
         wizard = SetupWizard()
         if wizard.exec() == SetupWizard.Rejected:
@@ -151,8 +176,9 @@ def run_gui() -> int:
 
     # Frozen builds: point projects at the user-chosen install directory
     # (same location as model checkpoints) instead of the exe directory.
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         from backend.project import get_data_dir, set_app_dir
+
         set_app_dir(get_data_dir())
 
     service = CorridorKeyService()
@@ -205,6 +231,7 @@ def run_cli() -> int:
 
 def main() -> int:
     ensure_standard_streams()
+    _try_setup_rocm_env()
     parser = argparse.ArgumentParser(
         description="CorridorKey — AI Green Screen Keyer",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -231,7 +258,7 @@ def main() -> int:
         default=None,
         choices=["auto", "speed", "lowvram"],
         help="GPU optimization mode: auto (detect VRAM), speed (torch.compile), "
-             "lowvram (tiled refiner for 8GB cards). Overrides CORRIDORKEY_OPT_MODE env var.",
+        "lowvram (tiled refiner for 8GB cards). Overrides CORRIDORKEY_OPT_MODE env var.",
     )
 
     # parse_known_args so CLI-mode flags (--action, --win_path, etc.)
@@ -241,10 +268,11 @@ def main() -> int:
 
     # CLI flag takes priority over env var for optimization mode
     if args.opt_mode:
-        os.environ['CORRIDORKEY_OPT_MODE'] = args.opt_mode
+        os.environ["CORRIDORKEY_OPT_MODE"] = args.opt_mode
 
     # Configure backend with the application directory
     from backend.project import set_app_dir
+
     set_app_dir(get_app_dir())
 
     if args.cli:
@@ -254,5 +282,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     import multiprocessing
+
     multiprocessing.freeze_support()
     sys.exit(main())

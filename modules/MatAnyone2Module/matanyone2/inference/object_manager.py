@@ -22,8 +22,8 @@ class ObjectManager:
         self.obj_id_to_obj = {obj.id: obj for obj in self.obj_to_tmp_id}
 
     def add_new_objects(
-            self, objects: Union[List[ObjectInfo], ObjectInfo,
-                                 List[int]]) -> (List[int], List[int]):
+        self, objects: Union[List[ObjectInfo], ObjectInfo, List[int]]
+    ) -> (List[int], List[int]):
         if not isinstance(objects, list):
             objects = [objects]
 
@@ -76,8 +76,9 @@ class ObjectManager:
         self.tmp_id_to_obj = local_tmp_to_obj_id
         self._recompute_obj_id_to_obj_mapping()
 
-    def purge_inactive_objects(self,
-                               max_missed_detection_count: int) -> (bool, List[int], List[int]):
+    def purge_inactive_objects(
+        self, max_missed_detection_count: int
+    ) -> (bool, List[int], List[int]):
         # remove tmp ids of objects that are removed
         obj_id_to_be_deleted = []
         tmp_id_to_be_deleted = []

@@ -1,4 +1,5 @@
 """Video metadata sidecar read/write."""
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,7 @@ def write_video_metadata(clip_root: str, metadata: dict) -> None:
     as source_probe and exr_vf for extraction bug reports.
     """
     path = os.path.join(clip_root, _METADATA_FILENAME)
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         json.dump(metadata, f, indent=2)
     logger.debug(f"Video metadata written: {path}")
 
@@ -29,7 +30,7 @@ def read_video_metadata(clip_root: str) -> dict | None:
     if not os.path.isfile(path):
         return None
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError) as e:
         logger.debug(f"Failed to read video metadata: {e}")

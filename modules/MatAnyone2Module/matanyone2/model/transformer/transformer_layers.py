@@ -10,23 +10,27 @@ from matanyone2.model.channel_attn import CAResBlock
 
 
 class SelfAttention(nn.Module):
-    def __init__(self,
-                 dim: int,
-                 nhead: int,
-                 dropout: float = 0.0,
-                 batch_first: bool = True,
-                 add_pe_to_qkv: List[bool] = [True, True, False]):
+    def __init__(
+        self,
+        dim: int,
+        nhead: int,
+        dropout: float = 0.0,
+        batch_first: bool = True,
+        add_pe_to_qkv: List[bool] = [True, True, False],
+    ):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(dim, nhead, dropout=dropout, batch_first=batch_first)
         self.norm = nn.LayerNorm(dim)
         self.dropout = nn.Dropout(dropout)
         self.add_pe_to_qkv = add_pe_to_qkv
 
-    def forward(self,
-                x: torch.Tensor,
-                pe: torch.Tensor,
-                attn_mask: bool = None,
-                key_padding_mask: bool = None) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        pe: torch.Tensor,
+        attn_mask: bool = None,
+        key_padding_mask: bool = None,
+    ) -> torch.Tensor:
         x = self.norm(x)
         if any(self.add_pe_to_qkv):
             x_with_pe = x + pe
@@ -43,19 +47,20 @@ class SelfAttention(nn.Module):
 
 # https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html#torch.nn.functional.scaled_dot_product_attention
 class CrossAttention(nn.Module):
-    def __init__(self,
-                 dim: int,
-                 nhead: int,
-                 dropout: float = 0.0,
-                 batch_first: bool = True,
-                 add_pe_to_qkv: List[bool] = [True, True, False],
-                 residual: bool = True,
-                 norm: bool = True):
+    def __init__(
+        self,
+        dim: int,
+        nhead: int,
+        dropout: float = 0.0,
+        batch_first: bool = True,
+        add_pe_to_qkv: List[bool] = [True, True, False],
+        residual: bool = True,
+        norm: bool = True,
+    ):
         super().__init__()
-        self.cross_attn = nn.MultiheadAttention(dim,
-                                                nhead,
-                                                dropout=dropout,
-                                                batch_first=batch_first)
+        self.cross_attn = nn.MultiheadAttention(
+            dim, nhead, dropout=dropout, batch_first=batch_first
+        )
         if norm:
             self.norm = nn.LayerNorm(dim)
         else:
@@ -64,14 +69,16 @@ class CrossAttention(nn.Module):
         self.add_pe_to_qkv = add_pe_to_qkv
         self.residual = residual
 
-    def forward(self,
-                x: torch.Tensor,
-                mem: torch.Tensor,
-                x_pe: torch.Tensor,
-                mem_pe: torch.Tensor,
-                attn_mask: bool = None,
-                *,
-                need_weights: bool = False) -> (torch.Tensor, torch.Tensor):
+    def forward(
+        self,
+        x: torch.Tensor,
+        mem: torch.Tensor,
+        x_pe: torch.Tensor,
+        mem_pe: torch.Tensor,
+        attn_mask: bool = None,
+        *,
+        need_weights: bool = False,
+    ) -> (torch.Tensor, torch.Tensor):
         x = self.norm(x)
         if self.add_pe_to_qkv[0]:
             q = x + x_pe
@@ -85,12 +92,9 @@ class CrossAttention(nn.Module):
         else:
             k = v = mem
         r = x
-        x, weights = self.cross_attn(q,
-                                     k,
-                                     v,
-                                     attn_mask=attn_mask,
-                                     need_weights=need_weights,
-                                     average_attn_weights=False)
+        x, weights = self.cross_attn(
+            q, k, v, attn_mask=attn_mask, need_weights=need_weights, average_attn_weights=False
+        )
 
         if self.residual:
             return r + self.dropout(x), weights

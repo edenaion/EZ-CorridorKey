@@ -3,6 +3,7 @@
 Implements the single-model-in-VRAM policy: only one heavy model
 stays loaded at a time. Switching triggers offload + gc + cache clear.
 """
+
 from __future__ import annotations
 
 import gc
@@ -11,7 +12,7 @@ import os
 import sys
 import time
 from enum import Enum
-from typing import Callable, Optional
+from typing import Callable
 
 from .helpers import BASE_DIR, _import_matanyone2_processor_class
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 class _ActiveModel(Enum):
     """Tracks which heavy model is currently loaded in VRAM."""
+
     NONE = "none"
     INFERENCE = "inference"
     GVM = "gvm"
@@ -37,8 +39,9 @@ class ModelManagerMixin:
         """Return current VRAM allocated in MB, or 0 if unavailable."""
         try:
             import torch
+
             if torch.cuda.is_available():
-                return torch.cuda.memory_allocated(0) / (1024 ** 2)
+                return torch.cuda.memory_allocated(0) / (1024**2)
         except Exception:
             pass
         return 0.0
@@ -55,11 +58,11 @@ class ModelManagerMixin:
         name = type(obj).__name__
         logger.debug(f"Offloading model: {name}")
         try:
-            if hasattr(obj, 'unload'):
+            if hasattr(obj, "unload"):
                 obj.unload()
-            elif hasattr(obj, 'to'):
-                obj.to('cpu')
-            elif hasattr(obj, 'cpu'):
+            elif hasattr(obj, "to"):
+                obj.to("cpu")
+            elif hasattr(obj, "cpu"):
                 obj.cpu()
             else:
                 logger.warning(f"Model {name} has no .to()/.cpu()/.unload() — VRAM may leak")
@@ -94,8 +97,10 @@ class ModelManagerMixin:
             vram_before_mb = self._vram_allocated_mb()
             if on_status:
                 on_status(f"Switching {self._active_model.value} -> {needed.value}...")
-            logger.info(f"Unloading {self._active_model.value} model for {needed.value}"
-                        f" (VRAM before: {vram_before_mb:.0f}MB)")
+            logger.info(
+                f"Unloading {self._active_model.value} model for {needed.value}"
+                f" (VRAM before: {vram_before_mb:.0f}MB)"
+            )
 
             t0 = time.monotonic()
             if on_status:
@@ -112,7 +117,7 @@ class ModelManagerMixin:
                 if gvm is not None:
                     self._safe_offload(gvm)
                     # Break circular references inside the diffusion pipeline
-                    for attr in ('pipe', 'vae', 'unet', 'scheduler'):
+                    for attr in ("pipe", "vae", "unet", "scheduler"):
                         try:
                             setattr(gvm, attr, None)
                         except Exception:
@@ -133,6 +138,7 @@ class ModelManagerMixin:
             logger.info(f"_safe_offload took {time.monotonic() - t0:.1f}s")
 
             import gc as _gc
+
             t0 = time.monotonic()
             # Two GC passes: first breaks cycles, second reclaims freed refs
             if on_status:
@@ -143,6 +149,7 @@ class ModelManagerMixin:
 
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     t0 = time.monotonic()
                     if on_status:
@@ -162,6 +169,7 @@ class ModelManagerMixin:
             # doesn't choke on stale CUDA state from the previous model
             try:
                 import torch._dynamo
+
                 torch._dynamo.reset()
                 logger.info("torch._dynamo.reset() — cleared compilation cache")
             except Exception as e:
@@ -169,6 +177,7 @@ class ModelManagerMixin:
 
             try:
                 import torch._inductor
+
                 torch._inductor.codecache.PyCodeCache.clear()
                 logger.info("torch._inductor code cache cleared")
             except Exception as e:
@@ -194,7 +203,7 @@ class ModelManagerMixin:
 
         # Pool already has enough engines
         if len(self._engine_pool) >= self._pool_size:
-            return self._engine_pool[:self._pool_size]
+            return self._engine_pool[: self._pool_size]
 
         from CorridorKeyModule.backend import create_engine, resolve_backend
 
@@ -202,13 +211,14 @@ class ModelManagerMixin:
         requested_backend = None
         try:
             from PySide6.QtCore import QSettings
+
             requested_backend = QSettings().value("inference/backend", "auto", type=str)
             if requested_backend == "auto":
                 requested_backend = None  # let resolve_backend auto-detect
         except Exception:
             pass
         backend = resolve_backend(requested_backend)
-        opt_mode = os.environ.get('CORRIDORKEY_OPT_MODE', 'auto')
+        opt_mode = os.environ.get("CORRIDORKEY_OPT_MODE", "auto")
         _img_size = self._model_resolution
 
         # MLX: unified memory, single engine only
@@ -216,6 +226,7 @@ class ModelManagerMixin:
 
         # Create engines serially (warmup each before creating next)
         import torch
+
         for i in range(len(self._engine_pool), pool_size):
             if on_status:
                 on_status(f"Loading engine {i + 1}/{pool_size}...")
@@ -234,7 +245,9 @@ class ModelManagerMixin:
             except (RuntimeError, torch.cuda.OutOfMemoryError):
                 logger.warning(
                     "OOM creating engine %d/%d, using %d engine(s)",
-                    i + 1, pool_size, len(self._engine_pool),
+                    i + 1,
+                    pool_size,
+                    len(self._engine_pool),
                 )
                 gc.collect()
                 if backend == "torch":
@@ -254,6 +267,7 @@ class ModelManagerMixin:
             return self._gvm_processor
 
         from gvm_core import GVMProcessor
+
         logger.info("Loading GVM processor...")
         t0 = time.monotonic()
         self._gvm_processor = GVMProcessor(device=self._device)
@@ -297,6 +311,7 @@ class ModelManagerMixin:
 
         sys.path.insert(0, os.path.join(BASE_DIR, "VideoMaMaInferenceModule"))
         from VideoMaMaInferenceModule.inference import load_videomama_model
+
         logger.info("Loading VideoMaMa pipeline...")
         t0 = time.monotonic()
         self._videomama_pipeline = load_videomama_model(device=self._device)
@@ -322,8 +337,7 @@ class ModelManagerMixin:
         self._ensure_model(_ActiveModel.BIREFNET, on_status=on_status)
 
         # If already loaded with the same usage, reuse
-        if (self._birefnet_processor is not None
-                and self._birefnet_processor._usage == usage):
+        if self._birefnet_processor is not None and self._birefnet_processor._usage == usage:
             return self._birefnet_processor
 
         # Different variant requested — release the old one
@@ -332,10 +346,12 @@ class ModelManagerMixin:
             self._birefnet_processor = None
 
         from modules.BiRefNetModule.wrapper import BiRefNetProcessor
+
         logger.info(f"Loading BiRefNet ({usage})...")
         t0 = time.monotonic()
         self._birefnet_processor = BiRefNetProcessor(
-            device=self._device, usage=usage,
+            device=self._device,
+            usage=usage,
         )
         # Trigger actual model download/load now so VRAM is claimed
         self._birefnet_processor._ensure_loaded(on_status=on_status)
@@ -359,9 +375,11 @@ class ModelManagerMixin:
         self._birefnet_processor = None
         self._active_model = _ActiveModel.NONE
         import gc as _gc
+
         _gc.collect()
         try:
             import torch
+
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
         except ImportError:

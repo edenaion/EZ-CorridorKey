@@ -13,6 +13,7 @@ Usage:
         cancel_check=fn,
     )
 """
+
 from __future__ import annotations
 
 import logging
@@ -62,6 +63,7 @@ def _ensure_checkpoint(ckpt_path: str | None = None) -> str:
     logger.info("MatAnyone2 checkpoint not found, downloading...")
     os.makedirs(ckpt_dir, exist_ok=True)
     from torch.hub import download_url_to_file
+
     download_url_to_file(_CKPT_URL, local_path)
     logger.info(f"Downloaded checkpoint to {local_path}")
     return local_path
@@ -92,7 +94,7 @@ class MatAnyone2Processor:
         self._r_dilate = r_dilate
         self._max_internal_size = max_internal_size
         self._processor = None  # InferenceCore, loaded lazily
-        self._model = None      # MatAnyone2 nn.Module
+        self._model = None  # MatAnyone2 nn.Module
 
     def _ensure_loaded(self, on_status: Optional[Callable[[str], None]] = None):
         """Load model + InferenceCore if not already loaded."""
@@ -113,7 +115,7 @@ class MatAnyone2Processor:
         from matanyone2.inference.inference_core import InferenceCore
 
         # Enable TF32 for Ampere+ GPUs (RTX 30xx/40xx/50xx) — ~15-30% speedup
-        torch.set_float32_matmul_precision('high')
+        torch.set_float32_matmul_precision("high")
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
 
@@ -132,6 +134,7 @@ class MatAnyone2Processor:
 
         # Clear Hydra global state so it doesn't poison other modules (e.g. SAM2)
         from hydra.core.global_hydra import GlobalHydra
+
         GlobalHydra.instance().clear()
 
         logger.info(f"MatAnyone2 loaded in {time.monotonic() - t0:.1f}s")
@@ -146,7 +149,7 @@ class MatAnyone2Processor:
         self._device = device
 
     @torch.inference_mode()
-    @torch.amp.autocast('cuda')
+    @torch.amp.autocast("cuda")
     def process_frames(
         self,
         input_frames: list[np.ndarray],
@@ -178,9 +181,12 @@ class MatAnyone2Processor:
             RuntimeError: If mask_frame doesn't match first frame dimensions.
         """
         import traceback
+
         logger.info(
             "MatAnyone2 process_frames CALLED: clip=%s, num_frames=%d\n%s",
-            clip_name, len(input_frames), "".join(traceback.format_stack()[-5:])
+            clip_name,
+            len(input_frames),
+            "".join(traceback.format_stack()[-5:]),
         )
         self._ensure_loaded(on_status=on_status)
 
@@ -208,9 +214,11 @@ class MatAnyone2Processor:
         mask_np = mask_frame.astype(np.float32)
         if r_dilate > 0:
             from matanyone2.utils.inference_utils import gen_dilate
+
             mask_np = gen_dilate(mask_np, r_dilate, r_dilate)
         if r_erode > 0:
             from matanyone2.utils.inference_utils import gen_erosion
+
             mask_np = gen_erosion(mask_np, r_erode, r_erode)
 
         mask_tensor = torch.from_numpy(mask_np).float().to(self._device)
@@ -284,8 +292,11 @@ class MatAnyone2Processor:
                             "MatAnyone2 DIAG: frame %d/%d, ti=%d, "
                             "last_50_elapsed=%.1fs (%.2fs/frame), "
                             "curr_ti=%d, last_mem_ti=%d",
-                            frames_written, num_frames, ti,
-                            _elapsed, _elapsed / min(frames_written, 50),
+                            frames_written,
+                            num_frames,
+                            ti,
+                            _elapsed,
+                            _elapsed / min(frames_written, 50),
                             self._processor.curr_ti,
                             self._processor.last_mem_ti,
                         )
@@ -308,20 +319,25 @@ class MatAnyone2Processor:
         except _CancelledError:
             # Clean up temp dir on cancel
             import shutil
+
             shutil.rmtree(tmp_dir, ignore_errors=True)
             raise
         except Exception:
             # Clean up temp dir on error
             import shutil
+
             shutil.rmtree(tmp_dir, ignore_errors=True)
             raise
         finally:
             # Always try to clean up temp dir
             if os.path.isdir(tmp_dir):
                 import shutil
+
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
-        logger.info(f"MatAnyone2 process_frames COMPLETE: wrote {frames_written} alpha frames to {output_dir}")
+        logger.info(
+            f"MatAnyone2 process_frames COMPLETE: wrote {frames_written} alpha frames to {output_dir}"
+        )
         return frames_written
 
     def clear(self):
@@ -332,4 +348,5 @@ class MatAnyone2Processor:
 
 class _CancelledError(Exception):
     """Internal: raised when cancel_check returns True."""
+
     pass

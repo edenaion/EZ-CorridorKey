@@ -13,6 +13,7 @@ class ImageFeatureStore:
 
     Feature of a frame should be associated with a unique index -- typically the frame id.
     """
+
     def __init__(self, network: MatAnyone2, no_warning: bool = False):
         self.network = network
         self._store = {}
@@ -22,23 +23,31 @@ class ImageFeatureStore:
         ms_features, pix_feat = self.network.encode_image(image, last_feats=last_feats)
         key, shrinkage, selection = self.network.transform_key(ms_features[0])
         self._store[index] = (ms_features, pix_feat, key, shrinkage, selection)
-   
+
     def get_all_features(self, images: torch.Tensor) -> (Iterable[torch.Tensor], torch.Tensor):
         seq_length = images.shape[0]
         ms_features, pix_feat = self.network.encode_image(images, seq_length)
         key, shrinkage, selection = self.network.transform_key(ms_features[0])
         for index in range(seq_length):
-            self._store[index] = ([f[index].unsqueeze(0) for f in ms_features], pix_feat[index].unsqueeze(0), key[index].unsqueeze(0), shrinkage[index].unsqueeze(0), selection[index].unsqueeze(0))
+            self._store[index] = (
+                [f[index].unsqueeze(0) for f in ms_features],
+                pix_feat[index].unsqueeze(0),
+                key[index].unsqueeze(0),
+                shrinkage[index].unsqueeze(0),
+                selection[index].unsqueeze(0),
+            )
 
-    def get_features(self, index: int,
-                     image: torch.Tensor, last_feats=None) -> (Iterable[torch.Tensor], torch.Tensor):
+    def get_features(
+        self, index: int, image: torch.Tensor, last_feats=None
+    ) -> (Iterable[torch.Tensor], torch.Tensor):
         if index not in self._store:
             self._encode_feature(index, image, last_feats)
 
         return self._store[index][:2]
 
-    def get_key(self, index: int,
-                image: torch.Tensor, last_feats=None) -> (torch.Tensor, torch.Tensor, torch.Tensor):
+    def get_key(
+        self, index: int, image: torch.Tensor, last_feats=None
+    ) -> (torch.Tensor, torch.Tensor, torch.Tensor):
         if index not in self._store:
             self._encode_feature(index, image, last_feats)
 
@@ -53,4 +62,4 @@ class ImageFeatureStore:
 
     def __del__(self):
         if len(self._store) > 0 and not self.no_warning:
-            warnings.warn(f'Leaking {self._store.keys()} in the image feature store')
+            warnings.warn(f"Leaking {self._store.keys()} in the image feature store")

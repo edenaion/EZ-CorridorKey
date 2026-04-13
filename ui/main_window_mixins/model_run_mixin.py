@@ -25,20 +25,17 @@ class ModelRunMixin:
         alpha_dir = os.path.join(self._current_clip.root_path, "AlphaHint")
         if not os.path.isdir(alpha_dir):
             return None
-        existing = [f for f in os.listdir(alpha_dir)
-                    if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        existing = [
+            f for f in os.listdir(alpha_dir) if f.lower().endswith((".png", ".jpg", ".jpeg"))
+        ]
         if not existing:
             return None
-        total = (self._current_clip.input_asset.frame_count
-                 if self._current_clip.input_asset else 0)
+        total = self._current_clip.input_asset.frame_count if self._current_clip.input_asset else 0
         msg = QMessageBox(self)
         msg.setWindowTitle("Partial Alpha Found")
-        msg.setText(
-            f"Found {len(existing)}/{total} alpha frames from a previous run."
-        )
+        msg.setText(f"Found {len(existing)}/{total} alpha frames from a previous run.")
         msg.setInformativeText(
-            "Resume will skip completed frames.\n"
-            "Regenerate will redo all frames from scratch."
+            "Resume will skip completed frames.\nRegenerate will redo all frames from scratch."
         )
         resume_btn = msg.addButton("Resume", QMessageBox.AcceptRole)
         regen_btn = msg.addButton("Regenerate", QMessageBox.DestructiveRole)
@@ -55,7 +52,10 @@ class ModelRunMixin:
 
     def _on_run_gvm(self) -> None:
         """Run GVM alpha generation on the selected clip."""
-        if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
+        if self._current_clip is None or self._current_clip.state not in (
+            ClipState.RAW,
+            ClipState.MASKED,
+        ):
             return
 
         if not self._warn_mps_slow("GVM Auto Alpha"):
@@ -75,7 +75,10 @@ class ModelRunMixin:
     @Slot(str)
     def _on_run_birefnet(self, usage: str) -> None:
         """Run BiRefNet alpha generation on the selected clip."""
-        if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
+        if self._current_clip is None or self._current_clip.state not in (
+            ClipState.RAW,
+            ClipState.MASKED,
+        ):
             return
 
         result = self._confirm_partial_alpha()

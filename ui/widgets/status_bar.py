@@ -10,14 +10,22 @@ RUN text changes to "RUN SELECTED" when in/out range is set.
 
 GPU/VRAM info is displayed in the top brand bar (see main_window.py).
 """
+
 from __future__ import annotations
 
 import textwrap
 import time
 
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QPushButton,
-    QProgressBar, QDialog, QVBoxLayout, QTextEdit, QDialogButtonBox,
+    QWidget,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QProgressBar,
+    QDialog,
+    QVBoxLayout,
+    QTextEdit,
+    QDialogButtonBox,
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QTextCursor
@@ -151,7 +159,9 @@ class StatusBar(QWidget):
         self._stop_btn.setObjectName("stopButton")
         self._stop_btn.setFixedWidth(80)
         self._stop_btn.setFixedHeight(32)
-        self._stop_btn.setToolTip("Stop the current job (Escape).\nAlready-processed frames are kept on disk.")
+        self._stop_btn.setToolTip(
+            "Stop the current job (Escape).\nAlready-processed frames are kept on disk."
+        )
         self._stop_btn.clicked.connect(self.stop_clicked.emit)
         self._stop_btn.hide()
         layout.addWidget(self._stop_btn)
@@ -170,7 +180,6 @@ class StatusBar(QWidget):
         self._tick_timer = QTimer(self)
         self._tick_timer.setInterval(1000)
         self._tick_timer.timeout.connect(self._on_tick)
-
 
     def set_running(self, running: bool) -> None:
         """Toggle between run/resume and stop state."""
@@ -197,8 +206,7 @@ class StatusBar(QWidget):
             self._stop_btn.setText("STOP")
             self._stop_btn.setFixedWidth(80)
             self._stop_btn.setToolTip(
-                "Stop the current job (Escape).\n"
-                "Already-processed frames are kept on disk."
+                "Stop the current job (Escape).\nAlready-processed frames are kept on disk."
             )
 
     def _on_run_clicked(self) -> None:
@@ -209,8 +217,12 @@ class StatusBar(QWidget):
             self.run_clicked.emit()
 
     def update_button_state(
-        self, can_run: bool, has_partial: bool, has_in_out: bool,
-        batch_count: int = 0, needs_extraction: bool = False,
+        self,
+        can_run: bool,
+        has_partial: bool,
+        has_in_out: bool,
+        batch_count: int = 0,
+        needs_extraction: bool = False,
         needs_pipeline: bool = False,
     ) -> None:
         """Update run/resume button visibility and text based on clip state.
@@ -358,7 +370,7 @@ class StatusBar(QWidget):
         elapsed = time.monotonic() - self._job_start if self._job_start > 0 else 0
         elapsed_str = _fmt_duration(elapsed)
         label = f"{self._job_label}  " if self._job_label else ""
-        phase = getattr(self, '_phase', '')
+        phase = getattr(self, "_phase", "")
 
         if self._last_total > 0 and self._last_current > 0:
             # Real frame progress — show frame counter + ETA + FPS

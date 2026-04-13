@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     x11vnc \
     novnc \
     websockify \
-    xvfb \
     python3-pil \
     python3-netifaces \
     libgl1 \
@@ -48,7 +47,8 @@ RUN uv python install 3.11
 RUN sed -i 's|</body>|<a href="http://localhost:6081" target="_blank" style="position:fixed;bottom:20px;right:20px;z-index:9999;background:#4caf50;color:white;padding:10px 18px;border-radius:6px;font-size:14px;text-decoration:none;box-shadow:0 2px 6px rgba(0,0,0,0.5)">& Upload Clips</a></body>|' /usr/share/novnc/vnc.html 
 RUN echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/vnc.html?autoconnect=true&reconnect=true&reconnect_delay=2000&resize=scale"></head></html>' > /usr/share/novnc/index.html
 
-RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/master/get.sh | bash
+# Pinned filebrowser/get install script (avoid floating master); bump commit when changing installer.
+RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/2aab36cbd9def8513160e31d753abc5a2e2aef0c/get.sh | bash
 
 COPY . /opt/corridorkey-src
 COPY docker/supervisord.conf /etc/supervisor/conf.d/corridorkey-vnc.conf

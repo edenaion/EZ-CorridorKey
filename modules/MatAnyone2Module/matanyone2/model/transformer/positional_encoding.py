@@ -19,17 +19,19 @@ def get_emb(sin_inp: torch.Tensor) -> torch.Tensor:
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self,
-                 dim: int,
-                 scale: float = math.pi * 2,
-                 temperature: float = 10000,
-                 normalize: bool = True,
-                 channel_last: bool = True,
-                 transpose_output: bool = False):
+    def __init__(
+        self,
+        dim: int,
+        scale: float = math.pi * 2,
+        temperature: float = 10000,
+        normalize: bool = True,
+        channel_last: bool = True,
+        transpose_output: bool = False,
+    ):
         super().__init__()
         dim = int(np.ceil(dim / 4) * 2)
         self.dim = dim
-        inv_freq = 1.0 / (temperature**(torch.arange(0, dim, 2).float() / dim))
+        inv_freq = 1.0 / (temperature ** (torch.arange(0, dim, 2).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
         self.normalize = normalize
         self.scale = scale
@@ -41,14 +43,14 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, tensor: torch.Tensor) -> torch.Tensor:
         """
-        :param tensor: A 4/5d tensor of size 
+        :param tensor: A 4/5d tensor of size
             channel_last=True: (batch_size, h, w, c) or (batch_size, k, h, w, c)
             channel_last=False: (batch_size, c, h, w) or (batch_size, k, c, h, w)
         :return: positional encoding tensor that has the same shape as the input if the input is 4d
                  if the input is 5d, the output is broadcastable along the k-dimension
         """
         if len(tensor.shape) != 4 and len(tensor.shape) != 5:
-            raise RuntimeError(f'The input tensor has to be 4/5d, got {tensor.shape}!')
+            raise RuntimeError(f"The input tensor has to be 4/5d, got {tensor.shape}!")
 
         if len(tensor.shape) == 5:
             # take a sample from the k dimension
@@ -82,8 +84,8 @@ class PositionalEncoding(nn.Module):
         emb_x = get_emb(sin_inp_x)
 
         emb = torch.zeros((h, w, self.dim * 2), device=tensor.device, dtype=tensor.dtype)
-        emb[:, :, :self.dim] = emb_x
-        emb[:, :, self.dim:] = emb_y
+        emb[:, :, : self.dim] = emb_x
+        emb[:, :, self.dim :] = emb_y
 
         if not self.channel_last and self.transpose_output:
             # cancelled out
@@ -98,7 +100,7 @@ class PositionalEncoding(nn.Module):
             return self.cached_penc.unsqueeze(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     device = get_default_device()
     pe = PositionalEncoding(8).to(device)
     input = torch.ones((1, 8, 8, 8), device=device)

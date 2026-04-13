@@ -3,15 +3,14 @@
 Uses threading.Barrier + time recording to prove process_frame calls
 don't overlap, without asserting Lock.acquire directly.
 """
+
 import threading
 import time
 from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 
-from backend.service import CorridorKeyService, InferenceParams, OutputConfig, _ActiveModel
-from backend.clip_state import ClipAsset, ClipEntry, ClipState
+from backend.service import CorridorKeyService, InferenceParams, _ActiveModel
 
 
 def _make_slow_engine(delay: float = 0.1):

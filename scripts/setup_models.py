@@ -41,12 +41,14 @@ def _data_root() -> Path:
         return _SCRIPT_ROOT
     try:
         from backend.project import get_data_dir
+
         return Path(get_data_dir())
     except ImportError:
         pass
     # Standalone fallback (script run outside frozen app)
     try:
         from PySide6.QtCore import QSettings
+
         saved = QSettings().value("app/install_path", "", type=str)
         if saved and os.path.isdir(saved):
             return Path(saved)
@@ -231,7 +233,7 @@ def download_corridorkey_mlx() -> bool:
     dest = local_dir / cfg["filename"]
 
     if dest.is_file():
-        print(f"  [OK] MLX checkpoint already installed")
+        print("  [OK] MLX checkpoint already installed")
         return True
 
     if not check_disk_space(cfg["size_bytes"], local_dir):
@@ -244,6 +246,7 @@ def download_corridorkey_mlx() -> bool:
     print(f"  Downloading MLX checkpoint ({cfg['size_human']})...")
     tmp_dest = dest.with_suffix(".safetensors.tmp")
     try:
+
         def _progress(block_num, block_size, total_size):
             downloaded = block_num * block_size
             if total_size > 0:
@@ -261,12 +264,12 @@ def download_corridorkey_mlx() -> bool:
             expected_hash = sha256_resp.read().decode().strip().split()[0]
             actual_hash = hashlib.sha256(tmp_dest.read_bytes()).hexdigest()
             if actual_hash != expected_hash:
-                print(f"  [ERROR] SHA256 mismatch!")
+                print("  [ERROR] SHA256 mismatch!")
                 print(f"  Expected: {expected_hash}")
                 print(f"  Got:      {actual_hash}")
                 tmp_dest.unlink(missing_ok=True)
                 return False
-            print(f"  [OK] SHA256 verified")
+            print("  [OK] SHA256 verified")
         except Exception as e:
             print(f"  [WARN] Could not verify SHA256: {e}")
             print("  Proceeding anyway (file downloaded successfully)")
@@ -318,7 +321,7 @@ def download_repo(name: str) -> bool:
         base_dir = local_dir / base["subfolder"]
         base_check = base.get("check_file")
         if base_check and (local_dir / base_check).is_file():
-            print(f"  [OK] Base model already downloaded")
+            print("  [OK] Base model already downloaded")
         else:
             print(f"  Downloading base model ({base['repo_id']})...")
             print("  This may take a while. Downloads resume if interrupted.")
@@ -346,7 +349,7 @@ def download_repo(name: str) -> bool:
             videomama_dir = local_dir / "VideoMaMa"
             if unet_dir.is_dir() and not videomama_dir.is_dir():
                 unet_dir.rename(videomama_dir)
-                print(f"  Renamed unet/ -> VideoMaMa/")
+                print("  Renamed unet/ -> VideoMaMa/")
         print(f"  Saved to: {local_dir}")
         return True
     except Exception as e:
@@ -408,7 +411,7 @@ def download_matanyone2() -> bool:
     dest = local_dir / cfg["filename"]
 
     if dest.is_file():
-        print(f"  [OK] MatAnyone2 checkpoint already installed")
+        print("  [OK] MatAnyone2 checkpoint already installed")
         return True
 
     if not check_disk_space(cfg["size_bytes"], local_dir):
@@ -421,6 +424,7 @@ def download_matanyone2() -> bool:
     print(f"  Downloading MatAnyone2 checkpoint ({cfg['size_human']})...")
     tmp_dest = dest.with_suffix(".pth.tmp")
     try:
+
         def _progress(block_num, block_size, total_size):
             downloaded = block_num * block_size
             if total_size > 0:
@@ -464,14 +468,22 @@ def check_all():
     ma2_installed = is_matanyone2_installed()
     ma2_mark = "[OK]" if ma2_installed else "[--]"
     ma2_status = "INSTALLED" if ma2_installed else "NOT INSTALLED"
-    print(f"  {ma2_mark} matanyone2   {MATANYONE2_CHECKPOINT['size_human']:>8s}  {ma2_status} (optional)")
+    print(
+        f"  {ma2_mark} matanyone2   {MATANYONE2_CHECKPOINT['size_human']:>8s}  {ma2_status} (optional)"
+    )
 
     # MLX checkpoint (Apple Silicon only, but show status on all platforms)
     mlx_installed = is_mlx_installed()
     mlx_mark = "[OK]" if mlx_installed else "[--]"
     mlx_status = "INSTALLED" if mlx_installed else "NOT INSTALLED"
-    mlx_note = " (Apple Silicon)" if sys.platform == "darwin" and platform.machine() == "arm64" else " (Apple Silicon only)"
-    print(f"  {mlx_mark} corridorkey-mlx {MLX_CHECKPOINT['size_human']:>8s}  {mlx_status}{mlx_note}")
+    mlx_note = (
+        " (Apple Silicon)"
+        if sys.platform == "darwin" and platform.machine() == "arm64"
+        else " (Apple Silicon only)"
+    )
+    print(
+        f"  {mlx_mark} corridorkey-mlx {MLX_CHECKPOINT['size_human']:>8s}  {mlx_status}{mlx_note}"
+    )
 
     tracker_installed = tracker_dependency_installed()
     tracker_mark = "[OK]" if tracker_installed else "[--]"
@@ -491,8 +503,16 @@ def check_all():
 
 def main():
     parser = argparse.ArgumentParser(description="Download model weights for EZ-CorridorKey")
-    parser.add_argument("--corridorkey", action="store_true", help="Download CorridorKey checkpoint (383MB, required)")
-    parser.add_argument("--corridorkey-mlx", action="store_true", help="Download MLX checkpoint for Apple Silicon (380MB)")
+    parser.add_argument(
+        "--corridorkey",
+        action="store_true",
+        help="Download CorridorKey checkpoint (383MB, required)",
+    )
+    parser.add_argument(
+        "--corridorkey-mlx",
+        action="store_true",
+        help="Download MLX checkpoint for Apple Silicon (380MB)",
+    )
     parser.add_argument(
         "--sam2",
         nargs="?",
@@ -501,21 +521,46 @@ def main():
         help="Download SAM2 checkpoint(s): small, base-plus, large, or all (default: base-plus)",
     )
     parser.add_argument("--gvm", action="store_true", help="Download GVM weights (~6GB, optional)")
-    parser.add_argument("--videomama", action="store_true", help="Download VideoMaMa weights (~37GB, optional)")
-    parser.add_argument("--matanyone2", action="store_true", help="Download MatAnyone2 weights (~141MB, optional)")
+    parser.add_argument(
+        "--videomama", action="store_true", help="Download VideoMaMa weights (~37GB, optional)"
+    )
+    parser.add_argument(
+        "--matanyone2", action="store_true", help="Download MatAnyone2 weights (~141MB, optional)"
+    )
     parser.add_argument("--all", action="store_true", help="Download all models")
     parser.add_argument("--check", action="store_true", help="Check installation status")
     args = parser.parse_args()
 
-    mlx_flag = getattr(args, 'corridorkey_mlx', False)
+    mlx_flag = getattr(args, "corridorkey_mlx", False)
 
     # Default to --check if no flags
-    if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.all, args.check]):
+    if not any(
+        [
+            args.corridorkey,
+            mlx_flag,
+            args.sam2,
+            args.gvm,
+            args.videomama,
+            args.matanyone2,
+            args.all,
+            args.check,
+        ]
+    ):
         args.check = True
 
     if args.check:
         check_all()
-        if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.all]):
+        if not any(
+            [
+                args.corridorkey,
+                mlx_flag,
+                args.sam2,
+                args.gvm,
+                args.videomama,
+                args.matanyone2,
+                args.all,
+            ]
+        ):
             return
 
     targets = []
@@ -549,7 +594,9 @@ def main():
     if not targets and not sam2_targets and not download_mlx and not download_ma2:
         return
 
-    total_targets = len(targets) + len(sam2_targets) + (1 if download_mlx else 0) + (1 if download_ma2 else 0)
+    total_targets = (
+        len(targets) + len(sam2_targets) + (1 if download_mlx else 0) + (1 if download_ma2 else 0)
+    )
     print(f"\nDownloading {total_targets} model(s)...\n")
     results = {}
     for name in targets:

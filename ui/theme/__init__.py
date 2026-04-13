@@ -4,7 +4,7 @@ import os
 import sys
 
 # Frozen-build aware path resolution
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     THEME_DIR = os.path.join(sys._MEIPASS, "ui", "theme")
 else:
     THEME_DIR = os.path.dirname(os.path.abspath(__file__))

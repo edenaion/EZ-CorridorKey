@@ -8,6 +8,7 @@ when some modes have holes.
 Codex critical finding: index-based navigation across directories with
 different file counts will misalign. Stem-based is the only correct approach.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,6 +21,7 @@ from backend.project import is_image_file as _is_image
 
 class ViewMode(str, Enum):
     """Available preview modes. Each maps to a specific source directory."""
+
     INPUT = "Input"
     MASK = "Mask"
     ALPHA = "Alpha"
@@ -50,6 +52,7 @@ class FrameIndex:
         availability: Maps ViewMode → set of stems present in that mode.
         stem_files: Maps (ViewMode, stem) → full file path.
     """
+
     stems: list[str] = field(default_factory=list)
     availability: dict[ViewMode, set[str]] = field(default_factory=dict)
     stem_files: dict[tuple[ViewMode, str], str] = field(default_factory=dict)
@@ -116,15 +119,16 @@ def build_frame_index(
                     # Check Source/ first (new format), then Input.* (legacy)
                     source_dir = os.path.join(clip_root, "Source")
                     if os.path.isdir(source_dir):
-                        video_exts = ('.mp4', '.mov', '.avi', '.mkv', '.mxf', '.webm', '.m4v')
+                        video_exts = (".mp4", ".mov", ".avi", ".mkv", ".mxf", ".webm", ".m4v")
                         for f in os.listdir(source_dir):
                             if f.lower().endswith(video_exts):
                                 index.video_modes[mode] = os.path.join(source_dir, f)
                                 break
                     if mode not in index.video_modes:
                         import glob as glob_module
+
                         video_candidates = glob_module.glob(os.path.join(clip_root, "Input.*"))
-                        video_exts = ('.mp4', '.mov', '.avi', '.mkv')
+                        video_exts = (".mp4", ".mov", ".avi", ".mkv")
                         for vc in video_candidates:
                             if vc.lower().endswith(video_exts):
                                 index.video_modes[mode] = vc
@@ -167,6 +171,7 @@ def build_frame_index(
         vpath = index.video_modes[ViewMode.INPUT]
         try:
             import cv2
+
             cap = cv2.VideoCapture(vpath)
             if cap.isOpened():
                 count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))

@@ -8,6 +8,7 @@ This module consolidates frame-reading patterns that were previously duplicated
 across service.py methods (_read_input_frame, reprocess_single_frame,
 _load_frames_for_videomama, _load_mask_frames_for_videomama).
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,8 +28,10 @@ logger = logging.getLogger(__name__)
 # EXR write flags for cv2.imwrite — PXR24 half-float (fallback only;
 # prefer write_exr() for output since OpenCV's DWAB writer is broken)
 EXR_WRITE_FLAGS = [
-    cv2.IMWRITE_EXR_TYPE, cv2.IMWRITE_EXR_TYPE_HALF,
-    cv2.IMWRITE_EXR_COMPRESSION, cv2.IMWRITE_EXR_COMPRESSION_PXR24,
+    cv2.IMWRITE_EXR_TYPE,
+    cv2.IMWRITE_EXR_TYPE_HALF,
+    cv2.IMWRITE_EXR_COMPRESSION,
+    cv2.IMWRITE_EXR_COMPRESSION_PXR24,
 ]
 
 
@@ -57,6 +60,7 @@ def _srgb_to_linear(srgb: np.ndarray) -> np.ndarray:
 def _exr_compression_constant(name: str):
     """Map a compression name to the Imath compression enum value."""
     import Imath
+
     _MAP = {
         "dwab": Imath.Compression.DWAB_COMPRESSION,
         "piz": Imath.Compression.PIZ_COMPRESSION,
@@ -91,39 +95,43 @@ def write_exr(path: str, img: np.ndarray, compression: str = "dwab") -> bool:
             # Grayscale — single Y channel
             h, w = img.shape
             header = OpenEXR.Header(w, h)
-            header['compression'] = comp
-            header['channels'] = {'Y': HALF}
+            header["compression"] = comp
+            header["channels"] = {"Y": HALF}
             y = img.astype(np.float16)
             out = OpenEXR.OutputFile(path, header)
-            out.writePixels({'Y': y.tobytes()})
+            out.writePixels({"Y": y.tobytes()})
             out.close()
         elif img.ndim == 3 and img.shape[2] == 3:
             # BGR → R, G, B channels
             h, w = img.shape[:2]
             header = OpenEXR.Header(w, h)
-            header['compression'] = comp
-            header['channels'] = {'R': HALF, 'G': HALF, 'B': HALF}
+            header["compression"] = comp
+            header["channels"] = {"R": HALF, "G": HALF, "B": HALF}
             b = img[:, :, 0].astype(np.float16)
             g = img[:, :, 1].astype(np.float16)
             r = img[:, :, 2].astype(np.float16)
             out = OpenEXR.OutputFile(path, header)
-            out.writePixels({'R': r.tobytes(), 'G': g.tobytes(), 'B': b.tobytes()})
+            out.writePixels({"R": r.tobytes(), "G": g.tobytes(), "B": b.tobytes()})
             out.close()
         elif img.ndim == 3 and img.shape[2] == 4:
             # BGRA → R, G, B, A channels
             h, w = img.shape[:2]
             header = OpenEXR.Header(w, h)
-            header['compression'] = comp
-            header['channels'] = {'R': HALF, 'G': HALF, 'B': HALF, 'A': HALF}
+            header["compression"] = comp
+            header["channels"] = {"R": HALF, "G": HALF, "B": HALF, "A": HALF}
             b = img[:, :, 0].astype(np.float16)
             g = img[:, :, 1].astype(np.float16)
             r = img[:, :, 2].astype(np.float16)
             a = img[:, :, 3].astype(np.float16)
             out = OpenEXR.OutputFile(path, header)
-            out.writePixels({
-                'R': r.tobytes(), 'G': g.tobytes(),
-                'B': b.tobytes(), 'A': a.tobytes(),
-            })
+            out.writePixels(
+                {
+                    "R": r.tobytes(),
+                    "G": g.tobytes(),
+                    "B": b.tobytes(),
+                    "A": a.tobytes(),
+                }
+            )
             out.close()
         else:
             logger.warning(f"Unsupported image shape for EXR write: {img.shape}")
@@ -161,7 +169,6 @@ def recompress_exr(src_path: str, dst_path: str, compression: str = "dwab") -> b
     return write_exr(dst_path, img, compression=compression)
 
 
-
 def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np.ndarray]:
     """Read an image file (EXR or standard) as float32 RGB [0, 1].
 
@@ -173,7 +180,7 @@ def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np
     Returns:
         float32 array [H, W, 3] in RGB order, or None if read fails.
     """
-    is_exr = fpath.lower().endswith('.exr')
+    is_exr = fpath.lower().endswith(".exr")
 
     if is_exr:
         img = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
@@ -196,7 +203,8 @@ def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np
 
 
 def read_video_frame_at(
-    video_path: str, frame_index: int,
+    video_path: str,
+    frame_index: int,
 ) -> Optional[np.ndarray]:
     """Read a single frame from a video by index, as float32 RGB [0, 1].
 
@@ -297,7 +305,8 @@ def decode_video_mask_frame(frame: np.ndarray) -> np.ndarray:
 
 
 def read_video_mask_at(
-    video_path: str, frame_index: int,
+    video_path: str,
+    frame_index: int,
 ) -> Optional[np.ndarray]:
     """Read a single mask frame from a video by index, as float32 [H, W] [0, 1].
 

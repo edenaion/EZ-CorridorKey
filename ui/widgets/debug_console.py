@@ -3,6 +3,7 @@
 Shows real-time log output inside the app. Toggle with F12 or Help > Console.
 Captures all Python logging output via a custom handler attached to the root logger.
 """
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,7 @@ import re
 from datetime import datetime
 
 from PySide6.QtCore import QObject, QSettings, Qt, Signal, Slot
-from PySide6.QtGui import QCursor, QFont, QKeySequence, QMouseEvent, QShortcut
+from PySide6.QtGui import QFont, QKeySequence, QMouseEvent, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -36,6 +37,7 @@ _LEVEL_COLORS = {
 # ---------------------------------------------------------------------------
 # Qt-safe logging handler
 # ---------------------------------------------------------------------------
+
 
 class _QtLogHandler(logging.Handler, QObject):
     """Logging handler that emits a Qt signal for each log record.
@@ -78,6 +80,7 @@ class _QtLogHandler(logging.Handler, QObject):
 # Debug Console Widget
 # ---------------------------------------------------------------------------
 
+
 class DebugConsoleWidget(QWidget):
     """Floating debug console window with live log output."""
 
@@ -110,9 +113,7 @@ class DebugConsoleWidget(QWidget):
 
     def _build_ui(self) -> None:
         self.setMinimumSize(400, 200)
-        self.setStyleSheet(
-            "DebugConsoleWidget { background: #0E0D00; border: 1px solid #2A2910; }"
-        )
+        self.setStyleSheet("DebugConsoleWidget { background: #0E0D00; border: 1px solid #2A2910; }")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(1, 1, 1, 1)
@@ -128,8 +129,7 @@ class DebugConsoleWidget(QWidget):
 
         title_label = QLabel("CONSOLE")
         title_label.setStyleSheet(
-            "color: #FFF203; font-size: 11px; font-weight: 700;"
-            "letter-spacing: 3px; border: none;"
+            "color: #FFF203; font-size: 11px; font-weight: 700;letter-spacing: 3px; border: none;"
         )
         tb_layout.addWidget(title_label)
         tb_layout.addStretch()
@@ -212,7 +212,9 @@ class DebugConsoleWidget(QWidget):
         grip = QLabel("\u25e2")  # ◢
         grip.setFixedSize(14, 14)
         grip.setAlignment(Qt.AlignRight | Qt.AlignBottom)
-        grip.setStyleSheet("color: #454430; font-size: 12px; border: none; background: transparent;")
+        grip.setStyleSheet(
+            "color: #454430; font-size: 12px; border: none; background: transparent;"
+        )
         layout.addWidget(grip, 0, Qt.AlignRight)
 
     @staticmethod
@@ -253,7 +255,7 @@ class DebugConsoleWidget(QWidget):
         # Always buffer (trim newest-first; drop oldest beyond limit)
         self._log_buffer.insert(0, (html, levelno))
         if len(self._log_buffer) > _MAX_LINES:
-            self._log_buffer = self._log_buffer[:_MAX_LINES - 500]
+            self._log_buffer = self._log_buffer[: _MAX_LINES - 500]
 
         # Prepend so newest entries appear at the top
         if levelno >= self._min_level:
@@ -278,10 +280,11 @@ class DebugConsoleWidget(QWidget):
 
     # --- Backfill from session log file ----------------------------------
 
-    _LOG_RE = re.compile(
-        r"^[\d-]+\s+([\d:]+)\s+\[(\w+)\s*\]\s+([\w.]+):\s+(.*)$"
-    )
-    _LEVEL_MAP = {n: getattr(logging, n, logging.DEBUG) for n in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")}
+    _LOG_RE = re.compile(r"^[\d-]+\s+([\d:]+)\s+\[(\w+)\s*\]\s+([\w.]+):\s+(.*)$")
+    _LEVEL_MAP = {
+        n: getattr(logging, n, logging.DEBUG)
+        for n in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+    }
 
     def _backfill_session_log(self) -> None:
         """Read any lines already written to this session's log file."""
@@ -359,8 +362,10 @@ class DebugConsoleWidget(QWidget):
         if event.button() == Qt.LeftButton:
             pos = event.position().toPoint()
             # Check if near bottom-right corner for resize
-            if (self.width() - pos.x() < self._EDGE_MARGIN
-                    and self.height() - pos.y() < self._EDGE_MARGIN):
+            if (
+                self.width() - pos.x() < self._EDGE_MARGIN
+                and self.height() - pos.y() < self._EDGE_MARGIN
+            ):
                 self._resize_edge = True
                 self._drag_pos = event.globalPosition().toPoint()
             elif pos.y() < 28:  # Title bar drag
@@ -374,8 +379,10 @@ class DebugConsoleWidget(QWidget):
         if self._drag_pos is None:
             # Update cursor for resize hint
             pos = event.position().toPoint()
-            if (self.width() - pos.x() < self._EDGE_MARGIN
-                    and self.height() - pos.y() < self._EDGE_MARGIN):
+            if (
+                self.width() - pos.x() < self._EDGE_MARGIN
+                and self.height() - pos.y() < self._EDGE_MARGIN
+            ):
                 self.setCursor(Qt.SizeFDiagCursor)
             elif pos.y() < 28:
                 self.setCursor(Qt.OpenHandCursor)

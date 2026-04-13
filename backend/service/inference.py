@@ -1,4 +1,5 @@
 """Core CorridorKey inference pipeline — dispatcher, sequential, and finalization."""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,6 @@ from collections import deque
 from typing import Callable, Optional
 
 import cv2
-import numpy as np
 
 from ..clip_state import ClipEntry, ClipState
 from ..errors import (
@@ -60,16 +60,28 @@ class InferenceMixin(ParallelInferenceMixin):
 
             if len(engines) == 1:
                 return self._run_inference_sequential(
-                    clip, params, engines[0], job=job,
-                    on_progress=on_progress, on_warning=on_warning,
-                    on_status=on_status, skip_stems=skip_stems,
-                    output_config=output_config, frame_range=frame_range,
+                    clip,
+                    params,
+                    engines[0],
+                    job=job,
+                    on_progress=on_progress,
+                    on_warning=on_warning,
+                    on_status=on_status,
+                    skip_stems=skip_stems,
+                    output_config=output_config,
+                    frame_range=frame_range,
                 )
             return self._run_inference_parallel(
-                clip, params, engines, job=job,
-                on_progress=on_progress, on_warning=on_warning,
-                on_status=on_status, skip_stems=skip_stems,
-                output_config=output_config, frame_range=frame_range,
+                clip,
+                params,
+                engines,
+                job=job,
+                on_progress=on_progress,
+                on_warning=on_warning,
+                on_status=on_status,
+                skip_stems=skip_stems,
+                output_config=output_config,
+                frame_range=frame_range,
             )
         finally:
             self._end_inference()
@@ -89,13 +101,14 @@ class InferenceMixin(ParallelInferenceMixin):
     ) -> list:
         """Sequential frame loop — exact extraction of original run_inference."""
         from .core import FrameResult, OutputConfig
+
         t_start = time.monotonic()
         dirs = ensure_output_dirs(clip.output_dir)
         cfg = output_config or OutputConfig()
 
-        self._write_manifest(dirs['root'], cfg, params)
+        self._write_manifest(dirs["root"], cfg, params)
 
-        if clip.input_asset.asset_type == 'sequence' and clip.alpha_asset.asset_type == 'sequence':
+        if clip.input_asset.asset_type == "sequence" and clip.alpha_asset.asset_type == "sequence":
             num_frames = clip.input_asset.frame_count
             if clip.input_asset.frame_count != clip.alpha_asset.frame_count:
                 logger.warning(
@@ -117,18 +130,17 @@ class InferenceMixin(ParallelInferenceMixin):
         input_files: list[str] = []
         alpha_files: list[str] = []
 
-        if clip.input_asset.asset_type == 'video':
+        if clip.input_asset.asset_type == "video":
             input_cap = cv2.VideoCapture(clip.input_asset.path)
         else:
             input_files = clip.input_asset.get_frame_files()
 
-        if clip.alpha_asset.asset_type == 'video':
+        if clip.alpha_asset.asset_type == "video":
             alpha_cap = cv2.VideoCapture(clip.alpha_asset.path)
         else:
             alpha_files = clip.alpha_asset.get_frame_files()
         alpha_stem_lookup = (
-            {os.path.splitext(fname)[0]: fname for fname in alpha_files}
-            if alpha_files else None
+            {os.path.splitext(fname)[0]: fname for fname in alpha_files} if alpha_files else None
         )
 
         results: list[FrameResult] = []
@@ -170,7 +182,11 @@ class InferenceMixin(ParallelInferenceMixin):
 
                 try:
                     img, input_stem, is_linear = self._read_input_frame(
-                        clip, i, input_files, input_cap, params.input_is_linear,
+                        clip,
+                        i,
+                        input_files,
+                        input_cap,
+                        params.input_is_linear,
                     )
                     if img is None:
                         skipped.append(i)
@@ -182,7 +198,10 @@ class InferenceMixin(ParallelInferenceMixin):
                         continue
 
                     mask = self._read_alpha_frame(
-                        clip, i, alpha_files, alpha_cap,
+                        clip,
+                        i,
+                        alpha_files,
+                        alpha_cap,
                         input_stem=input_stem,
                         alpha_stem_lookup=alpha_stem_lookup,
                     )
@@ -192,12 +211,15 @@ class InferenceMixin(ParallelInferenceMixin):
                         continue
 
                     if mask.shape[:2] != img.shape[:2]:
-                        mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+                        mask = cv2.resize(
+                            mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR
+                        )
 
                     t_frame = time.monotonic()
                     with self._gpu_lock:
                         res = engine.process_frame(
-                            img, mask,
+                            img,
+                            mask,
                             input_is_linear=is_linear,
                             fg_is_straight=True,
                             despill_strength=params.despill_strength,
@@ -220,9 +242,7 @@ class InferenceMixin(ParallelInferenceMixin):
                             on_status("")
                     total_t = sum(frame_times)
                     avg_fps = len(frame_times) / total_t if total_t > 0 else 0.0
-                    logger.debug(
-                        f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)"
-                    )
+                    logger.debug(f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)")
 
                     self._write_outputs(res, dirs, input_stem, clip.name, i, cfg)
                     results.append(FrameResult(i, input_stem, True))
@@ -255,8 +275,13 @@ class InferenceMixin(ParallelInferenceMixin):
                 alpha_cap.release()
 
         return self._finalize_inference(
-            clip, results, skipped, processed_count,
-            t_start, frame_range, num_frames,
+            clip,
+            results,
+            skipped,
+            processed_count,
+            t_start,
+            frame_range,
+            num_frames,
             on_warning=on_warning,
         )
 
@@ -291,8 +316,9 @@ class InferenceMixin(ParallelInferenceMixin):
             f"in {t_total:.1f}s ({t_total / max(processed, 1):.2f}s/frame, {avg_fps:.1f} fps avg)"
         )
 
-        is_full_clip = (frame_range is None or
-                        (frame_range[0] == 0 and frame_range[1] >= num_frames - 1))
+        is_full_clip = frame_range is None or (
+            frame_range[0] == 0 and frame_range[1] >= num_frames - 1
+        )
         if processed == range_count and is_full_clip:
             try:
                 clip.transition_to(ClipState.COMPLETE)
@@ -330,7 +356,7 @@ class InferenceMixin(ParallelInferenceMixin):
         # Read the specific input frame
         is_linear = params.input_is_linear
         input_stem = f"{frame_index:05d}"
-        if clip.input_asset.asset_type == 'video':
+        if clip.input_asset.asset_type == "video":
             img = read_video_frame_at(clip.input_asset.path, frame_index)
         else:
             input_files = clip.input_asset.get_frame_files()
@@ -343,7 +369,7 @@ class InferenceMixin(ParallelInferenceMixin):
             return None
 
         # Read the specific alpha frame
-        if clip.alpha_asset.asset_type == 'video':
+        if clip.alpha_asset.asset_type == "video":
             mask = read_video_mask_at(clip.alpha_asset.path, frame_index)
         else:
             alpha_files = clip.alpha_asset.get_frame_files()
@@ -367,7 +393,8 @@ class InferenceMixin(ParallelInferenceMixin):
 
         with self._gpu_lock:
             res = engine.process_frame(
-                img, mask,
+                img,
+                mask,
                 input_is_linear=is_linear,
                 fg_is_straight=True,
                 despill_strength=params.despill_strength,
@@ -380,5 +407,7 @@ class InferenceMixin(ParallelInferenceMixin):
                 edge_erode_px=params.edge_erode_px,
                 edge_blur_px=params.edge_blur_px,
             )
-        logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")
+        logger.debug(
+            f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s"
+        )
         return res

@@ -4,6 +4,7 @@ Provides the data layer for the clip browser list view. The model
 emits standard Qt signals when clips are added/removed/changed, so
 the view updates automatically.
 """
+
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -70,7 +71,9 @@ class ClipListModel(QAbstractListModel):
         elif role == Qt.ToolTipRole:
             lines = [f"State: {clip.state.value}"]
             if clip.input_asset:
-                lines.append(f"Input: {clip.input_asset.frame_count} frames ({clip.input_asset.asset_type})")
+                lines.append(
+                    f"Input: {clip.input_asset.frame_count} frames ({clip.input_asset.asset_type})"
+                )
             if clip.alpha_asset:
                 lines.append(f"Alpha: {clip.alpha_asset.frame_count} frames")
             if clip.warnings:

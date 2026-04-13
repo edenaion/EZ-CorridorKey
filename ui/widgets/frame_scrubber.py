@@ -6,6 +6,7 @@ after a debounce period (50ms) to coalesce rapid scrubbing events.
 Helper widgets (CoverageBar, MarkerOverlay, _FatSlider) live in
 ``ui.widgets.timeline_widgets`` to keep this module focused on FrameScrubber.
 """
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton, QToolTip
@@ -17,10 +18,10 @@ from ui.widgets.timeline_widgets import _FatSlider, CoverageBar, MarkerOverlay
 class FrameScrubber(QWidget):
     """Frame navigation scrubber with transport controls, coverage bar, and debounced output."""
 
-    frame_changed = Signal(int)      # emitted after debounce, stem index
-    in_point_changed = Signal(int)   # in-point set at stem index
+    frame_changed = Signal(int)  # emitted after debounce, stem index
+    in_point_changed = Signal(int)  # in-point set at stem index
     out_point_changed = Signal(int)  # out-point set at stem index
-    range_cleared = Signal()         # in/out range cleared
+    range_cleared = Signal()  # in/out range cleared
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -46,7 +47,7 @@ class FrameScrubber(QWidget):
         )
 
         # Jump to start
-        self._start_btn = QPushButton("\u25C0\u25C0")  # ◀◀
+        self._start_btn = QPushButton("\u25c0\u25c0")  # ◀◀
         self._start_btn.setFixedWidth(28)
         self._start_btn.setStyleSheet(btn_style)
         self._start_btn.setToolTip("Go to first frame")
@@ -54,7 +55,7 @@ class FrameScrubber(QWidget):
         row.addWidget(self._start_btn)
 
         # Step back
-        self._prev_btn = QPushButton("\u25C0")  # ◀
+        self._prev_btn = QPushButton("\u25c0")  # ◀
         self._prev_btn.setFixedWidth(24)
         self._prev_btn.setStyleSheet(btn_style)
         self._prev_btn.setToolTip("Previous frame")
@@ -62,7 +63,7 @@ class FrameScrubber(QWidget):
         row.addWidget(self._prev_btn)
 
         # Play/Pause toggle
-        self._play_btn = QPushButton("\u25B6")  # ▶ (play icon)
+        self._play_btn = QPushButton("\u25b6")  # ▶ (play icon)
         self._play_btn.setFixedWidth(24)
         self._play_btn.setStyleSheet(btn_style)
         self._play_btn.setToolTip("Play / Pause (Space)")
@@ -110,7 +111,7 @@ class FrameScrubber(QWidget):
         self._center.installEventFilter(self)
 
         # Step forward
-        self._next_btn = QPushButton("\u25B6")  # ▶
+        self._next_btn = QPushButton("\u25b6")  # ▶
         self._next_btn.setFixedWidth(24)
         self._next_btn.setStyleSheet(btn_style)
         self._next_btn.setToolTip("Next frame")
@@ -118,7 +119,7 @@ class FrameScrubber(QWidget):
         row.addWidget(self._next_btn)
 
         # Jump to end
-        self._end_btn = QPushButton("\u25B6\u25B6")  # ▶▶
+        self._end_btn = QPushButton("\u25b6\u25b6")  # ▶▶
         self._end_btn.setFixedWidth(28)
         self._end_btn.setStyleSheet(btn_style)
         self._end_btn.setToolTip("Go to last frame")
@@ -158,7 +159,8 @@ class FrameScrubber(QWidget):
                     self._marker_overlay._become_interactive()
         # Forward tooltip events from overlay or center to correct child
         if event.type() == QEvent.ToolTip and obj in (
-            self._marker_overlay, self._center,
+            self._marker_overlay,
+            self._center,
         ):
             local_y = int(event.pos().y())
             coverage_h = self._coverage_bar.height()
@@ -304,14 +306,14 @@ class FrameScrubber(QWidget):
         if self._total <= 1:
             return
         self._playing = True
-        self._play_btn.setText("\u275A\u275A")  # ❚❚ (pause icon)
+        self._play_btn.setText("\u275a\u275a")  # ❚❚ (pause icon)
         self._play_btn.setToolTip("Pause (Space)")
         self._playback_timer.start()
 
     def _stop_playback(self) -> None:
         self._playing = False
         self._playback_timer.stop()
-        self._play_btn.setText("\u25B6")  # ▶ (play icon)
+        self._play_btn.setText("\u25b6")  # ▶ (play icon)
         self._play_btn.setToolTip("Play (Space)")
 
     def _playback_tick(self) -> None:

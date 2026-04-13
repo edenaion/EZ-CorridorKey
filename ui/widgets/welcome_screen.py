@@ -5,14 +5,19 @@ browse button) — exactly like the original welcome screen. A small panel
 on the left shows recent projects as clickable cards. Clicks on the
 drop zone open the file dialog; clicks on project cards open that project.
 """
+
 from __future__ import annotations
 
 import os
 import sys
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFileDialog, QSizePolicy,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QFileDialog,
 )
 from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtGui import QPixmap, QImage, QPainter
@@ -20,12 +25,12 @@ from PySide6.QtSvg import QSvgRenderer
 
 from ui.recent_sessions import RecentSessionsStore
 from ui.widgets.recent_projects_panel import RecentProjectsPanel
-from backend.project import is_video_file, is_image_file, VIDEO_FILE_FILTER
+from backend.project import is_video_file, is_image_file
 
 
 def _load_brand_logo(size: int) -> QPixmap | None:
     """Load brand logo from SVG (crisp at any size) with PNG fallback."""
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         base = os.path.join(sys._MEIPASS, "ui", "theme")
     else:
         base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "theme")
@@ -101,6 +106,7 @@ class _DropZone(QWidget):
     def eventFilter(self, obj, event):
         if event.type() == QEvent.Enter and obj.objectName() == "welcomeBrowse":
             from ui.sounds.audio_manager import UIAudio
+
             UIAudio.hover()
         return super().eventFilter(obj, event)
 
@@ -126,8 +132,8 @@ class WelcomeScreen(QWidget):
     └─────────────┴────────────────────────────────────────────┘
     """
 
-    folder_selected = Signal(str)     # directory path
-    files_selected = Signal(list)     # list of file paths
+    folder_selected = Signal(str)  # directory path
+    files_selected = Signal(list)  # list of file paths
     recent_project_opened = Signal(str)  # workspace path from recents
 
     def __init__(self, store: RecentSessionsStore, parent=None):
@@ -172,7 +178,9 @@ class WelcomeScreen(QWidget):
             "All Files (*)"
         )
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select Media Files", "",
+            self,
+            "Select Media Files",
+            "",
             media_filter,
         )
         if paths:

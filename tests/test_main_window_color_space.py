@@ -159,6 +159,7 @@ def test_selecting_another_clip_remembers_previous_clip_color_space_override():
     # Mock _clip_model with a clips list for index tracking
     class _DummyClipModel:
         clips = [previous, selected]
+
     window._clip_model = _DummyClipModel()
 
     MainWindow._on_clip_selected(window, selected)

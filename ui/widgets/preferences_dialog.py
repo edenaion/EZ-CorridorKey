@@ -2,15 +2,29 @@
 
 Provides user-configurable settings that persist across sessions via QSettings.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
-    QComboBox, QGroupBox, QProgressBar, QMessageBox, QApplication,
-    QLineEdit, QFileDialog, QScrollArea, QWidget, QFrame,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QCheckBox,
+    QPushButton,
+    QLabel,
+    QComboBox,
+    QGroupBox,
+    QProgressBar,
+    QMessageBox,
+    QApplication,
+    QLineEdit,
+    QFileDialog,
+    QScrollArea,
+    QWidget,
+    QFrame,
 )
 from PySide6.QtCore import QSettings, Qt, QUrl, QThread, Signal, QEvent
 
@@ -64,6 +78,7 @@ DEFAULT_TRACKER_MODEL = "facebook/sam2.1-hiera-base-plus"
 DEFAULT_PARALLEL_CLIPS = 1
 import platform as _platform
 import sys as _sys
+
 # MPS/MLX (Apple Silicon) defaults to 1024 — 2048 needs 20GB+ and is very slow.
 # CUDA defaults to 2048 (dedicated VRAM handles it fine).
 _is_apple_silicon = _sys.platform == "darwin" and _platform.machine() == "arm64"
@@ -153,6 +168,7 @@ class PreferencesDialog(QDialog):
         self.setModal(True)
         # Ctrl+, closes the dialog (toggle behavior matching F12 pattern)
         from PySide6.QtGui import QShortcut, QKeySequence
+
         QShortcut(QKeySequence("Ctrl+,"), self, self.reject)
         self._ffmpeg_repair_worker: _FFmpegRepairWorker | None = None
         self._local_ffmpeg_dir = get_local_ffmpeg_dir()
@@ -185,15 +201,11 @@ class PreferencesDialog(QDialog):
         ui_layout = QVBoxLayout(ui_group)
 
         self._tooltips_cb = QCheckBox("Show tooltips on controls")
-        self._tooltips_cb.setChecked(
-            get_setting_bool(KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS)
-        )
+        self._tooltips_cb.setChecked(get_setting_bool(KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS))
         ui_layout.addWidget(self._tooltips_cb)
 
         self._sounds_cb = QCheckBox("UI sounds")
-        self._sounds_cb.setChecked(
-            get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS)
-        )
+        self._sounds_cb.setChecked(get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS))
         ui_layout.addWidget(self._sounds_cb)
 
         # (added to layout below in display order)
@@ -208,9 +220,7 @@ class PreferencesDialog(QDialog):
             "When disabled, the project references the original file in place.\n\n"
             "Note: Deleting a project never touches the original source file."
         )
-        self._copy_source_cb.setChecked(
-            get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
-        )
+        self._copy_source_cb.setChecked(get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE))
         proj_layout.addWidget(self._copy_source_cb)
 
         self._copy_sequences_cb = QCheckBox("Copy imported image sequences into project folder")
@@ -341,9 +351,7 @@ class PreferencesDialog(QDialog):
             "When enabled, playback loops back to the in-point\n"
             "after reaching the out-point (or start/end if no range)."
         )
-        self._loop_cb.setChecked(
-            get_setting_bool(KEY_LOOP_PLAYBACK, DEFAULT_LOOP_PLAYBACK)
-        )
+        self._loop_cb.setChecked(get_setting_bool(KEY_LOOP_PLAYBACK, DEFAULT_LOOP_PLAYBACK))
         play_layout.addWidget(self._loop_cb)
 
         # (added to layout below in display order)
@@ -523,6 +531,7 @@ class PreferencesDialog(QDialog):
         s.setValue(KEY_OUTPUT_DIRECTORY, self._output_dir_edit.text().strip())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
+
         UIAudio.set_muted(not self._sounds_cb.isChecked())
         self.accept()
 
@@ -530,7 +539,9 @@ class PreferencesDialog(QDialog):
         """Open folder picker for default output directory."""
         start = self._output_dir_edit.text() or ""
         path = QFileDialog.getExistingDirectory(
-            self, "Select Default Output Directory", start,
+            self,
+            "Select Default Output Directory",
+            start,
             QFileDialog.ShowDirsOnly,
         )
         if path:
@@ -574,6 +585,7 @@ class PreferencesDialog(QDialog):
     def _on_download_models(self) -> None:
         """Open the model download dialog (same UI as the first-launch wizard)."""
         from ui.widgets.setup_wizard import SetupWizard
+
         dialog = SetupWizard(parent=self)
         dialog.setWindowTitle("Download Models")
         dialog.exec()
@@ -581,7 +593,6 @@ class PreferencesDialog(QDialog):
     def _on_repair_ffmpeg(self) -> None:
         """Repair FFmpeg on Windows or show manual install guidance elsewhere."""
         from backend.ffmpeg_tools import get_ffmpeg_install_help, validate_ffmpeg_install
-        import sys
 
         current = validate_ffmpeg_install(require_probe=True)
         if current.ok:

@@ -3,11 +3,13 @@
 
 class CorridorKeyError(Exception):
     """Base exception for all CorridorKey backend errors."""
+
     pass
 
 
 class ClipScanError(CorridorKeyError):
     """Raised when a clip directory cannot be scanned or is malformed."""
+
     pass
 
 
@@ -31,9 +33,7 @@ class FrameReadError(CorridorKeyError):
         self.clip_name = clip_name
         self.frame_index = frame_index
         self.path = path
-        super().__init__(
-            f"Clip '{clip_name}': failed to read frame {frame_index} ({path})"
-        )
+        super().__init__(f"Clip '{clip_name}': failed to read frame {frame_index} ({path})")
 
 
 class WriteFailureError(CorridorKeyError):
@@ -43,9 +43,7 @@ class WriteFailureError(CorridorKeyError):
         self.clip_name = clip_name
         self.frame_index = frame_index
         self.path = path
-        super().__init__(
-            f"Clip '{clip_name}': failed to write frame {frame_index} ({path})"
-        )
+        super().__init__(f"Clip '{clip_name}': failed to write frame {frame_index} ({path})")
 
 
 class MaskChannelError(CorridorKeyError):
@@ -68,8 +66,7 @@ class VRAMInsufficientError(CorridorKeyError):
         self.required_gb = required_gb
         self.available_gb = available_gb
         super().__init__(
-            f"Insufficient VRAM: {required_gb:.1f}GB required, "
-            f"{available_gb:.1f}GB available"
+            f"Insufficient VRAM: {required_gb:.1f}GB required, {available_gb:.1f}GB available"
         )
 
 
@@ -81,8 +78,7 @@ class InvalidStateTransitionError(CorridorKeyError):
         self.current_state = current_state
         self.target_state = target_state
         super().__init__(
-            f"Clip '{clip_name}': invalid state transition "
-            f"{current_state} -> {target_state}"
+            f"Clip '{clip_name}': invalid state transition {current_state} -> {target_state}"
         )
 
 

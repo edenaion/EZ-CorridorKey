@@ -36,6 +36,7 @@ class AnnotationMixin:
     def _cycle_fg_color(self) -> None:
         """Hotkey C: cycle foreground annotation color (green/blue)."""
         from ui.widgets.annotation_overlay import cycle_fg_color
+
         name = cycle_fg_color()
         self._dual_viewer.input_viewer.update()
         self._show_toast(f"Foreground color: {name}")
@@ -84,7 +85,8 @@ class AnnotationMixin:
         model = iv.annotation_model
         if not model.has_annotations():
             QMessageBox.information(
-                self, "No Paint Strokes",
+                self,
+                "No Paint Strokes",
                 "Paint green (1) and red (2) strokes on frames first.",
             )
             return
@@ -92,7 +94,9 @@ class AnnotationMixin:
         if not self._warn_mps_slow("SAM2 Track Mask"):
             return
 
-        job = create_job_snapshot(clip, self._param_panel.get_params(), job_type=JobType.SAM2_PREVIEW)
+        job = create_job_snapshot(
+            clip, self._param_panel.get_params(), job_type=JobType.SAM2_PREVIEW
+        )
         job.params["_frame_index"] = max(0, self._dual_viewer.current_stem_index)
         if not self._service.job_queue.submit(job):
             return
@@ -107,7 +111,8 @@ class AnnotationMixin:
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
             reply = QMessageBox.question(
-                self, "Replace Existing Alpha?",
+                self,
+                "Replace Existing Alpha?",
                 "This clip already has an AlphaHint (from GVM or a previous run).\n\n"
                 "Tracking a new mask sequence will replace that alpha hint.\n\n"
                 "Remove existing AlphaHint and proceed?",
@@ -201,9 +206,7 @@ class AnnotationMixin:
         model = iv.annotation_model
         fi = iv._frame_index
         total = fi.frame_count if fi else 0
-        self._param_panel.set_annotation_info(
-            model.annotated_frame_count(), total
-        )
+        self._param_panel.set_annotation_info(model.annotated_frame_count(), total)
         # Push annotation coverage to the scrubber timeline
         if fi and total > 0:
             annotated = [model.has_annotations(i) for i in range(total)]

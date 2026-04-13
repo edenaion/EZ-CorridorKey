@@ -1,5 +1,5 @@
 """Tests for Phase 4 job queue enhancements — PREVIEW_REPROCESS replacement semantics."""
-import pytest
+
 from backend.job_queue import GPUJob, GPUJobQueue, JobType, JobStatus
 
 

@@ -99,7 +99,10 @@ class UIAudio:
 
     @classmethod
     def _play(
-        cls, sfx: QSoundEffect, variance: float = _VARIANCE, db_offset: float = 0.0,
+        cls,
+        sfx: QSoundEffect,
+        variance: float = _VARIANCE,
+        db_offset: float = 0.0,
         skip_debounce: bool = False,
     ) -> None:
         if cls._muted or cls._volume <= 0.0:

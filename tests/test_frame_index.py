@@ -1,8 +1,7 @@
 """Tests for FrameIndex — stem-based cross-mode navigation."""
+
 import os
-import tempfile
-import pytest
-from ui.preview.frame_index import FrameIndex, ViewMode, build_frame_index
+from ui.preview.frame_index import ViewMode, build_frame_index
 
 
 class TestFrameIndex:
@@ -28,26 +27,32 @@ class TestFrameIndex:
             os.makedirs(dir_path, exist_ok=True)
             ext = ".png" if mode == ViewMode.COMP else ".exr"
             for stem in stems:
-                open(os.path.join(dir_path, f"{stem}{ext}"), 'w').close()
+                open(os.path.join(dir_path, f"{stem}{ext}"), "w").close()
 
         return clip_root
 
     def test_basic_index(self, tmp_path):
-        clip_root = self._make_clip_dir(tmp_path, {
-            ViewMode.INPUT: ["frame_001", "frame_002", "frame_003"],
-            ViewMode.COMP: ["frame_001", "frame_002", "frame_003"],
-        })
+        clip_root = self._make_clip_dir(
+            tmp_path,
+            {
+                ViewMode.INPUT: ["frame_001", "frame_002", "frame_003"],
+                ViewMode.COMP: ["frame_001", "frame_002", "frame_003"],
+            },
+        )
         idx = build_frame_index(clip_root)
         assert idx.frame_count == 3
         assert idx.stems == ["frame_001", "frame_002", "frame_003"]
 
     def test_cross_mode_holes(self, tmp_path):
         """Codex test: stem-based sync when one mode has missing frames."""
-        clip_root = self._make_clip_dir(tmp_path, {
-            ViewMode.INPUT: ["frame_001", "frame_002", "frame_003"],
-            ViewMode.COMP: ["frame_001", "frame_003"],  # frame_002 missing
-            ViewMode.FG: ["frame_001", "frame_002"],     # frame_003 missing
-        })
+        clip_root = self._make_clip_dir(
+            tmp_path,
+            {
+                ViewMode.INPUT: ["frame_001", "frame_002", "frame_003"],
+                ViewMode.COMP: ["frame_001", "frame_003"],  # frame_002 missing
+                ViewMode.FG: ["frame_001", "frame_002"],  # frame_003 missing
+            },
+        )
         idx = build_frame_index(clip_root)
         # All stems should be present in the timeline
         assert idx.frame_count == 3
@@ -58,27 +63,33 @@ class TestFrameIndex:
         assert idx.has_frame(ViewMode.INPUT, 1)  # frame_002
         assert idx.has_frame(ViewMode.INPUT, 2)  # frame_003
 
-        assert idx.has_frame(ViewMode.COMP, 0)   # frame_001 ✓
-        assert not idx.has_frame(ViewMode.COMP, 1) # frame_002 ✗
-        assert idx.has_frame(ViewMode.COMP, 2)   # frame_003 ✓
+        assert idx.has_frame(ViewMode.COMP, 0)  # frame_001 ✓
+        assert not idx.has_frame(ViewMode.COMP, 1)  # frame_002 ✗
+        assert idx.has_frame(ViewMode.COMP, 2)  # frame_003 ✓
 
-        assert idx.has_frame(ViewMode.FG, 0)      # frame_001 ✓
-        assert idx.has_frame(ViewMode.FG, 1)      # frame_002 ✓
+        assert idx.has_frame(ViewMode.FG, 0)  # frame_001 ✓
+        assert idx.has_frame(ViewMode.FG, 1)  # frame_002 ✓
         assert not idx.has_frame(ViewMode.FG, 2)  # frame_003 ✗
 
     def test_natural_sort_order(self, tmp_path):
         """Verify natural sort in stem timeline."""
-        clip_root = self._make_clip_dir(tmp_path, {
-            ViewMode.INPUT: ["frame_1", "frame_10", "frame_2"],
-        })
+        clip_root = self._make_clip_dir(
+            tmp_path,
+            {
+                ViewMode.INPUT: ["frame_1", "frame_10", "frame_2"],
+            },
+        )
         idx = build_frame_index(clip_root)
         assert idx.stems == ["frame_1", "frame_2", "frame_10"]
 
     def test_available_modes(self, tmp_path):
-        clip_root = self._make_clip_dir(tmp_path, {
-            ViewMode.INPUT: ["frame_001"],
-            ViewMode.COMP: ["frame_001"],
-        })
+        clip_root = self._make_clip_dir(
+            tmp_path,
+            {
+                ViewMode.INPUT: ["frame_001"],
+                ViewMode.COMP: ["frame_001"],
+            },
+        )
         idx = build_frame_index(clip_root)
         modes = idx.available_modes()
         assert ViewMode.INPUT in modes
@@ -86,9 +97,12 @@ class TestFrameIndex:
         assert ViewMode.FG not in modes
 
     def test_get_path(self, tmp_path):
-        clip_root = self._make_clip_dir(tmp_path, {
-            ViewMode.INPUT: ["frame_001"],
-        })
+        clip_root = self._make_clip_dir(
+            tmp_path,
+            {
+                ViewMode.INPUT: ["frame_001"],
+            },
+        )
         idx = build_frame_index(clip_root)
         path = idx.get_path(ViewMode.INPUT, 0)
         assert path is not None
@@ -102,9 +116,12 @@ class TestFrameIndex:
         assert idx.stems == []
 
     def test_out_of_range(self, tmp_path):
-        clip_root = self._make_clip_dir(tmp_path, {
-            ViewMode.INPUT: ["frame_001"],
-        })
+        clip_root = self._make_clip_dir(
+            tmp_path,
+            {
+                ViewMode.INPUT: ["frame_001"],
+            },
+        )
         idx = build_frame_index(clip_root)
         assert not idx.has_frame(ViewMode.INPUT, -1)
         assert not idx.has_frame(ViewMode.INPUT, 1)

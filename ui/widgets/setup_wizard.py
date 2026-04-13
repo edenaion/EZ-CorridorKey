@@ -4,6 +4,7 @@ Shown automatically when the required CorridorKey checkpoint is missing.
 Provides the same model selection as 1-install.sh / 1-install.bat but in
 a PySide6 GUI with checkboxes and progress bars.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -11,15 +12,22 @@ import logging
 import os
 import platform
 import sys
-import traceback
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox,
-    QPushButton, QProgressBar, QWidget,
-    QFrame, QLineEdit, QFileDialog,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QCheckBox,
+    QPushButton,
+    QProgressBar,
+    QWidget,
+    QFrame,
+    QLineEdit,
+    QFileDialog,
 )
-from PySide6.QtCore import Qt, Signal, QThread, QObject
+from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QFont
 
 logger = logging.getLogger(__name__)
@@ -27,6 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
+
 
 def _project_root() -> Path:
     if getattr(sys, "frozen", False):
@@ -53,6 +62,7 @@ def _data_root() -> Path:
         return _project_root()
     try:
         from backend.project import get_data_dir
+
         return Path(get_data_dir())
     except ImportError:
         return _default_install_dir()
@@ -80,14 +90,16 @@ MODELS: list[dict] = [
 ]
 
 if _IS_APPLE_SILICON:
-    MODELS.append({
-        "key": "corridorkey-mlx",
-        "label": "CorridorKey MLX (Apple Silicon)",
-        "size": "380 MB",
-        "required": False,
-        "description": "1.5-2x faster inference on Apple Silicon",
-        "default_checked": True,
-    })
+    MODELS.append(
+        {
+            "key": "corridorkey-mlx",
+            "label": "CorridorKey MLX (Apple Silicon)",
+            "size": "380 MB",
+            "required": False,
+            "description": "1.5-2x faster inference on Apple Silicon",
+            "default_checked": True,
+        }
+    )
 
 MODELS += [
     {
@@ -127,6 +139,7 @@ MODELS += [
 
 def needs_setup() -> bool:
     import glob
+
     ckpt_dir = _checkpoint_dir()
     return len(glob.glob(str(ckpt_dir / "*.pth"))) == 0
 
@@ -134,6 +147,7 @@ def needs_setup() -> bool:
 # ---------------------------------------------------------------------------
 # Import setup_models
 # ---------------------------------------------------------------------------
+
 
 def _load_setup_models():
     script_path = _project_root() / "scripts" / "setup_models.py"
@@ -151,16 +165,18 @@ def _load_setup_models():
 # Download worker
 # ---------------------------------------------------------------------------
 
+
 class _DownloadWorker(QThread):
     """Download selected models sequentially in a background thread.
 
     IMPORTANT: This thread must be properly waited on before the parent
     dialog is destroyed, otherwise Qt will abort() on ~QThread.
     """
-    model_started = Signal(str, str)          # key, label
-    model_progress = Signal(str, int, int)    # key, downloaded_mb, total_mb
-    model_finished = Signal(str, bool, str)   # key, success, message
-    all_finished = Signal(bool)               # overall success
+
+    model_started = Signal(str, str)  # key, label
+    model_progress = Signal(str, int, int)  # key, downloaded_mb, total_mb
+    model_finished = Signal(str, bool, str)  # key, success, message
+    all_finished = Signal(bool)  # overall success
 
     def __init__(self, selected_keys: list[str], parent=None):
         super().__init__(parent)
@@ -174,7 +190,7 @@ class _DownloadWorker(QThread):
     def run(self):
         try:
             setup_models = _load_setup_models()
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to load setup_models")
             self.all_finished.emit(False)
             return
@@ -192,7 +208,7 @@ class _DownloadWorker(QThread):
 
             try:
                 ok = self._download_one(setup_models, key)
-            except Exception as e:
+            except Exception:
                 logger.exception("Download failed for %s", key)
                 ok = False
 
@@ -222,10 +238,10 @@ class _DownloadWorker(QThread):
 
     def _patch_mlx_progress(self, setup_models):
         worker = self
-        original = setup_models.download_corridorkey_mlx
 
         def patched():
             import urllib.request
+
             cfg = setup_models.MLX_CHECKPOINT
             local_dir = cfg["local_dir"]
             local_dir.mkdir(parents=True, exist_ok=True)
@@ -237,6 +253,7 @@ class _DownloadWorker(QThread):
 
             tmp = dest.with_suffix(".safetensors.tmp")
             try:
+
                 def hook(bn, bs, total):
                     if total > 0 and not worker._cancelled:
                         worker.model_progress.emit(
@@ -244,9 +261,11 @@ class _DownloadWorker(QThread):
                             (bn * bs) // (1024 * 1024),
                             total // (1024 * 1024),
                         )
+
                 urllib.request.urlretrieve(cfg["url"], str(tmp), reporthook=hook)
                 try:
                     import hashlib
+
                     resp = urllib.request.urlopen(cfg["sha256_url"])
                     expected = resp.read().decode().strip().split()[0]
                     actual = hashlib.sha256(tmp.read_bytes()).hexdigest()
@@ -265,11 +284,14 @@ class _DownloadWorker(QThread):
 
         try:
             import huggingface_hub
+
             orig_hf = huggingface_hub.hf_hub_download
+
             def patched_hf(*a, **kw):
                 r = orig_hf(*a, **kw)
                 worker.model_progress.emit(worker._current_key, 100, 100)
                 return r
+
             huggingface_hub.hf_hub_download = patched_hf
         except ImportError:
             pass
@@ -278,6 +300,7 @@ class _DownloadWorker(QThread):
 # ---------------------------------------------------------------------------
 # Model row widget
 # ---------------------------------------------------------------------------
+
 
 class _ModelRow(QWidget):
     def __init__(self, model: dict, parent=None):
@@ -364,6 +387,7 @@ class _ModelRow(QWidget):
 # Setup Wizard Dialog
 # ---------------------------------------------------------------------------
 
+
 class SetupWizard(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -380,7 +404,9 @@ class SetupWizard(QDialog):
         layout.setSpacing(16)
         layout.setContentsMargins(28, 28, 28, 28)
 
-        title = QLabel('Welcome to <span style="color:#FFF203;">EZ</span><span style="color:#4CAF50;">-</span><span style="color:#FFF203;">Corridor</span><span style="color:#4CAF50;">Key</span>')
+        title = QLabel(
+            'Welcome to <span style="color:#FFF203;">EZ</span><span style="color:#4CAF50;">-</span><span style="color:#FFF203;">Corridor</span><span style="color:#4CAF50;">Key</span>'
+        )
         title.setFont(QFont("Open Sans", 18, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: #FFFFFF;")
@@ -426,6 +452,7 @@ class SetupWizard(QDialog):
 
         # Scrollable model list — labels always display full width
         from PySide6.QtWidgets import QScrollArea
+
         model_container = QWidget()
         model_layout = QVBoxLayout(model_container)
         model_layout.setContentsMargins(0, 0, 0, 0)
@@ -440,8 +467,9 @@ class SetupWizard(QDialog):
         scroll.setWidget(model_container)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background: transparent; }"
-                             "QWidget { background: transparent; }")
+        scroll.setStyleSheet(
+            "QScrollArea { background: transparent; }QWidget { background: transparent; }"
+        )
         layout.addWidget(scroll, 1)
 
         # Divider + desktop shortcut
@@ -520,6 +548,7 @@ class SetupWizard(QDialog):
         # Save chosen install directory
         install_dir = self._loc_edit.text()
         from PySide6.QtCore import QSettings
+
         QSettings().setValue("app/install_path", install_dir)
 
         self._downloading = True
@@ -613,20 +642,22 @@ class SetupWizard(QDialog):
             elif sys.platform == "win32":
                 # Windows: create a .lnk shortcut via PowerShell
                 import subprocess
+
                 app_exe = sys.executable
                 icon = Path(sys._MEIPASS) / "ui" / "theme" / "corridorkey.ico"
                 lnk = desktop / "CorridorKey.lnk"
                 ps_cmd = (
-                    f'$ws = New-Object -ComObject WScript.Shell; '
+                    f"$ws = New-Object -ComObject WScript.Shell; "
                     f'$s = $ws.CreateShortcut("{lnk}"); '
                     f'$s.TargetPath = "{app_exe}"; '
                     f'$s.IconLocation = "{icon},0"; '
                     f'$s.Description = "CorridorKey - AI Green Screen"; '
-                    f'$s.Save()'
+                    f"$s.Save()"
                 )
                 subprocess.run(
                     ["powershell", "-NoProfile", "-Command", ps_cmd],
-                    capture_output=True, timeout=10,
+                    capture_output=True,
+                    timeout=10,
                 )
                 logger.info("Desktop shortcut created: %s", lnk)
         except Exception as e:

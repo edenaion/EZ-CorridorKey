@@ -1,4 +1,5 @@
 """Auto-alpha pipelines — GVM and BiRefNet (no annotations required)."""
+
 from __future__ import annotations
 
 import logging
@@ -34,7 +35,7 @@ class AutoPipelinesMixin:
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for GVM")
 
-        if self._device == 'cpu':
+        if self._device == "cpu":
             raise GPURequiredError("GVM Auto Alpha")
 
         t_start = time.monotonic()
@@ -69,7 +70,7 @@ class AutoPipelinesMixin:
                 num_frames_per_batch=1,
                 decode_chunk_size=1,
                 denoise_steps=1,
-                mode='matte',
+                mode="matte",
                 write_video=False,
                 direct_output_dir=alpha_dir,
                 progress_callback=_gvm_progress,
@@ -82,7 +83,7 @@ class AutoPipelinesMixin:
             raise CorridorKeyError(f"GVM failed for '{clip.name}': {e}") from e
 
         # Refresh alpha asset
-        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+        clip.alpha_asset = ClipAsset(alpha_dir, "sequence")
 
         if on_progress:
             on_progress(clip.name, 1, 1)
@@ -94,7 +95,9 @@ class AutoPipelinesMixin:
             if on_warning:
                 on_warning(f"State transition after GVM: {e}")
 
-        logger.info(f"GVM complete for '{clip.name}': {clip.alpha_asset.frame_count} alpha frames in {time.monotonic() - t_start:.1f}s")
+        logger.info(
+            f"GVM complete for '{clip.name}': {clip.alpha_asset.frame_count} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )
 
     def run_birefnet(
         self,
@@ -113,7 +116,7 @@ class AutoPipelinesMixin:
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for BiRefNet")
 
-        if self._device == 'cpu':
+        if self._device == "cpu":
             raise GPURequiredError("BiRefNet")
 
         def _status(msg: str) -> None:
@@ -171,6 +174,7 @@ class AutoPipelinesMixin:
                 self._active_model = _ActiveModel.NONE
                 try:
                     import torch as _torch
+
                     _torch.cuda.empty_cache()
                 except Exception:
                     pass
@@ -181,7 +185,7 @@ class AutoPipelinesMixin:
             raise
 
         # Phase 4: Finalize
-        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+        clip.alpha_asset = ClipAsset(alpha_dir, "sequence")
 
         try:
             clip.transition_to(ClipState.READY)

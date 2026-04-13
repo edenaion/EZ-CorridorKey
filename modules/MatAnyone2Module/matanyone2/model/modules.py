@@ -3,7 +3,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from matanyone2.model.group_modules import MainToGroupDistributor, GroupResBlock, upsample_groups, GConv2d, downsample_groups
+from matanyone2.model.group_modules import (
+    MainToGroupDistributor,
+    GroupResBlock,
+    upsample_groups,
+    GConv2d,
+    downsample_groups,
+)
 from matanyone2.utils.device import safe_autocast
 
 
@@ -14,17 +20,16 @@ class UpsampleBlock(nn.Module):
         self.scale_factor = scale_factor
 
     def forward(self, in_g: torch.Tensor, skip_f: torch.Tensor) -> torch.Tensor:
-        g = F.interpolate(in_g,
-                      scale_factor=self.scale_factor,
-                      mode='bilinear')
+        g = F.interpolate(in_g, scale_factor=self.scale_factor, mode="bilinear")
         g = self.out_conv(g)
         g = g + skip_f
         return g
 
+
 class MaskUpsampleBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, scale_factor: int = 2):
         super().__init__()
-        self.distributor = MainToGroupDistributor(method='add')
+        self.distributor = MainToGroupDistributor(method="add")
         self.out_conv = GroupResBlock(in_dim, out_dim)
         self.scale_factor = scale_factor
 
@@ -33,14 +38,14 @@ class MaskUpsampleBlock(nn.Module):
         g = self.distributor(skip_f, g)
         g = self.out_conv(g)
         return g
-    
+
 
 class DecoderFeatureProcessor(nn.Module):
     def __init__(self, decoder_dims: List[int], out_dims: List[int]):
         super().__init__()
-        self.transforms = nn.ModuleList([
-            nn.Conv2d(d_dim, p_dim, kernel_size=1) for d_dim, p_dim in zip(decoder_dims, out_dims)
-        ])
+        self.transforms = nn.ModuleList(
+            [nn.Conv2d(d_dim, p_dim, kernel_size=1) for d_dim, p_dim in zip(decoder_dims, out_dims)]
+        )
 
     def forward(self, multi_scale_features: Iterable[torch.Tensor]) -> List[torch.Tensor]:
         outputs = [func(x) for x, func in zip(multi_scale_features, self.transforms)]
@@ -53,8 +58,8 @@ def _recurrent_update(h: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
     # values: batch_size * num_objects * (hidden_dim*3) * h * w
     dim = values.shape[2] // 3
     forget_gate = torch.sigmoid(values[:, :, :dim])
-    update_gate = torch.sigmoid(values[:, :, dim:dim * 2])
-    new_value = torch.tanh(values[:, :, dim * 2:])
+    update_gate = torch.sigmoid(values[:, :, dim : dim * 2])
+    new_value = torch.tanh(values[:, :, dim * 2 :])
     new_h = forget_gate * h * (1 - update_gate) + update_gate * new_value
     return new_h
 
@@ -74,10 +79,13 @@ class SensoryUpdater_fullscale(nn.Module):
         nn.init.xavier_normal_(self.transform.weight)
 
     def forward(self, g: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
-        g = self.g16_conv(g[0]) + self.g8_conv(downsample_groups(g[1], ratio=1/2)) + \
-            self.g4_conv(downsample_groups(g[2], ratio=1/4)) + \
-            self.g2_conv(downsample_groups(g[3], ratio=1/8)) + \
-            self.g1_conv(downsample_groups(g[4], ratio=1/16))
+        g = (
+            self.g16_conv(g[0])
+            + self.g8_conv(downsample_groups(g[1], ratio=1 / 2))
+            + self.g4_conv(downsample_groups(g[2], ratio=1 / 4))
+            + self.g2_conv(downsample_groups(g[3], ratio=1 / 8))
+            + self.g1_conv(downsample_groups(g[4], ratio=1 / 16))
+        )
 
         with safe_autocast(enabled=False):
             g = g.float()
@@ -86,6 +94,7 @@ class SensoryUpdater_fullscale(nn.Module):
             new_h = _recurrent_update(h, values)
 
         return new_h
+
 
 class SensoryUpdater(nn.Module):
     # Used in the decoder, multi-scale feature + GRU
@@ -100,8 +109,11 @@ class SensoryUpdater(nn.Module):
         nn.init.xavier_normal_(self.transform.weight)
 
     def forward(self, g: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
-        g = self.g16_conv(g[0]) + self.g8_conv(downsample_groups(g[1], ratio=1/2)) + \
-            self.g4_conv(downsample_groups(g[2], ratio=1/4))
+        g = (
+            self.g16_conv(g[0])
+            + self.g8_conv(downsample_groups(g[1], ratio=1 / 2))
+            + self.g4_conv(downsample_groups(g[2], ratio=1 / 4))
+        )
 
         with safe_autocast(enabled=False):
             g = g.float()
@@ -128,7 +140,7 @@ class SensoryDeepUpdater(nn.Module):
 
         return new_h
 
-  
+
 class ResBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int):
         super().__init__()

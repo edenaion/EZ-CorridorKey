@@ -11,7 +11,6 @@ import cv2
 import numpy as np
 from PIL import Image
 from typing import Callable, Iterator, List, Optional
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +21,17 @@ if current_dir not in sys.path:
 
 from .pipeline import VideoInferencePipeline
 
-def load_videomama_model(base_model_path: Optional[str] = None, unet_checkpoint_path: Optional[str] = None, device: str = "cuda") -> VideoInferencePipeline:
+
+def load_videomama_model(
+    base_model_path: Optional[str] = None,
+    unet_checkpoint_path: Optional[str] = None,
+    device: str = "cuda",
+) -> VideoInferencePipeline:
     """
     Load VideoMaMa pipeline with pretrained weights.
 
     Args:
-        base_model_path (str, optional): Path to the base Stable Video Diffusion model. 
+        base_model_path (str, optional): Path to the base Stable Video Diffusion model.
                                          Defaults to 'checkpoints/stable-video-diffusion-img2vid-xt' in module dir.
         unet_checkpoint_path (str, optional): Path to the fine-tuned UNet checkpoint.
                                               Defaults to 'checkpoints/VideoMaMa' in module dir.
@@ -38,14 +42,16 @@ def load_videomama_model(base_model_path: Optional[str] = None, unet_checkpoint_
     """
     # Default to local checkpoints if not provided
     if base_model_path is None:
-        base_model_path = os.path.join(current_dir, "checkpoints", "stable-video-diffusion-img2vid-xt")
-    
+        base_model_path = os.path.join(
+            current_dir, "checkpoints", "stable-video-diffusion-img2vid-xt"
+        )
+
     if unet_checkpoint_path is None:
         unet_checkpoint_path = os.path.join(current_dir, "checkpoints", "VideoMaMa")
 
     logger.info(f"Loading Base model from {base_model_path}...")
     logger.info(f"Loading VideoMaMa UNet from {unet_checkpoint_path}...")
-    
+
     # Check if paths exist
     if not os.path.exists(base_model_path):
         raise FileNotFoundError(f"Base model path not found: {base_model_path}")
@@ -55,14 +61,17 @@ def load_videomama_model(base_model_path: Optional[str] = None, unet_checkpoint_
     pipeline = VideoInferencePipeline(
         base_model_path=base_model_path,
         unet_checkpoint_path=unet_checkpoint_path,
-        weight_dtype=torch.float16, # Use float16 for inference by default
-        device=device
+        weight_dtype=torch.float16,  # Use float16 for inference by default
+        device=device,
     )
-    
+
     logger.info("VideoMaMa pipeline loaded successfully")
     return pipeline
 
-def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None) -> tuple[List[np.ndarray], float]:
+
+def extract_frames_from_video(
+    video_path: str, max_frames: Optional[int] = None
+) -> tuple[List[np.ndarray], float]:
     """
     Extract frames from video file.
 
@@ -78,7 +87,7 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
 
     cap = cv2.VideoCapture(video_path)
     original_fps = cap.get(cv2.CAP_PROP_FPS)
-    
+
     all_frames = []
     while cap.isOpened():
         ret, frame = cap.read()
@@ -87,15 +96,16 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
         # Convert BGR to RGB
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         all_frames.append(frame_rgb)
-    
+
     cap.release()
-    
+
     if max_frames and len(all_frames) > max_frames:
         frames = all_frames[:max_frames]
     else:
         frames = all_frames
-    
+
     return frames, original_fps
+
 
 def run_inference(
     pipeline: VideoInferencePipeline,
@@ -121,7 +131,9 @@ def run_inference(
         List[np.ndarray]: Chunk of output RGB frames (H,W,3) uint8.
     """
     if len(input_frames) != len(mask_frames):
-        raise ValueError(f"Input frames ({len(input_frames)}) and mask frames ({len(mask_frames)}) must have same length.")
+        raise ValueError(
+            f"Input frames ({len(input_frames)}) and mask frames ({len(mask_frames)}) must have same length."
+        )
 
     if not input_frames:
         return
@@ -131,12 +143,14 @@ def run_inference(
     target_width, target_height = 1024, 576
     total_chunks = (len(input_frames) + chunk_size - 1) // chunk_size
 
-    logger.info(f"Processing {len(input_frames)} frames in chunks of {chunk_size} ({total_chunks} chunks)")
+    logger.info(
+        f"Processing {len(input_frames)} frames in chunks of {chunk_size} ({total_chunks} chunks)"
+    )
 
     for i in range(0, len(input_frames), chunk_size):
         chunk_idx = i // chunk_size + 1
-        chunk_input = input_frames[i:i + chunk_size]
-        chunk_masks = mask_frames[i:i + chunk_size]
+        chunk_input = input_frames[i : i + chunk_size]
+        chunk_masks = mask_frames[i : i + chunk_size]
 
         # Per-chunk PIL conversion + resize (2-3 sec instead of minutes upfront)
         chunk_frames_pil = [
@@ -148,10 +162,14 @@ def run_inference(
             if m.ndim == 3:
                 m = cv2.cvtColor(m, cv2.COLOR_RGB2GRAY)
             chunk_masks_pil.append(
-                Image.fromarray(m, mode='L').resize((target_width, target_height), Image.Resampling.BILINEAR)
+                Image.fromarray(m, mode="L").resize(
+                    (target_width, target_height), Image.Resampling.BILINEAR
+                )
             )
 
-        logger.debug(f"Running inference on chunk {chunk_idx}/{total_chunks} ({len(chunk_frames_pil)} frames)")
+        logger.debug(
+            f"Running inference on chunk {chunk_idx}/{total_chunks} ({len(chunk_frames_pil)} frames)"
+        )
 
         torch.cuda.empty_cache()
 
@@ -170,10 +188,12 @@ def run_inference(
         )
 
         # Resize output back to original resolution
-        chunk_output_resized = [f.resize(original_size, Image.Resampling.BILINEAR)
-                                for f in chunk_output]
+        chunk_output_resized = [
+            f.resize(original_size, Image.Resampling.BILINEAR) for f in chunk_output
+        ]
 
         yield [np.array(f) for f in chunk_output_resized]
+
 
 def save_video(frames: List[np.ndarray], output_path: str, fps: float):
     """
@@ -186,16 +206,15 @@ def save_video(frames: List[np.ndarray], output_path: str, fps: float):
     """
     if not frames:
         return
-    
+
     height, width = frames[0].shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-    
+
     for frame in frames:
         # Convert RGB to BGR for OpenCV
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         out.write(frame_bgr)
-    
+
     out.release()
     logger.info(f"Saved video to {output_path}")
-

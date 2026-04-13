@@ -1,4 +1,5 @@
 """Video probing via ffprobe."""
+
 from __future__ import annotations
 
 import json
@@ -27,15 +28,20 @@ def probe_video(path: str) -> dict:
 
     cmd = [
         ffprobe,
-        "-v", "quiet",
-        "-print_format", "json",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
         "-show_streams",
         "-show_format",
         path,
     ]
 
     result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=30,
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=30,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     if result.returncode != 0:
@@ -70,8 +76,9 @@ def probe_video(path: str) -> dict:
             pass
 
     if frame_count <= 0:
-        duration = float(video_stream.get("duration", 0) or
-                         data.get("format", {}).get("duration", 0))
+        duration = float(
+            video_stream.get("duration", 0) or data.get("format", {}).get("duration", 0)
+        )
         if duration > 0:
             frame_count = int(duration * fps)
 
@@ -81,8 +88,9 @@ def probe_video(path: str) -> dict:
         "height": int(video_stream.get("height", 0)),
         "frame_count": frame_count,
         "codec": video_stream.get("codec_name", "unknown"),
-        "duration": float(video_stream.get("duration", 0) or
-                          data.get("format", {}).get("duration", 0)),
+        "duration": float(
+            video_stream.get("duration", 0) or data.get("format", {}).get("duration", 0)
+        ),
         # Color metadata for building explicit conversion filters
         "pix_fmt": video_stream.get("pix_fmt", ""),
         "color_space": video_stream.get("color_space", ""),

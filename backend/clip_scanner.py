@@ -3,6 +3,7 @@
 Extracted from clip_state.py to keep that module focused on dataclasses
 and state machine logic.
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,7 +43,7 @@ def scan_project_clips(project_dir: str) -> list[ClipEntry]:
         entries: list[ClipEntry] = []
         for item in sorted(os.listdir(clips_dir)):
             item_path = os.path.join(clips_dir, item)
-            if item.startswith('.') or item.startswith('_'):
+            if item.startswith(".") or item.startswith("_"):
                 continue
             if not os.path.isdir(item_path):
                 continue
@@ -94,6 +95,7 @@ def scan_clips_dir(
 
     # If the directory itself is a v2 project, scan its clips directly
     from .project import is_v2_project
+
     if is_v2_project(clips_dir):
         return scan_project_clips(clips_dir)
 
@@ -103,12 +105,13 @@ def scan_clips_dir(
         item_path = os.path.join(clips_dir, item)
 
         # Skip hidden and special items
-        if item.startswith('.') or item.startswith('_'):
+        if item.startswith(".") or item.startswith("_"):
             continue
 
         if os.path.isdir(item_path):
             # Check if this is a v2 project container (has clips/ subdir)
             from .project import is_v2_project
+
             if is_v2_project(item_path):
                 # v2 project: scan its clips/ subdirectory
                 for clip in scan_project_clips(item_path):
@@ -126,15 +129,13 @@ def scan_clips_dir(
                     # Skip folders without valid input assets
                     logger.debug(str(e))
 
-        elif (allow_standalone_videos
-              and os.path.isfile(item_path)
-              and _is_video_file(item_path)):
+        elif allow_standalone_videos and os.path.isfile(item_path) and _is_video_file(item_path):
             # Standalone video file → treat as a clip needing extraction
             stem = os.path.splitext(item)[0]
             if stem in seen_names:
                 continue  # folder clip already exists with this name
             clip = ClipEntry(name=stem, root_path=clips_dir)
-            clip.input_asset = ClipAsset(item_path, 'video')
+            clip.input_asset = ClipAsset(item_path, "video")
             clip.state = ClipState.EXTRACTING
             entries.append(clip)
             seen_names.add(stem)

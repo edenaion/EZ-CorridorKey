@@ -4,6 +4,7 @@ Covers dtype casting behaviour for non-standard integer types, boundary frame
 counts, unexpected array dimensions, empty/minimal frames, and directory
 creation idempotency.
 """
+
 import os
 import tempfile
 
@@ -23,6 +24,7 @@ from backend.errors import MaskChannelError
 # ---------------------------------------------------------------------------
 # normalize_mask_dtype — non-standard integer dtypes
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeMaskDtypeEdge:
     """normalize_mask_dtype falls through to the bare astype(float32) branch
@@ -66,6 +68,7 @@ class TestNormalizeMaskDtypeEdge:
 # validate_frame_counts — boundary counts
 # ---------------------------------------------------------------------------
 
+
 class TestValidateFrameCountsEdge:
     def test_both_zero_returns_zero(self):
         # min(0, 0) == 0; no mismatch, no warning.
@@ -83,6 +86,7 @@ class TestValidateFrameCountsEdge:
 # ---------------------------------------------------------------------------
 # normalize_mask_channels — unsupported dimensions
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeMaskChannelsEdge:
     def test_1d_raises_mask_channel_error(self):
@@ -105,6 +109,7 @@ class TestNormalizeMaskChannelsEdge:
 # validate_frame_read — empty and minimal valid arrays
 # ---------------------------------------------------------------------------
 
+
 class TestValidateFrameReadEdge:
     def test_empty_array_shape_passes(self):
         # An array with a zero dimension is NOT None — it passes validation.
@@ -121,6 +126,7 @@ class TestValidateFrameReadEdge:
 # ---------------------------------------------------------------------------
 # ensure_output_dirs — nested creation and idempotency
 # ---------------------------------------------------------------------------
+
 
 class TestEnsureOutputDirsEdge:
     def test_nested_creation_creates_all_subdirs(self):

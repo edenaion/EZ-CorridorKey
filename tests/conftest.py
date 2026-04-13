@@ -1,4 +1,5 @@
 """Shared fixtures for ez-CorridorKey backend tests."""
+
 import os
 import tempfile
 
@@ -129,12 +130,16 @@ def tmp_project_dir(sample_frame, sample_mask):
 
         # project.json
         import json
+
         with open(os.path.join(project_root, "project.json"), "w") as f:
-            json.dump({
-                "version": 1,
-                "display_name": "Test Project",
-                "source": {"filename": "test_video.mp4"},
-            }, f)
+            json.dump(
+                {
+                    "version": 1,
+                    "display_name": "Test Project",
+                    "source": {"filename": "test_video.mp4"},
+                },
+                f,
+            )
 
         yield project_root
 
@@ -179,16 +184,23 @@ def tmp_v2_project_dir(sample_frame, sample_mask):
             cv2.imwrite(os.path.join(alpha_dir, f"_alphaHint_{i:06d}.png"), mask_u8)
 
         import json
+
         with open(os.path.join(project_root, "project.json"), "w") as f:
-            json.dump({
-                "version": 2,
-                "display_name": "Test Project",
-                "clips": ["test_clip"],
-            }, f)
+            json.dump(
+                {
+                    "version": 2,
+                    "display_name": "Test Project",
+                    "clips": ["test_clip"],
+                },
+                f,
+            )
 
         with open(os.path.join(clip_dir, "clip.json"), "w") as f:
-            json.dump({
-                "source": {"filename": "test_video.mp4", "copied": True},
-            }, f)
+            json.dump(
+                {
+                    "source": {"filename": "test_video.mp4", "copied": True},
+                },
+                f,
+            )
 
         yield project_root

@@ -50,8 +50,9 @@ class CancelMixin:
                 # Check if frames already exist -> RAW, else back to VIDEO
                 frames_dir = os.path.join(clip.root_path, "Frames")
                 input_dir = os.path.join(clip.root_path, "Input")
-                has_frames = (os.path.isdir(frames_dir) and os.listdir(frames_dir)) or \
-                             (os.path.isdir(input_dir) and os.listdir(input_dir))
+                has_frames = (os.path.isdir(frames_dir) and os.listdir(frames_dir)) or (
+                    os.path.isdir(input_dir) and os.listdir(input_dir)
+                )
                 new_state = ClipState.RAW if has_frames else ClipState.ERROR
                 self._clip_model.update_clip_state(clip.name, new_state)
         self._io_tray.refresh()
@@ -64,8 +65,7 @@ class CancelMixin:
 
         queue = self._service.job_queue
         current_job = queue.current_job
-        is_videomama = (queue.current_job
-                        and queue.current_job.job_type == JobType.VIDEOMAMA_ALPHA)
+        is_videomama = queue.current_job and queue.current_job.job_type == JobType.VIDEOMAMA_ALPHA
         self._cancel_requested_job_id = current_job.id if current_job is not None else None
         queue.cancel_all()
         self._pipeline_steps.clear()
@@ -85,9 +85,11 @@ class CancelMixin:
         self._queue_panel.refresh()
         logger.info("Processing cancelled by user")
         if is_videomama:
-            _Toast(self, "GPU is finishing the current chunk.\n"
-                         "VideoMaMa will stop after it completes.",
-                   center=True)
+            _Toast(
+                self,
+                "GPU is finishing the current chunk.\nVideoMaMa will stop after it completes.",
+                center=True,
+            )
 
     def _force_restart_app(self) -> None:
         """Hard-stop a blocked GPU phase by relaunching the app process."""
@@ -112,9 +114,8 @@ class CancelMixin:
 
         kwargs: dict = {"cwd": cwd}
         if os.name == "nt":
-            kwargs["creationflags"] = (
-                getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-                | getattr(subprocess, "DETACHED_PROCESS", 0)
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
+                subprocess, "DETACHED_PROCESS", 0
             )
         else:
             kwargs["start_new_session"] = True
@@ -147,7 +148,8 @@ class CancelMixin:
 
         if self._force_stop_armed:
             reply = QMessageBox.question(
-                self, "Force Stop",
+                self,
+                "Force Stop",
                 "The current GPU step has not returned to Python.\n\n"
                 "Force Stop will auto-save the session and relaunch the app "
                 "to break the stuck job immediately.\n\n"
@@ -161,7 +163,8 @@ class CancelMixin:
             return
 
         reply = QMessageBox.question(
-            self, "Cancel",
+            self,
+            "Cancel",
             "Cancel processing?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
@@ -170,6 +173,7 @@ class CancelMixin:
             return
 
         from ui.sounds.audio_manager import UIAudio
+
         UIAudio.user_cancel()
         self._cancel_inference()
 

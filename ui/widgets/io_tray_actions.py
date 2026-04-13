@@ -12,6 +12,7 @@ This mixin expects to be mixed into a class that has:
   - self.get_selected_clips() -> list[ClipEntry]
   - self._rebuild() -> None
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,17 +55,21 @@ class IOTrayActionsMixin:
 
         # Run Extraction — for clips that have a video source and need frames
         from backend.clip_state import ClipState
+
         needs_extract = [
-            c for c in selected
+            c
+            for c in selected
             if c.state == ClipState.EXTRACTING
             or (c.input_asset and c.input_asset.asset_type == "video")
         ]
         if needs_extract:
-            label_ext = (f"Run Extraction ({len(needs_extract)} clips)"
-                         if len(needs_extract) > 1 else "Run Extraction")
+            label_ext = (
+                f"Run Extraction ({len(needs_extract)} clips)"
+                if len(needs_extract) > 1
+                else "Run Extraction"
+            )
             extract_action = QAction(label_ext, self)
-            extract_action.triggered.connect(
-                lambda: self.extract_requested.emit(needs_extract))
+            extract_action.triggered.connect(lambda: self.extract_requested.emit(needs_extract))
             menu.addAction(extract_action)
             menu.addSeparator()
 
@@ -136,6 +141,7 @@ class IOTrayActionsMixin:
         menu.addAction(remove_action)
 
         from PySide6.QtGui import QCursor
+
         menu.exec(QCursor.pos())
 
     def _on_export_context_menu(self, clip: ClipEntry) -> None:
@@ -143,11 +149,12 @@ class IOTrayActionsMixin:
         menu = QMenu(self)
 
         # Export Video — list each available output subdirectory
-        if clip.state == ClipState.COMPLETE and hasattr(clip, 'output_dir'):
+        if clip.state == ClipState.COMPLETE and hasattr(clip, "output_dir"):
             output_dir = clip.output_dir
             if os.path.isdir(output_dir):
                 subdirs = sorted(
-                    d for d in os.listdir(output_dir)
+                    d
+                    for d in os.listdir(output_dir)
                     if os.path.isdir(os.path.join(output_dir, d))
                     and os.listdir(os.path.join(output_dir, d))
                 )
@@ -156,7 +163,9 @@ class IOTrayActionsMixin:
                         src = os.path.join(output_dir, subdir)
                         action = QAction(f"Export {subdir} as Video...", self)
                         action.triggered.connect(
-                            lambda checked=False, c=clip, s=src: self.export_video_requested.emit(c, s)
+                            lambda checked=False, c=clip, s=src: self.export_video_requested.emit(
+                                c, s
+                            )
                         )
                         menu.addAction(action)
                     menu.addSeparator()
@@ -173,14 +182,18 @@ class IOTrayActionsMixin:
         menu.addAction(open_action)
 
         from PySide6.QtGui import QCursor
+
         menu.exec(QCursor.pos())
 
     def _set_output_dir(self, clip: ClipEntry) -> None:
         """Prompt user to pick a custom output directory for this clip."""
         from backend.project import save_custom_output_dir
+
         start = clip.custom_output_dir or clip.output_dir
         path = QFileDialog.getExistingDirectory(
-            self, f"Output Directory for '{clip.name}'", start,
+            self,
+            f"Output Directory for '{clip.name}'",
+            start,
             QFileDialog.ShowDirsOnly,
         )
         if not path:
@@ -192,6 +205,7 @@ class IOTrayActionsMixin:
     def _clear_output_dir(self, clip: ClipEntry) -> None:
         """Remove per-clip output directory override."""
         from backend.project import save_custom_output_dir
+
         clip.custom_output_dir = ""
         save_custom_output_dir(clip.root_path, None)
         logger.info(f"Cleared custom output dir for '{clip.name}'")
@@ -211,7 +225,10 @@ class IOTrayActionsMixin:
 
         current = clip.name
         new_name, ok = QInputDialog.getText(
-            self, "Rename Clip", "New name:", text=current,
+            self,
+            "Rename Clip",
+            "New name:",
+            text=current,
         )
         if not ok or not new_name.strip() or new_name.strip() == current:
             return
@@ -229,10 +246,12 @@ class IOTrayActionsMixin:
         if len(clips) > 3:
             names += f" (+{len(clips) - 3} more)"
         confirm = QMessageBox.question(
-            self, "Clear Mask",
+            self,
+            "Clear Mask",
             f"Delete tracked masks for {len(clips)} clip(s)?\n{names}\n\n"
             "This will remove all SAM2 mask frames from disk.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
             return
@@ -293,10 +312,12 @@ class IOTrayActionsMixin:
         if len(clips) > 3:
             names += f" (+{len(clips) - 3} more)"
         confirm = QMessageBox.question(
-            self, "Clear All",
+            self,
+            "Clear All",
             f"Remove ALL generated data for {len(clips)} clip(s)?\n{names}\n\n"
             "This will delete masks, alpha hints, and all output frames.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
             return
@@ -338,10 +359,12 @@ class IOTrayActionsMixin:
         if len(clips) > 3:
             names += f" (+{len(clips) - 3} more)"
         confirm = QMessageBox.question(
-            self, "Clear Alpha",
+            self,
+            "Clear Alpha",
             f"Delete AlphaHint for {len(clips)} clip(s)?\n{names}\n\n"
             "This will remove all generated alpha hint frames from disk.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
             return
@@ -370,10 +393,12 @@ class IOTrayActionsMixin:
         if len(clips) > 3:
             names += f" (+{len(clips) - 3} more)"
         confirm = QMessageBox.question(
-            self, "Clear Outputs",
+            self,
+            "Clear Outputs",
             f"Remove all output files for {len(clips)} clip(s)?\n{names}\n\n"
             "This will delete FG, Matte, Comp, and Processed frames.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
             return
@@ -406,9 +431,7 @@ class IOTrayActionsMixin:
         msg = QMessageBox(self)
         msg.setWindowTitle(title)
         msg.setIcon(QMessageBox.Warning)
-        msg.setText(
-            f"How would you like to remove {n} clip{'s' if n > 1 else ''}?"
-        )
+        msg.setText(f"How would you like to remove {n} clip{'s' if n > 1 else ''}?")
         msg.setInformativeText(paths_text)
 
         btn_list = msg.addButton("Remove from List", QMessageBox.AcceptRole)

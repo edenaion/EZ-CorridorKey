@@ -1,4 +1,5 @@
 """Parallel inference pipeline — reader/worker/writer thread architecture."""
+
 from __future__ import annotations
 
 import logging
@@ -40,24 +41,29 @@ class ParallelInferenceMixin:
     ) -> list:
         """Parallel frame pipeline: reader thread -> N workers -> writer thread."""
         from .core import FrameResult, OutputConfig
+
         N = len(engines)
         logger.info("Starting parallel inference with %d engines", N)
 
         t_start = time.monotonic()
         dirs = ensure_output_dirs(clip.output_dir)
         cfg = output_config or OutputConfig()
-        self._write_manifest(dirs['root'], cfg, params)
+        self._write_manifest(dirs["root"], cfg, params)
 
-        if clip.input_asset.asset_type == 'sequence' and clip.alpha_asset.asset_type == 'sequence':
+        if clip.input_asset.asset_type == "sequence" and clip.alpha_asset.asset_type == "sequence":
             num_frames = clip.input_asset.frame_count
             if clip.input_asset.frame_count != clip.alpha_asset.frame_count:
                 logger.warning(
                     "Clip '%s': sequence alpha count mismatch — input has %d, alpha has %d.",
-                    clip.name, clip.input_asset.frame_count, clip.alpha_asset.frame_count,
+                    clip.name,
+                    clip.input_asset.frame_count,
+                    clip.alpha_asset.frame_count,
                 )
         else:
             num_frames = validate_frame_counts(
-                clip.name, clip.input_asset.frame_count, clip.alpha_asset.frame_count,
+                clip.name,
+                clip.input_asset.frame_count,
+                clip.alpha_asset.frame_count,
             )
 
         if frame_range is not None:
@@ -98,7 +104,8 @@ class ParallelInferenceMixin:
                 frame_idx, img, mask, stem, is_linear = item
                 try:
                     res = eng.process_frame(
-                        img, mask,
+                        img,
+                        mask,
                         input_is_linear=is_linear,
                         fg_is_straight=True,
                         despill_strength=params.despill_strength,
@@ -130,18 +137,19 @@ class ParallelInferenceMixin:
             alpha_files: list[str] = []
 
             try:
-                if clip.input_asset.asset_type == 'video':
+                if clip.input_asset.asset_type == "video":
                     input_cap = cv2.VideoCapture(clip.input_asset.path)
                 else:
                     input_files = clip.input_asset.get_frame_files()
 
-                if clip.alpha_asset.asset_type == 'video':
+                if clip.alpha_asset.asset_type == "video":
                     alpha_cap = cv2.VideoCapture(clip.alpha_asset.path)
                 else:
                     alpha_files = clip.alpha_asset.get_frame_files()
                 alpha_stem_lookup = (
                     {os.path.splitext(fname)[0]: fname for fname in alpha_files}
-                    if alpha_files else None
+                    if alpha_files
+                    else None
                 )
 
                 for i in frame_indices:
@@ -149,10 +157,16 @@ class ParallelInferenceMixin:
                         break
 
                     img, input_stem, is_linear = self._read_input_frame(
-                        clip, i, input_files, input_cap, params.input_is_linear,
+                        clip,
+                        i,
+                        input_files,
+                        input_cap,
+                        params.input_is_linear,
                     )
                     if img is None:
-                        out_q.put((i, f"{i:05d}", None, FrameReadError(clip.name, i, "video read failed")))
+                        out_q.put(
+                            (i, f"{i:05d}", None, FrameReadError(clip.name, i, "video read failed"))
+                        )
                         continue
 
                     if input_stem in skip_stems:
@@ -160,15 +174,23 @@ class ParallelInferenceMixin:
                         continue
 
                     mask = self._read_alpha_frame(
-                        clip, i, alpha_files, alpha_cap,
-                        input_stem=input_stem, alpha_stem_lookup=alpha_stem_lookup,
+                        clip,
+                        i,
+                        alpha_files,
+                        alpha_cap,
+                        input_stem=input_stem,
+                        alpha_stem_lookup=alpha_stem_lookup,
                     )
                     if mask is None:
-                        out_q.put((i, input_stem, None, FrameReadError(clip.name, i, "alpha read failed")))
+                        out_q.put(
+                            (i, input_stem, None, FrameReadError(clip.name, i, "alpha read failed"))
+                        )
                         continue
 
                     if mask.shape[:2] != img.shape[:2]:
-                        mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+                        mask = cv2.resize(
+                            mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR
+                        )
 
                     in_q.put((i, img, mask, input_stem, is_linear))
             finally:
@@ -264,9 +286,9 @@ class ParallelInferenceMixin:
 
         # Launch all threads
         threads = (
-            [threading.Thread(target=reader, name="ck-reader")] +
-            [threading.Thread(target=worker, args=(i,), name=f"ck-worker-{i}") for i in range(N)] +
-            [threading.Thread(target=writer, name="ck-writer")]
+            [threading.Thread(target=reader, name="ck-reader")]
+            + [threading.Thread(target=worker, args=(i,), name=f"ck-worker-{i}") for i in range(N)]
+            + [threading.Thread(target=writer, name="ck-writer")]
         )
         for t in threads:
             t.start()
@@ -283,7 +305,12 @@ class ParallelInferenceMixin:
             raise JobCancelledError(clip.name, 0)
 
         return self._finalize_inference(
-            clip, results, skipped, processed_count_box[0],
-            t_start, frame_range, num_frames,
+            clip,
+            results,
+            skipped,
+            processed_count_box[0],
+            t_start,
+            frame_range,
+            num_frames,
             on_warning=on_warning,
         )

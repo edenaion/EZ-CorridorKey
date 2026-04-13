@@ -12,7 +12,7 @@ EZ-CorridorKey is a GUI built on top of [Niko Pueringer's CorridorKey](https://g
 
 - Python 3.11
 - A virtual environment (`python -m venv .venv`)
-- GPU with CUDA support (recommended), or Apple Silicon for MLX backend
+- GPU with CUDA support (recommended), or Apple Silicon for MLX backend; **AMD (ROCm)** is supported via **[Docker only](docs/ROCm_Setup.md)** (see `docker/Dockerfile.rocm` and Compose profile **`rocm`**)
 
 ### Dev Setup
 
@@ -40,6 +40,14 @@ pytest -v                    # verbose
 pytest -m "not gpu"          # skip GPU-dependent tests
 ```
 
+ROCm startup tests (mocked; no AMD GPU). Pass the file path so collection stays fast; `--noconftest` avoids `cv2` from the shared `conftest.py`:
+
+```bash
+uv run --extra dev pytest tests/test_rocm_setup.py -m rocm -v --noconftest
+```
+
+If you use Docker Compose, the **`rocm`** profile binds the same **6080–6081** ports as the default CPU/GPU services — only run one stack at a time unless you remap ports.
+
 Most tests run in seconds and don't require a GPU or model weights.
 
 ### Linting and Formatting
@@ -49,6 +57,8 @@ ruff check                   # check for lint errors
 ruff format --check          # check formatting
 ruff format                  # auto-format
 ```
+
+The **`Ruff`** workflow (`.github/workflows/ruff.yml`) runs **`ruff check .`** and **`ruff format --check .`** on pushes and pull requests that touch Python or **`pyproject.toml`**; merges should stay green. **`[tool.ruff.lint]`** in **`pyproject.toml`** documents ignored rules (**`E402`**, **`E701`**) for legacy import layout.
 
 ## Making Changes
 

@@ -4,6 +4,7 @@ Uses QButtonGroup with exclusive selection. Active button highlighted
 with brand yellow. Buttons are enabled/disabled based on which output
 directories actually have frames (via FrameIndex availability).
 """
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QButtonGroup
@@ -96,7 +97,6 @@ class ViewModeBar(QWidget):
 
         self._button_group.idClicked.connect(self._on_mode_clicked)
         layout.addStretch()
-
 
     def set_available_modes(self, modes: list[ViewMode]) -> None:
         """Enable buttons for modes that have frames."""

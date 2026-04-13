@@ -13,8 +13,17 @@ from .session_mixin import SessionMixin
 from .settings_mixin import SettingsMixin
 
 __all__ = [
-    "MenuMixin", "ShortcutsMixin", "ClipMixin", "ImportMixin",
-    "InferenceMixin", "AlphaImportMixin", "ModelRunMixin", "CancelMixin",
-    "WorkerMixin", "AnnotationMixin",
-    "ExportMixin", "SessionMixin", "SettingsMixin",
+    "MenuMixin",
+    "ShortcutsMixin",
+    "ClipMixin",
+    "ImportMixin",
+    "InferenceMixin",
+    "AlphaImportMixin",
+    "ModelRunMixin",
+    "CancelMixin",
+    "WorkerMixin",
+    "AnnotationMixin",
+    "ExportMixin",
+    "SessionMixin",
+    "SettingsMixin",
 ]

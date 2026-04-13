@@ -15,6 +15,7 @@ Requirements:
     - CorridorKey checkpoint in CorridorKeyModule/checkpoints/
     - Enough VRAM for 2 engine instances (~4 GB minimum)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,7 +26,6 @@ import sys
 import time
 import threading
 
-import cv2
 import numpy as np
 import torch
 
@@ -74,8 +74,9 @@ def warmup_engine(engine: CorridorKeyEngine, image: np.ndarray, mask: np.ndarray
     print(f"done ({time.monotonic() - t0:.2f}s)")
 
 
-def bench_sequential(engine: CorridorKeyEngine, image: np.ndarray, mask: np.ndarray,
-                     n_frames: int) -> tuple[float, float]:
+def bench_sequential(
+    engine: CorridorKeyEngine, image: np.ndarray, mask: np.ndarray, n_frames: int
+) -> tuple[float, float]:
     """Scenario 1: One engine, N frames sequentially."""
     torch.cuda.reset_peak_memory_stats()
 
@@ -88,9 +89,13 @@ def bench_sequential(engine: CorridorKeyEngine, image: np.ndarray, mask: np.ndar
     return elapsed, peak
 
 
-def bench_two_engines_sequential(engine1: CorridorKeyEngine, engine2: CorridorKeyEngine,
-                                  image: np.ndarray, mask: np.ndarray,
-                                  n_frames: int) -> tuple[float, float]:
+def bench_two_engines_sequential(
+    engine1: CorridorKeyEngine,
+    engine2: CorridorKeyEngine,
+    image: np.ndarray,
+    mask: np.ndarray,
+    n_frames: int,
+) -> tuple[float, float]:
     """Scenario 2: Two engines, alternating frames (no overlap)."""
     torch.cuda.reset_peak_memory_stats()
 
@@ -106,9 +111,13 @@ def bench_two_engines_sequential(engine1: CorridorKeyEngine, engine2: CorridorKe
     return elapsed, peak
 
 
-def bench_two_engines_concurrent(engine1: CorridorKeyEngine, engine2: CorridorKeyEngine,
-                                  image: np.ndarray, mask: np.ndarray,
-                                  n_frames: int) -> tuple[float, float]:
+def bench_two_engines_concurrent(
+    engine1: CorridorKeyEngine,
+    engine2: CorridorKeyEngine,
+    image: np.ndarray,
+    mask: np.ndarray,
+    n_frames: int,
+) -> tuple[float, float]:
     """Scenario 3: Two engines processing frames concurrently via threads.
 
     PyTorch releases the GIL during CUDA kernel execution, so two Python
@@ -156,16 +165,23 @@ def bench_two_engines_concurrent(engine1: CorridorKeyEngine, engine2: CorridorKe
 
 def main():
     parser = argparse.ArgumentParser(description="Benchmark parallel frame processing")
-    parser.add_argument("--frames", type=int, default=10, help="Number of frames to process per scenario")
+    parser.add_argument(
+        "--frames", type=int, default=10, help="Number of frames to process per scenario"
+    )
     parser.add_argument("--resolution", type=int, default=2048, help="Input resolution (square)")
-    parser.add_argument("--opt-mode", type=str, default="speed", choices=["speed", "lowvram", "auto"],
-                        help="Optimization mode for engines")
+    parser.add_argument(
+        "--opt-mode",
+        type=str,
+        default="speed",
+        choices=["speed", "lowvram", "auto"],
+        help="Optimization mode for engines",
+    )
     args = parser.parse_args()
 
     n_frames = args.frames
     res = args.resolution
 
-    print(f"=== CorridorKey Parallel Frame Benchmark ===")
+    print("=== CorridorKey Parallel Frame Benchmark ===")
     print(f"Frames: {n_frames}, Resolution: {res}x{res}, Opt mode: {args.opt_mode}")
     print()
 
@@ -187,9 +203,10 @@ def main():
 
     # --- Scenario 1: Single engine ---
     print("--- Scenario 1: Single engine, sequential ---")
-    os.environ['CORRIDORKEY_OPT_MODE'] = args.opt_mode
-    engine1 = CorridorKeyEngine(checkpoint_path=ckpt, device='cuda', img_size=2048,
-                                 optimization_mode=args.opt_mode)
+    os.environ["CORRIDORKEY_OPT_MODE"] = args.opt_mode
+    engine1 = CorridorKeyEngine(
+        checkpoint_path=ckpt, device="cuda", img_size=2048, optimization_mode=args.opt_mode
+    )
     vram_after_load1 = get_vram_mb()
     print(f"  VRAM after loading engine 1: {vram_after_load1:.0f} MB")
 
@@ -203,8 +220,9 @@ def main():
 
     # --- Load second engine ---
     print("--- Loading second engine ---")
-    engine2 = CorridorKeyEngine(checkpoint_path=ckpt, device='cuda', img_size=2048,
-                                 optimization_mode=args.opt_mode)
+    engine2 = CorridorKeyEngine(
+        checkpoint_path=ckpt, device="cuda", img_size=2048, optimization_mode=args.opt_mode
+    )
     vram_after_load2 = get_vram_mb()
     print(f"  VRAM after loading engine 2: {vram_after_load2:.0f} MB")
     print(f"  VRAM increase: {vram_after_load2 - vram_after_load1:.0f} MB")
@@ -235,8 +253,10 @@ def main():
     print(f"{'Scenario':<40} {'FPS':>8} {'Speedup':>10} {'Peak VRAM':>12}")
     print("-" * 70)
     print(f"{'1. Single engine, sequential':<40} {fps1:>8.2f} {'1.00x':>10} {peak1:>10.0f} MB")
-    print(f"{'2. Two engines, alternating':<40} {fps2:>8.2f} {fps2/fps1:>9.2f}x {peak2:>10.0f} MB")
-    print(f"{'3. Two engines, concurrent':<40} {fps3:>8.2f} {fps3/fps1:>9.2f}x {peak3:>10.0f} MB")
+    print(
+        f"{'2. Two engines, alternating':<40} {fps2:>8.2f} {fps2 / fps1:>9.2f}x {peak2:>10.0f} MB"
+    )
+    print(f"{'3. Two engines, concurrent':<40} {fps3:>8.2f} {fps3 / fps1:>9.2f}x {peak3:>10.0f} MB")
     print()
 
     if fps3 > fps1 * 1.15:

@@ -58,7 +58,9 @@ class ExportMixin:
                 clip.input_asset.path = target
 
             self._extract_worker.submit(
-                clip.name, clip.input_asset.path, clip.root_path,
+                clip.name,
+                clip.input_asset.path,
+                clip.root_path,
             )
         self._status_bar.start_job_timer(label="Extracting")
         logger.info(f"Auto-extraction queued: {len(extracting)} clip(s)")
@@ -93,10 +95,11 @@ class ExportMixin:
                             os.makedirs(target, exist_ok=True)
                             logger.info(f"Cleared {subdir}/ for retry: {clip.name}")
                     clip.error_message = None
-                    self._clip_model.update_clip_state(
-                        clip.name, ClipState.EXTRACTING)
+                    self._clip_model.update_clip_state(clip.name, ClipState.EXTRACTING)
                 self._extract_worker.submit(
-                    clip.name, clip.input_asset.path, clip.root_path,
+                    clip.name,
+                    clip.input_asset.path,
+                    clip.root_path,
                 )
                 count += 1
         if count:
@@ -166,6 +169,7 @@ class ExportMixin:
         if not self._extract_worker.is_busy:
             self._status_bar.reset_progress()
             from ui.sounds.audio_manager import UIAudio
+
             UIAudio.frame_extract_done()
 
     @Slot(str, str)
@@ -185,13 +189,15 @@ class ExportMixin:
         if not self._extract_worker.is_busy:
             self._status_bar.reset_progress()
         from ui.sounds.audio_manager import UIAudio
+
         UIAudio.error()
         logger.error(f"Extraction failed for {clip_name}: {error_msg}")
 
     # ── Export Video ──
 
-    def _on_export_video(self, clip: ClipEntry | None = None,
-                         source_dir: str | None = None) -> None:
+    def _on_export_video(
+        self, clip: ClipEntry | None = None, source_dir: str | None = None
+    ) -> None:
         """Export output image sequence as video file.
 
         Args:
@@ -206,7 +212,8 @@ class ExportMixin:
 
         if clip.state != ClipState.COMPLETE:
             QMessageBox.warning(
-                self, "Not Complete",
+                self,
+                "Not Complete",
                 f"Clip '{clip.name}' must be COMPLETE to export video.",
             )
             return
@@ -227,11 +234,13 @@ class ExportMixin:
 
         # Read video metadata for fps
         from backend.ffmpeg_tools import read_video_metadata, stitch_video, require_ffmpeg_install
+
         try:
             require_ffmpeg_install(require_probe=True)
         except RuntimeError as exc:
             QMessageBox.critical(
-                self, "FFmpeg Unavailable",
+                self,
+                "FFmpeg Unavailable",
                 str(exc),
             )
             return
@@ -256,29 +265,39 @@ class ExportMixin:
             )
         else:
             default_name = f"{clip.name}_{subdir_name}_export.mp4"
-            file_filter = "MP4 Video (*.mp4);;MOV ProRes (*.mov);;WebM Video (*.webm);;All Files (*)"
+            file_filter = (
+                "MP4 Video (*.mp4);;MOV ProRes (*.mov);;WebM Video (*.webm);;All Files (*)"
+            )
 
         default_path = os.path.join(exports_dir, default_name)
         out_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Video", default_path,
+            self,
+            "Export Video",
+            default_path,
             file_filter,
         )
         if not out_path:
             return
 
         # Determine frame pattern from actual files
-        frames = sorted([f for f in os.listdir(source_dir)
-                         if os.path.splitext(f)[1].lower()
-                         in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff')])
+        frames = sorted(
+            [
+                f
+                for f in os.listdir(source_dir)
+                if os.path.splitext(f)[1].lower()
+                in (".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff")
+            ]
+        )
         if not frames:
             QMessageBox.warning(self, "No Frames", "No image frames found in output directory.")
             return
 
         # Detect pattern from first filename (e.g. frame_000000.png -> frame_%06d.png)
         import re
+
         first = frames[0]
         ext = os.path.splitext(first)[1]
-        m = re.match(r'^(.*?)(\d+)(\.\w+)$', first)
+        m = re.match(r"^(.*?)(\d+)(\.\w+)$", first)
         if m:
             prefix, digits, suffix = m.group(1), m.group(2), m.group(3)
             pattern = f"{prefix}%0{len(digits)}d{suffix}"
@@ -300,15 +319,18 @@ class ExportMixin:
             )
             self._status_bar.set_message("")
             QMessageBox.information(
-                self, "Export Complete",
+                self,
+                "Export Complete",
                 f"Video exported:\n{out_path}",
             )
         except Exception as e:
             self._status_bar.set_message("")
             from ui.sounds.audio_manager import UIAudio
+
             UIAudio.error()
             QMessageBox.critical(
-                self, "Export Failed",
+                self,
+                "Export Failed",
                 f"Failed to export video:\n{e}",
             )
 
@@ -321,7 +343,15 @@ class ExportMixin:
         Writes to each clip's _EXPORTS/ folder.
         """
         from backend.ffmpeg_tools import read_video_metadata, stitch_video, require_ffmpeg_install
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QDialogButtonBox, QTreeWidget, QTreeWidgetItem, QLabel, QComboBox
+        from PySide6.QtWidgets import (
+            QDialog,
+            QVBoxLayout,
+            QDialogButtonBox,
+            QTreeWidget,
+            QTreeWidgetItem,
+            QLabel,
+            QComboBox,
+        )
         import re
 
         try:
@@ -373,11 +403,14 @@ class ExportMixin:
                 node.setCheckState(0, Qt.Checked)
                 clip_nodes[clip.name] = node
 
-            frame_count = len([
-                f for f in os.listdir(src)
-                if os.path.splitext(f)[1].lower()
-                in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff')
-            ])
+            frame_count = len(
+                [
+                    f
+                    for f in os.listdir(src)
+                    if os.path.splitext(f)[1].lower()
+                    in (".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff")
+                ]
+            )
             is_processed = subdir.lower() == "processed"
 
             child = QTreeWidgetItem(clip_nodes[clip.name], [subdir, "", str(frame_count)])
@@ -426,7 +459,11 @@ class ExportMixin:
 
         # ── Export with progress ──
         progress = QProgressDialog(
-            "Exporting videos...", "Cancel", 0, len(selected), self,
+            "Exporting videos...",
+            "Cancel",
+            0,
+            len(selected),
+            self,
         )
         progress.setWindowTitle("Batch Export")
         progress.setWindowModality(Qt.WindowModal)
@@ -444,15 +481,16 @@ class ExportMixin:
             fps = metadata.get("fps", 24.0) if metadata else 24.0
 
             frames = sorted(
-                f for f in os.listdir(src)
+                f
+                for f in os.listdir(src)
                 if os.path.splitext(f)[1].lower()
-                in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff')
+                in (".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff")
             )
             if not frames:
                 continue
 
             first = frames[0]
-            m = re.match(r'^(.*?)(\d+)(\.\w+)$', first)
+            m = re.match(r"^(.*?)(\d+)(\.\w+)$", first)
             if m:
                 prefix, digits, suffix = m.group(1), m.group(2), m.group(3)
                 pattern = f"{prefix}%0{len(digits)}d{suffix}"
@@ -464,8 +502,11 @@ class ExportMixin:
 
             try:
                 stitch_video(
-                    in_dir=src, out_path=out_path, fps=fps,
-                    pattern=pattern, start_number=start_number,
+                    in_dir=src,
+                    out_path=out_path,
+                    fps=fps,
+                    pattern=pattern,
+                    start_number=start_number,
                 )
                 exported.append(f"{clip.name}/{subdir}")
             except Exception as e:
@@ -479,10 +520,12 @@ class ExportMixin:
             summary += f"\n\n{len(failed)} failed:\n" + "\n".join(failed[:5])
         if exported:
             from ui.sounds.audio_manager import UIAudio
+
             UIAudio.frame_extract_done()
             QMessageBox.information(self, "Batch Export Complete", summary)
         elif failed:
             from ui.sounds.audio_manager import UIAudio
+
             UIAudio.error()
             QMessageBox.warning(self, "Batch Export", summary)
 
@@ -538,8 +581,7 @@ class ExportMixin:
         # Re-resolve state: removing in/out may drop READY -> RAW
         # if alpha only partially covers the full clip
         self._current_clip._resolve_state()
-        self._clip_model.update_clip_state(
-            self._current_clip.name, self._current_clip.state)
+        self._clip_model.update_clip_state(self._current_clip.name, self._current_clip.state)
         self._io_tray.refresh()
         self._refresh_button_state()
 
@@ -555,8 +597,7 @@ class ExportMixin:
             # Re-resolve state: partial alpha + new in/out range may
             # promote RAW -> READY (v1.2.1 partial alpha logic)
             self._current_clip._resolve_state()
-            self._clip_model.update_clip_state(
-                self._current_clip.name, self._current_clip.state)
+            self._clip_model.update_clip_state(self._current_clip.name, self._current_clip.state)
             self._io_tray.refresh()
         self._refresh_button_state()
 

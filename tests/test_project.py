@@ -1,10 +1,9 @@
 """Tests for backend.project module — project folder creation and metadata."""
-import json
+
 import os
 import tempfile
 from unittest.mock import patch
 
-import pytest
 
 from backend.project import (
     sanitize_stem,
@@ -139,6 +138,7 @@ class TestInOutRangeStorage:
     def test_save_load_with_clip_json(self):
         """In/out range saved to clip.json when clip.json exists."""
         from backend.clip_state import InOutRange
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a clip.json first
             write_clip_json(tmpdir, {"source": {"filename": "test.mp4"}})
@@ -157,6 +157,7 @@ class TestInOutRangeStorage:
     def test_save_load_with_project_json_v1(self):
         """In/out range falls back to project.json for v1 projects."""
         from backend.clip_state import InOutRange
+
         with tempfile.TemporaryDirectory() as tmpdir:
             # v1: only project.json, no clip.json
             write_project_json(tmpdir, {"version": 1})
@@ -170,6 +171,7 @@ class TestInOutRangeStorage:
 
     def test_clear_in_out_range(self):
         from backend.clip_state import InOutRange
+
         with tempfile.TemporaryDirectory() as tmpdir:
             write_clip_json(tmpdir, {"source": {"filename": "test.mp4"}})
             save_in_out_range(tmpdir, InOutRange(in_point=0, out_point=10))
@@ -306,7 +308,8 @@ class TestCreateProject:
 
             with patch("backend.project.projects_root", return_value=tmpdir):
                 project_dir = create_project(
-                    videos, display_name="My Cool Project",
+                    videos,
+                    display_name="My Cool Project",
                 )
 
             # Folder name uses sanitized display_name
@@ -400,10 +403,13 @@ class TestRemovedClips:
             # Need at least one image file for find_assets()
             with open(os.path.join(frames, "frame_001.png"), "wb") as f:
                 f.write(b"\x89PNG" + b"\x00" * 100)
-        write_project_json(tmpdir, {
-            "version": 2,
-            "clips": ["clip_a", "clip_b", "clip_c"],
-        })
+        write_project_json(
+            tmpdir,
+            {
+                "version": 2,
+                "clips": ["clip_a", "clip_b", "clip_c"],
+            },
+        )
         return tmpdir
 
     def test_get_removed_clips_empty_default(self):
@@ -447,18 +453,28 @@ class TestRemovedClips:
     def test_clear_removed_clip(self):
         """clear_removed_clip restores a clip."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            write_project_json(tmpdir, {
-                "version": 2, "clips": ["a"], "removed_clips": ["a", "b"],
-            })
+            write_project_json(
+                tmpdir,
+                {
+                    "version": 2,
+                    "clips": ["a"],
+                    "removed_clips": ["a", "b"],
+                },
+            )
             clear_removed_clip(tmpdir, "a")
             assert get_removed_clips(tmpdir) == {"b"}
 
     def test_clear_nonexistent_noop(self):
         """Clearing a clip that isn't removed is a no-op."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            write_project_json(tmpdir, {
-                "version": 2, "clips": ["a"], "removed_clips": ["x"],
-            })
+            write_project_json(
+                tmpdir,
+                {
+                    "version": 2,
+                    "clips": ["a"],
+                    "removed_clips": ["x"],
+                },
+            )
             clear_removed_clip(tmpdir, "a")
             assert get_removed_clips(tmpdir) == {"x"}
 

@@ -6,5 +6,5 @@ __all__ = [
     "run_inference",
     "extract_frames_from_video",
     "save_video",
-    "VideoInferencePipeline"
+    "VideoInferencePipeline",
 ]

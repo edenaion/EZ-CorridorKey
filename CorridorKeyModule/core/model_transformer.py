@@ -3,10 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import timm
 
+
 class MLP(nn.Module):
     """
     Linear Embedding: C_in -> C_out
     """
+
     def __init__(self, input_dim=2048, embed_dim=768):
         super().__init__()
         self.proj = nn.Linear(input_dim, embed_dim)
@@ -14,46 +16,63 @@ class MLP(nn.Module):
     def forward(self, x):
         return self.proj(x)
 
+
 class DecoderHead(nn.Module):
     def __init__(self, feature_channels=[112, 224, 448, 896], embedding_dim=256, output_dim=1):
         super().__init__()
-        
+
         # MLP layers to unify channel dimensions
         self.linear_c4 = MLP(input_dim=feature_channels[3], embed_dim=embedding_dim)
         self.linear_c3 = MLP(input_dim=feature_channels[2], embed_dim=embedding_dim)
         self.linear_c2 = MLP(input_dim=feature_channels[1], embed_dim=embedding_dim)
         self.linear_c1 = MLP(input_dim=feature_channels[0], embed_dim=embedding_dim)
-        
+
         # Fuse
-        self.linear_fuse = nn.Conv2d(embedding_dim*4, embedding_dim, kernel_size=1, bias=False)
+        self.linear_fuse = nn.Conv2d(embedding_dim * 4, embedding_dim, kernel_size=1, bias=False)
         self.bn = nn.BatchNorm2d(embedding_dim)
         self.relu = nn.ReLU(inplace=True)
-        
+
         # Predict
         self.dropout = nn.Dropout(0.1)
         self.classifier = nn.Conv2d(embedding_dim, output_dim, kernel_size=1)
 
     def forward(self, features):
         c1, c2, c3, c4 = features
-        
+
         n, _, h, w = c4.shape
-        
+
         # Resize to C1 size (which is H/4)
-        _c4 = self.linear_c4(c4.flatten(2).transpose(1, 2)).transpose(1, 2).view(n, -1, c4.shape[2], c4.shape[3])
-        _c4 = F.interpolate(_c4, size=c1.shape[2:], mode='bilinear', align_corners=False)
+        _c4 = (
+            self.linear_c4(c4.flatten(2).transpose(1, 2))
+            .transpose(1, 2)
+            .view(n, -1, c4.shape[2], c4.shape[3])
+        )
+        _c4 = F.interpolate(_c4, size=c1.shape[2:], mode="bilinear", align_corners=False)
 
-        _c3 = self.linear_c3(c3.flatten(2).transpose(1, 2)).transpose(1, 2).view(n, -1, c3.shape[2], c3.shape[3])
-        _c3 = F.interpolate(_c3, size=c1.shape[2:], mode='bilinear', align_corners=False)
+        _c3 = (
+            self.linear_c3(c3.flatten(2).transpose(1, 2))
+            .transpose(1, 2)
+            .view(n, -1, c3.shape[2], c3.shape[3])
+        )
+        _c3 = F.interpolate(_c3, size=c1.shape[2:], mode="bilinear", align_corners=False)
 
-        _c2 = self.linear_c2(c2.flatten(2).transpose(1, 2)).transpose(1, 2).view(n, -1, c2.shape[2], c2.shape[3])
-        _c2 = F.interpolate(_c2, size=c1.shape[2:], mode='bilinear', align_corners=False)
+        _c2 = (
+            self.linear_c2(c2.flatten(2).transpose(1, 2))
+            .transpose(1, 2)
+            .view(n, -1, c2.shape[2], c2.shape[3])
+        )
+        _c2 = F.interpolate(_c2, size=c1.shape[2:], mode="bilinear", align_corners=False)
 
-        _c1 = self.linear_c1(c1.flatten(2).transpose(1, 2)).transpose(1, 2).view(n, -1, c1.shape[2], c1.shape[3])
+        _c1 = (
+            self.linear_c1(c1.flatten(2).transpose(1, 2))
+            .transpose(1, 2)
+            .view(n, -1, c1.shape[2], c1.shape[3])
+        )
 
         _c = self.linear_fuse(torch.cat([_c4, _c3, _c2, _c1], dim=1))
         _c = self.bn(_c)
         _c = self.relu(_c)
-        
+
         x = self.dropout(_c)
         x = self.classifier(x)
 
@@ -64,12 +83,17 @@ class RefinerBlock(nn.Module):
     """
     Residual Block with Dilation and GroupNorm (Safe for Batch Size 2).
     """
+
     def __init__(self, channels, dilation=1):
         super().__init__()
-        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=dilation, dilation=dilation)
+        self.conv1 = nn.Conv2d(
+            channels, channels, kernel_size=3, padding=dilation, dilation=dilation
+        )
         self.gn1 = nn.GroupNorm(8, channels)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=dilation, dilation=dilation)
+        self.conv2 = nn.Conv2d(
+            channels, channels, kernel_size=3, padding=dilation, dilation=dilation
+        )
         self.gn2 = nn.GroupNorm(8, channels)
 
     def forward(self, x):
@@ -83,6 +107,7 @@ class RefinerBlock(nn.Module):
         out = self.relu(out)
         return out
 
+
 class CNNRefinerModule(nn.Module):
     """
     Dilated Residual Refiner (Receptive Field ~65px).
@@ -90,6 +115,7 @@ class CNNRefinerModule(nn.Module):
     Structure: Stem -> Res(d1) -> Res(d2) -> Res(d4) -> Res(d8) -> Projection.
     Tiled CNN refiner by Marclie.
     """
+
     def __init__(self, in_channels=7, hidden_channels=64, out_channels=4):
         super().__init__()
 
@@ -97,15 +123,15 @@ class CNNRefinerModule(nn.Module):
         self.stem = nn.Sequential(
             nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1),
             nn.GroupNorm(8, hidden_channels),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
         )
-        
+
         # Dilated Residual Blocks (RF Expansion)
         self.res1 = RefinerBlock(hidden_channels, dilation=1)
         self.res2 = RefinerBlock(hidden_channels, dilation=2)
         self.res3 = RefinerBlock(hidden_channels, dilation=4)
         self.res4 = RefinerBlock(hidden_channels, dilation=8)
-        
+
         # Final Projection (No Activation, purely additive logits)
         self.final = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
 
@@ -131,7 +157,9 @@ class CNNRefinerModule(nn.Module):
         """Compile the fixed-shape tile CNN without changing checkpoint keys."""
         if self._compiled_process_tile is None:
             self._compiled_process_tile = torch.compile(
-                self._process_tile_impl, dynamic=False, fullgraph=True,
+                self._process_tile_impl,
+                dynamic=False,
+                fullgraph=True,
             )
 
     def _process_tile(self, x):
@@ -167,14 +195,20 @@ class CNNRefinerModule(nn.Module):
 
                 tile_h, tile_w = tile_delta.shape[2], tile_delta.shape[3]
                 # Only ramp edges that overlap with adjacent tiles, not image boundaries.
-                at_top = (y0_adj == 0)
-                at_bottom = (y1 == H)
-                at_left = (x0_adj == 0)
-                at_right = (x1 == W)
+                at_top = y0_adj == 0
+                at_bottom = y1 == H
+                at_left = x0_adj == 0
+                at_right = x1 == W
                 blend_w = self._get_blend_weight(
-                    tile_h, tile_w, tile_overlap,
-                    at_top, at_bottom, at_left, at_right,
-                    full_input.device, full_input.dtype,
+                    tile_h,
+                    tile_w,
+                    tile_overlap,
+                    at_top,
+                    at_bottom,
+                    at_left,
+                    at_right,
+                    full_input.device,
+                    full_input.dtype,
                 )
 
                 delta_sum[:, :, y0_adj:y1, x0_adj:x1] += tile_delta * blend_w
@@ -201,22 +235,18 @@ class CNNRefinerModule(nn.Module):
 
         return self._forward_tiled(full_input, coarse_pred.shape[1])
 
-    def _get_blend_weight(self, h, w, overlap,
-                          at_top, at_bottom, at_left, at_right,
-                          device, dtype):
+    def _get_blend_weight(self, h, w, overlap, at_top, at_bottom, at_left, at_right, device, dtype):
         key = (h, w, overlap, at_top, at_bottom, at_left, at_right, device, dtype)
         weight = self._blend_weight_cache.get(key)
         if weight is None:
-            weight = self._blend_weight(h, w, overlap,
-                                        at_top, at_bottom, at_left, at_right,
-                                        device, dtype)
+            weight = self._blend_weight(
+                h, w, overlap, at_top, at_bottom, at_left, at_right, device, dtype
+            )
             self._blend_weight_cache[key] = weight
         return weight
 
     @staticmethod
-    def _blend_weight(h, w, overlap,
-                      at_top, at_bottom, at_left, at_right,
-                      device, dtype):
+    def _blend_weight(h, w, overlap, at_top, at_bottom, at_left, at_right, device, dtype):
         """Linear blend ramp for tile overlap regions.
 
         Edges at image boundaries (at_top/bottom/left/right=True) keep
@@ -239,41 +269,48 @@ class CNNRefinerModule(nn.Module):
         return weight
 
 
-
 class GreenFormer(nn.Module):
-    def __init__(self, encoder_name='hiera_base_plus_224.mae_in1k_ft_in1k', in_channels=4, img_size=512, use_refiner=True):
+    def __init__(
+        self,
+        encoder_name="hiera_base_plus_224.mae_in1k_ft_in1k",
+        in_channels=4,
+        img_size=512,
+        use_refiner=True,
+    ):
         super().__init__()
-        
+
         # --- Encoder ---
         # Load Pretrained Hiera
         # 1. Create Target Model (512x512, Random Weights)
         # We use features_only=True, which wraps it in FeatureGetterNet
         print(f"Initializing {encoder_name} (img_size={img_size})...")
-        self.encoder = timm.create_model(encoder_name, pretrained=False, features_only=True, img_size=img_size)
-        # We skip downloading/loading base weights because the user's checkpoint 
-        # (loaded immediately after this) contains all weights, including correctly 
+        self.encoder = timm.create_model(
+            encoder_name, pretrained=False, features_only=True, img_size=img_size
+        )
+        # We skip downloading/loading base weights because the user's checkpoint
+        # (loaded immediately after this) contains all weights, including correctly
         # trained/sized PosEmbeds. This keeps the project offline-capable using only local assets.
         print("Skipped downloading base weights (relying on custom checkpoint).")
-        
+
         # Patch First Layer for 4 channels
         if in_channels != 3:
             self._patch_input_layer(in_channels)
-            
+
         # Get feature info
         # Verified Hiera Base Plus channels: [112, 224, 448, 896]
         # We can try to fetch dynamically
         try:
             feature_channels = self.encoder.feature_info.channels()
-        except:
+        except Exception:
             feature_channels = [112, 224, 448, 896]
         print(f"Feature Channels: {feature_channels}")
-        
+
         # --- Decoders ---
         embedding_dim = 256
-        
+
         # Alpha Decoder (Outputs 1 channel)
         self.alpha_decoder = DecoderHead(feature_channels, embedding_dim, output_dim=1)
-        
+
         # Foreground Decoder (Outputs 3 channels)
         self.fg_decoder = DecoderHead(feature_channels, embedding_dim, output_dim=3)
 
@@ -293,35 +330,42 @@ class GreenFormer(nn.Module):
         Copies existing RGB weights and initializes extras to zero.
         """
         # Hiera: self.encoder.model.patch_embed.proj
-        
+
         try:
             patch_embed = self.encoder.model.patch_embed.proj
         except AttributeError:
-             # Fallback if timm changes structure or for other models
+            # Fallback if timm changes structure or for other models
             patch_embed = self.encoder.patch_embed.proj
-        weight = patch_embed.weight.data # [Out, 3, K, K]
+        weight = patch_embed.weight.data  # [Out, 3, K, K]
         bias = patch_embed.bias.data if patch_embed.bias is not None else None
-        
+
         new_in_channels = in_channels
         out_channels, _, k, k = weight.shape
-        
+
         # Create new conv
-        new_conv = nn.Conv2d(new_in_channels, out_channels, kernel_size=k, stride=patch_embed.stride, padding=patch_embed.padding, bias=(bias is not None))
-        
+        new_conv = nn.Conv2d(
+            new_in_channels,
+            out_channels,
+            kernel_size=k,
+            stride=patch_embed.stride,
+            padding=patch_embed.padding,
+            bias=(bias is not None),
+        )
+
         # Copy weights
         new_conv.weight.data[:, :3, :, :] = weight
         # Initialize new channels to 0 (Weight Patching)
         new_conv.weight.data[:, 3:, :, :] = 0.0
-        
+
         if bias is not None:
             new_conv.bias.data = bias
-            
+
         # Replace in module
         try:
-             self.encoder.model.patch_embed.proj = new_conv
+            self.encoder.model.patch_embed.proj = new_conv
         except AttributeError:
-             self.encoder.patch_embed.proj = new_conv
-        
+            self.encoder.patch_embed.proj = new_conv
+
         print(f"Patched input layer: 3 channels -> {in_channels} channels (Extra initialized to 0)")
 
     def forward(self, x, refiner_scale=None):
@@ -329,16 +373,20 @@ class GreenFormer(nn.Module):
         input_size = x.shape[2:]
 
         # Encode
-        features = self.encoder(x) # Returns list of features
+        features = self.encoder(x)  # Returns list of features
 
         # Decode Streams
-        alpha_logits = self.alpha_decoder(features) # [B, 1, H/4, W/4]
-        fg_logits = self.fg_decoder(features)       # [B, 3, H/4, W/4]
+        alpha_logits = self.alpha_decoder(features)  # [B, 1, H/4, W/4]
+        fg_logits = self.fg_decoder(features)  # [B, 3, H/4, W/4]
 
         # Upsample to full resolution (Bilinear)
         # These are the "Coarse" LOGITS
-        alpha_logits_up = F.interpolate(alpha_logits, size=input_size, mode='bilinear', align_corners=False)
-        fg_logits_up = F.interpolate(fg_logits, size=input_size, mode='bilinear', align_corners=False)
+        alpha_logits_up = F.interpolate(
+            alpha_logits, size=input_size, mode="bilinear", align_corners=False
+        )
+        fg_logits_up = F.interpolate(
+            fg_logits, size=input_size, mode="bilinear", align_corners=False
+        )
 
         # Coarse Probs (for Loss and Refiner Input)
         alpha_coarse = torch.sigmoid(alpha_logits_up)
@@ -346,7 +394,7 @@ class GreenFormer(nn.Module):
 
         # --- Refinement (CNN Hybrid) ---
         rgb = x[:, :3, :, :]
-        coarse_pred = torch.cat([alpha_coarse, fg_coarse], dim=1) # [B, 4, H, W]
+        coarse_pred = torch.cat([alpha_coarse, fg_coarse], dim=1)  # [B, 4, H, W]
 
         # Refiner outputs DELTA LOGITS
         if self.use_refiner and self.refiner is not None:
@@ -372,7 +420,4 @@ class GreenFormer(nn.Module):
         alpha_final = torch.sigmoid(alpha_final_logits)
         fg_final = torch.sigmoid(fg_final_logits)
 
-        return {
-            'alpha': alpha_final,
-            'fg': fg_final
-        }
+        return {"alpha": alpha_final, "fg": fg_final}

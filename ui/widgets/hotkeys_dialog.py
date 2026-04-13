@@ -3,13 +3,21 @@
 Displays all keyboard shortcuts grouped by category. Users can click
 a key binding button to rebind, with conflict detection and reset-to-default.
 """
+
 from __future__ import annotations
 
 import logging
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QWidget, QLineEdit, QMessageBox,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QWidget,
+    QLineEdit,
+    QMessageBox,
 )
 from PySide6.QtCore import QKeyCombination, Qt
 from PySide6.QtGui import QKeySequence, QKeyEvent
@@ -37,8 +45,14 @@ class KeyBindButton(QPushButton):
         "border: 1px solid #FFF203; padding: 4px 12px; font-size: 12px; }"
     )
 
-    def __init__(self, action_id: str, key_str: str, registry: ShortcutRegistry,
-                 dialog: HotkeysDialog, parent=None):
+    def __init__(
+        self,
+        action_id: str,
+        key_str: str,
+        registry: ShortcutRegistry,
+        dialog: HotkeysDialog,
+        parent=None,
+    ):
         super().__init__(parent)
         self.action_id = action_id
         self._registry = registry
@@ -87,11 +101,11 @@ class KeyBindButton(QPushButton):
         conflicts = self._registry.find_conflicts(self.action_id, key_str)
         if conflicts:
             conflict_names = ", ".join(
-                d.display_name for d in self._registry.definitions()
-                if d.action_id in conflicts
+                d.display_name for d in self._registry.definitions() if d.action_id in conflicts
             )
             reply = QMessageBox.warning(
-                self, "Shortcut Conflict",
+                self,
+                "Shortcut Conflict",
                 f'"{key_str}" is already assigned to:\n{conflict_names}\n\n'
                 "Reassign anyway? The conflicting binding will be cleared.",
                 QMessageBox.Yes | QMessageBox.No,
@@ -156,9 +170,7 @@ class HotkeysDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(
-            "QScrollArea { background: #0E0D00; border: 1px solid #2A2910; }"
-        )
+        scroll.setStyleSheet("QScrollArea { background: #0E0D00; border: 1px solid #2A2910; }")
         content = QWidget()
         content.setStyleSheet("background: #0E0D00;")
         self._content_layout = QVBoxLayout(content)
@@ -221,9 +233,7 @@ class HotkeysDialog(QDialog):
                 reset_btn.setToolTip(f"Reset to default: {defn.default_key}")
                 reset_btn.setCursor(Qt.PointingHandCursor)
                 aid = defn.action_id
-                reset_btn.clicked.connect(
-                    lambda checked, a=aid: self._reset_single(a)
-                )
+                reset_btn.clicked.connect(lambda checked, a=aid: self._reset_single(a))
                 row_layout.addWidget(reset_btn)
 
                 self._content_layout.addWidget(row_widget)
@@ -307,7 +317,8 @@ class HotkeysDialog(QDialog):
 
     def _reset_all(self) -> None:
         reply = QMessageBox.question(
-            self, "Reset All Shortcuts",
+            self,
+            "Reset All Shortcuts",
             "Reset all shortcuts to their default values?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,

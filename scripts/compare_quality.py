@@ -12,6 +12,7 @@ Metrics:
     - PSNR (Peak Signal-to-Noise Ratio) — >60dB is essentially identical
     - SSIM (Structural Similarity) — >0.999 is perceptually identical
 """
+
 import sys
 import os
 import glob
@@ -20,12 +21,14 @@ import numpy as np
 try:
     import OpenEXR
     import Imath
+
     HAS_OPENEXR = True
 except ImportError:
     HAS_OPENEXR = False
 
 try:
     import cv2
+
     HAS_CV2 = True
 except ImportError:
     HAS_CV2 = False
@@ -36,12 +39,12 @@ def load_exr_alpha(path: str) -> np.ndarray:
     if HAS_OPENEXR:
         exr = OpenEXR.InputFile(path)
         header = exr.header()
-        dw = header['dataWindow']
+        dw = header["dataWindow"]
         w = dw.max.x - dw.min.x + 1
         h = dw.max.y - dw.min.y + 1
         # Try A channel first, fall back to R
-        channels = header['channels']
-        ch_name = 'A' if 'A' in channels else 'R'
+        channels = header["channels"]
+        ch_name = "A" if "A" in channels else "R"
         raw = exr.channel(ch_name, Imath.PixelType(Imath.PixelType.FLOAT))
         return np.frombuffer(raw, dtype=np.float32).reshape(h, w)
     elif HAS_CV2:
@@ -60,14 +63,14 @@ def load_exr_alpha(path: str) -> np.ndarray:
 def psnr(a: np.ndarray, b: np.ndarray) -> float:
     mse = np.mean((a - b) ** 2)
     if mse == 0:
-        return float('inf')
+        return float("inf")
     return 10 * np.log10(1.0 / mse)
 
 
 def ssim_simple(a: np.ndarray, b: np.ndarray) -> float:
     """Simplified SSIM (no windowing, whole-image)."""
-    c1 = 0.01 ** 2
-    c2 = 0.03 ** 2
+    c1 = 0.01**2
+    c2 = 0.03**2
     mu_a, mu_b = a.mean(), b.mean()
     var_a, var_b = a.var(), b.var()
     cov = np.mean((a - mu_a) * (b - mu_b))
@@ -133,17 +136,22 @@ def main():
 
     print(f"{'Metric':<25} {'Min':>12} {'Mean':>12} {'Max':>12}")
     print("-" * 63)
-    print(f"{'Max pixel difference':<25} {min(all_max_diff):>12.8f} {np.mean(all_max_diff):>12.8f} {max(all_max_diff):>12.8f}")
-    print(f"{'Mean absolute error':<25} {min(all_mae):>12.8f} {np.mean(all_mae):>12.8f} {max(all_mae):>12.8f}")
-    print(f"{'PSNR (dB)':<25} {min(all_psnr):>12.2f} {np.mean(all_psnr):>12.2f} {max(all_psnr):>12.2f}")
+    print(
+        f"{'Max pixel difference':<25} {min(all_max_diff):>12.8f} {np.mean(all_max_diff):>12.8f} {max(all_max_diff):>12.8f}"
+    )
+    print(
+        f"{'Mean absolute error':<25} {min(all_mae):>12.8f} {np.mean(all_mae):>12.8f} {max(all_mae):>12.8f}"
+    )
+    print(
+        f"{'PSNR (dB)':<25} {min(all_psnr):>12.2f} {np.mean(all_psnr):>12.2f} {max(all_psnr):>12.2f}"
+    )
     print(f"{'SSIM':<25} {min(all_ssim):>12.8f} {np.mean(all_ssim):>12.8f} {max(all_ssim):>12.8f}")
     print()
 
     avg_psnr = np.mean(all_psnr)
-    avg_ssim = np.mean(all_ssim)
     avg_max = np.mean(all_max_diff)
 
-    if avg_psnr == float('inf'):
+    if avg_psnr == float("inf"):
         print("RESULT: IDENTICAL — zero difference between A and B")
     elif avg_psnr > 60:
         print(f"RESULT: EFFECTIVELY IDENTICAL — PSNR {avg_psnr:.1f}dB (>60dB)")

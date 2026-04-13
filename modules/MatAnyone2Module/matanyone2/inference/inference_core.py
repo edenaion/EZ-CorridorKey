@@ -1,6 +1,6 @@
 import logging
 from omegaconf import DictConfig
-from typing import List, Optional, Iterable, Union,Tuple
+from typing import List, Optional, Iterable, Union, Tuple
 
 import os
 import cv2
@@ -25,14 +25,14 @@ log = logging.getLogger()
 
 
 class InferenceCore:
-
-    def __init__(self,
-                 network: Union[MatAnyone2,str],
-                 cfg: DictConfig = None,
-                 *,
-                 image_feature_store: ImageFeatureStore = None,
-                 device: Optional[Union[str, torch.device]] = None
-                 ):
+    def __init__(
+        self,
+        network: Union[MatAnyone2, str],
+        cfg: DictConfig = None,
+        *,
+        image_feature_store: ImageFeatureStore = None,
+        device: Optional[Union[str, torch.device]] = None,
+    ):
         if device is None:
             device = get_default_device()
         self.device = device
@@ -40,7 +40,7 @@ class InferenceCore:
             network = MatAnyone2.from_pretrained(network)
         network.to(device)
         network.eval()
-        self.network = network  
+        self.network = network
         cfg = cfg if cfg is not None else network.cfg
         self.cfg = cfg
         self.mem_every = cfg.mem_every
@@ -57,7 +57,8 @@ class InferenceCore:
             self.stagger_ti = set(range(1, self.mem_every + 1))
         else:
             self.stagger_ti = set(
-                np.round(np.linspace(1, self.mem_every, stagger_updates)).astype(int))
+                np.round(np.linspace(1, self.mem_every, stagger_updates)).astype(int)
+            )
         self.object_manager = ObjectManager()
         self.memory = MemoryManager(cfg=cfg, object_manager=self.object_manager)
 
@@ -86,25 +87,27 @@ class InferenceCore:
         self.memory.clear_sensory_memory()
 
     def update_config(self, cfg):
-        self.mem_every = cfg['mem_every']
+        self.mem_every = cfg["mem_every"]
         self.memory.update_config(cfg)
-    
+
     def clear_temp_mem(self):
         self.memory.clear_work_mem()
         # self.object_manager = ObjectManager()
         self.memory.clear_obj_mem()
         # self.memory.clear_sensory_memory()
 
-    def _add_memory(self,
-                    image: torch.Tensor,
-                    pix_feat: torch.Tensor,
-                    prob: torch.Tensor,
-                    key: torch.Tensor,
-                    shrinkage: torch.Tensor,
-                    selection: torch.Tensor,
-                    *,
-                    is_deep_update: bool = True,
-                    force_permanent: bool = False) -> None:
+    def _add_memory(
+        self,
+        image: torch.Tensor,
+        pix_feat: torch.Tensor,
+        prob: torch.Tensor,
+        key: torch.Tensor,
+        shrinkage: torch.Tensor,
+        selection: torch.Tensor,
+        *,
+        is_deep_update: bool = True,
+        force_permanent: bool = False,
+    ) -> None:
         """
         Memorize the given segmentation in all memory stores.
 
@@ -119,13 +122,13 @@ class InferenceCore:
         """
         if prob.shape[1] == 0:
             # nothing to add
-            log.warn('Trying to add an empty object mask to memory!')
+            log.warn("Trying to add an empty object mask to memory!")
             return
 
         if force_permanent:
-            as_permanent = 'all'
+            as_permanent = "all"
         else:
-            as_permanent = 'first'
+            as_permanent = "first"
 
         self.memory.initialize_sensory_if_needed(key, self.object_manager.all_obj_ids)
         msk_value, sensory, obj_value, _ = self.network.encode_mask(
@@ -135,25 +138,30 @@ class InferenceCore:
             prob,
             deep_update=is_deep_update,
             chunk_size=self.chunk_size,
-            need_weights=self.save_aux)
-        self.memory.add_memory(key,
-                               shrinkage,
-                               msk_value,
-                               obj_value,
-                               self.object_manager.all_obj_ids,
-                               selection=selection,
-                               as_permanent=as_permanent)
+            need_weights=self.save_aux,
+        )
+        self.memory.add_memory(
+            key,
+            shrinkage,
+            msk_value,
+            obj_value,
+            self.object_manager.all_obj_ids,
+            selection=selection,
+            as_permanent=as_permanent,
+        )
         self.last_mem_ti = self.curr_ti
         if is_deep_update:
             self.memory.update_sensory(sensory, self.object_manager.all_obj_ids)
         self.last_msk_value = msk_value
 
-    def _segment(self,
-                 key: torch.Tensor,
-                 selection: torch.Tensor,
-                 pix_feat: torch.Tensor,
-                 ms_features: Iterable[torch.Tensor],
-                 update_sensory: bool = True) -> torch.Tensor:
+    def _segment(
+        self,
+        key: torch.Tensor,
+        selection: torch.Tensor,
+        pix_feat: torch.Tensor,
+        ms_features: Iterable[torch.Tensor],
+        update_sensory: bool = True,
+    ) -> torch.Tensor:
         """
         Produce a segmentation using the given features and the memory
 
@@ -173,60 +181,80 @@ class InferenceCore:
             assert bs == 1
 
         if not self.memory.engaged:
-            log.warn('Trying to segment without any memory!')
-            return torch.zeros((1, key.shape[-2] * 16, key.shape[-1] * 16),
-                               device=key.device,
-                               dtype=key.dtype)
-        
+            log.warn("Trying to segment without any memory!")
+            return torch.zeros(
+                (1, key.shape[-2] * 16, key.shape[-1] * 16), device=key.device, dtype=key.dtype
+            )
+
         uncert_output = None
 
-        if self.curr_ti == 0: # ONLY for the first frame for prediction
-            memory_readout = self.memory.read_first_frame(self.last_msk_value, pix_feat, self.last_mask, self.network, uncert_output=uncert_output)
+        if self.curr_ti == 0:  # ONLY for the first frame for prediction
+            memory_readout = self.memory.read_first_frame(
+                self.last_msk_value,
+                pix_feat,
+                self.last_mask,
+                self.network,
+                uncert_output=uncert_output,
+            )
         else:
-            memory_readout = self.memory.read(pix_feat, key, selection, self.last_mask, self.network, uncert_output=uncert_output, last_msk_value=self.last_msk_value, ti=self.curr_ti, 
-                                              last_pix_feat=self.last_pix_feat, last_pred_mask=self.last_mask)
+            memory_readout = self.memory.read(
+                pix_feat,
+                key,
+                selection,
+                self.last_mask,
+                self.network,
+                uncert_output=uncert_output,
+                last_msk_value=self.last_msk_value,
+                ti=self.curr_ti,
+                last_pix_feat=self.last_pix_feat,
+                last_pred_mask=self.last_mask,
+            )
         memory_readout = self.object_manager.realize_dict(memory_readout)
 
-        sensory, _, pred_prob_with_bg = self.network.segment(ms_features,
-                                                        memory_readout,
-                                                        self.memory.get_sensory(
-                                                            self.object_manager.all_obj_ids),
-                                                        chunk_size=self.chunk_size,
-                                                        update_sensory=update_sensory)
+        sensory, _, pred_prob_with_bg = self.network.segment(
+            ms_features,
+            memory_readout,
+            self.memory.get_sensory(self.object_manager.all_obj_ids),
+            chunk_size=self.chunk_size,
+            update_sensory=update_sensory,
+        )
         # remove batch dim
         if self.flip_aug:
             # average predictions of the non-flipped and flipped version
-            pred_prob_with_bg = (pred_prob_with_bg[0] +
-                                 torch.flip(pred_prob_with_bg[1], dims=[-1])) / 2
+            pred_prob_with_bg = (
+                pred_prob_with_bg[0] + torch.flip(pred_prob_with_bg[1], dims=[-1])
+            ) / 2
         else:
             pred_prob_with_bg = pred_prob_with_bg[0]
         if update_sensory:
             self.memory.update_sensory(sensory, self.object_manager.all_obj_ids)
         return pred_prob_with_bg
-    
+
     def pred_all_flow(self, images):
         self.total_len = images.shape[0]
         images, self.pad = pad_divide_by(images, 16)
         images = images.unsqueeze(0)  # add the batch dimension: (1,t,c,h,w)
-        
+
         self.flows_forward, self.flows_backward = self.network.pred_forward_backward_flow(images)
 
     def encode_all_images(self, images):
         images, self.pad = pad_divide_by(images, 16)
-        self.image_feature_store.get_all_features(images) # t c h w
+        self.image_feature_store.get_all_features(images)  # t c h w
         return images
 
-    def step(self,
-             image: torch.Tensor,
-             mask: Optional[torch.Tensor] = None,
-             objects: Optional[List[int]] = None,
-             *,
-             idx_mask: bool = False,
-             end: bool = False,
-             delete_buffer: bool = True,
-             force_permanent: bool = False,
-             matting: bool = True,
-             first_frame_pred: bool = False) -> torch.Tensor:
+    def step(
+        self,
+        image: torch.Tensor,
+        mask: Optional[torch.Tensor] = None,
+        objects: Optional[List[int]] = None,
+        *,
+        idx_mask: bool = False,
+        end: bool = False,
+        delete_buffer: bool = True,
+        force_permanent: bool = False,
+        matting: bool = True,
+        first_frame_pred: bool = False,
+    ) -> torch.Tensor:
         """
         Take a step with a new incoming image.
         If there is an incoming mask with new objects, we will memorize them.
@@ -236,15 +264,15 @@ class InferenceCore:
         image: 3*H*W
         mask: H*W (if idx mask) or len(objects)*H*W or None
         objects: list of object ids that are valid in the mask Tensor.
-                The ids themselves do not need to be consecutive/in order, but they need to be 
+                The ids themselves do not need to be consecutive/in order, but they need to be
                 in the same position in the list as the corresponding mask
                 in the tensor in non-idx-mask mode.
-                objects is ignored if the mask is None. 
+                objects is ignored if the mask is None.
                 If idx_mask is False and objects is None, we sequentially infer the object ids.
         idx_mask: if True, mask is expected to contain an object id at every pixel.
                   If False, mask should have multiple channels with each channel representing one object.
         end: if we are at the end of the sequence, we do not need to update memory
-            if unsure just set it to False 
+            if unsure just set it to False
         delete_buffer: whether to delete the image feature buffer after this step
         force_permanent: the memory recorded this frame will be added to the permanent memory
         """
@@ -261,42 +289,51 @@ class InferenceCore:
                 resize_needed = True
                 new_h = int(h / min_side * self.max_internal_size)
                 new_w = int(w / min_side * self.max_internal_size)
-                image = F.interpolate(image.unsqueeze(0),
-                                      size=(new_h, new_w),
-                                      mode='bilinear',
-                                      align_corners=False)[0]
+                image = F.interpolate(
+                    image.unsqueeze(0), size=(new_h, new_w), mode="bilinear", align_corners=False
+                )[0]
                 if mask is not None:
                     if idx_mask:
-                        mask = F.interpolate(mask.unsqueeze(0).unsqueeze(0).float(),
-                                             size=(new_h, new_w),
-                                             mode='nearest-exact',
-                                             align_corners=False)[0, 0].round().long()
+                        mask = (
+                            F.interpolate(
+                                mask.unsqueeze(0).unsqueeze(0).float(),
+                                size=(new_h, new_w),
+                                mode="nearest-exact",
+                                align_corners=False,
+                            )[0, 0]
+                            .round()
+                            .long()
+                        )
                     else:
                         # Ensure mask is at least 3D for F.interpolate (N, C, H, W)
                         _squeeze_back = False
                         if mask.ndim == 2:
                             mask = mask.unsqueeze(0)  # (H, W) → (1, H, W)
                             _squeeze_back = True
-                        mask = F.interpolate(mask.unsqueeze(0),
-                                             size=(new_h, new_w),
-                                             mode='bilinear',
-                                             align_corners=False)[0]
+                        mask = F.interpolate(
+                            mask.unsqueeze(0),
+                            size=(new_h, new_w),
+                            mode="bilinear",
+                            align_corners=False,
+                        )[0]
                         if _squeeze_back:
                             mask = mask.squeeze(0)  # restore (H, W)
 
         self.curr_ti += 1
 
-        image, self.pad = pad_divide_by(image, 16) # DONE alreay for 3DCNN!!
+        image, self.pad = pad_divide_by(image, 16)  # DONE alreay for 3DCNN!!
         image = image.unsqueeze(0)  # add the batch dimension
         if self.flip_aug:
             image = torch.cat([image, torch.flip(image, dims=[-1])], dim=0)
 
         # whether to update the working memory
-        is_mem_frame = ((self.curr_ti - self.last_mem_ti >= self.mem_every) or
-                        (mask is not None)) and (not end)
+        is_mem_frame = (
+            (self.curr_ti - self.last_mem_ti >= self.mem_every) or (mask is not None)
+        ) and (not end)
         # segment when there is no input mask or when the input mask is incomplete
-        need_segment = (mask is None) or (self.object_manager.num_obj > 0
-                                          and not self.object_manager.has_all(objects))
+        need_segment = (mask is None) or (
+            self.object_manager.num_obj > 0 and not self.object_manager.has_all(objects)
+        )
         update_sensory = ((self.curr_ti - self.last_mem_ti) in self.stagger_ti) and (not end)
 
         # reinit if it is the first frame for prediction
@@ -313,11 +350,9 @@ class InferenceCore:
 
         # segmentation from memory if needed
         if need_segment:
-            pred_prob_with_bg = self._segment(key,
-                                              selection,
-                                              pix_feat,
-                                              ms_feat,
-                                              update_sensory=update_sensory)
+            pred_prob_with_bg = self._segment(
+                key, selection, pix_feat, ms_feat, update_sensory=update_sensory
+            )
 
         # use the input mask if provided
         if mask is not None:
@@ -354,16 +389,19 @@ class InferenceCore:
                 if len(objects) == 0:
                     if delete_buffer:
                         self.image_feature_store.delete(self.curr_ti)
-                    log.warn('Trying to insert an empty mask as memory!')
-                    return torch.zeros((1, key.shape[-2] * 16, key.shape[-1] * 16),
-                                       device=key.device,
-                                       dtype=key.dtype)
+                    log.warn("Trying to insert an empty mask as memory!")
+                    return torch.zeros(
+                        (1, key.shape[-2] * 16, key.shape[-1] * 16),
+                        device=key.device,
+                        dtype=key.dtype,
+                    )
                 mask = torch.stack(
                     [mask == objects[mask_id] for mask_id, _ in enumerate(corresponding_tmp_ids)],
-                    dim=0)
+                    dim=0,
+                )
             if matting:
-                mask = mask.unsqueeze(0).float() / 255.
-                pred_prob_with_bg = torch.cat([1-mask, mask], 0)
+                mask = mask.unsqueeze(0).float() / 255.0
+                pred_prob_with_bg = torch.cat([1 - mask, mask], 0)
             else:
                 pred_prob_with_bg = aggregate(mask, dim=0)
                 pred_prob_with_bg = torch.softmax(pred_prob_with_bg, dim=0)
@@ -371,7 +409,8 @@ class InferenceCore:
         self.last_mask = pred_prob_with_bg[1:].unsqueeze(0)
         if self.flip_aug:
             self.last_mask = torch.cat(
-                [self.last_mask, torch.flip(self.last_mask, dims=[-1])], dim=0)
+                [self.last_mask, torch.flip(self.last_mask, dims=[-1])], dim=0
+            )
         self.last_pix_feat = pix_feat
 
         # save as memory if needed
@@ -379,23 +418,26 @@ class InferenceCore:
             # clear the memory for given mask and add the first predicted mask
             if first_frame_pred:
                 self.clear_temp_mem()
-            self._add_memory(image,
-                             pix_feat,
-                             self.last_mask,
-                             key,
-                             shrinkage,
-                             selection,
-                             force_permanent=force_permanent,
-                             is_deep_update=True)
-        else: # compute self.last_msk_value for non-memory frame 
+            self._add_memory(
+                image,
+                pix_feat,
+                self.last_mask,
+                key,
+                shrinkage,
+                selection,
+                force_permanent=force_permanent,
+                is_deep_update=True,
+            )
+        else:  # compute self.last_msk_value for non-memory frame
             msk_value, _, _, _ = self.network.encode_mask(
-                            image,
-                            pix_feat,
-                            self.memory.get_sensory(self.object_manager.all_obj_ids),
-                            self.last_mask,
-                            deep_update=False,
-                            chunk_size=self.chunk_size,
-                            need_weights=self.save_aux)
+                image,
+                pix_feat,
+                self.memory.get_sensory(self.object_manager.all_obj_ids),
+                self.last_mask,
+                deep_update=False,
+                chunk_size=self.chunk_size,
+                need_weights=self.save_aux,
+            )
             self.last_msk_value = msk_value
 
         if delete_buffer:
@@ -404,10 +446,9 @@ class InferenceCore:
         output_prob = unpad(pred_prob_with_bg, self.pad)
         if resize_needed:
             # restore output to the original size
-            output_prob = F.interpolate(output_prob.unsqueeze(0),
-                                        size=(h, w),
-                                        mode='bilinear',
-                                        align_corners=False)[0]
+            output_prob = F.interpolate(
+                output_prob.unsqueeze(0), size=(h, w), mode="bilinear", align_corners=False
+            )[0]
 
         return output_prob
 
@@ -500,7 +541,7 @@ class InferenceCore:
             mask = gen_dilate(mask, r_dilate, r_dilate)
         if r_erode > 0:
             mask = gen_erosion(mask, r_erode, r_erode)
-        
+
         mask = torch.from_numpy(mask).float().to(self.device)
         if max_size > 0:
             mask = F.interpolate(
@@ -547,11 +588,11 @@ class InferenceCore:
 
         fgrs = np.array(fgrs)
         phas = np.array(phas)
-        
+
         fgr_filename = f"{output_path}/{video_name}_fgr.mp4"
         alpha_filename = f"{output_path}/{video_name}_pha.mp4"
-        
+
         imageio.mimwrite(fgr_filename, fgrs, fps=fps, quality=7)
         imageio.mimwrite(alpha_filename, phas, fps=fps, quality=7)
-        
-        return (fgr_filename,alpha_filename)
+
+        return (fgr_filename, alpha_filename)

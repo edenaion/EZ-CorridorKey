@@ -227,8 +227,14 @@ def _expand_points_for_brush(
     diag = r * 0.35
     offsets = [
         (0.0, 0.0),
-        (half, 0.0), (-half, 0.0), (0.0, half), (0.0, -half),
-        (diag, diag), (diag, -diag), (-diag, diag), (-diag, -diag),
+        (half, 0.0),
+        (-half, 0.0),
+        (0.0, half),
+        (0.0, -half),
+        (diag, diag),
+        (diag, -diag),
+        (-diag, diag),
+        (-diag, -diag),
     ]
 
     expanded: list[tuple[float, float]] = []
@@ -259,7 +265,9 @@ def _dedupe_points(points: Iterable[tuple[float, float]]) -> list[tuple[float, f
     return result
 
 
-def _bounding_box(points: Sequence[tuple[float, float]]) -> tuple[float, float, float, float] | None:
+def _bounding_box(
+    points: Sequence[tuple[float, float]],
+) -> tuple[float, float, float, float] | None:
     if not points:
         return None
     xs = [p[0] for p in points]

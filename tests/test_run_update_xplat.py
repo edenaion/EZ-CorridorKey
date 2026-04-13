@@ -4,10 +4,10 @@ Verifies that the subprocess call in _run_update uses platform-appropriate
 flags (CREATE_NEW_CONSOLE on Windows, start_new_session on Unix) and
 does not raise AttributeError on any platform.
 """
+
 import os
 import subprocess
-import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -17,6 +17,7 @@ def _build_run_update_logic():
 
     Returns a callable(root_dir) that performs the Popen call.
     """
+
     def launch_updater(root):
         if os.name == "nt":
             bat = os.path.join(root, "3-update.bat")
@@ -30,6 +31,7 @@ def _build_run_update_logic():
                 [sh, "--relaunch"],
                 start_new_session=True,
             )
+
     return launch_updater
 
 
@@ -120,7 +122,9 @@ class TestRunUpdateCrossPlatform:
         """Verify _run_update has the os.name guard (in settings mixin)."""
         src_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
-            "ui", "main_window_mixins", "settings_mixin.py",
+            "ui",
+            "main_window_mixins",
+            "settings_mixin.py",
         )
         with open(src_path, "r", encoding="utf-8") as f:
             source = f.read()

@@ -14,6 +14,7 @@ Usage:
         cancel_check=fn,
     )
 """
+
 from __future__ import annotations
 
 import logging
@@ -69,11 +70,13 @@ class _ImagePreprocessor:
     """Resize and normalize for BiRefNet inference."""
 
     def __init__(self, resolution: Tuple[int, int] = (1024, 1024)) -> None:
-        self.transform = transforms.Compose([
-            transforms.Resize(resolution),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ])
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(resolution),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
+        )
 
     def __call__(self, image: Image.Image) -> torch.Tensor:
         return self.transform(image)
@@ -108,8 +111,7 @@ class BiRefNetProcessor:
         repo_name = BIREFNET_MODELS.get(self._usage)
         if repo_name is None:
             raise ValueError(
-                f"Unknown BiRefNet model '{self._usage}'. "
-                f"Available: {list(BIREFNET_MODELS.keys())}"
+                f"Unknown BiRefNet model '{self._usage}'. Available: {list(BIREFNET_MODELS.keys())}"
             )
 
         repo_id = f"ZhengPeng7/{repo_name}"
@@ -118,13 +120,15 @@ class BiRefNetProcessor:
 
         # Download if needed (idempotent — skips existing files)
         if not os.path.isdir(model_local_dir) or not any(
-            f.endswith(('.safetensors', '.bin')) for f in os.listdir(model_local_dir)
+            f.endswith((".safetensors", ".bin"))
+            for f in os.listdir(model_local_dir)
             if os.path.isfile(os.path.join(model_local_dir, f))
         ):
             if on_status:
                 on_status(f"Downloading {repo_name}...")
             logger.info(f"Downloading BiRefNet model: {repo_id}")
             from huggingface_hub import snapshot_download
+
             snapshot_download(
                 repo_id=repo_id,
                 local_dir=model_local_dir,
@@ -139,9 +143,10 @@ class BiRefNetProcessor:
         t0 = time.monotonic()
 
         # Enable TF32 for Ampere+ GPUs
-        torch.set_float32_matmul_precision('high')
+        torch.set_float32_matmul_precision("high")
 
         from transformers import AutoModelForImageSegmentation
+
         self._model = AutoModelForImageSegmentation.from_pretrained(
             model_local_dir, trust_remote_code=True
         )
@@ -266,7 +271,8 @@ class BiRefNetProcessor:
                     elapsed = time.monotonic() - _t_start
                     logger.info(
                         "BiRefNet: frame %d/%d, %.2fs/frame",
-                        frames_written, num_frames,
+                        frames_written,
+                        num_frames,
                         elapsed / frames_written,
                     )
 
@@ -286,15 +292,18 @@ class BiRefNetProcessor:
 
         except _CancelledError:
             import shutil
+
             shutil.rmtree(tmp_dir, ignore_errors=True)
             raise
         except Exception:
             import shutil
+
             shutil.rmtree(tmp_dir, ignore_errors=True)
             raise
         finally:
             if os.path.isdir(tmp_dir):
                 import shutil
+
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
         elapsed = time.monotonic() - _t_start
@@ -307,4 +316,5 @@ class BiRefNetProcessor:
 
 class _CancelledError(Exception):
     """Internal: raised when cancel_check returns True."""
+
     pass

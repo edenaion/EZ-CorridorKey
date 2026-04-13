@@ -8,6 +8,7 @@ Pure Python, no Qt deps. Provides:
 - stitch_video() — image sequence -> video (H.264)
 - write/read_video_metadata() — sidecar JSON for roundtrip fidelity
 """
+
 from __future__ import annotations
 
 # Re-export stdlib modules that tests monkeypatch on the module object
@@ -41,6 +42,10 @@ from .probe import probe_video
 from .stitching import stitch_video
 
 __all__ = [
+    # stdlib re-exports (tests monkeypatch these on the package)
+    "shutil",
+    "subprocess",
+    "sys",
     # discovery
     "FFmpegValidationResult",
     "FFmpegVersionInfo",

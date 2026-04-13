@@ -3,6 +3,7 @@
 Extracted from project.py to keep that module focused on core project
 management (creation, JSON helpers, path utilities).
 """
+
 from __future__ import annotations
 
 import logging
@@ -13,14 +14,12 @@ from datetime import datetime
 
 from .project import (
     is_image_file,
-    is_video_file,
     projects_root,
     sanitize_stem,
     write_clip_json,
     write_project_json,
     read_project_json,
     _create_clip_folder,
-    _VIDEO_EXTS,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,7 +84,8 @@ def create_clip_from_sequence(
         frames_dir = os.path.join(clip_dir, "Frames")
         os.makedirs(frames_dir, exist_ok=True)
         files_to_copy = specific_files or [
-            f for f in os.listdir(source_folder)
+            f
+            for f in os.listdir(source_folder)
             if os.path.isfile(os.path.join(source_folder, f)) and is_image_file(f)
         ]
         for f in files_to_copy:
@@ -93,22 +93,23 @@ def create_clip_from_sequence(
             dst = os.path.join(frames_dir, f)
             if os.path.isfile(src) and not os.path.isfile(dst):
                 shutil.copy2(src, dst)
-        logger.info(
-            f"Copied {len(files_to_copy)} frame(s) from {source_folder} -> {frames_dir}"
-        )
+        logger.info(f"Copied {len(files_to_copy)} frame(s) from {source_folder} -> {frames_dir}")
     else:
         logger.info(f"Referencing image sequence in place: {source_folder}")
 
     # Write clip.json with sequence source metadata
     clip_display = display_name or os.path.basename(source_folder).replace("_", " ")
-    write_clip_json(clip_dir, {
-        "source": {
-            "type": "sequence",
-            "original_path": os.path.abspath(source_folder),
-            "copied": copy_source,
+    write_clip_json(
+        clip_dir,
+        {
+            "source": {
+                "type": "sequence",
+                "original_path": os.path.abspath(source_folder),
+                "copied": copy_source,
+            },
+            "display_name": clip_display,
         },
-        "display_name": clip_display,
-    })
+    )
 
     return clip_name
 
@@ -135,7 +136,9 @@ def add_sequences_to_project(
     new_paths: list[str] = []
     for folder in sequence_folders:
         clip_name = create_clip_from_sequence(
-            clips_dir, folder, copy_source=copy_source,
+            clips_dir,
+            folder,
+            copy_source=copy_source,
         )
         new_paths.append(os.path.join(clips_dir, clip_name))
 
@@ -217,22 +220,29 @@ def create_project_from_media(
     # Add video clips
     for video_path in video_paths:
         clip_name = _create_clip_folder(
-            clips_dir, video_path, copy_source=copy_video,
+            clips_dir,
+            video_path,
+            copy_source=copy_video,
         )
         clip_names.append(clip_name)
 
     # Add sequence clips
     for seq_folder in sequence_folders:
         clip_name = create_clip_from_sequence(
-            clips_dir, seq_folder, copy_source=copy_sequences,
+            clips_dir,
+            seq_folder,
+            copy_source=copy_sequences,
         )
         clip_names.append(clip_name)
 
-    write_project_json(project_dir, {
-        "version": 2,
-        "created": datetime.now().isoformat(),
-        "display_name": project_display_name,
-        "clips": clip_names,
-    })
+    write_project_json(
+        project_dir,
+        {
+            "version": 2,
+            "created": datetime.now().isoformat(),
+            "display_name": project_display_name,
+            "clips": clip_names,
+        },
+    )
 
     return project_dir

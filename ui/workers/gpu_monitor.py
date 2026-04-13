@@ -7,6 +7,7 @@ Design decisions (from Codex review):
 - Polling interval: 2000ms (not too aggressive on GPU queries)
 - Emits lightweight dict signal, QPixmap/rendering stays on main thread
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,7 +33,7 @@ class GPUMonitor(QObject):
     """
 
     vram_updated = Signal(dict)  # GPU info dict
-    gpu_name = Signal(str)       # emitted once on first successful poll
+    gpu_name = Signal(str)  # emitted once on first successful poll
 
     def __init__(self, interval_ms: int = 2000, parent=None):
         super().__init__(parent)
@@ -51,6 +52,7 @@ class GPUMonitor(QObject):
         """Try to initialize NVML for GPU monitoring."""
         try:
             import pynvml
+
             pynvml.nvmlInit()
             self._nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             self._nvml_available = True
@@ -60,6 +62,7 @@ class GPUMonitor(QObject):
             # Check torch fallback
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     self._torch_fallback = True
                     logger.info("GPU monitor: NVML unavailable, using torch.cuda fallback")
@@ -71,8 +74,10 @@ class GPUMonitor(QObject):
             if sys.platform == "darwin" and platform.machine() == "arm64":
                 self._apple_silicon = True
                 self._apple_chip_name = self._detect_apple_chip()
-                logger.info("GPU monitor: Apple Silicon (%s), reporting unified memory",
-                            self._apple_chip_name or "unknown chip")
+                logger.info(
+                    "GPU monitor: Apple Silicon (%s), reporting unified memory",
+                    self._apple_chip_name or "unknown chip",
+                )
             else:
                 logger.info("GPU monitor: no GPU monitoring available")
 
@@ -108,13 +113,14 @@ class GPUMonitor(QObject):
         """Query via NVML (preferred — no CUDA context interference)."""
         try:
             import pynvml
+
             mem = pynvml.nvmlDeviceGetMemoryInfo(self._nvml_handle)
             name = pynvml.nvmlDeviceGetName(self._nvml_handle)
             if isinstance(name, bytes):
                 name = name.decode("utf-8")
-            total_gb = mem.total / (1024 ** 3)
-            used_gb = mem.used / (1024 ** 3)
-            free_gb = mem.free / (1024 ** 3)
+            total_gb = mem.total / (1024**3)
+            used_gb = mem.used / (1024**3)
+            free_gb = mem.free / (1024**3)
             return {
                 "available": True,
                 "name": name,
@@ -131,13 +137,14 @@ class GPUMonitor(QObject):
         """Fallback: query via torch.cuda (may contend with inference)."""
         try:
             import torch
+
             props = torch.cuda.get_device_properties(0)
             total = props.total_memory
             reserved = torch.cuda.memory_reserved(0)
             free = total - reserved
-            total_gb = total / (1024 ** 3)
-            used_gb = reserved / (1024 ** 3)
-            free_gb = free / (1024 ** 3)
+            total_gb = total / (1024**3)
+            used_gb = reserved / (1024**3)
+            free_gb = free / (1024**3)
             return {
                 "available": True,
                 "name": torch.cuda.get_device_name(0),
@@ -156,7 +163,9 @@ class GPUMonitor(QObject):
         try:
             result = subprocess.run(
                 ["sysctl", "-n", "machdep.cpu.brand_string"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             return result.stdout.strip() or None
         except Exception:
@@ -170,13 +179,14 @@ class GPUMonitor(QObject):
         """
         try:
             import psutil
+
             mem = psutil.virtual_memory()
             total_bytes = int(mem.total)
             free_bytes = int(mem.available)
             used_bytes = max(0, total_bytes - free_bytes)
-            total_gb = total_bytes / (1024 ** 3)
-            used_gb = used_bytes / (1024 ** 3)
-            free_gb = free_bytes / (1024 ** 3)
+            total_gb = total_bytes / (1024**3)
+            used_gb = used_bytes / (1024**3)
+            free_gb = free_bytes / (1024**3)
             usage_pct = (used_bytes / total_bytes * 100.0) if total_bytes > 0 else 0.0
             return {
                 "available": True,

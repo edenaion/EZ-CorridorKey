@@ -187,9 +187,7 @@ def find_checkpoint(user_path: str | None) -> str:
 
     ckpt_dir = os.path.join(PROJECT_ROOT, "CorridorKeyModule", "checkpoints")
     candidates = sorted(
-        os.path.join(ckpt_dir, fname)
-        for fname in os.listdir(ckpt_dir)
-        if fname.endswith(".pth")
+        os.path.join(ckpt_dir, fname) for fname in os.listdir(ckpt_dir) if fname.endswith(".pth")
     )
     if not candidates:
         raise FileNotFoundError("Checkpoint not found in CorridorKeyModule/checkpoints")
@@ -223,6 +221,7 @@ def import_engine(repo_root: str):
     sys.path.insert(0, repo_root)
     try:
         from CorridorKeyModule.inference_engine import CorridorKeyEngine
+
         return CorridorKeyEngine
     finally:
         sys.path.pop(0)
@@ -272,7 +271,9 @@ def verdict_for_psnr(psnr: float) -> str:
     return "INVESTIGATE"
 
 
-def compute_metrics(name: str, a: np.ndarray, b: np.ndarray, mask: np.ndarray | None = None) -> MetricRow:
+def compute_metrics(
+    name: str, a: np.ndarray, b: np.ndarray, mask: np.ndarray | None = None
+) -> MetricRow:
     a_sel = np.asarray(_select_values(a, mask), dtype=np.float64)
     b_sel = np.asarray(_select_values(b, mask), dtype=np.float64)
     if a_sel.shape != b_sel.shape:
@@ -282,7 +283,7 @@ def compute_metrics(name: str, a: np.ndarray, b: np.ndarray, mask: np.ndarray | 
 
     diff = a_sel - b_sel
     abs_diff = np.abs(diff)
-    mse = float(np.mean(diff ** 2))
+    mse = float(np.mean(diff**2))
     psnr = float("inf") if mse == 0.0 else 10.0 * np.log10(1.0 / mse)
     pixel_count = int(a_sel.shape[0]) if a_sel.ndim > 1 else int(a_sel.size)
 
@@ -296,7 +297,9 @@ def compute_metrics(name: str, a: np.ndarray, b: np.ndarray, mask: np.ndarray | 
     )
 
 
-def compute_subject_mask(alpha_up: np.ndarray, alpha_ours: np.ndarray, threshold: float) -> np.ndarray:
+def compute_subject_mask(
+    alpha_up: np.ndarray, alpha_ours: np.ndarray, threshold: float
+) -> np.ndarray:
     a = alpha_up[:, :, 0] if alpha_up.ndim == 3 else alpha_up
     b = alpha_ours[:, :, 0] if alpha_ours.ndim == 3 else alpha_ours
     return np.maximum(np.clip(a, 0.0, 1.0), np.clip(b, 0.0, 1.0)) > threshold
@@ -314,7 +317,9 @@ def compute_luminance(rgb: np.ndarray) -> np.ndarray:
     return 0.2126 * rgb[:, 0] + 0.7152 * rgb[:, 1] + 0.0722 * rgb[:, 2]
 
 
-def attach_color_drift(row: MetricRow, comp_up: np.ndarray, comp_ours: np.ndarray, mask: np.ndarray) -> None:
+def attach_color_drift(
+    row: MetricRow, comp_up: np.ndarray, comp_ours: np.ndarray, mask: np.ndarray
+) -> None:
     up = np.clip(comp_up[mask], 0.0, 1.0).astype(np.float64)
     ours = np.clip(comp_ours[mask], 0.0, 1.0).astype(np.float64)
     if up.size == 0 or ours.size == 0:
@@ -343,13 +348,7 @@ def detect_skin_mask(
     cb = ycrcb[:, :, 2]
 
     skin_mask = (
-        subject_mask
-        & alpha_mask
-        & (y > 40)
-        & (cr >= 133)
-        & (cr <= 173)
-        & (cb >= 77)
-        & (cb <= 127)
+        subject_mask & alpha_mask & (y > 40) & (cr >= 133) & (cr <= 173) & (cb >= 77) & (cb <= 127)
     )
     if int(skin_mask.sum()) < MIN_SKIN_PIXELS:
         return None
@@ -364,8 +363,12 @@ def alpha_to_rgb(alpha: np.ndarray) -> np.ndarray:
 
 def _backend_status() -> list[str]:
     status = []
-    status.append("SSIM/DeltaE: ready" if skimage_ssim is not None else "SSIM/DeltaE: missing scikit-image")
-    status.append("MS-SSIM: ready" if torch_ms_ssim is not None else "MS-SSIM: missing pytorch-msssim")
+    status.append(
+        "SSIM/DeltaE: ready" if skimage_ssim is not None else "SSIM/DeltaE: missing scikit-image"
+    )
+    status.append(
+        "MS-SSIM: ready" if torch_ms_ssim is not None else "MS-SSIM: missing pytorch-msssim"
+    )
     if lpips is not None:
         status.append("LPIPS: ready")
     else:
@@ -373,7 +376,9 @@ def _backend_status() -> list[str]:
     return status
 
 
-def _bbox_from_mask(mask: np.ndarray, pad: int = DEFAULT_MASK_PAD) -> tuple[int, int, int, int] | None:
+def _bbox_from_mask(
+    mask: np.ndarray, pad: int = DEFAULT_MASK_PAD
+) -> tuple[int, int, int, int] | None:
     ys, xs = np.nonzero(mask)
     if ys.size == 0:
         return None
@@ -469,7 +474,9 @@ def _compute_lpips(a: np.ndarray, b: np.ndarray) -> float | None:
     return float(value.item())
 
 
-def _compute_deltae(comp_up: np.ndarray, comp_ours: np.ndarray, mask: np.ndarray) -> tuple[float, float] | tuple[None, None]:
+def _compute_deltae(
+    comp_up: np.ndarray, comp_ours: np.ndarray, mask: np.ndarray
+) -> tuple[float, float] | tuple[None, None]:
     if rgb2lab is None or deltaE_ciede2000 is None:
         return None, None
     if not np.any(mask):
@@ -483,13 +490,17 @@ def _compute_deltae(comp_up: np.ndarray, comp_ours: np.ndarray, mask: np.ndarray
     return float(masked.mean()), float(np.percentile(masked, 95))
 
 
-def _attach_image_metrics(row: MetricRow, a: np.ndarray, b: np.ndarray, allow_lpips: bool = True) -> None:
+def _attach_image_metrics(
+    row: MetricRow, a: np.ndarray, b: np.ndarray, allow_lpips: bool = True
+) -> None:
     row.ssim = _compute_ssim(a, b)
     row.ms_ssim = _compute_ms_ssim(a, b)
     row.lpips = _compute_lpips(a, b) if allow_lpips else None
 
 
-def _attach_subject_patch_metrics(row: MetricRow, up: np.ndarray, ours: np.ndarray, mask: np.ndarray, fill: float = 0.5) -> None:
+def _attach_subject_patch_metrics(
+    row: MetricRow, up: np.ndarray, ours: np.ndarray, mask: np.ndarray, fill: float = 0.5
+) -> None:
     patch_up = _crop_and_fill(up, mask, fill)
     patch_ours = _crop_and_fill(ours, mask, fill)
     if patch_up is None or patch_ours is None:
@@ -558,7 +569,13 @@ def summarize_overall(rows: list[MetricRow]) -> tuple[str, str]:
     return "BIT-IDENTICAL", "#FFF203"
 
 
-def _render_table(ax, rows: list[MetricRow], col_labels: list[str], cell_text: list[list[str]], highlight_verdict: bool) -> None:
+def _render_table(
+    ax,
+    rows: list[MetricRow],
+    col_labels: list[str],
+    cell_text: list[list[str]],
+    highlight_verdict: bool,
+) -> None:
     BG_CARD = "#1A1900"
     BORDER = "#2A2910"
     YELLOW = "#FFF203"
@@ -621,13 +638,11 @@ def generate_report(
         pil.save(buf, format="PNG", optimize=True)
         return base64.b64encode(buf.getvalue()).decode()
 
-    src_disp = np.clip(source / max(float(source.max()), 1e-6), 0.0, 1.0)
     comp_up_disp = np.clip(res_up["comp"], 0.0, 1.0)
     comp_ours_disp = np.clip(res_ours["comp"], 0.0, 1.0)
     alpha_up_disp = alpha_to_rgb(res_up["alpha"])
     alpha_ours_disp = alpha_to_rgb(res_ours["alpha"])
 
-    src_b64 = to_b64_png(src_disp)
     comp_up_b64 = to_b64_png(comp_up_disp)
     comp_ours_b64 = to_b64_png(comp_ours_disp)
     alpha_up_b64 = to_b64_png(alpha_up_disp)
@@ -659,11 +674,11 @@ def generate_report(
     for row in rows:
         perc_rows_html += f"""<tr>
             <td>{row.name}</td>
-            <td>{'-' if row.ssim is None else f'{row.ssim:.6f}'}</td>
-            <td>{'-' if row.ms_ssim is None else f'{row.ms_ssim:.6f}'}</td>
-            <td>{'-' if row.lpips is None else f'{row.lpips:.6f}'}</td>
-            <td>{'-' if row.deltae_mean is None else f'{row.deltae_mean:.6f}'}</td>
-            <td>{'-' if row.deltae_p95 is None else f'{row.deltae_p95:.6f}'}</td></tr>\n"""
+            <td>{"-" if row.ssim is None else f"{row.ssim:.6f}"}</td>
+            <td>{"-" if row.ms_ssim is None else f"{row.ms_ssim:.6f}"}</td>
+            <td>{"-" if row.lpips is None else f"{row.lpips:.6f}"}</td>
+            <td>{"-" if row.deltae_mean is None else f"{row.deltae_mean:.6f}"}</td>
+            <td>{"-" if row.deltae_p95 is None else f"{row.deltae_p95:.6f}"}</td></tr>\n"""
 
     # Inline logo SVG (from ui/theme/corridorkey_logo.svg)
     logo_svg = (
@@ -675,7 +690,7 @@ def generate_report(
         '<path d="M269.54 474L330 413.54V320L176 474H269.54Z" fill="#FFF203"/>'
         '<path d="M330 562.46L269.54 502H176L330 656V562.46Z" fill="#FFF203"/>'
         '<path d="M418.46 502L358 562.46V656L512 502H418.46Z" fill="#FFF203"/>'
-        '</svg>'
+        "</svg>"
     )
 
     html = f"""<!DOCTYPE html>
@@ -740,6 +755,7 @@ td {{ background:#1A1900; padding:4px 8px; border:1px solid #2A2910; text-align:
     # Try headless screenshot via Playwright if available
     try:
         from playwright.sync_api import sync_playwright
+
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page(viewport={"width": 1600, "height": 900})
@@ -813,7 +829,9 @@ def build_rows(
     rows.append(comp_row)
 
     subject_mask = compute_subject_mask(res_up["alpha"], res_ours["alpha"], subject_alpha)
-    subject_row = compute_metrics("Composite RGB (Subject)", res_up["comp"], res_ours["comp"], mask=subject_mask)
+    subject_row = compute_metrics(
+        "Composite RGB (Subject)", res_up["comp"], res_ours["comp"], mask=subject_mask
+    )
     attach_color_drift(subject_row, res_up["comp"], res_ours["comp"], subject_mask)
     _attach_subject_patch_metrics(subject_row, res_up["comp"], res_ours["comp"], subject_mask)
     subject_row.note = f"Mask = max(alpha_up, alpha_ours) > {subject_alpha:.2f}"
@@ -823,12 +841,15 @@ def build_rows(
     alpha_mask = compute_subject_mask(res_up["alpha"], res_ours["alpha"], skin_alpha)
     skin_mask = detect_skin_mask(res_up["comp"], res_ours["comp"], subject_mask, alpha_mask)
     if skin_mask is not None:
-        skin_row = compute_metrics("Composite RGB (Skin-Like)", res_up["comp"], res_ours["comp"], mask=skin_mask)
+        skin_row = compute_metrics(
+            "Composite RGB (Skin-Like)", res_up["comp"], res_ours["comp"], mask=skin_mask
+        )
         attach_color_drift(skin_row, res_up["comp"], res_ours["comp"], skin_mask)
-        skin_row.deltae_mean, skin_row.deltae_p95 = _compute_deltae(res_up["comp"], res_ours["comp"], skin_mask)
+        skin_row.deltae_mean, skin_row.deltae_p95 = _compute_deltae(
+            res_up["comp"], res_ours["comp"], skin_mask
+        )
         skin_row.note = (
-            "Mask = skin-like YCrCb thresholds on mean composite "
-            f"and alpha > {skin_alpha:.2f}"
+            f"Mask = skin-like YCrCb thresholds on mean composite and alpha > {skin_alpha:.2f}"
         )
         _apply_supplemental_verdict(skin_row)
         rows.append(skin_row)
@@ -920,7 +941,12 @@ def main() -> None:
     print("Completed.")
     print()
 
-    rows = build_rows(res_up=res_up, res_ours=res_ours, subject_alpha=args.subject_alpha, skin_alpha=args.skin_alpha)
+    rows = build_rows(
+        res_up=res_up,
+        res_ours=res_ours,
+        subject_alpha=args.subject_alpha,
+        skin_alpha=args.skin_alpha,
+    )
     print_metric_rows(rows)
 
     generate_report(

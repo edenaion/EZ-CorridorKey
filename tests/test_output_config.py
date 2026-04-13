@@ -1,7 +1,7 @@
 """Tests for OutputConfig, InferenceParams serialization, and manifest-based resume."""
+
 import os
 import json
-import pytest
 
 from backend.service import InferenceParams, OutputConfig
 
@@ -71,7 +71,9 @@ class TestOutputConfig:
         assert restored.processed_enabled is False
 
     def test_enabled_outputs(self):
-        cfg = OutputConfig(fg_enabled=True, matte_enabled=True, comp_enabled=False, processed_enabled=False)
+        cfg = OutputConfig(
+            fg_enabled=True, matte_enabled=True, comp_enabled=False, processed_enabled=False
+        )
         assert cfg.enabled_outputs == ["fg", "matte"]
 
     def test_all_enabled(self):
@@ -88,7 +90,7 @@ class TestOutputConfig:
 class TestManifestResume:
     def test_completed_stems_uses_manifest(self, tmp_path):
         """When manifest exists, resume checks only enabled outputs."""
-        from backend.clip_state import ClipEntry, ClipState
+        from backend.clip_state import ClipEntry
 
         clip = ClipEntry(name="TestClip", root_path=str(tmp_path))
         out = os.path.join(str(tmp_path), "Output")
@@ -104,12 +106,12 @@ class TestManifestResume:
             "formats": {"fg": "exr", "comp": "png"},
             "params": {},
         }
-        with open(os.path.join(out, ".corridorkey_manifest.json"), 'w') as f:
+        with open(os.path.join(out, ".corridorkey_manifest.json"), "w") as f:
             json.dump(manifest, f)
 
         # Create matching stems
-        open(os.path.join(fg_dir, "frame_001.exr"), 'w').close()
-        open(os.path.join(comp_dir, "frame_001.png"), 'w').close()
+        open(os.path.join(fg_dir, "frame_001.exr"), "w").close()
+        open(os.path.join(comp_dir, "frame_001.png"), "w").close()
 
         stems = clip.completed_stems()
         assert "frame_001" in stems
@@ -125,9 +127,9 @@ class TestManifestResume:
         os.makedirs(fg_dir)
         os.makedirs(matte_dir)
 
-        open(os.path.join(fg_dir, "frame_001.exr"), 'w').close()
-        open(os.path.join(matte_dir, "frame_001.exr"), 'w').close()
-        open(os.path.join(fg_dir, "frame_002.exr"), 'w').close()
+        open(os.path.join(fg_dir, "frame_001.exr"), "w").close()
+        open(os.path.join(matte_dir, "frame_001.exr"), "w").close()
+        open(os.path.join(fg_dir, "frame_002.exr"), "w").close()
         # frame_002 missing from matte — not complete
 
         stems = clip.completed_stems()
@@ -145,8 +147,8 @@ class TestManifestResume:
         os.makedirs(matte_dir)
 
         for stem in ["frame_001", "frame_002", "frame_003"]:
-            open(os.path.join(fg_dir, f"{stem}.exr"), 'w').close()
-            open(os.path.join(matte_dir, f"{stem}.exr"), 'w').close()
+            open(os.path.join(fg_dir, f"{stem}.exr"), "w").close()
+            open(os.path.join(matte_dir, f"{stem}.exr"), "w").close()
 
         assert clip.completed_frame_count() == 3
         assert len(clip.completed_stems()) == 3

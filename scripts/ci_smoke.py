@@ -10,6 +10,7 @@ This script is intentionally narrow:
 
 It is meant for CI and post-install smoke tests, not full GPU QA.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -108,9 +109,15 @@ def _exercise_ffmpeg_repair_button(app, prefs) -> None:
         ffmpeg_tools.get_ffmpeg_install_help = fake_help
         ffmpeg_tools.repair_ffmpeg_install = fake_repair
 
-        QMessageBox.information = lambda parent, title, text: dialogs.append((title, text)) or QMessageBox.Ok
-        QMessageBox.critical = lambda parent, title, text: dialogs.append((title, text)) or QMessageBox.Ok
-        QMessageBox.question = lambda parent, title, text: dialogs.append((title, text)) or QMessageBox.Yes
+        QMessageBox.information = lambda parent, title, text: (
+            dialogs.append((title, text)) or QMessageBox.Ok
+        )
+        QMessageBox.critical = lambda parent, title, text: (
+            dialogs.append((title, text)) or QMessageBox.Ok
+        )
+        QMessageBox.question = lambda parent, title, text: (
+            dialogs.append((title, text)) or QMessageBox.Yes
+        )
 
         prefs._refresh_ffmpeg_status()
         prefs._repair_ffmpeg_btn.click()

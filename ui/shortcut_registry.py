@@ -3,6 +3,7 @@
 Stores default shortcuts, loads/saves user overrides via QSettings,
 creates QShortcut objects, and detects conflicts.
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,11 +21,12 @@ _QSETTINGS_GROUP = "shortcuts"
 @dataclass
 class ShortcutDef:
     """One shortcut definition."""
-    action_id: str          # Unique internal ID, e.g. "run_inference"
-    display_name: str       # Human-readable label shown in the dialog
-    category: str           # Grouping: "Global", "Timeline", etc.
-    default_key: str        # Default key sequence string, e.g. "Ctrl+R"
-    callback_name: str      # Name of the method on MainWindow to call
+
+    action_id: str  # Unique internal ID, e.g. "run_inference"
+    display_name: str  # Human-readable label shown in the dialog
+    category: str  # Grouping: "Global", "Timeline", etc.
+    default_key: str  # Default key sequence string, e.g. "Ctrl+R"
+    callback_name: str  # Name of the method on MainWindow to call
     menu_action: bool = False  # True for shortcuts managed by QAction (menu bar)
     app_shortcut: bool = False  # True to use ApplicationShortcut context (fires globally)
 
@@ -32,38 +34,55 @@ class ShortcutDef:
 # Authoritative list — order here = display order in dialog
 SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     # Global
-    ShortcutDef("escape",             "Stop / Cancel",                "Global",     "Esc",          "_on_escape"),
-    ShortcutDef("run_inference",      "Run Inference",                "Global",     "Ctrl+R",       "_on_run_inference"),
-    ShortcutDef("run_all",            "Run All Clips",                "Global",     "Ctrl+Shift+R", "_on_run_all_ready"),
-    ShortcutDef("save_session",       "Save Session",                 "Global",     "Ctrl+S",       "_on_save_session",    menu_action=True),
-    ShortcutDef("open_project",       "Open Project",                 "Global",     "Ctrl+O",       "_on_open_project",    menu_action=True),
-    ShortcutDef("toggle_mute",        "Toggle Mute",                  "Global",     "Ctrl+M",       "_toggle_mute"),
-    ShortcutDef("welcome_screen",     "Return to Home",               "Global",     "Home",         "_return_to_welcome"),
-    ShortcutDef("delete_clips",       "Remove Selected Clips",        "Global",     "Del",          "_on_delete_selected_clips"),
-    ShortcutDef("toggle_queue",       "Toggle Queue",                 "Global",     "Q",            "_toggle_queue_panel"),
-    ShortcutDef("debug_console",     "Debug Console",                "Global",     "F12",          "_toggle_debug_console", app_shortcut=True),
-    ShortcutDef("preferences",       "Preferences",                  "Global",     "Ctrl+,",       "_show_preferences",     menu_action=True),
+    ShortcutDef("escape", "Stop / Cancel", "Global", "Esc", "_on_escape"),
+    ShortcutDef("run_inference", "Run Inference", "Global", "Ctrl+R", "_on_run_inference"),
+    ShortcutDef("run_all", "Run All Clips", "Global", "Ctrl+Shift+R", "_on_run_all_ready"),
+    ShortcutDef(
+        "save_session", "Save Session", "Global", "Ctrl+S", "_on_save_session", menu_action=True
+    ),
+    ShortcutDef(
+        "open_project", "Open Project", "Global", "Ctrl+O", "_on_open_project", menu_action=True
+    ),
+    ShortcutDef("toggle_mute", "Toggle Mute", "Global", "Ctrl+M", "_toggle_mute"),
+    ShortcutDef("welcome_screen", "Return to Home", "Global", "Home", "_return_to_welcome"),
+    ShortcutDef(
+        "delete_clips", "Remove Selected Clips", "Global", "Del", "_on_delete_selected_clips"
+    ),
+    ShortcutDef("toggle_queue", "Toggle Queue", "Global", "Q", "_toggle_queue_panel"),
+    ShortcutDef(
+        "debug_console",
+        "Debug Console",
+        "Global",
+        "F12",
+        "_toggle_debug_console",
+        app_shortcut=True,
+    ),
+    ShortcutDef(
+        "preferences", "Preferences", "Global", "Ctrl+,", "_show_preferences", menu_action=True
+    ),
     # Timeline
-    ShortcutDef("set_in",             "Set In-Point",                 "Timeline",   "I",            "_set_in_point"),
-    ShortcutDef("set_out",            "Set Out-Point",                "Timeline",   "O",            "_set_out_point"),
-    ShortcutDef("clear_in_out",       "Clear In/Out",                 "Timeline",   "Alt+I",        "_clear_in_out"),
+    ShortcutDef("set_in", "Set In-Point", "Timeline", "I", "_set_in_point"),
+    ShortcutDef("set_out", "Set Out-Point", "Timeline", "O", "_set_out_point"),
+    ShortcutDef("clear_in_out", "Clear In/Out", "Timeline", "Alt+I", "_clear_in_out"),
     # Playback
-    ShortcutDef("play_pause",         "Play / Pause",                 "Playback",   "Space",        "_toggle_playback"),
+    ShortcutDef("play_pause", "Play / Pause", "Playback", "Space", "_toggle_playback"),
     # Paint
-    ShortcutDef("annotation_fg",      "Foreground Paint",             "Paint",      "1",            "_toggle_annotation_fg"),
-    ShortcutDef("annotation_bg",      "Background Paint (Red)",       "Paint",      "2",            "_toggle_annotation_bg"),
-    ShortcutDef("cycle_fg_color",     "Cycle Foreground Color",       "Paint",      "C",            "_cycle_fg_color"),
-    ShortcutDef("undo_annotation",    "Undo Paint Stroke",            "Paint",      "Ctrl+Z",       "_undo_annotation"),
-    ShortcutDef("clear_annotations",  "Clear Paint Strokes",          "Paint",      "Ctrl+C",       "_confirm_clear_annotations"),
+    ShortcutDef("annotation_fg", "Foreground Paint", "Paint", "1", "_toggle_annotation_fg"),
+    ShortcutDef("annotation_bg", "Background Paint (Red)", "Paint", "2", "_toggle_annotation_bg"),
+    ShortcutDef("cycle_fg_color", "Cycle Foreground Color", "Paint", "C", "_cycle_fg_color"),
+    ShortcutDef("undo_annotation", "Undo Paint Stroke", "Paint", "Ctrl+Z", "_undo_annotation"),
+    ShortcutDef(
+        "clear_annotations", "Clear Paint Strokes", "Paint", "Ctrl+C", "_confirm_clear_annotations"
+    ),
     # Viewer
-    ShortcutDef("toggle_ab_wipe",     "Toggle A/B Wipe",              "Viewer",     "A",            "_toggle_ab_wipe"),
-    ShortcutDef("view_input",         "View: INPUT",                  "Viewer",     "F1",           "_view_mode_input"),
-    ShortcutDef("view_mask",          "View: MASK",                   "Viewer",     "F2",           "_view_mode_mask"),
-    ShortcutDef("view_alpha",         "View: ALPHA",                  "Viewer",     "F3",           "_view_mode_alpha"),
-    ShortcutDef("view_fg",            "View: FG",                     "Viewer",     "F4",           "_view_mode_fg"),
-    ShortcutDef("view_matte",         "View: MATTE",                  "Viewer",     "F5",           "_view_mode_matte"),
-    ShortcutDef("view_comp",          "View: COMP",                   "Viewer",     "F6",           "_view_mode_comp"),
-    ShortcutDef("view_proc",          "View: PROC",                   "Viewer",     "F7",           "_view_mode_proc"),
+    ShortcutDef("toggle_ab_wipe", "Toggle A/B Wipe", "Viewer", "A", "_toggle_ab_wipe"),
+    ShortcutDef("view_input", "View: INPUT", "Viewer", "F1", "_view_mode_input"),
+    ShortcutDef("view_mask", "View: MASK", "Viewer", "F2", "_view_mode_mask"),
+    ShortcutDef("view_alpha", "View: ALPHA", "Viewer", "F3", "_view_mode_alpha"),
+    ShortcutDef("view_fg", "View: FG", "Viewer", "F4", "_view_mode_fg"),
+    ShortcutDef("view_matte", "View: MATTE", "Viewer", "F5", "_view_mode_matte"),
+    ShortcutDef("view_comp", "View: COMP", "Viewer", "F6", "_view_mode_comp"),
+    ShortcutDef("view_proc", "View: PROC", "Viewer", "F7", "_view_mode_proc"),
 ]
 
 # Category display order
@@ -119,8 +138,10 @@ class ShortcutRegistry:
 
     def is_default(self, action_id: str) -> bool:
         """True if the action uses its default key (no custom override)."""
-        return action_id not in self._overrides or \
-            self._overrides[action_id] == self._defs[action_id].default_key
+        return (
+            action_id not in self._overrides
+            or self._overrides[action_id] == self._defs[action_id].default_key
+        )
 
     def get_def(self, action_id: str) -> ShortcutDef | None:
         """Return the definition for an action."""

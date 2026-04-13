@@ -1,6 +1,6 @@
 """Tests for display transform — EXR preview conversion for various channel layouts."""
+
 import os
-import tempfile
 from unittest.mock import patch
 import pytest
 import numpy as np
@@ -13,9 +13,15 @@ pyside6 = pytest.importorskip("PySide6", reason="PySide6 not installed")
 from PySide6.QtGui import QImage
 
 from ui.preview.display_transform import (
-    decode_frame, clear_cache, _cache_key, _transform_matte,
-    _transform_linear_rgb, _transform_processed_rgba, _numpy_to_qimage,
-    processed_rgba_to_qimage, decode_video_frame,
+    decode_frame,
+    clear_cache,
+    _cache_key,
+    _transform_matte,
+    _transform_linear_rgb,
+    _transform_processed_rgba,
+    _numpy_to_qimage,
+    processed_rgba_to_qimage,
+    decode_video_frame,
 )
 from ui.preview.frame_index import ViewMode
 
@@ -95,7 +101,7 @@ class TestTransformProcessedRGBA:
         """Codex test: 4-channel straight RGBA (Processed output)."""
         bgra = np.zeros((10, 10, 4), dtype=np.float32)
         bgra[:, :, :3] = 0.25
-        bgra[:, :, 3] = 0.5   # alpha
+        bgra[:, :, 3] = 0.5  # alpha
         qimg = _transform_processed_rgba(bgra)
         assert isinstance(qimg, QImage)
 
@@ -134,7 +140,9 @@ class TestTransformProcessedRGBA:
 class TestDecodeFrame:
     def test_cache_key_distinguishes_input_exr_color_truth(self):
         assert _cache_key("/tmp/test.exr", ViewMode.INPUT, False) != _cache_key(
-            "/tmp/test.exr", ViewMode.INPUT, True,
+            "/tmp/test.exr",
+            ViewMode.INPUT,
+            True,
         )
 
     def test_decode_png(self, tmp_path):

@@ -7,6 +7,7 @@ thread for storage in the model. Uses QStandardPaths for cache location
 Codex finding: don't create QPixmap off main thread. Generate QImage
 in worker, promote to QPixmap on main thread only if needed.
 """
+
 from __future__ import annotations
 
 import os
@@ -148,8 +149,16 @@ class _ThumbTask(QRunnable):
             if self._input_path is None or not os.path.isdir(self._input_path):
                 return None
             from backend.natural_sort import natsorted
-            files = natsorted([f for f in os.listdir(self._input_path)
-                             if f.lower().endswith(('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp'))])
+
+            files = natsorted(
+                [
+                    f
+                    for f in os.listdir(self._input_path)
+                    if f.lower().endswith(
+                        (".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff", ".bmp")
+                    )
+                ]
+            )
             if not files:
                 return None
             path = os.path.join(self._input_path, files[0])
@@ -179,10 +188,15 @@ class _ThumbTask(QRunnable):
             dir_path = mode_dirs.get(mode)
             if dir_path is None or not os.path.isdir(dir_path):
                 continue
-            files = natsorted([
-                f for f in os.listdir(dir_path)
-                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp'))
-            ])
+            files = natsorted(
+                [
+                    f
+                    for f in os.listdir(dir_path)
+                    if f.lower().endswith(
+                        (".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff", ".bmp")
+                    )
+                ]
+            )
             if not files:
                 continue
             path = os.path.join(dir_path, files[0])
@@ -211,6 +225,7 @@ class _ThumbTask(QRunnable):
         except Exception:
             pass
         return None
+
 
 class ThumbnailGenerator(QObject):
     """Manages background thumbnail generation for clips.

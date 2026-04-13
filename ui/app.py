@@ -4,6 +4,7 @@ Fonts:
   - Gagarin: Logo / brand mark text (identity font)
   - Open Sans: All secondary / body UI text (default app font)
 """
+
 from __future__ import annotations
 
 import sys
@@ -13,7 +14,7 @@ import logging
 
 from PySide6.QtWidgets import QApplication, QMessageBox, QDialogButtonBox
 from PySide6.QtGui import QFontDatabase, QFont, QIcon
-from PySide6.QtCore import Qt, QObject, QEvent
+from PySide6.QtCore import QObject, QEvent
 
 from ui.theme import load_stylesheet
 
@@ -47,7 +48,8 @@ def _configure_runtime_backends() -> None:
     # so the first batch of frames ran without TF32 tensor-core acceleration.
     try:
         import torch
-        torch.set_float32_matmul_precision('high')
+
+        torch.set_float32_matmul_precision("high")
         torch.backends.cudnn.benchmark = False
         logger.info("CUDA globals: TF32 precision='high', cuDNN benchmark=off")
     except ImportError:
@@ -60,6 +62,7 @@ def _configure_runtime_backends() -> None:
     # Without this, Windows 11 aggressively throttles background processes,
     # starving our GPU worker thread of CPU time and stalling CUDA inference.
     try:
+
         class _POWER_THROTTLING_STATE(ctypes.Structure):
             _fields_ = [
                 ("Version", ctypes.c_ulong),
@@ -83,8 +86,7 @@ def _configure_runtime_backends() -> None:
         if ok:
             logger.info("Disabled Windows power throttling (EcoQoS)")
         else:
-            logger.debug("SetProcessInformation failed: %s",
-                         ctypes.get_last_error())
+            logger.debug("SetProcessInformation failed: %s", ctypes.get_last_error())
     except Exception as exc:
         logger.debug("Power throttling opt-out skipped: %s", exc)
 
@@ -96,8 +98,7 @@ def _configure_runtime_backends() -> None:
     try:
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000
-        if kernel32.SetPriorityClass(kernel32.GetCurrentProcess(),
-                                     ABOVE_NORMAL_PRIORITY_CLASS):
+        if kernel32.SetPriorityClass(kernel32.GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS):
             logger.info("Process priority set to ABOVE_NORMAL")
         else:
             logger.debug("SetPriorityClass failed: %s", ctypes.get_last_error())
@@ -106,6 +107,7 @@ def _configure_runtime_backends() -> None:
 
     try:
         import cv2
+
         cv2.setNumThreads(1)
     except Exception as exc:
         logger.debug(f"OpenCV thread tuning skipped: {exc}")
@@ -118,6 +120,7 @@ def _migrate_legacy_settings() -> None:
     New: HKCU\\Software\\EZSCAPE\\EZ-CorridorKey
     """
     from PySide6.QtCore import QSettings
+
     new = QSettings()  # Uses current org/app (EZSCAPE / EZ-CorridorKey)
     if new.value("_migrated_from_legacy", False, type=bool):
         return
@@ -152,7 +155,7 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     _migrate_legacy_settings()
 
     # ── Font loading (frozen-build aware) ──
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         base = sys._MEIPASS
         fonts_dir = os.path.join(base, "ui", "theme", "fonts")
     else:
@@ -209,7 +212,11 @@ def create_app(argv: list[str] | None = None) -> QApplication:
 
     # Set app icon (window title bar + taskbar) — ICO preferred for window chrome
     # (corridorkey.svg is the brand logo used on the welcome screen, not the app icon)
-    theme_dir = os.path.join(base, "ui", "theme") if getattr(sys, 'frozen', False) else os.path.join(base, "theme")
+    theme_dir = (
+        os.path.join(base, "ui", "theme")
+        if getattr(sys, "frozen", False)
+        else os.path.join(base, "theme")
+    )
     ico_icon = os.path.join(theme_dir, "corridorkey.ico")
     png_icon = os.path.join(theme_dir, "corridorkey.png")
     if os.path.isfile(ico_icon):
@@ -219,6 +226,7 @@ def create_app(argv: list[str] | None = None) -> QApplication:
 
     # Install unified click sound — every QPushButton gets click sound automatically
     from ui.sounds.audio_manager import install_global_click_sound
+
     install_global_click_sound(app)
 
     # Center buttons on all QMessageBox dialogs globally

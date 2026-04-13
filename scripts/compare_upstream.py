@@ -7,7 +7,9 @@ Runs the SAME source frame + alpha mask through:
 Compares the actual output alphas, FGs, and composites.
 Generates a branded visual report PNG.
 """
+
 import os
+
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
 import sys
@@ -82,14 +84,17 @@ def run_upstream(frame, mask, checkpoint):
     sys.path.insert(0, UPSTREAM_ROOT)
     # Import upstream's engine
     from CorridorKeyModule.inference_engine import CorridorKeyEngine as UpstreamEngine
+
     sys.path.pop(0)
 
     engine = UpstreamEngine(
-        checkpoint_path=checkpoint, device='cuda', img_size=2048,
+        checkpoint_path=checkpoint,
+        device="cuda",
+        img_size=2048,
     )
     result = engine.process_frame(frame, mask)
-    alpha = result['alpha']
-    comp = result['comp']
+    alpha = result["alpha"]
+    comp = result["comp"]
     del engine
     torch.cuda.empty_cache()
     return alpha, comp
@@ -100,41 +105,41 @@ def run_ours(frame, mask, checkpoint):
     sys.path.insert(0, PROJECT_ROOT)
     # Force fresh import of our engine (not upstream's cached one)
     # Remove any cached CorridorKeyModule imports
-    mods_to_remove = [k for k in sys.modules if k.startswith('CorridorKeyModule')]
+    mods_to_remove = [k for k in sys.modules if k.startswith("CorridorKeyModule")]
     for m in mods_to_remove:
         del sys.modules[m]
 
     from CorridorKeyModule.inference_engine import CorridorKeyEngine as OurEngine
 
     engine = OurEngine(
-        checkpoint_path=checkpoint, device='cuda', img_size=2048,
+        checkpoint_path=checkpoint,
+        device="cuda",
+        img_size=2048,
     )
     result = engine.process_frame(frame, mask)
-    alpha = result['alpha']
-    comp = result['comp']
+    alpha = result["alpha"]
+    comp = result["comp"]
     del engine
     torch.cuda.empty_cache()
     torch._dynamo.reset()
     return alpha, comp
 
 
-def generate_report(frame_path, source, mask,
-                    alpha_up, comp_up,
-                    alpha_ours, comp_ours,
-                    metrics):
+def generate_report(frame_path, source, mask, alpha_up, comp_up, alpha_ours, comp_ours, metrics):
     """Generate branded visual comparison report."""
     import matplotlib
-    matplotlib.use('Agg')
+
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from datetime import datetime
 
-    BG = '#141300'
-    BG_CARD = '#1A1900'
-    BORDER = '#2A2910'
-    YELLOW = '#FFF203'
-    TEXT = '#E0E0E0'
-    PASS_GREEN = '#44ff44'
-    FAIL_RED = '#ff4444'
+    BG = "#141300"
+    BG_CARD = "#1A1900"
+    BORDER = "#2A2910"
+    YELLOW = "#FFF203"
+    TEXT = "#E0E0E0"
+    PASS_GREEN = "#44ff44"
+    FAIL_RED = "#ff4444"
 
     timestamp = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
     date_slug = datetime.now().strftime("%y%m%d_%H%M%S")
@@ -166,73 +171,96 @@ def generate_report(frame_path, source, mask,
     # Row 2: Alpha Mask Input | Upstream Alpha Output | Our Alpha Output
     positions = [
         # Row 1
-        [0.02,  0.52, 0.31, 0.34],  # source
+        [0.02, 0.52, 0.31, 0.34],  # source
         [0.345, 0.52, 0.31, 0.34],  # upstream comp
-        [0.67,  0.52, 0.31, 0.34],  # ours comp
+        [0.67, 0.52, 0.31, 0.34],  # ours comp
         # Row 2
-        [0.02,  0.15, 0.31, 0.34],  # mask input
+        [0.02, 0.15, 0.31, 0.34],  # mask input
         [0.345, 0.15, 0.31, 0.34],  # upstream alpha
-        [0.67,  0.15, 0.31, 0.34],  # ours alpha
+        [0.67, 0.15, 0.31, 0.34],  # ours alpha
     ]
 
     panels = [
-        (src_disp,        "Source Frame",                              TEXT),
-        (comp_ours_disp,  "EZ-CorridorKey Output\n(composited key)",   PASS_GREEN),
-        (comp_up_disp,    "CorridorKey Output\n(composited key)",      YELLOW),
-        (mask_disp,       "Alpha Hint Input\n(GVM coarse mask)",       TEXT),
-        (alpha_ours_disp, "EZ-CorridorKey Alpha\n(raw matte output)",  PASS_GREEN),
-        (alpha_up_disp,   "CorridorKey Alpha\n(raw matte output)",     YELLOW),
+        (src_disp, "Source Frame", TEXT),
+        (comp_ours_disp, "EZ-CorridorKey Output\n(composited key)", PASS_GREEN),
+        (comp_up_disp, "CorridorKey Output\n(composited key)", YELLOW),
+        (mask_disp, "Alpha Hint Input\n(GVM coarse mask)", TEXT),
+        (alpha_ours_disp, "EZ-CorridorKey Alpha\n(raw matte output)", PASS_GREEN),
+        (alpha_up_disp, "CorridorKey Alpha\n(raw matte output)", YELLOW),
     ]
 
     for pos, (img, title, color) in zip(positions, panels):
         ax = fig.add_axes(pos)
         ax.imshow(img)
-        ax.set_title(title, color=color, fontsize=11, fontweight='bold', pad=8)
-        ax.axis('off')
+        ax.set_title(title, color=color, fontsize=11, fontweight="bold", pad=8)
+        ax.axis("off")
 
     # --- Header ---
-    fig.text(0.5, 0.97, "C O R R I D O R K E Y", color=YELLOW,
-             fontsize=18, fontweight='bold', ha='center', fontfamily='sans-serif')
-    fig.text(0.5, 0.935,
-             f"EZ-CorridorKey vs CorridorKey — End-to-End Comparison   |   "
-             f"v{VERSION}   |   {timestamp}",
-             color=TEXT, fontsize=11, ha='center', fontfamily='sans-serif')
-    fig.patches.append(matplotlib.patches.Rectangle(
-        (0.02, 0.925), 0.96, 0.003, transform=fig.transFigure,
-        facecolor=YELLOW, edgecolor='none',
-    ))
+    fig.text(
+        0.5,
+        0.97,
+        "C O R R I D O R K E Y",
+        color=YELLOW,
+        fontsize=18,
+        fontweight="bold",
+        ha="center",
+        fontfamily="sans-serif",
+    )
+    fig.text(
+        0.5,
+        0.935,
+        f"EZ-CorridorKey vs CorridorKey — End-to-End Comparison   |   v{VERSION}   |   {timestamp}",
+        color=TEXT,
+        fontsize=11,
+        ha="center",
+        fontfamily="sans-serif",
+    )
+    fig.patches.append(
+        matplotlib.patches.Rectangle(
+            (0.02, 0.925),
+            0.96,
+            0.003,
+            transform=fig.transFigure,
+            facecolor=YELLOW,
+            edgecolor="none",
+        )
+    )
 
     # --- Metrics table ---
     ax_tbl = fig.add_axes([0.10, 0.02, 0.80, 0.10])
-    ax_tbl.axis('off')
+    ax_tbl.axis("off")
 
     m = metrics
-    psnr_str = f"{m['psnr']:.1f}" if m['psnr'] != float('inf') else "inf"
-    if m['psnr'] == float('inf'):
+    psnr_str = f"{m['psnr']:.1f}" if m["psnr"] != float("inf") else "inf"
+    if m["psnr"] == float("inf"):
         verdict = "BIT-IDENTICAL"
         v_color = YELLOW
-    elif m['psnr'] > 80:
+    elif m["psnr"] > 80:
         verdict = "PASS — below float32 noise floor"
         v_color = PASS_GREEN
-    elif m['psnr'] > 60:
+    elif m["psnr"] > 60:
         verdict = "PASS — imperceptible"
         v_color = PASS_GREEN
     else:
         verdict = "INVESTIGATE"
         v_color = FAIL_RED
 
-    col_labels = ['Comparison', 'Max Pixel Diff', 'MAE', 'PSNR (dB)', 'Verdict']
-    table_data = [[
-        "EZ-CorridorKey vs CorridorKey (alpha)",
-        f"{m['max_diff']:.10f}",
-        f"{m['mae']:.10f}",
-        psnr_str,
-        verdict,
-    ]]
+    col_labels = ["Comparison", "Max Pixel Diff", "MAE", "PSNR (dB)", "Verdict"]
+    table_data = [
+        [
+            "EZ-CorridorKey vs CorridorKey (alpha)",
+            f"{m['max_diff']:.10f}",
+            f"{m['mae']:.10f}",
+            psnr_str,
+            verdict,
+        ]
+    ]
 
     tbl = ax_tbl.table(
-        cellText=table_data, colLabels=col_labels,
-        cellLoc='center', loc='center',
+        cellText=table_data,
+        colLabels=col_labels,
+        cellLoc="center",
+        loc="center",
     )
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(11)
@@ -242,20 +270,24 @@ def generate_report(frame_path, source, mask,
         cell.set_edgecolor(BORDER)
         if row == 0:
             cell.set_facecolor(BORDER)
-            cell.set_text_props(color=YELLOW, fontweight='bold', fontsize=11)
+            cell.set_text_props(color=YELLOW, fontweight="bold", fontsize=11)
         else:
             cell.set_facecolor(BG_CARD)
             cell.set_text_props(color=TEXT, fontsize=11)
             if col == 4:
-                cell.set_text_props(color=v_color, fontweight='bold', fontsize=11)
+                cell.set_text_props(color=v_color, fontweight="bold", fontsize=11)
 
     # --- Footer ---
     fig.text(
-        0.5, 0.005,
+        0.5,
+        0.005,
         f"v{VERSION}   |   Frame: {os.path.basename(frame_path)}   |   "
         f"Resolution: {w}x{h}   |   {verdict}",
-        ha='center', color=YELLOW if 'PASS' in verdict or 'IDENTICAL' in verdict else FAIL_RED,
-        fontsize=12, fontweight='bold', fontfamily='sans-serif',
+        ha="center",
+        color=YELLOW if "PASS" in verdict or "IDENTICAL" in verdict else FAIL_RED,
+        fontsize=12,
+        fontweight="bold",
+        fontfamily="sans-serif",
     )
 
     # Save
@@ -277,7 +309,7 @@ def main():
         if candidates:
             ckpt = os.path.join(ckpt_dir, candidates[0])
     if not os.path.isfile(ckpt):
-        print(f"Checkpoint not found")
+        print("Checkpoint not found")
         sys.exit(1)
     print(f"Checkpoint: {ckpt}")
 
@@ -325,24 +357,21 @@ def main():
     max_diff = float(diff.max())
     mae = float(diff.mean())
     mse = float(np.mean((a - b) ** 2))
-    psnr_val = float('inf') if mse == 0 else 10 * np.log10(1.0 / mse)
+    psnr_val = float("inf") if mse == 0 else 10 * np.log10(1.0 / mse)
 
     print("=" * 60)
     print("COMPARISON: Upstream vs Ours")
     print("=" * 60)
-    psnr_str = f"{psnr_val:.1f}" if psnr_val != float('inf') else "inf (bit-identical)"
+    psnr_str = f"{psnr_val:.1f}" if psnr_val != float("inf") else "inf (bit-identical)"
     print(f"  Max pixel diff: {max_diff:.10f}")
     print(f"  MAE:            {mae:.10f}")
     print(f"  PSNR:           {psnr_str} dB")
     print()
 
-    metrics = {'max_diff': max_diff, 'mae': mae, 'psnr': psnr_val}
+    metrics = {"max_diff": max_diff, "mae": mae, "psnr": psnr_val}
 
     # --- Generate report ---
-    generate_report(frame_path, frame, mask,
-                    alpha_up, comp_up,
-                    alpha_ours, comp_ours,
-                    metrics)
+    generate_report(frame_path, frame, mask, alpha_up, comp_up, alpha_ours, comp_ours, metrics)
 
 
 if __name__ == "__main__":

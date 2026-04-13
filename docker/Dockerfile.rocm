@@ -1,0 +1,99 @@
+# syntax=docker/dockerfile:1
+# AMD / ROCm GPU — isolated from docker/Dockerfile (NVIDIA stack unchanged).
+# PyTorch ROCm wheels only inside this image: uv sync then uv pip … --reinstall (no pyproject ROCm extra).
+#
+# Targets:
+#   rocm-runtime (default) — `uv run python main.py` (single process; use host display or SSH X11 as needed).
+#   rocm-vnc              — same app + noVNC / x11vnc / filebrowser (parity with default docker/Dockerfile UX).
+
+FROM rocm/pytorch:rocm6.1-py3.10-ubuntu22.04 AS rocm-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HSA_OVERRIDE_GFX_VERSION=10.3.0
+ENV HF_HUB_DISABLE_PROGRESS_BARS=1
+# Hardlinks across image layers break in some graph drivers; matches docker/entrypoint.sh installer.
+ENV UV_LINK_MODE=copy
+ENV PATH="/opt/conda/bin:${PATH}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    git \
+    curl \
+    python3-tk \
+    && rm -rf /var/lib/apt/lists/*
+
+# Official static binary (path is /uv in ghcr.io/astral-sh/uv:latest)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN uv --version
+
+WORKDIR /opt/corridorkey
+COPY . .
+
+# PATH puts conda first; pin interpreter so uv does not pick a different python3 from the base image.
+RUN uv sync --no-dev --python "$(command -v python3)"
+
+# ROCm stack + Triton (required by many torch.compile / inductor paths on AMD)
+RUN uv pip install --python /opt/corridorkey/.venv/bin/python \
+    torch==2.9.1 \
+    torchvision==0.24.1 \
+    pytorch-triton-rocm \
+    --index-url https://download.pytorch.org/whl/rocm6.1 \
+    --reinstall
+
+# --- Browser / noVNC stack (optional build target) — mirrors docker/Dockerfile services ---
+FROM rocm-base AS rocm-vnc
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb \
+    x11vnc \
+    novnc \
+    websockify \
+    python3-pil \
+    python3-netifaces \
+    libgl1 \
+    libglib2.0-0 \
+    libxkbcommon-x11-0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-xinerama0 \
+    libxcb-xfixes0 \
+    libxcb-cursor0 \
+    libdbus-1-3 \
+    libfontconfig1 \
+    libfreetype6 \
+    libegl1 \
+    libgles2 \
+    libpulse0 \
+    libasound2-dev \
+    libopenexr-dev \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN sed -i 's|</body>|<a href="http://localhost:6081" target="_blank" style="position:fixed;bottom:20px;right:20px;z-index:9999;background:#4caf50;color:white;padding:10px 18px;border-radius:6px;font-size:14px;text-decoration:none;box-shadow:0 2px 6px rgba(0,0,0,0.5)">& Upload Clips</a></body>|' /usr/share/novnc/vnc.html
+RUN echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/vnc.html?autoconnect=true&reconnect=true&reconnect_delay=2000&resize=scale"></head></html>' > /usr/share/novnc/index.html
+
+# Pinned filebrowser/get install script (avoid floating master); bump commit when changing installer.
+RUN curl -fsSL https://raw.githubusercontent.com/filebrowser/get/2aab36cbd9def8513160e31d753abc5a2e2aef0c/get.sh | bash
+
+COPY docker/supervisord.conf /etc/supervisor/conf.d/corridorkey-vnc.conf
+COPY docker/entrypoint-rocm-vnc.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 6080 6081 5900
+ENV DISPLAY=:1
+ENV QT_QPA_PLATFORM=xcb
+ENV CORRIDORKEY_CONTAINER_MODE=1
+ENV CORRIDORKEY_RESOLUTION=1920x1080x24
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+# --- Default image: minimal entrypoint (no supervisor) ---
+FROM rocm-base AS rocm-runtime
+
+CMD ["uv", "run", "python", "main.py"]

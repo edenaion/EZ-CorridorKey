@@ -19,6 +19,7 @@ from .inference_engine import INFERENCE_DEFAULTS as _D
 
 _BUNDLED_CHECKPOINT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
 
+
 def _resolve_checkpoint_dir() -> str:
     """Return the writable checkpoint directory.
 
@@ -30,11 +31,13 @@ def _resolve_checkpoint_dir() -> str:
         return _BUNDLED_CHECKPOINT_DIR
     try:
         from backend.project import get_data_dir
+
         ckpt_dir = os.path.join(get_data_dir(), "CorridorKeyModule", "checkpoints")
         os.makedirs(ckpt_dir, exist_ok=True)
         return ckpt_dir
     except ImportError:
         return _BUNDLED_CHECKPOINT_DIR
+
 
 CHECKPOINT_DIR = _resolve_checkpoint_dir()
 TORCH_EXT = ".pth"
@@ -124,7 +127,9 @@ def _discover_checkpoint(ext: str) -> Path:
 
     if len(matches) > 1:
         names = [os.path.basename(f) for f in matches]
-        raise ValueError(f"Multiple {ext} checkpoints in {CHECKPOINT_DIR}: {names}. Keep exactly one.")
+        raise ValueError(
+            f"Multiple {ext} checkpoints in {CHECKPOINT_DIR}: {names}. Keep exactly one."
+        )
 
     return Path(matches[0])
 
@@ -161,8 +166,10 @@ def _wrap_mlx_output(
     # Apply despeckle (MLX stubs this)
     if auto_despeckle:
         processed_alpha = cu.clean_matte(
-            alpha, area_threshold=despeckle_size,
-            dilation=despeckle_dilation, blur_size=despeckle_blur,
+            alpha,
+            area_threshold=despeckle_size,
+            dilation=despeckle_dilation,
+            blur_size=despeckle_blur,
         )
     else:
         processed_alpha = alpha
@@ -178,12 +185,13 @@ def _wrap_mlx_output(
         source_rgb = source_image
 
     source_srgb = cu.linear_to_srgb(source_rgb) if input_is_linear else source_rgb
-    source_lin = source_rgb if input_is_linear else cu.srgb_to_linear(source_rgb)
 
     # Despill the source too — _restore_opaque_source_detail blends source
     # pixels back in, and they must already be despilled or they undo the
     # despill we just applied to the model fg.
-    source_srgb_despilled = cu.despill(source_srgb, green_limit_mode="average", strength=despill_strength)
+    source_srgb_despilled = cu.despill(
+        source_srgb, green_limit_mode="average", strength=despill_strength
+    )
     source_lin_despilled = cu.srgb_to_linear(source_srgb_despilled)
 
     # Composite over checkerboard for comp output
@@ -209,7 +217,10 @@ def _wrap_mlx_output(
     # opaque regions so FG view matches what the user shot).
     fg_lin = cu.srgb_to_linear(fg)
     fg_restored_lin = _restore_opaque_source_detail(
-        source_lin_despilled, source_srgb_despilled, fg_lin, processed_alpha,
+        source_lin_despilled,
+        source_srgb_despilled,
+        fg_lin,
+        processed_alpha,
     )
     fg_restored = cu.linear_to_srgb(fg_restored_lin)
 
@@ -244,8 +255,10 @@ def _assemble_mlx_output(
 
     if auto_despeckle:
         processed_alpha = cu.clean_matte(
-            alpha, area_threshold=despeckle_size,
-            dilation=despeckle_dilation, blur_size=despeckle_blur,
+            alpha,
+            area_threshold=despeckle_size,
+            dilation=despeckle_dilation,
+            blur_size=despeckle_blur,
         )
     else:
         processed_alpha = alpha
@@ -260,12 +273,13 @@ def _assemble_mlx_output(
         source_rgb = source_image
 
     source_srgb = cu.linear_to_srgb(source_rgb) if input_is_linear else source_rgb
-    source_lin = source_rgb if input_is_linear else cu.srgb_to_linear(source_rgb)
 
     # Despill the source too — _restore_opaque_source_detail blends source
     # pixels back in, and they must already be despilled or they undo the
     # despill we just applied to the model fg.
-    source_srgb_despilled = cu.despill(source_srgb, green_limit_mode="average", strength=despill_strength)
+    source_srgb_despilled = cu.despill(
+        source_srgb, green_limit_mode="average", strength=despill_strength
+    )
     source_lin_despilled = cu.srgb_to_linear(source_srgb_despilled)
 
     h, w = fg.shape[:2]
@@ -289,7 +303,10 @@ def _assemble_mlx_output(
     # opaque regions so FG view matches what the user shot).
     fg_lin = cu.srgb_to_linear(fg)
     fg_restored_lin = _restore_opaque_source_detail(
-        source_lin_despilled, source_srgb_despilled, fg_lin, processed_alpha,
+        source_lin_despilled,
+        source_srgb_despilled,
+        fg_lin,
+        processed_alpha,
     )
     fg_restored = cu.linear_to_srgb(fg_restored_lin)
 
@@ -327,7 +344,9 @@ def _resize_float_image_bicubic(image: np.ndarray, size: tuple[int, int]) -> np.
     """Resize float image data with PIL bicubic to match upstream MLX behavior."""
     if image.ndim == 2:
         return np.asarray(
-            Image.fromarray(image.astype(np.float32), mode="F").resize(size, Image.Resampling.BICUBIC),
+            Image.fromarray(image.astype(np.float32), mode="F").resize(
+                size, Image.Resampling.BICUBIC
+            ),
             dtype=np.float32,
         )
 
@@ -407,10 +426,7 @@ def _restore_opaque_source_detail(
     )
 
     source_srgb = np.clip(source_srgb.astype(np.float32, copy=False), 0.0, 1.0)
-    green_excess = (
-        source_srgb[..., 1:2]
-        - np.maximum(source_srgb[..., 0:1], source_srgb[..., 2:3])
-    )
+    green_excess = source_srgb[..., 1:2] - np.maximum(source_srgb[..., 0:1], source_srgb[..., 2:3])
     green_spill_weight = np.clip(
         (green_excess - green_spill_threshold) / max(green_spill_softness, 1e-6),
         0.0,
@@ -422,7 +438,9 @@ def _restore_opaque_source_detail(
     return image_lin * (1.0 - detail_weight) + source_lin * detail_weight
 
 
-def _try_mlx_float_outputs(raw_engine, image_u8: np.ndarray, mask_u8: np.ndarray, refiner_scale: float) -> dict | None:
+def _try_mlx_float_outputs(
+    raw_engine, image_u8: np.ndarray, mask_u8: np.ndarray, refiner_scale: float
+) -> dict | None:
     """Use corridorkey-mlx internals to recover float outputs before uint8 quantization."""
     if not hasattr(raw_engine, "_model") or not hasattr(raw_engine, "_img_size"):
         return None
@@ -550,14 +568,20 @@ class _MLXEngineAdapter:
             refiner_scale=refiner_scale,
             input_is_linear=input_is_linear,
             fg_is_straight=fg_is_straight,
-            despill_strength=0.0,      # disable MLX stubs — adapter applies these
+            despill_strength=0.0,  # disable MLX stubs — adapter applies these
             auto_despeckle=False,
             despeckle_size=despeckle_size,
         )
 
         return _wrap_mlx_output(
-            raw, image, input_is_linear, despill_strength, auto_despeckle,
-            despeckle_size, despeckle_dilation, despeckle_blur,
+            raw,
+            image,
+            input_is_linear,
+            despill_strength,
+            auto_despeckle,
+            despeckle_size,
+            despeckle_dilation,
+            despeckle_blur,
         )
 
 
@@ -594,7 +618,10 @@ def create_engine(
 
         try:
             raw_engine = CorridorKeyMLXEngine(
-                str(ckpt), img_size=img_size, tile_size=tile_size, overlap=overlap,
+                str(ckpt),
+                img_size=img_size,
+                tile_size=tile_size,
+                overlap=overlap,
             )
             mode = f"tiled (tile={tile_size}, overlap={overlap})" if tile_size else "full-frame"
         except TypeError:

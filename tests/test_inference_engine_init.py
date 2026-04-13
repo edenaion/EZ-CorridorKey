@@ -79,7 +79,6 @@ class TestCorridorKeyEngineInit:
         monkeypatch.setattr(CorridorKeyEngine, "_load_model", lambda self: object())
 
         probe_called_with = []
-        original_get_vram = CorridorKeyEngine._get_vram_gb
 
         @staticmethod
         def _tracking_probe() -> float:

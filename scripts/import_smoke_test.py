@@ -1,4 +1,5 @@
 """Import smoke test — verify every module in backend/ and ui/ can be loaded."""
+
 import sys
 import importlib
 import os
@@ -7,9 +8,16 @@ os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ".")
 
 SKIP_PREFIXES = (
-    "scripts", "tests", "CorridorKeyModule.core", "gvm_core",
-    "VideoMaMaInferenceModule", "modules", "docker", "clip_manager",
-    "sam2_tracker", "main",
+    "scripts",
+    "tests",
+    "CorridorKeyModule.core",
+    "gvm_core",
+    "VideoMaMaInferenceModule",
+    "modules",
+    "docker",
+    "clip_manager",
+    "sam2_tracker",
+    "main",
 )
 
 errors = []

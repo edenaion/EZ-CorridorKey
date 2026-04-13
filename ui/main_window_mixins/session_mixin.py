@@ -28,6 +28,7 @@ class SessionMixin:
         if not self._clips_dir:
             return None
         from backend.project import projects_root as _projects_root
+
         try:
             if os.path.normcase(os.path.abspath(self._clips_dir)) == os.path.normcase(
                 os.path.abspath(_projects_root())
@@ -50,8 +51,10 @@ class SessionMixin:
         # Window geometry
         geo = self.geometry()
         data["geometry"] = {
-            "x": geo.x(), "y": geo.y(),
-            "width": geo.width(), "height": geo.height(),
+            "x": geo.x(),
+            "y": geo.y(),
+            "width": geo.width(),
+            "height": geo.height(),
         }
 
         # Splitter sizes
@@ -164,9 +167,7 @@ class SessionMixin:
         if clip.name in self._clip_input_is_linear:
             return self._clip_input_is_linear[clip.name]
 
-        input_is_linear = bool(
-            clip.input_asset is not None and clip.should_default_input_linear()
-        )
+        input_is_linear = bool(clip.input_asset is not None and clip.should_default_input_linear())
         self._clip_input_is_linear[clip.name] = input_is_linear
         return input_is_linear
 
@@ -181,7 +182,7 @@ class SessionMixin:
         data = self._build_session_data()
         tmp_path = path + ".tmp"
         try:
-            with open(tmp_path, 'w') as f:
+            with open(tmp_path, "w") as f:
                 json.dump(data, f, indent=2)
             # Atomic rename (Windows: need to remove target first)
             if os.path.exists(path):
@@ -206,7 +207,7 @@ class SessionMixin:
             data = self._build_session_data()
             tmp_path = path + ".tmp"
             try:
-                with open(tmp_path, 'w') as f:
+                with open(tmp_path, "w") as f:
                     json.dump(data, f, indent=2)
                 if os.path.exists(path):
                     os.remove(path)
@@ -222,9 +223,12 @@ class SessionMixin:
     def _on_open_project(self) -> None:
         """Open a project folder via directory picker (Ctrl+O)."""
         from backend.project import projects_root
+
         start_dir = projects_root()
         folder = QFileDialog.getExistingDirectory(
-            self, "Open Project", start_dir,
+            self,
+            "Open Project",
+            start_dir,
         )
         if not folder:
             return
@@ -240,7 +244,7 @@ class SessionMixin:
     def _load_session_from(self, path: str) -> None:
         """Load session data from a file path."""
         try:
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 data = json.load(f)
             self._apply_session_data(data)
             logger.info(f"Session loaded: {path}")

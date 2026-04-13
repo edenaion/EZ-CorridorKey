@@ -2,6 +2,7 @@
 
 All validators either return cleaned data or raise typed exceptions from errors.py.
 """
+
 from __future__ import annotations
 
 import os
@@ -149,11 +150,11 @@ def ensure_output_dirs(output_root: str) -> dict[str, str]:
         Dict with keys: 'root', 'fg', 'matte', 'comp', 'processed'
     """
     dirs = {
-        'root': output_root,
-        'fg': os.path.join(output_root, "FG"),
-        'matte': os.path.join(output_root, "Matte"),
-        'comp': os.path.join(output_root, "Comp"),
-        'processed': os.path.join(output_root, "Processed"),
+        "root": output_root,
+        "fg": os.path.join(output_root, "FG"),
+        "matte": os.path.join(output_root, "Matte"),
+        "comp": os.path.join(output_root, "Comp"),
+        "processed": os.path.join(output_root, "Processed"),
     }
     for d in dirs.values():
         os.makedirs(d, exist_ok=True)

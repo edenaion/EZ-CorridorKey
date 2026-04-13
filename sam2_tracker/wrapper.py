@@ -202,11 +202,11 @@ class SAM2Tracker:
 
         frame_shape = frames[0].shape[:2]
         sanitized_prompts = [
-            self._sanitize_prompt_frame(prompt, frame_shape)
-            for prompt in prompt_frames
+            self._sanitize_prompt_frame(prompt, frame_shape) for prompt in prompt_frames
         ]
         sanitized_prompts = [
-            prompt for prompt in sanitized_prompts
+            prompt
+            for prompt in sanitized_prompts
             if (
                 prompt.mask is not None
                 or prompt.positive_points
@@ -291,7 +291,12 @@ class SAM2Tracker:
                         frame_idx = prompt.frame_index
                         obj_ids = []
                         mask_logits = None
-                        for batch_points, batch_labels, batch_box, clear_old_points in self._iter_prompt_refinement_batches(prompt):
+                        for (
+                            batch_points,
+                            batch_labels,
+                            batch_box,
+                            clear_old_points,
+                        ) in self._iter_prompt_refinement_batches(prompt):
                             if check_cancel:
                                 check_cancel()
                             frame_idx, obj_ids, mask_logits = predictor.add_new_points_or_box(
@@ -377,8 +382,8 @@ class SAM2Tracker:
             return
 
         while pos_cursor < len(prompt.positive_points) or neg_cursor < len(prompt.negative_points):
-            pos_chunk = prompt.positive_points[pos_cursor:pos_cursor + pos_batch]
-            neg_chunk = prompt.negative_points[neg_cursor:neg_cursor + neg_batch]
+            pos_chunk = prompt.positive_points[pos_cursor : pos_cursor + pos_batch]
+            neg_chunk = prompt.negative_points[neg_cursor : neg_cursor + neg_batch]
             points: list[tuple[float, float]] = [*pos_chunk, *neg_chunk]
             labels: list[int] = ([1] * len(pos_chunk)) + ([0] * len(neg_chunk))
             yield (
@@ -441,9 +446,7 @@ class SAM2Tracker:
             if mask.ndim != 2:
                 raise ValueError("SAM2 mask prompts must be 2D arrays")
             if mask.shape != frame_shape:
-                raise ValueError(
-                    "SAM2 mask prompt dimensions must match the input frame size"
-                )
+                raise ValueError("SAM2 mask prompt dimensions must match the input frame size")
             mask = np.where(mask > 0, 255, 0).astype(np.uint8, copy=False)
 
         positive_points = _clamp_points(prompt.positive_points)
@@ -482,4 +485,4 @@ class SAM2Tracker:
 
         idx = ids.index(object_id)
         mask = (mask_logits[idx] > 0.0).detach().cpu().numpy()
-        return (np.squeeze(mask).astype(np.uint8) * 255)
+        return np.squeeze(mask).astype(np.uint8) * 255

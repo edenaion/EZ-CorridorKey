@@ -5,6 +5,7 @@ registry of known error patterns (``_DIAGNOSTICS``), and the
 ``run_startup_diagnostics`` routine.  The UI dialog classes that *display*
 these results live in ``diagnostic_dialog.py``.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,9 +17,11 @@ logger = logging.getLogger(__name__)
 
 # ── Known error patterns ─────────────────────────────────────────────
 
+
 @dataclass
 class Diagnostic:
     """A single known-error diagnosis with user-facing fix steps."""
+
     id: str
     title: str
     pattern: re.Pattern[str]
@@ -46,8 +49,7 @@ _DIAGNOSTICS: list[Diagnostic] = [
         ),
         steps=[
             "Open a terminal in the EZ-CorridorKey folder.",
-            "Activate the virtual environment:\n"
-            "    .venv\\Scripts\\activate",
+            "Activate the virtual environment:\n    .venv\\Scripts\\activate",
             "Reinstall PyTorch with CUDA:\n"
             "    pip install torch torchvision --index-url\n"
             "    https://download.pytorch.org/whl/cu128",
@@ -72,10 +74,8 @@ _DIAGNOSTICS: list[Diagnostic] = [
             "checkpoints folder.  The model must be downloaded separately."
         ),
         steps=[
-            "Download CorridorKey.pth from the project release page\n"
-            "or the link in the README.",
-            "Place the file in:\n"
-            "    CorridorKeyModule/checkpoints/CorridorKey.pth",
+            "Download CorridorKey.pth from the project release page\nor the link in the README.",
+            "Place the file in:\n    CorridorKeyModule/checkpoints/CorridorKey.pth",
             "Restart EZ-CorridorKey.",
         ],
         tags=["checkpoint", "model", "pth"],
@@ -105,9 +105,7 @@ _DIAGNOSTICS: list[Diagnostic] = [
             "  Windows: re-run 1-install.bat.\n"
             "  macOS: brew install ffmpeg\n"
             "  Linux: install both ffmpeg and ffprobe from your package manager (version 7.0+).",
-            "Verify both commands work:\n"
-            "    ffmpeg -version\n"
-            "    ffprobe -version",
+            "Verify both commands work:\n    ffmpeg -version\n    ffprobe -version",
         ],
         tags=["ffmpeg", "ffprobe", "video", "version"],
     ),
@@ -151,10 +149,8 @@ _DIAGNOSTICS: list[Diagnostic] = [
         ),
         steps=[
             "Open a terminal in the EZ-CorridorKey folder.",
-            "Activate the virtual environment:\n"
-            "    .venv\\Scripts\\activate",
-            "Install triton-windows:\n"
-            "    pip install triton-windows",
+            "Activate the virtual environment:\n    .venv\\Scripts\\activate",
+            "Install triton-windows:\n    pip install triton-windows",
             "Restart EZ-CorridorKey.",
         ],
         tags=["triton", "compile"],
@@ -200,8 +196,7 @@ _DIAGNOSTICS: list[Diagnostic] = [
             "Open a terminal in the EZ-CorridorKey folder.",
             "Activate the virtual environment:\n"
             "    .venv\\Scripts\\activate  (or venv\\Scripts\\activate)",
-            "Uninstall the CPU-only build:\n"
-            "    pip uninstall torch torchvision -y",
+            "Uninstall the CPU-only build:\n    pip uninstall torch torchvision -y",
             "Reinstall with CUDA support:\n"
             "    pip install torch torchvision --index-url\n"
             "    https://download.pytorch.org/whl/cu128",
@@ -227,7 +222,7 @@ _DIAGNOSTICS: list[Diagnostic] = [
         ),
         steps=[
             "First, check if you have CPU-only PyTorch:\n"
-            "    python -c \"import torch; print(torch.__version__)\"",
+            '    python -c "import torch; print(torch.__version__)"',
             "If the version ends in '+cpu', reinstall with CUDA:\n"
             "    pip install torch torchvision --index-url\n"
             "    https://download.pytorch.org/whl/cu128",
@@ -252,10 +247,8 @@ _DIAGNOSTICS: list[Diagnostic] = [
             "They must be downloaded separately from the model files."
         ),
         steps=[
-            "Run the GVM weight downloader:\n"
-            "    python -m gvm_core.download",
-            "Or download manually from the README link and place\n"
-            "in gvm_core/weights/",
+            "Run the GVM weight downloader:\n    python -m gvm_core.download",
+            "Or download manually from the README link and place\nin gvm_core/weights/",
             "Restart EZ-CorridorKey.",
         ],
         tags=["gvm", "weights"],
@@ -301,10 +294,8 @@ _DIAGNOSTICS: list[Diagnostic] = [
             "Close other GPU-heavy applications (games, other AI tools,\n"
             "browser hardware acceleration).",
             "Try processing at a lower resolution first.",
-            "Set the environment variable for low-VRAM mode:\n"
-            "    set CORRIDORKEY_OPT_MODE=lowvram",
-            "If the problem persists, your GPU may not have enough\n"
-            "VRAM for this clip resolution.",
+            "Set the environment variable for low-VRAM mode:\n    set CORRIDORKEY_OPT_MODE=lowvram",
+            "If the problem persists, your GPU may not have enough\nVRAM for this clip resolution.",
         ],
         tags=["vram", "memory", "oom"],
     ),
@@ -321,9 +312,11 @@ def match_diagnostic(error_msg: str) -> Diagnostic | None:
 
 # ── Startup diagnostics ──────────────────────────────────────────────
 
+
 @dataclass
 class StartupIssue:
     """A non-fatal issue detected during application startup."""
+
     diagnostic: Diagnostic
     detail: str  # extra context (e.g. detected PyTorch version)
 
@@ -346,10 +339,12 @@ def run_startup_diagnostics(device: str) -> list[StartupIssue]:
     if device == "cpu":
         try:
             import torch
+
             if "+cpu" in torch.__version__:
                 has_nvidia = False
                 try:
                     import pynvml
+
                     pynvml.nvmlInit()
                     has_nvidia = pynvml.nvmlDeviceGetCount() > 0
                     pynvml.nvmlShutdown()
@@ -361,27 +356,33 @@ def run_startup_diagnostics(device: str) -> list[StartupIssue]:
                         None,
                     )
                     if diag:
-                        issues.append(StartupIssue(
-                            diag,
-                            f"PyTorch {torch.__version__} (CPU-only) with NVIDIA GPU detected",
-                        ))
+                        issues.append(
+                            StartupIssue(
+                                diag,
+                                f"PyTorch {torch.__version__} (CPU-only) with NVIDIA GPU detected",
+                            )
+                        )
         except ImportError:
             pass
 
     # 2. Python version outside supported range
     import sys
+
     vi = sys.version_info
     if vi.major != 3 or vi.minor < 10 or vi.minor > 13:
         diag = next((d for d in _DIAGNOSTICS if d.id == "python-version"), None)
         if diag:
-            issues.append(StartupIssue(
-                diag,
-                f"Detected Python {vi.major}.{vi.minor}.{vi.micro}",
-            ))
+            issues.append(
+                StartupIssue(
+                    diag,
+                    f"Detected Python {vi.major}.{vi.minor}.{vi.micro}",
+                )
+            )
 
     # 3. FFmpeg missing, too old, or invalid build
     try:
         from backend.ffmpeg_tools import validate_ffmpeg_install
+
         result = validate_ffmpeg_install()
         if not result.ok:
             # Pick the right diagnostic based on whether FFmpeg was found at all
@@ -401,6 +402,7 @@ def _get_torch_detail() -> str:
     """Build a one-line detail string about the PyTorch install."""
     try:
         import torch
+
         ver = torch.__version__
         cuda = torch.version.cuda or "none"
         return f"PyTorch {ver}, CUDA toolkit: {cuda}"

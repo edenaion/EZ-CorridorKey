@@ -1,4 +1,5 @@
 """Probe-driven colour-space filter chain for EXR extraction."""
+
 from __future__ import annotations
 
 import logging
@@ -14,9 +15,14 @@ def _is_rgb_pix_fmt(pix_fmt: str) -> bool:
     if not pix_fmt:
         return False
     pf = pix_fmt.lower()
-    return (pf.startswith("rgb") or pf.startswith("bgr") or
-            pf.startswith("gbr") or pf.startswith("argb") or
-            pf.startswith("abgr") or pf == "pal8")
+    return (
+        pf.startswith("rgb")
+        or pf.startswith("bgr")
+        or pf.startswith("gbr")
+        or pf.startswith("argb")
+        or pf.startswith("abgr")
+        or pf == "pal8"
+    )
 
 
 def _is_yuv_pix_fmt(pix_fmt: str) -> bool:
@@ -24,13 +30,22 @@ def _is_yuv_pix_fmt(pix_fmt: str) -> bool:
     if not pix_fmt:
         return False
     pf = pix_fmt.lower()
-    return (pf.startswith("yuv") or pf.startswith("yuva") or
-            pf.startswith("nv12") or pf.startswith("nv16") or
-            pf.startswith("nv21") or pf.startswith("p010") or
-            pf.startswith("p016") or pf.startswith("p210") or
-            pf.startswith("p216") or pf.startswith("p410") or
-            pf.startswith("p416") or pf.startswith("y210") or
-            pf.startswith("y212") or pf.startswith("y216"))
+    return (
+        pf.startswith("yuv")
+        or pf.startswith("yuva")
+        or pf.startswith("nv12")
+        or pf.startswith("nv16")
+        or pf.startswith("nv21")
+        or pf.startswith("p010")
+        or pf.startswith("p016")
+        or pf.startswith("p210")
+        or pf.startswith("p216")
+        or pf.startswith("p410")
+        or pf.startswith("p416")
+        or pf.startswith("y210")
+        or pf.startswith("y212")
+        or pf.startswith("y216")
+    )
 
 
 def _clean_color_value(value: str | None) -> str:
@@ -96,36 +111,61 @@ def _default_range(pix_fmt: str) -> str:
 
 # in_color_matrix (swscale colorspace table)
 _SCALE_MATRIX_MAP = {
-    "bt470bg": "bt601",          # BT.470 System B/G = same matrix as BT.601
-    "bt2020c": "bt2020ncl",     # constant-luminance -> non-constant (swscale compat)
+    "bt470bg": "bt601",  # BT.470 System B/G = same matrix as BT.601
+    "bt2020c": "bt2020ncl",  # constant-luminance -> non-constant (swscale compat)
 }
 _KNOWN_MATRICES = {
-    "bt709", "fcc", "bt601", "smpte170m", "smpte240m",
-    "bt2020nc", "bt2020ncl",
+    "bt709",
+    "fcc",
+    "bt601",
+    "smpte170m",
+    "smpte240m",
+    "bt2020nc",
+    "bt2020ncl",
 }
 
 # in_primaries
 _SCALE_PRIMARIES_MAP = {
     # Most ffprobe primaries pass through. Guard edge cases.
-    "film": "bt470m",           # "film" (SMPTE-C) -> bt470m
+    "film": "bt470m",  # "film" (SMPTE-C) -> bt470m
 }
 _KNOWN_PRIMARIES = {
-    "bt709", "bt470m", "bt470bg", "smpte170m", "smpte240m",
-    "film", "bt2020", "smpte428", "smpte431", "smpte432",
+    "bt709",
+    "bt470m",
+    "bt470bg",
+    "smpte170m",
+    "smpte240m",
+    "film",
+    "bt2020",
+    "smpte428",
+    "smpte431",
+    "smpte432",
 }
 
 # in_transfer
 _SCALE_TRANSFER_MAP = {
-    "bt470bg": "gamma28",       # BT.470 System B/G = gamma 2.8
-    "bt470m": "gamma22",        # BT.470 System M = gamma 2.2
-    "bt2020-12": "bt2020-12",   # pass through (explicit for clarity)
+    "bt470bg": "gamma28",  # BT.470 System B/G = gamma 2.8
+    "bt470m": "gamma22",  # BT.470 System M = gamma 2.2
+    "bt2020-12": "bt2020-12",  # pass through (explicit for clarity)
     "bt2020-10": "bt2020-10",
 }
 _KNOWN_TRANSFERS = {
-    "bt709", "gamma22", "gamma28", "smpte170m", "smpte240m",
-    "linear", "log", "log_sqrt", "iec61966-2-4", "bt1361e",
-    "iec61966-2-1", "bt2020-10", "bt2020-12", "smpte2084",
-    "smpte428", "arib-std-b67",
+    "bt709",
+    "gamma22",
+    "gamma28",
+    "smpte170m",
+    "smpte240m",
+    "linear",
+    "log",
+    "log_sqrt",
+    "iec61966-2-4",
+    "bt1361e",
+    "iec61966-2-1",
+    "bt2020-10",
+    "bt2020-12",
+    "smpte2084",
+    "smpte428",
+    "arib-std-b67",
 }
 
 
@@ -140,7 +180,10 @@ def _safe_scale_value(value: str, mapping: dict, known: set, param_name: str) ->
         logger.warning(
             "Unknown %s value '%s' (mapped from '%s') — FFmpeg may reject this. "
             "Add it to _SCALE_%s_MAP in ffmpeg_tools.py",
-            param_name, mapped, value, param_name.upper(),
+            param_name,
+            mapped,
+            value,
+            param_name.upper(),
         )
     return mapped
 
@@ -185,7 +228,9 @@ def build_exr_vf(video_info: dict) -> str:
 
     logger.info(
         "EXR colour conversion: pix_fmt=%s matrix=%s range=%s",
-        pix_fmt, cs, cr,
+        pix_fmt,
+        cs,
+        cr,
     )
 
     # Only in_color_matrix and in_range are standard swscale options.
@@ -197,6 +242,4 @@ def build_exr_vf(video_info: dict) -> str:
     raw_ct = video_info.get("color_transfer")
     prefix = f"setparams=color_trc={ct}," if raw_ct is None else ""
 
-    return (
-        f"{prefix}scale=in_color_matrix={cs}:in_range={cr},format=gbrpf32le"
-    )
+    return f"{prefix}scale=in_color_matrix={cs}:in_range={cr},format=gbrpf32le"

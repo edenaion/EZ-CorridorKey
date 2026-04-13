@@ -4,6 +4,7 @@ Covers: lifecycle, failure, cancellation, mark_cancelled, callbacks,
 callback safety, deduplication, find_job_by_id, properties, clear_history,
 and GPUJob internals.
 """
+
 import pytest
 
 from backend.job_queue import GPUJob, GPUJobQueue, JobType, JobStatus
@@ -13,6 +14,7 @@ from backend.errors import JobCancelledError
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_queue() -> GPUJobQueue:
     return GPUJobQueue()
@@ -29,6 +31,7 @@ def _gvm(clip: str = "clip1") -> GPUJob:
 # ---------------------------------------------------------------------------
 # TestJobLifecycle
 # ---------------------------------------------------------------------------
+
 
 class TestJobLifecycle:
     def test_submit_puts_job_in_queue_with_queued_status(self):
@@ -120,6 +123,7 @@ class TestJobLifecycle:
 # TestJobFailure
 # ---------------------------------------------------------------------------
 
+
 class TestJobFailure:
     def test_fail_job_sets_failed_status(self):
         q = _make_queue()
@@ -158,6 +162,7 @@ class TestJobFailure:
 # TestJobCancellation
 # ---------------------------------------------------------------------------
 
+
 class TestJobCancellation:
     def test_cancel_queued_job_removes_from_queue(self):
         q = _make_queue()
@@ -182,7 +187,7 @@ class TestJobCancellation:
         q.start_job(job)
         q.cancel_job(job)
         assert job.status == JobStatus.RUNNING  # still running
-        assert job.is_cancelled is True          # flag set
+        assert job.is_cancelled is True  # flag set
 
     def test_cancel_running_job_stays_as_current(self):
         """cancel_job does NOT clear _current_job — worker must call mark_cancelled."""
@@ -240,6 +245,7 @@ class TestJobCancellation:
 # TestMarkCancelled
 # ---------------------------------------------------------------------------
 
+
 class TestMarkCancelled:
     def test_mark_cancelled_sets_status(self):
         q = _make_queue()
@@ -284,6 +290,7 @@ class TestMarkCancelled:
 # ---------------------------------------------------------------------------
 # TestCallbacks
 # ---------------------------------------------------------------------------
+
 
 class TestCallbacks:
     def test_on_completion_called_after_complete_job(self):
@@ -355,9 +362,11 @@ class TestCallbacks:
 # TestCallbackSafety
 # ---------------------------------------------------------------------------
 
+
 class TestCallbackSafety:
     def test_on_completion_exception_does_not_corrupt_history(self):
         """If on_completion raises, the job must still be in history as COMPLETED."""
+
         def boom(clip):
             raise RuntimeError("cb blew up")
 
@@ -378,6 +387,7 @@ class TestCallbackSafety:
 
     def test_on_error_exception_does_not_corrupt_history(self):
         """If on_error raises, the job must still be in history as FAILED."""
+
         def boom(clip, err):
             raise RuntimeError("cb blew up")
 
@@ -400,6 +410,7 @@ class TestCallbackSafety:
 # ---------------------------------------------------------------------------
 # TestDeduplication
 # ---------------------------------------------------------------------------
+
 
 class TestDeduplication:
     def test_same_clip_same_type_queued_twice_rejected(self):
@@ -447,6 +458,7 @@ class TestDeduplication:
 # TestFindJob
 # ---------------------------------------------------------------------------
 
+
 class TestFindJob:
     def test_find_job_in_queue(self):
         q = _make_queue()
@@ -480,6 +492,7 @@ class TestFindJob:
 # ---------------------------------------------------------------------------
 # TestProperties
 # ---------------------------------------------------------------------------
+
 
 class TestProperties:
     def test_has_pending_true_when_queue_has_jobs(self):
@@ -561,6 +574,7 @@ class TestProperties:
 # TestClearHistory
 # ---------------------------------------------------------------------------
 
+
 class TestClearHistory:
     def test_clear_history_empties_history(self):
         q = _make_queue()
@@ -596,6 +610,7 @@ class TestClearHistory:
 # ---------------------------------------------------------------------------
 # TestGPUJob
 # ---------------------------------------------------------------------------
+
 
 class TestGPUJob:
     def test_request_cancel_sets_flag(self):

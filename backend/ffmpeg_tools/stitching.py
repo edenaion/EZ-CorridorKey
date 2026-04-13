@@ -1,4 +1,5 @@
 """Video stitching from image sequences via FFmpeg."""
+
 from __future__ import annotations
 
 import logging
@@ -46,14 +47,15 @@ def stitch_video(
         raise RuntimeError("FFmpeg not found")
 
     # Count total frames
-    total_frames = len([f for f in os.listdir(in_dir)
-                        if f.lower().endswith(('.png', '.jpg', '.jpeg', '.exr'))])
+    total_frames = len(
+        [f for f in os.listdir(in_dir) if f.lower().endswith((".png", ".jpg", ".jpeg", ".exr"))]
+    )
 
     # Auto-detect codec/pixel format from output extension
     ext = os.path.splitext(out_path)[1].lower()
-    is_webm = ext == '.webm'
-    is_mov = ext == '.mov'
-    is_exr = pattern.lower().endswith('.exr')
+    is_webm = ext == ".webm"
+    is_mov = ext == ".mov"
+    is_exr = pattern.lower().endswith(".exr")
 
     if is_mov:
         codec = "prores_ks"

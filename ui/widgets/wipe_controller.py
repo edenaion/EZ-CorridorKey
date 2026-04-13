@@ -5,6 +5,7 @@ and painting. Used by SplitViewWidget to keep wipe concerns separate.
 
 All methods are pure functions of explicit parameters — no widget state owned here.
 """
+
 from __future__ import annotations
 
 import math
@@ -15,9 +16,12 @@ from PySide6.QtGui import QPainter, QPen, QColor, QPolygonF, QPainterPath
 
 # ── Geometry helpers ──
 
+
 def wipe_line_endpoints(
-    width: float, height: float,
-    wipe_angle: float, wipe_offset: float,
+    width: float,
+    height: float,
+    wipe_angle: float,
+    wipe_offset: float,
 ) -> tuple[QPointF, QPointF, QPointF]:
     """Compute the wipe line endpoints from angle + offset.
 
@@ -55,8 +59,10 @@ def wipe_handle_rect(center: QPointF, hit: bool = False) -> QRectF:
 
 def wipe_distance_to_line(
     pos: QPointF,
-    width: float, height: float,
-    wipe_angle: float, wipe_offset: float,
+    width: float,
+    height: float,
+    wipe_angle: float,
+    wipe_offset: float,
 ) -> float:
     """Signed perpendicular distance from pos to the wipe line (pixels)."""
     angle_rad = math.radians(wipe_angle)
@@ -68,11 +74,15 @@ def wipe_distance_to_line(
 
 # ── Painting ──
 
+
 def paint_wipe(
     painter: QPainter,
-    width: float, height: float,
-    wipe_angle: float, wipe_offset: float,
-    left_image, right_image,
+    width: float,
+    height: float,
+    wipe_angle: float,
+    wipe_offset: float,
+    left_image,
+    right_image,
     image_rect_fn,
     divider_width: int = 2,
 ) -> None:
@@ -146,19 +156,22 @@ def paint_wipe(
 
     label_offset = 16
     painter.drawText(
-        QPointF(center.x() - perp_x * label_offset - 4,
-                center.y() - perp_y * label_offset + 4), "A")
+        QPointF(center.x() - perp_x * label_offset - 4, center.y() - perp_y * label_offset + 4), "A"
+    )
     painter.drawText(
-        QPointF(center.x() + perp_x * label_offset - 4,
-                center.y() + perp_y * label_offset + 4), "B")
+        QPointF(center.x() + perp_x * label_offset - 4, center.y() + perp_y * label_offset + 4), "B"
+    )
 
 
 # ── Drag handling ──
 
+
 def handle_wipe_press(
     pos: QPointF,
-    width: float, height: float,
-    wipe_angle: float, wipe_offset: float,
+    width: float,
+    height: float,
+    wipe_angle: float,
+    wipe_offset: float,
     hit_zone: int,
 ) -> tuple[str | None, QPointF, float, float]:
     """Check if a left-click hits the wipe handle or line.
@@ -181,7 +194,8 @@ def handle_wipe_drag(
     drag_start: QPointF,
     start_offset: float,
     start_angle: float,
-    width: float, height: float,
+    width: float,
+    height: float,
     wipe_angle: float,
 ) -> tuple[float, float]:
     """Process a wipe drag move event.
@@ -194,7 +208,7 @@ def handle_wipe_drag(
         ny = math.cos(angle_rad)
         dx = event_pos.x() - drag_start.x()
         dy = event_pos.y() - drag_start.y()
-        diag = math.sqrt(width ** 2 + height ** 2)
+        diag = math.sqrt(width**2 + height**2)
         delta_offset = (dx * nx + dy * ny) / diag
         new_offset = max(-0.5, min(0.5, start_offset + delta_offset))
         return new_offset, wipe_angle
@@ -215,8 +229,10 @@ def handle_wipe_drag(
 
 def wipe_cursor_for_pos(
     pos: QPointF,
-    width: float, height: float,
-    wipe_angle: float, wipe_offset: float,
+    width: float,
+    height: float,
+    wipe_angle: float,
+    wipe_offset: float,
     hit_zone: int,
 ) -> Qt.CursorShape | None:
     """Return cursor shape for wipe hover, or None if not near wipe elements."""
