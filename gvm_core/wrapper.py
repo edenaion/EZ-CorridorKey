@@ -210,7 +210,12 @@ class GVMProcessor:
         if new_long > _scale_cap:
             new_long = _scale_cap
 
-        max_res_param = new_long
+        # torchvision Resize(size=S, max_size=M) requires M > S strictly.
+        # For square or near-square inputs, new_long can equal _base_res,
+        # which trips the constraint and crashes with
+        # "max_size must be strictly greater than the requested size
+        # for the smaller edge size". Guarantee a 1-px margin.
+        max_res_param = max(new_long, _base_res + 1)
 
         transform = Compose([
             ToTensor(),
