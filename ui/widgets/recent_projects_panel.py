@@ -4,6 +4,7 @@ Shows a scrollable list of project cards representing recently-opened
 projects. Each card shows the project name, path, and last opened date,
 with an always-visible delete button. Right-click for rename/delete.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,9 +15,16 @@ import sys
 logger = logging.getLogger(__name__)
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QFrame, QPushButton, QScrollArea, QMessageBox,
-    QMenu, QInputDialog,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QFrame,
+    QPushButton,
+    QScrollArea,
+    QMessageBox,
+    QMenu,
+    QInputDialog,
 )
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtGui import QAction, QDesktopServices
@@ -27,7 +35,7 @@ from ui.recent_sessions import RecentSessionsStore, RecentSession
 class RecentProjectCard(QFrame):
     """Single project card — clickable row with always-visible X button."""
 
-    clicked = Signal(str)         # workspace_path
+    clicked = Signal(str)  # workspace_path
     delete_clicked = Signal(str)  # workspace_path
     rename_clicked = Signal(str)  # workspace_path
 
@@ -51,7 +59,7 @@ class RecentProjectCard(QFrame):
 
         btn_layout.addStretch(1)
 
-        folder_btn = QPushButton("\uD83D\uDCC2")  # open folder icon
+        folder_btn = QPushButton("\ud83d\udcc2")  # open folder icon
         folder_btn.setObjectName("projectFolderBtn")
         folder_btn.setFixedSize(16, 16)
         folder_btn.setToolTip("Open in Finder" if sys.platform == "darwin" else "Open in Explorer")
@@ -60,7 +68,7 @@ class RecentProjectCard(QFrame):
 
         btn_layout.addStretch(2)
 
-        delete_btn = QPushButton("\u00D7")  # ×
+        delete_btn = QPushButton("\u00d7")  # ×
         delete_btn.setObjectName("projectDeleteBtn")
         delete_btn.setFixedSize(16, 16)
         delete_btn.setToolTip("Remove project")
@@ -88,12 +96,14 @@ class RecentProjectCard(QFrame):
 
     def enterEvent(self, event):
         from ui.sounds.audio_manager import UIAudio
+
         UIAudio.hover()
         super().enterEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             from ui.sounds.audio_manager import UIAudio
+
             UIAudio.click()  # ProjectCard is not QPushButton, manual click needed
             self.clicked.emit(self._workspace_path)
         super().mousePressEvent(event)
@@ -123,8 +133,8 @@ class RecentProjectCard(QFrame):
 class RecentProjectsPanel(QWidget):
     """Scrollable list of recent project cards."""
 
-    project_selected = Signal(str)   # workspace_path
-    project_deleted = Signal(str)    # workspace_path
+    project_selected = Signal(str)  # workspace_path
+    project_deleted = Signal(str)  # workspace_path
 
     def __init__(self, store: RecentSessionsStore, parent=None):
         super().__init__(parent)
@@ -169,6 +179,7 @@ class RecentProjectsPanel(QWidget):
         """Check if a path is the Projects root directory."""
         try:
             from backend.project import projects_root
+
             return os.path.normcase(os.path.abspath(path)) == os.path.normcase(
                 os.path.abspath(projects_root())
             )
@@ -208,7 +219,10 @@ class RecentProjectsPanel(QWidget):
 
         current_name = get_display_name(workspace_path)
         new_name, ok = QInputDialog.getText(
-            self, "Rename Project", "Project name:", text=current_name,
+            self,
+            "Rename Project",
+            "Project name:",
+            text=current_name,
         )
         if ok and new_name.strip() and new_name.strip() != current_name:
             new_name = new_name.strip()
@@ -226,6 +240,7 @@ class RecentProjectsPanel(QWidget):
         Safety: refuses to delete the Projects root directory.
         """
         from backend.project import get_display_name
+
         name = get_display_name(workspace_path)
 
         # Safety: never allow disk-delete of the Projects root
@@ -236,7 +251,7 @@ class RecentProjectsPanel(QWidget):
 
         msg = QMessageBox(self)
         msg.setWindowTitle("Remove Project")
-        msg.setText(f"Remove \"{name}\" from recent projects?")
+        msg.setText(f'Remove "{name}" from recent projects?')
         msg.setInformativeText(
             "Remove from List: hides it from recents (files stay on disk).\n"
             "Delete from Disk: permanently deletes the project folder."
@@ -257,7 +272,8 @@ class RecentProjectsPanel(QWidget):
         elif clicked == delete_btn:
             # Second confirmation with path shown
             confirm = QMessageBox.warning(
-                self, "Confirm Delete",
+                self,
+                "Confirm Delete",
                 f"Permanently delete this project folder?\n\n{workspace_path}",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
@@ -267,20 +283,20 @@ class RecentProjectsPanel(QWidget):
                 try:
                     # Safety: only delete if path is inside the Projects root
                     from backend.project import projects_root
+
                     root = os.path.realpath(projects_root())
                     target = os.path.realpath(workspace_path)
                     if not target.startswith(root + os.sep):
                         logger.warning(f"Refusing to delete outside Projects folder: {target}")
-                        raise OSError(
-                            f"Refusing to delete outside Projects folder: {target}"
-                        )
+                        raise OSError(f"Refusing to delete outside Projects folder: {target}")
                     if os.path.isdir(workspace_path):
                         logger.info(f"Deleting project folder: {workspace_path}")
                         shutil.rmtree(workspace_path)
                 except OSError as e:
                     logger.error(f"Failed to delete project: {e}")
                     QMessageBox.warning(
-                        self, "Delete Failed",
+                        self,
+                        "Delete Failed",
                         f"Could not delete project:\n{e}",
                     )
                 self.project_deleted.emit(workspace_path)

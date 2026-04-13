@@ -4,12 +4,14 @@ from typing import Optional, Union, Tuple
 
 
 # @torch.jit.script
-def get_similarity(mk: torch.Tensor,
-                   ms: torch.Tensor,
-                   qk: torch.Tensor,
-                   qe: torch.Tensor,
-                   add_batch_dim: bool = False,
-                   uncert_mask = None) -> torch.Tensor:
+def get_similarity(
+    mk: torch.Tensor,
+    ms: torch.Tensor,
+    qk: torch.Tensor,
+    qe: torch.Tensor,
+    add_batch_dim: bool = False,
+    uncert_mask=None,
+) -> torch.Tensor:
     # used for training/inference and memory reading/memory potentiation
     # mk: B x CK x [N]    - Memory keys
     # ms: B x  1 x [N]    - Memory shrinkage
@@ -27,7 +29,7 @@ def get_similarity(mk: torch.Tensor,
     ms = ms.flatten(start_dim=1).unsqueeze(2) if ms is not None else None
     qk = qk.flatten(start_dim=2)
     qe = qe.flatten(start_dim=2) if qe is not None else None
-    
+
     # query token selection based on temporal sparsity
     if uncert_mask is not None:
         uncert_mask = uncert_mask.flatten(start_dim=2)
@@ -38,15 +40,15 @@ def get_similarity(mk: torch.Tensor,
     if qe is not None:
         # See XMem's appendix for derivation
         mk = mk.transpose(1, 2)
-        a_sq = (mk.pow(2) @ qe)
+        a_sq = mk.pow(2) @ qe
         two_ab = 2 * (mk @ (qk * qe))
         b_sq = (qe * qk.pow(2)).sum(1, keepdim=True)
-        similarity = (-a_sq + two_ab - b_sq)
+        similarity = -a_sq + two_ab - b_sq
     else:
         # similar to STCN if we don't have the selection term
         a_sq = mk.pow(2).sum(1).unsqueeze(2)
         two_ab = 2 * (mk.transpose(1, 2) @ qk)
-        similarity = (-a_sq + two_ab)
+        similarity = -a_sq + two_ab
 
     if ms is not None:
         similarity = similarity * ms / math.sqrt(CK)  # B*N*HW
@@ -57,10 +59,11 @@ def get_similarity(mk: torch.Tensor,
 
 
 def do_softmax(
-        similarity: torch.Tensor,
-        top_k: Optional[int] = None,
-        inplace: bool = False,
-        return_usage: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    similarity: torch.Tensor,
+    top_k: Optional[int] = None,
+    inplace: bool = False,
+    return_usage: bool = False,
+) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
     # normalize similarity with top-k softmax
     # similarity: B x N x [HW/P]
     # use inplace with care
@@ -87,14 +90,18 @@ def do_softmax(
     return affinity
 
 
-def get_affinity(mk: torch.Tensor, ms: torch.Tensor, qk: torch.Tensor,
-                 qe: torch.Tensor, uncert_mask = None) -> torch.Tensor:
+def get_affinity(
+    mk: torch.Tensor, ms: torch.Tensor, qk: torch.Tensor, qe: torch.Tensor, uncert_mask=None
+) -> torch.Tensor:
     # shorthand used in training with no top-k
     similarity = get_similarity(mk, ms, qk, qe, uncert_mask=uncert_mask)
     affinity = do_softmax(similarity)
     return affinity
 
-def readout(affinity: torch.Tensor, mv: torch.Tensor, uncert_mask: torch.Tensor=None) -> torch.Tensor:
+
+def readout(
+    affinity: torch.Tensor, mv: torch.Tensor, uncert_mask: torch.Tensor = None
+) -> torch.Tensor:
     B, CV, T, H, W = mv.shape
 
     mo = mv.view(B, CV, T * H * W)

@@ -6,6 +6,7 @@ queue (extraction is CPU/hardware decode, not GPU inference).
 Supports multiple concurrent extraction requests via an internal job
 queue. Each clip gets its own cancel event for independent cancellation.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,8 +19,11 @@ from dataclasses import dataclass, field
 from PySide6.QtCore import QThread, Signal
 
 from backend.ffmpeg_tools import (
-    require_ffmpeg_install, probe_video, extract_frames,
-    write_video_metadata, build_exr_vf,
+    require_ffmpeg_install,
+    probe_video,
+    extract_frames,
+    write_video_metadata,
+    build_exr_vf,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,8 +73,7 @@ class ExtractWorker(QThread):
                 if job.clip_name == clip_name:
                     logger.debug(f"Extraction already queued: {clip_name}")
                     return
-        job = _ExtractJob(clip_name=clip_name, video_path=video_path,
-                          clip_root=clip_root)
+        job = _ExtractJob(clip_name=clip_name, video_path=video_path, clip_root=clip_root)
         with self._lock:
             self._jobs.append(job)
         self._wake.set()
@@ -158,6 +161,7 @@ class ExtractWorker(QThread):
             # main thread with expensive UI updates).  Emit at most every
             # 100 ms, plus always emit the final frame so the bar hits 100%.
             import time as _time
+
             _MIN_INTERVAL = 0.10  # seconds between progress emissions
             _last_emit = [0.0]  # mutable closure — [timestamp]
 
@@ -173,9 +177,7 @@ class ExtractWorker(QThread):
             def on_recompress(current: int, total: int) -> None:
                 # Report as total_frames + progress to show "compressing"
                 # without resetting the counter
-                _throttled_emit(job.clip_name,
-                                total_frames + current,
-                                total_frames + total)
+                _throttled_emit(job.clip_name, total_frames + current, total_frames + total)
 
             # Run extraction (two-pass: FFmpeg EXR ZIP16 → DWAB recompress)
             extracted = extract_frames(
@@ -237,7 +239,6 @@ class ExtractWorker(QThread):
         Naming convention:  ``input_alphahint.mov`` alongside ``input.mov``.
         Also checks the Source/ folder if the video lives there.
         """
-        import glob as _glob
 
         stem = os.path.splitext(os.path.basename(video_path))[0]
         parent = os.path.dirname(video_path)
@@ -255,6 +256,7 @@ class ExtractWorker(QThread):
         clip_json = os.path.join(clip_root, "clip.json")
         if os.path.isfile(clip_json):
             import json
+
             try:
                 with open(clip_json, "r") as fh:
                     data = json.load(fh)
@@ -295,37 +297,41 @@ class ExtractWorker(QThread):
             out_pattern = os.path.join(alpha_dir, "frame%06d.png")
 
             import subprocess
+
             cmd = [
-                ffmpeg, "-y",
-                "-i", alpha_video,
-                "-vf", "format=gray",
-                "-pix_fmt", "gray",
+                ffmpeg,
+                "-y",
+                "-i",
+                alpha_video,
+                "-vf",
+                "format=gray",
+                "-pix_fmt",
+                "gray",
                 out_pattern,
             ]
             result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=600,
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
             if result.returncode != 0:
-                logger.error("Alpha hint extraction failed: %s",
-                             result.stderr[-500:])
+                logger.error("Alpha hint extraction failed: %s", result.stderr[-500:])
                 # Clean up partial output
                 if os.path.isdir(alpha_dir):
                     shutil.rmtree(alpha_dir)
                 return
 
             # Count extracted frames
-            alpha_frames = len([
-                f for f in os.listdir(alpha_dir)
-                if f.lower().endswith(".png")
-            ])
-            logger.info("Auto-extracted %d alpha hint frames into %s",
-                         alpha_frames, alpha_dir)
+            alpha_frames = len([f for f in os.listdir(alpha_dir) if f.lower().endswith(".png")])
+            logger.info("Auto-extracted %d alpha hint frames into %s", alpha_frames, alpha_dir)
 
             if alpha_frames != frame_count:
                 logger.warning(
                     "Alpha hint frame count (%d) != source frame count (%d)",
-                    alpha_frames, frame_count,
+                    alpha_frames,
+                    frame_count,
                 )
 
         except Exception as exc:

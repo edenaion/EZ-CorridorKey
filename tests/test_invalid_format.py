@@ -8,10 +8,10 @@ Key design facts documented by these tests:
 - OutputConfig accepts arbitrary format strings; no validation is enforced at
   construction time.  Callers are responsible for passing valid values.
 """
+
 from unittest.mock import patch
 
 import numpy as np
-import pytest
 
 from backend.service import CorridorKeyService, OutputConfig
 
@@ -19,6 +19,7 @@ from backend.service import CorridorKeyService, OutputConfig
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _float32_frame(h: int = 4, w: int = 4, c: int = 3) -> np.ndarray:
     """Return a small float32 array whose values span [0, 1]."""
@@ -33,6 +34,7 @@ def _make_service() -> CorridorKeyService:
 # ---------------------------------------------------------------------------
 # TestWriteImageFormats
 # ---------------------------------------------------------------------------
+
 
 class TestWriteImageFormats:
     """Unit tests for _write_image format-routing logic."""
@@ -101,9 +103,7 @@ class TestWriteImageFormats:
 
         for path, info in captured_calls.items():
             # PNG branch: no extra flags passed
-            assert info["extra_args"] == (), (
-                f"Unknown format at {path} must not forward EXR flags"
-            )
+            assert info["extra_args"] == (), f"Unknown format at {path} must not forward EXR flags"
             # PNG branch: array must be uint8
             assert info["arr"].dtype == np.uint8, (
                 f"Unknown format at {path} must produce uint8 output"
@@ -151,6 +151,7 @@ class TestWriteImageFormats:
 # ---------------------------------------------------------------------------
 # TestOutputConfigNonStandardFormats
 # ---------------------------------------------------------------------------
+
 
 class TestOutputConfigNonStandardFormats:
     """Verify OutputConfig accepts arbitrary format strings without error."""

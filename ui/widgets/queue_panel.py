@@ -8,11 +8,19 @@ The tab is always present — click it to expand or collapse.
 Progress bars update in-place (no widget rebuild per frame) so the bar
 moves smoothly instead of stuttering on every progress tick.
 """
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QProgressBar, QScrollArea, QFrame, QSizePolicy,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QProgressBar,
+    QScrollArea,
+    QFrame,
+    QSizePolicy,
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 
@@ -55,11 +63,24 @@ _ROW_H = 60
 
 class _JobRowCache:
     """Cached widgets for a single job row, enabling in-place updates."""
-    __slots__ = ("frame", "progress_bar", "frame_label", "status_label",
-                 "last_status", "last_current", "last_total")
 
-    def __init__(self, frame: QFrame, progress_bar: QProgressBar | None,
-                 frame_label: QLabel | None, status_label: QLabel | None):
+    __slots__ = (
+        "frame",
+        "progress_bar",
+        "frame_label",
+        "status_label",
+        "last_status",
+        "last_current",
+        "last_total",
+    )
+
+    def __init__(
+        self,
+        frame: QFrame,
+        progress_bar: QProgressBar | None,
+        frame_label: QLabel | None,
+        status_label: QLabel | None,
+    ):
         self.frame = frame
         self.progress_bar = progress_bar
         self.frame_label = frame_label
@@ -119,9 +140,7 @@ class QueuePanel(QWidget):
 
         # ── Content panel (shown when expanded) ──
         self._panel = QWidget()
-        self._panel.setStyleSheet(
-            "background-color: #0E0D00; border-right: 1px solid #2A2910;"
-        )
+        self._panel.setStyleSheet("background-color: #0E0D00; border-right: 1px solid #2A2910;")
         self._panel.setFixedWidth(_CONTENT_W)
         panel_layout = QVBoxLayout(self._panel)
         panel_layout.setContentsMargins(0, 0, 0, 0)
@@ -169,9 +188,7 @@ class QueuePanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(
-            "QScrollArea { border: none; background: transparent; }"
-        )
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
         self._scroll = scroll
 
         self._job_container = QWidget()
@@ -276,9 +293,11 @@ class QueuePanel(QWidget):
             cache = self._row_cache.get(job.id)
             if cache is None:
                 continue
-            if (job.status == cache.last_status
-                    and job.current_frame == cache.last_current
-                    and job.total_frames == cache.last_total):
+            if (
+                job.status == cache.last_status
+                and job.current_frame == cache.last_current
+                and job.total_frames == cache.last_total
+            ):
                 continue
             self._update_row_in_place(cache, job)
 
@@ -302,9 +321,7 @@ class QueuePanel(QWidget):
         """Create a single job row — vertical stack: type+clip, progress/status."""
         row = QFrame()
         row.setFixedHeight(_ROW_H)
-        row.setStyleSheet(
-            "QFrame { background-color: #1A1900; border-bottom: 1px solid #151400; }"
-        )
+        row.setStyleSheet("QFrame { background-color: #1A1900; border-bottom: 1px solid #151400; }")
         layout = QVBoxLayout(row)
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(2)
@@ -335,9 +352,7 @@ class QueuePanel(QWidget):
             )
             dismiss_btn.setToolTip("Dismiss")
             job_id = job.id
-            dismiss_btn.clicked.connect(
-                lambda checked, jid=job_id: self._dismiss_job(jid)
-            )
+            dismiss_btn.clicked.connect(lambda checked, jid=job_id: self._dismiss_job(jid))
             top.addWidget(dismiss_btn)
 
         layout.addLayout(top)

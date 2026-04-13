@@ -49,10 +49,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["backend", "ui", "CorridorKeyModule", "gvm_core", "sam2_tracker", "VideoMaMaInferenceModule", "modules/MatAnyone2Module"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"device_utils.py" = "device_utils.py"
+
+[tool.hatch.build.targets.sdist.force-include]
+"device_utils.py" = "device_utils.py"
+
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.uv]
+[tool.uv.pip]
 torch-backend = "auto"
 
 [tool.uv.sources]
@@ -60,3 +66,21 @@ corridorkey-mlx = { git = "https://github.com/nikopueringer/corridorkey-mlx.git"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "rocm: ROCm/HIP startup tests (mocked; no AMD GPU required)",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    ".venv",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+# Default rule set is E4, E7, E9, F (see Ruff docs). We only relax:
+# E402 — lazy imports after env/path setup (GUI, clip_manager, upstream patterns).
+# E701 — compound statements on one line in dense numeric / legacy code.
+ignore = ["E402", "E701"]

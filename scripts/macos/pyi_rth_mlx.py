@@ -9,27 +9,29 @@ so we help MLX find the kernels by:
 2. Ensuring the mlx package directory is on sys.path so that
    ``import mlx.core`` can find the native extension and its resources.
 """
+
 import os
 import sys
 import glob
 
+
 def _fixup_mlx_paths():
     """Locate bundled .metallib files and set MLX_METAL_PATH."""
     # In a PyInstaller bundle, _MEIPASS is the temp extraction directory
-    bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    bundle_dir = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
 
     # Search common locations where PyInstaller places MLX files
     search_dirs = [
-        os.path.join(bundle_dir, 'mlx', 'lib'),
-        os.path.join(bundle_dir, 'mlx'),
-        os.path.join(bundle_dir, 'mlx_metal'),
+        os.path.join(bundle_dir, "mlx", "lib"),
+        os.path.join(bundle_dir, "mlx"),
+        os.path.join(bundle_dir, "mlx_metal"),
         bundle_dir,
     ]
 
     # Find .metallib files
     metallib_path = None
     for search_dir in search_dirs:
-        pattern = os.path.join(search_dir, '*.metallib')
+        pattern = os.path.join(search_dir, "*.metallib")
         matches = glob.glob(pattern)
         if matches:
             metallib_path = matches[0]
@@ -37,19 +39,19 @@ def _fixup_mlx_paths():
 
     # Also do a recursive search if not found in expected locations
     if metallib_path is None:
-        for match in glob.glob(os.path.join(bundle_dir, '**', '*.metallib'), recursive=True):
+        for match in glob.glob(os.path.join(bundle_dir, "**", "*.metallib"), recursive=True):
             metallib_path = match
             break
 
     if metallib_path:
         metallib_dir = os.path.dirname(metallib_path)
         # MLX checks MLX_METAL_PATH for the directory containing metallib files
-        os.environ['MLX_METAL_PATH'] = metallib_dir
+        os.environ["MLX_METAL_PATH"] = metallib_dir
         # Also set the individual file path variant some versions use
-        os.environ['MLX_METALLIB_PATH'] = metallib_path
+        os.environ["MLX_METALLIB_PATH"] = metallib_path
 
     # Ensure mlx package directory is findable
-    mlx_dir = os.path.join(bundle_dir, 'mlx')
+    mlx_dir = os.path.join(bundle_dir, "mlx")
     if os.path.isdir(mlx_dir) and bundle_dir not in sys.path:
         sys.path.insert(0, bundle_dir)
 
@@ -65,6 +67,7 @@ def _prewarm_mlx():
     """
     try:
         import mlx.core as mx
+
         # Force Metal device initialization by running a trivial op
         mx.eval(mx.zeros(1))
     except Exception:

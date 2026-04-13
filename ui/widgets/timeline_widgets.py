@@ -7,6 +7,7 @@ CoverageBar: multi-lane bar showing alpha, inference, and annotation coverage.
 MarkerOverlay: transparent overlay for in/out bracket markers with drag handles.
 _FatSlider: QSlider with enlarged clickable groove area.
 """
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import QSlider, QWidget, QStyle, QStyleOptionSlider
@@ -29,9 +30,7 @@ class _FatSlider(QSlider):
         """Return the expanded groove rect used for hit-testing."""
         opt = QStyleOptionSlider()
         self.initStyleOption(opt)
-        base = self.style().subControlRect(
-            QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self
-        )
+        base = self.style().subControlRect(QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self)
         # Expand groove to full widget height
         base.setTop(0)
         base.setBottom(self.height())
@@ -59,10 +58,10 @@ class CoverageBar(QWidget):
     Bottom lane: inference output coverage (brand yellow segments).
     """
 
-    _ALPHA_COLOR = QColor(200, 200, 200)       # Soft white for alpha
-    _INFERENCE_COLOR = QColor(255, 242, 3)      # Brand yellow #FFF203
-    _ANNOTATION_COLOR = QColor(44, 195, 80)     # Green #2CC350 for annotations
-    _TRACK_COLOR = QColor(26, 25, 0)            # Dark track
+    _ALPHA_COLOR = QColor(200, 200, 200)  # Soft white for alpha
+    _INFERENCE_COLOR = QColor(255, 242, 3)  # Brand yellow #FFF203
+    _ANNOTATION_COLOR = QColor(44, 195, 80)  # Green #2CC350 for annotations
+    _TRACK_COLOR = QColor(26, 25, 0)  # Dark track
     _LANE_HEIGHT = 3
     _GAP = 1
 
@@ -167,12 +166,12 @@ class MarkerOverlay(QWidget):
     out_point_dragged = Signal(int)
     scrub_to_frame = Signal(int)  # request scrubber jump during drag
 
-    GRAB_WIDTH = 8    # px hitbox for drag detection
-    HANDLE_W = 6      # px visible handle width
-    HANDLE_H = 8      # px handle nub height at bottom
+    GRAB_WIDTH = 8  # px hitbox for drag detection
+    HANDLE_W = 6  # px visible handle width
+    HANDLE_H = 8  # px handle nub height at bottom
     MARKER_WIDTH = 2  # px bracket line width
-    MARKER_COLOR = QColor(255, 242, 3)      # Brand yellow
-    DIM_COLOR = QColor(0, 0, 0, 120)        # Semi-transparent dim
+    MARKER_COLOR = QColor(255, 242, 3)  # Brand yellow
+    DIM_COLOR = QColor(0, 0, 0, 120)  # Semi-transparent dim
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -208,19 +207,19 @@ class MarkerOverlay(QWidget):
         """Return pixel x for in or out marker, or None if not set."""
         if self._in_point is None or self._out_point is None or self._total <= 0:
             return None
-        if which == 'in':
+        if which == "in":
             return self._frame_to_x(self._in_point)
         else:
             return self._frame_to_x(self._out_point + 1)
 
     def _hit_marker(self, x: int) -> str | None:
         """Return 'in', 'out', or None based on proximity to markers."""
-        x_in = self._marker_x('in')
-        x_out = self._marker_x('out')
+        x_in = self._marker_x("in")
+        x_out = self._marker_x("out")
         if x_in is not None and abs(x - x_in) <= self.GRAB_WIDTH:
-            return 'in'
+            return "in"
         if x_out is not None and abs(x - x_out) <= self.GRAB_WIDTH:
-            return 'out'
+            return "out"
         return None
 
     def paintEvent(self, event) -> None:
@@ -248,28 +247,33 @@ class MarkerOverlay(QWidget):
         painter.fillRect(x_in, 0, self.MARKER_WIDTH, h, self.MARKER_COLOR)
 
         # Out-point bracket line
-        painter.fillRect(max(0, x_out - self.MARKER_WIDTH), 0,
-                         self.MARKER_WIDTH, h, self.MARKER_COLOR)
+        painter.fillRect(
+            max(0, x_out - self.MARKER_WIDTH), 0, self.MARKER_WIDTH, h, self.MARKER_COLOR
+        )
 
         # Handle nubs at bottom (small triangles pointing inward)
         painter.setBrush(self.MARKER_COLOR)
         painter.setPen(Qt.NoPen)
 
         # In-point handle: triangle pointing right at bottom-left of bracket
-        in_tri = QPolygonF([
-            QPointF(x_in, h),
-            QPointF(x_in + self.HANDLE_W, h),
-            QPointF(x_in, h - self.HANDLE_H),
-        ])
+        in_tri = QPolygonF(
+            [
+                QPointF(x_in, h),
+                QPointF(x_in + self.HANDLE_W, h),
+                QPointF(x_in, h - self.HANDLE_H),
+            ]
+        )
         painter.drawPolygon(in_tri)
 
         # Out-point handle: triangle pointing left at bottom-right of bracket
         ox = max(0, x_out - self.MARKER_WIDTH)
-        out_tri = QPolygonF([
-            QPointF(ox + self.MARKER_WIDTH, h),
-            QPointF(ox + self.MARKER_WIDTH - self.HANDLE_W, h),
-            QPointF(ox + self.MARKER_WIDTH, h - self.HANDLE_H),
-        ])
+        out_tri = QPolygonF(
+            [
+                QPointF(ox + self.MARKER_WIDTH, h),
+                QPointF(ox + self.MARKER_WIDTH - self.HANDLE_W, h),
+                QPointF(ox + self.MARKER_WIDTH, h - self.HANDLE_H),
+            ]
+        )
         painter.drawPolygon(out_tri)
 
         painter.end()
@@ -295,13 +299,13 @@ class MarkerOverlay(QWidget):
         elif event.button() == Qt.MiddleButton:
             # Middle-click on a marker resets it to boundary
             hit = self._hit_marker(int(event.position().x()))
-            if hit == 'in':
+            if hit == "in":
                 self._in_point = 0
                 self.update()
                 self.in_point_dragged.emit(0)
                 event.accept()
                 return
-            elif hit == 'out' and self._total > 0:
+            elif hit == "out" and self._total > 0:
                 self._out_point = self._total - 1
                 self.update()
                 self.out_point_dragged.emit(self._total - 1)
@@ -315,7 +319,7 @@ class MarkerOverlay(QWidget):
         x = int(event.position().x())
         if self._dragging:
             frame = self._x_to_frame(x)
-            if self._dragging == 'in':
+            if self._dragging == "in":
                 if self._out_point is not None:
                     frame = min(frame, self._out_point)
                 self._in_point = frame
@@ -336,9 +340,9 @@ class MarkerOverlay(QWidget):
 
     def mouseReleaseEvent(self, event) -> None:
         if self._dragging:
-            if self._dragging == 'in' and self._in_point is not None:
+            if self._dragging == "in" and self._in_point is not None:
                 self.in_point_dragged.emit(self._in_point)
-            elif self._dragging == 'out' and self._out_point is not None:
+            elif self._dragging == "out" and self._out_point is not None:
                 self.out_point_dragged.emit(self._out_point)
             self._dragging = None
             # Check if still near a marker

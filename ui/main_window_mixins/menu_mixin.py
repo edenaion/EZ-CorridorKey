@@ -76,6 +76,7 @@ class MenuMixin:
         corner_layout.addWidget(self._update_btn)
 
         from ui.widgets.volume_control import VolumeControl
+
         self._volume_control = VolumeControl(self._corner_widget)
         corner_layout.addWidget(self._volume_control)
 
@@ -83,4 +84,5 @@ class MenuMixin:
 
     def _menu_click_sound(self) -> None:
         from ui.sounds.audio_manager import UIAudio
+
         UIAudio.click()

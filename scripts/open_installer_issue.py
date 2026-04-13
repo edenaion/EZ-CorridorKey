@@ -4,11 +4,11 @@ This mirrors the in-app "Report Issue" experience closely enough for installer
 errors, but keeps the implementation stdlib-only so it can run before the full
 project environment is healthy.
 """
+
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import subprocess
 import sys
@@ -38,7 +38,11 @@ def _copy_to_clipboard(text: str) -> bool:
         except Exception:
             return False
 
-    for cmd in (["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
+    for cmd in (
+        ["wl-copy"],
+        ["xclip", "-selection", "clipboard"],
+        ["xsel", "--clipboard", "--input"],
+    ):
         try:
             subprocess.run(cmd, input=text, text=True, check=True)
             return True
@@ -102,10 +106,16 @@ def _build_url(title: str, body: str) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Open a pre-filled GitHub issue for an installer failure")
+    parser = argparse.ArgumentParser(
+        description="Open a pre-filled GitHub issue for an installer failure"
+    )
     parser.add_argument("--json", required=True, help="Path to installer diagnostic JSON")
-    parser.add_argument("--stage", default="installer-runtime-verification", help="Short failure stage label")
-    parser.add_argument("--title", default="Installer failed to validate GPU/PyTorch runtime", help="Issue title")
+    parser.add_argument(
+        "--stage", default="installer-runtime-verification", help="Short failure stage label"
+    )
+    parser.add_argument(
+        "--title", default="Installer failed to validate GPU/PyTorch runtime", help="Issue title"
+    )
     parser.add_argument(
         "--body-out",
         default="logs/diagnostics/install-support-report.md",

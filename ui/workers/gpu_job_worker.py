@@ -13,6 +13,7 @@ Design decisions (from Codex review):
 - Model residency: service._ensure_model() unloads previous model type
 - Lock order: service._gpu_lock > job_queue._lock > never hold while joining
 """
+
 from __future__ import annotations
 
 import os
@@ -22,19 +23,15 @@ import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 
 import cv2
-import numpy as np
 from PySide6.QtCore import QThread, Signal, QMutex, QWaitCondition
 
 from backend import (
     CorridorKeyService,
     ClipEntry,
-    ClipState,
     GPUJob,
-    GPUJobQueue,
     InferenceParams,
     JobType,
 )
-from backend.job_queue import JobStatus
 from backend.errors import JobCancelledError, CorridorKeyError
 
 # Re-export create_job_snapshot for backward compatibility
@@ -61,14 +58,16 @@ class GPUJobWorker(QThread):
     """
 
     # Signals — all carry job_id as first arg for stale detection
-    progress = Signal(str, str, int, int, float)  # job_id, clip_name, current_frame, total_frames, fps
-    preview_ready = Signal(str, str, int, str) # job_id, clip_name, frame_index, temp_file_path
-    clip_finished = Signal(str, str, str)       # job_id, clip_name, job_type_value
-    warning = Signal(str, str)                 # job_id, message
-    status_update = Signal(str, str)           # job_id, status_text (phase label for status bar)
-    error = Signal(str, str, str)              # job_id, clip_name, error_message
-    queue_empty = Signal()                     # all jobs done
-    reprocess_result = Signal(str, object)     # job_id, result_dict (for preview display)
+    progress = Signal(
+        str, str, int, int, float
+    )  # job_id, clip_name, current_frame, total_frames, fps
+    preview_ready = Signal(str, str, int, str)  # job_id, clip_name, frame_index, temp_file_path
+    clip_finished = Signal(str, str, str)  # job_id, clip_name, job_type_value
+    warning = Signal(str, str)  # job_id, message
+    status_update = Signal(str, str)  # job_id, status_text (phase label for status bar)
+    error = Signal(str, str, str)  # job_id, clip_name, error_message
+    queue_empty = Signal()  # all jobs done
+    reprocess_result = Signal(str, object)  # job_id, result_dict (for preview display)
 
     def __init__(self, service: CorridorKeyService, max_workers: int = 1, parent=None):
         super().__init__(parent)
@@ -227,7 +226,9 @@ class GPUJobWorker(QThread):
         Assumes start_job() has already been called.
         """
         job_id = job.id
-        logger.info(f">>> PROCESS_JOB START [{job_id}]: type={job.job_type.value}, clip={job.clip_name}")
+        logger.info(
+            f">>> PROCESS_JOB START [{job_id}]: type={job.job_type.value}, clip={job.clip_name}"
+        )
 
         try:
             if job.job_type == JobType.INFERENCE:
@@ -295,7 +296,9 @@ class GPUJobWorker(QThread):
         skip_stems = job.params.get("_skip_stems", set())
 
         if clip is None or params is None:
-            raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip or params snapshot")
+            raise CorridorKeyError(
+                f"Job [{job.id}] for '{job.clip_name}' missing clip or params snapshot"
+            )
 
         def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
             self.progress.emit(job.id, clip_name, current, total, kwargs.get("fps", 0.0))
@@ -361,7 +364,9 @@ class GPUJobWorker(QThread):
 
         self._service.run_sam2_track(
             clip=clip,
-            input_is_linear=(params.input_is_linear if isinstance(params, InferenceParams) else None),
+            input_is_linear=(
+                params.input_is_linear if isinstance(params, InferenceParams) else None
+            ),
             job=job,
             on_progress=on_progress,
             on_warning=on_warning,
@@ -388,7 +393,9 @@ class GPUJobWorker(QThread):
         result = self._service.preview_sam2_prompt(
             clip=clip,
             preferred_frame_index=frame_index,
-            input_is_linear=(params.input_is_linear if isinstance(params, InferenceParams) else None),
+            input_is_linear=(
+                params.input_is_linear if isinstance(params, InferenceParams) else None
+            ),
             job=job,
             on_progress=on_progress,
             on_warning=on_warning,
@@ -509,6 +516,7 @@ class GPUJobWorker(QThread):
 
             # Find the most recently written comp frame (natural sort)
             from backend.natural_sort import natsorted
+
             comp_files = natsorted(os.listdir(comp_dir))
             if not comp_files:
                 return

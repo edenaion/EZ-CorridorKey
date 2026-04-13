@@ -1,4 +1,5 @@
 """Backend service package — re-exports the public API."""
+
 import importlib
 import cv2
 from .core import CorridorKeyService, InferenceParams, OutputConfig, FrameResult

@@ -75,9 +75,9 @@ def _make_fixture_frame(
     xs = np.linspace(0.0, 1.0, width, dtype=np.float32)
     ys = np.linspace(0.0, 1.0, height, dtype=np.float32)
     xv, yv = np.meshgrid(xs, ys)
-    bg[..., 0] = np.clip(30 + 18 * xv, 0, 255).astype(np.uint8)   # B
+    bg[..., 0] = np.clip(30 + 18 * xv, 0, 255).astype(np.uint8)  # B
     bg[..., 1] = np.clip(135 + 55 * (1.0 - yv), 0, 255).astype(np.uint8)  # G
-    bg[..., 2] = np.clip(25 + 10 * xv, 0, 255).astype(np.uint8)   # R
+    bg[..., 2] = np.clip(25 + 10 * xv, 0, 255).astype(np.uint8)  # R
 
     # Humanoid motion path.
     t = index / max(total - 1, 1)
@@ -106,22 +106,28 @@ def _make_fixture_frame(
     _human_part(frame, mask, (58, 62, 78), line=((cx + 10, cy + 18), right_foot, 14))
 
     # Add a simple white shirt highlight so the figure has internal structure.
-    cv2.ellipse(frame, (cx, cy - 18), (12, 24), 0, 0, 360, (180, 190, 220), -1, lineType=cv2.LINE_AA)
+    cv2.ellipse(
+        frame, (cx, cy - 18), (12, 24), 0, 0, 360, (180, 190, 220), -1, lineType=cv2.LINE_AA
+    )
 
-    return frame, mask, {
-        "head": head,
-        "torso": torso,
-        "hips": (cx, cy + 18),
-        "left_shoulder": (cx - 26, cy - 34),
-        "right_shoulder": (cx + 26, cy - 34),
-        "left_hand": left_hand,
-        "right_hand": right_hand,
-        "left_foot": left_foot,
-        "right_foot": right_foot,
-        "left_bg": (max(18, cx - 86), cy - 12),
-        "right_bg": (min(width - 18, cx + 86), cy - 12),
-        "low_bg": (cx, min(height - 18, cy + 108)),
-    }
+    return (
+        frame,
+        mask,
+        {
+            "head": head,
+            "torso": torso,
+            "hips": (cx, cy + 18),
+            "left_shoulder": (cx - 26, cy - 34),
+            "right_shoulder": (cx + 26, cy - 34),
+            "left_hand": left_hand,
+            "right_hand": right_hand,
+            "left_foot": left_foot,
+            "right_foot": right_foot,
+            "left_bg": (max(18, cx - 86), cy - 12),
+            "right_bg": (min(width - 18, cx + 86), cy - 12),
+            "low_bg": (cx, min(height - 18, cy + 108)),
+        },
+    )
 
 
 def _write_fixture_clip(root: Path, *, frames: int, width: int, height: int) -> tuple[Path, Path]:
@@ -375,7 +381,9 @@ def run_local_gpu_qa(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Local GPU QA harness for SAM2 + VideoMaMa")
-    parser.add_argument("--frames", type=int, default=8, help="Number of synthetic frames to generate")
+    parser.add_argument(
+        "--frames", type=int, default=8, help="Number of synthetic frames to generate"
+    )
     parser.add_argument("--width", type=int, default=320, help="Fixture frame width")
     parser.add_argument("--height", type=int, default=256, help="Fixture frame height")
     parser.add_argument("--chunk-size", type=int, default=8, help="VideoMaMa chunk size")
@@ -385,9 +393,18 @@ def main() -> int:
         default="base-plus",
         help="SAM2 checkpoint to test. Default: base-plus.",
     )
-    parser.add_argument("--keep-dir", type=str, default="", help="Directory to keep outputs instead of using a temp dir")
-    parser.add_argument("--json-out", type=str, default="", help="Optional path to write the JSON summary")
-    parser.add_argument("--min-sam2-iou", type=float, default=0.75, help="Fail if SAM2 mean IoU drops below this")
+    parser.add_argument(
+        "--keep-dir",
+        type=str,
+        default="",
+        help="Directory to keep outputs instead of using a temp dir",
+    )
+    parser.add_argument(
+        "--json-out", type=str, default="", help="Optional path to write the JSON summary"
+    )
+    parser.add_argument(
+        "--min-sam2-iou", type=float, default=0.75, help="Fail if SAM2 mean IoU drops below this"
+    )
     parser.add_argument(
         "--min-videomama-iou",
         type=float,

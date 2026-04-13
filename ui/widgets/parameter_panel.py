@@ -1,9 +1,18 @@
 """Right panel — alpha generation, tracking, and output config."""
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
-    QComboBox, QCheckBox, QSpinBox, QPushButton, QGroupBox,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QSlider,
+    QComboBox,
+    QCheckBox,
+    QSpinBox,
+    QPushButton,
+    QGroupBox,
     QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal, QEvent
@@ -36,6 +45,7 @@ class _WheelGuard(QWidget):
             event.ignore()
             return True
         return False
+
 
 from backend import InferenceParams, OutputConfig
 
@@ -70,9 +80,9 @@ class ParameterPanel(QWidget):
 
     params_changed = Signal()  # emitted when any parameter changes
     parallel_frames_changed = Signal(int)  # parallel engine count changed
-    gvm_requested = Signal()      # GVM AUTO button clicked
+    gvm_requested = Signal()  # GVM AUTO button clicked
     birefnet_requested = Signal(str)  # BiRefNet button clicked, emits model variant name
-    videomama_requested = Signal() # VIDEOMAMA button clicked
+    videomama_requested = Signal()  # VIDEOMAMA button clicked
     matanyone2_requested = Signal()  # MatAnyone2 button clicked
     track_masks_requested = Signal()  # Track annotation prompts into dense masks
     import_alpha_requested = Signal()  # Import own AlphaHint folder
@@ -148,10 +158,12 @@ class ParameterPanel(QWidget):
         self._birefnet_model.setToolTip("BiRefNet model variant — changes take effect on next run.")
         # Populate from the wrapper's model registry
         from modules.BiRefNetModule.wrapper import BIREFNET_MODELS, DEFAULT_MODEL
+
         for display_name in BIREFNET_MODELS:
             self._birefnet_model.addItem(display_name)
         # Restore last-used model from QSettings
         from PySide6.QtCore import QSettings
+
         saved_model = QSettings().value("alpha/birefnet_model", DEFAULT_MODEL)
         idx = self._birefnet_model.findText(saved_model)
         if idx >= 0:
@@ -342,7 +354,9 @@ class ParameterPanel(QWidget):
         self._fg_format = QComboBox()
         self._fg_format.addItems(["exr", "png"])
         self._fg_format.setFixedWidth(70)
-        self._fg_format.setToolTip("EXR = 32-bit float (post-production).\nPNG = 8-bit (general use).")
+        self._fg_format.setToolTip(
+            "EXR = 32-bit float (post-production).\nPNG = 8-bit (general use)."
+        )
         fg_row.addWidget(self._fg_format)
         out_layout.addLayout(fg_row)
 
@@ -359,7 +373,9 @@ class ParameterPanel(QWidget):
         self._matte_format = QComboBox()
         self._matte_format.addItems(["exr", "png"])
         self._matte_format.setFixedWidth(70)
-        self._matte_format.setToolTip("EXR = 32-bit float (post-production).\nPNG = 8-bit (general use).")
+        self._matte_format.setToolTip(
+            "EXR = 32-bit float (post-production).\nPNG = 8-bit (general use)."
+        )
         matte_row.addWidget(self._matte_format)
         out_layout.addLayout(matte_row)
 
@@ -376,7 +392,9 @@ class ParameterPanel(QWidget):
         self._comp_format = QComboBox()
         self._comp_format.addItems(["png", "exr"])
         self._comp_format.setFixedWidth(70)
-        self._comp_format.setToolTip("PNG = 8-bit with transparency.\nEXR = 32-bit float (post-production).")
+        self._comp_format.setToolTip(
+            "PNG = 8-bit with transparency.\nEXR = 32-bit float (post-production)."
+        )
         comp_row.addWidget(self._comp_format)
         out_layout.addLayout(comp_row)
 
@@ -393,7 +411,9 @@ class ParameterPanel(QWidget):
         self._proc_format = QComboBox()
         self._proc_format.addItems(["exr", "png"])
         self._proc_format.setFixedWidth(70)
-        self._proc_format.setToolTip("EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for straight linear RGBA).")
+        self._proc_format.setToolTip(
+            "EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for straight linear RGBA)."
+        )
         proc_row.addWidget(self._proc_format)
         out_layout.addLayout(proc_row)
 
@@ -422,7 +442,12 @@ class ParameterPanel(QWidget):
             "CUDA only right now. Not currently supported on Apple Silicon."
         )
         self._parallel_spin.setFixedWidth(60)
-        from ui.widgets.preferences_dialog import get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS
+        from ui.widgets.preferences_dialog import (
+            get_setting_int,
+            KEY_PARALLEL_CLIPS,
+            DEFAULT_PARALLEL_CLIPS,
+        )
+
         self._parallel_spin.setValue(get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS))
         self._parallel_spin.valueChanged.connect(self._on_parallel_changed)
         parallel_row.addWidget(self._parallel_spin)
@@ -437,9 +462,9 @@ class ParameterPanel(QWidget):
 
         # Middle-click reset: map widget → (setter_callable, default_value)
         self._middle_click_defaults: dict[QWidget, tuple] = {
-            self._despill_slider: (self._despill_slider.setValue, 5),       # 0.5
-            self._refiner_slider: (self._refiner_slider.setValue, 10),      # 1.0
-            self._despeckle_size: (self._despeckle_size.setValue, 400),      # 400px
+            self._despill_slider: (self._despill_slider.setValue, 5),  # 0.5
+            self._refiner_slider: (self._refiner_slider.setValue, 10),  # 1.0
+            self._despeckle_size: (self._despeckle_size.setValue, 400),  # 400px
         }
         for widget in self._middle_click_defaults:
             widget.installEventFilter(self)
@@ -478,11 +503,13 @@ class ParameterPanel(QWidget):
     def _on_birefnet_model_changed(self, text: str) -> None:
         """Persist the selected BiRefNet model variant to QSettings."""
         from PySide6.QtCore import QSettings
+
         QSettings().setValue("alpha/birefnet_model", text)
 
     def _on_parallel_changed(self, value: int) -> None:
         from PySide6.QtCore import QSettings
         from ui.widgets.preferences_dialog import KEY_PARALLEL_CLIPS
+
         QSettings().setValue(KEY_PARALLEL_CLIPS, value)
         self.parallel_frames_changed.emit(value)
 
@@ -498,15 +525,18 @@ class ParameterPanel(QWidget):
             auto_despeckle=self._despeckle_check.isChecked(),
             despeckle_size=self._despeckle_size.value(),
             despeckle_dilation=25,  # fixed default
-            despeckle_blur=5,       # fixed default
+            despeckle_blur=5,  # fixed default
             refiner_scale=self._refiner_slider.value() / 10.0,
         )
 
     def get_output_config(self) -> OutputConfig:
         """Snapshot current output format configuration."""
         from ui.widgets.preferences_dialog import (
-            KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION, get_setting_str,
+            KEY_EXR_COMPRESSION,
+            DEFAULT_EXR_COMPRESSION,
+            get_setting_str,
         )
+
         return OutputConfig(
             fg_enabled=self._fg_check.isChecked(),
             fg_format=self._fg_format.currentText(),

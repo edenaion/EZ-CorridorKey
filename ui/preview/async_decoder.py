@@ -6,12 +6,13 @@ latest request is honored when rapid scrubbing generates many requests.
 Codex finding: synchronous decode freezes UI on scrub/mode change.
 Pattern: worker generates QImage, signals main thread, main thread paints.
 """
+
 from __future__ import annotations
 
 import logging
 import sys
 
-from PySide6.QtCore import QObject, QRunnable, Signal, Slot, QThreadPool
+from PySide6.QtCore import QObject, QRunnable, Signal, QThreadPool
 
 from .frame_index import ViewMode
 from .display_transform import decode_frame, decode_video_frame
@@ -21,16 +22,23 @@ logger = logging.getLogger(__name__)
 
 class _DecodeSignals(QObject):
     """Signals for the decode worker (QRunnable can't have signals directly)."""
+
     finished = Signal(int, str, object)  # stem_index, mode_value, QImage|None
 
 
 class _DecodeTask(QRunnable):
     """Decode a single frame in the thread pool."""
 
-    def __init__(self, request_id: int, path: str, mode: ViewMode,
-                 stem_index: int, video_path: str | None = None,
-                 video_frame_index: int = 0,
-                 input_exr_is_linear: bool = False):
+    def __init__(
+        self,
+        request_id: int,
+        path: str,
+        mode: ViewMode,
+        stem_index: int,
+        video_path: str | None = None,
+        video_frame_index: int = 0,
+        input_exr_is_linear: bool = False,
+    ):
         super().__init__()
         self.signals = _DecodeSignals()
         self._request_id = request_id
@@ -90,10 +98,15 @@ class AsyncDecoder(QObject):
         # before the callback fires. Keyed by request_id.
         self._pending_signals: dict[int, _DecodeSignals] = {}
 
-    def request_decode(self, path: str, mode: ViewMode, stem_index: int,
-                       video_path: str | None = None,
-                       video_frame_index: int = 0,
-                       input_exr_is_linear: bool = False) -> None:
+    def request_decode(
+        self,
+        path: str,
+        mode: ViewMode,
+        stem_index: int,
+        video_path: str | None = None,
+        video_frame_index: int = 0,
+        input_exr_is_linear: bool = False,
+    ) -> None:
         """Submit a decode request. Supersedes any pending request."""
         self._current_request_id += 1
         req_id = self._current_request_id
@@ -116,8 +129,9 @@ class AsyncDecoder(QObject):
         )
         self._pool.start(task)
 
-    def _on_decoded(self, request_id: int, stem_index: int,
-                    mode_value: str, qimage: object) -> None:
+    def _on_decoded(
+        self, request_id: int, stem_index: int, mode_value: str, qimage: object
+    ) -> None:
         """Handle decode completion — discard if stale."""
         # Release the signal reference
         self._pending_signals.pop(request_id, None)

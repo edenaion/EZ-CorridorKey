@@ -5,11 +5,12 @@ Mocking strategy (Codex-informed hybrid):
 - unittest.mock.patch for GPU/model/error injection
 - Behavioral tests for GPU lock (not structural)
 """
+
 import json
 import os
 import tempfile
 import types
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np
@@ -20,7 +21,6 @@ from backend.service import (
     CorridorKeyService,
     InferenceParams,
     OutputConfig,
-    FrameResult,
     _ActiveModel,
     _import_matanyone2_processor_class,
 )
@@ -192,7 +192,10 @@ class TestGetEnginePool:
         result = svc._get_engine_pool()
         assert result[0] is mock_engine
 
-    @patch("CorridorKeyModule.backend.create_engine", side_effect=FileNotFoundError("No .pth checkpoint found"))
+    @patch(
+        "CorridorKeyModule.backend.create_engine",
+        side_effect=FileNotFoundError("No .pth checkpoint found"),
+    )
     @patch("CorridorKeyModule.backend.resolve_backend", return_value="torch")
     def test_no_checkpoint_raises(self, _rb, _ce):
         svc = CorridorKeyService()
@@ -200,7 +203,9 @@ class TestGetEnginePool:
         with pytest.raises(FileNotFoundError, match="No .pth checkpoint"):
             svc._get_engine_pool()
 
-    @patch("CorridorKeyModule.backend.create_engine", side_effect=ValueError("Multiple checkpoints"))
+    @patch(
+        "CorridorKeyModule.backend.create_engine", side_effect=ValueError("Multiple checkpoints")
+    )
     @patch("CorridorKeyModule.backend.resolve_backend", return_value="torch")
     def test_multiple_checkpoints_raises(self, _rb, _ce):
         svc = CorridorKeyService()
@@ -244,7 +249,11 @@ class TestReadInputFrame:
         svc = CorridorKeyService()
         input_files = sample_clip.input_asset.get_frame_files()
         img, stem, is_linear = svc._read_input_frame(
-            sample_clip, 0, input_files, None, False,
+            sample_clip,
+            0,
+            input_files,
+            None,
+            False,
         )
         assert img is not None
         assert img.dtype == np.float32
@@ -271,14 +280,20 @@ class TestReadInputFrame:
                 handle.write("dummy")
 
             clip = ClipEntry(
-                "test", tmpdir, state=ClipState.RAW,
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
                 input_asset=ClipAsset(frames_dir, "sequence"),
             )
 
             fake_img = np.zeros((2, 2, 3), dtype=np.float32)
             with patch("backend.service.read_image_frame", return_value=fake_img):
                 img, stem, is_linear = svc._read_input_frame(
-                    clip, 0, clip.input_asset.get_frame_files(), None, False,
+                    clip,
+                    0,
+                    clip.input_asset.get_frame_files(),
+                    None,
+                    False,
                 )
 
             assert img is fake_img
@@ -326,7 +341,9 @@ class TestReadAlphaFrame:
             alpha_files = clip.alpha_asset.get_frame_files()
             alpha_lookup = {os.path.splitext(f)[0]: f for f in alpha_files}
 
-            with patch("backend.service.read_mask_frame", return_value=np.ones((4, 4), dtype=np.float32)) as mock_read:
+            with patch(
+                "backend.service.read_mask_frame", return_value=np.ones((4, 4), dtype=np.float32)
+            ) as mock_read:
                 svc._read_alpha_frame(
                     clip,
                     0,
@@ -355,7 +372,9 @@ class TestReadAlphaFrame:
             )
             alpha_files = clip.alpha_asset.get_frame_files()
 
-            with patch("backend.service.read_mask_frame", return_value=np.ones((4, 4), dtype=np.float32)) as mock_read:
+            with patch(
+                "backend.service.read_mask_frame", return_value=np.ones((4, 4), dtype=np.float32)
+            ) as mock_read:
                 svc._read_alpha_frame(
                     clip,
                     0,
@@ -461,11 +480,14 @@ class TestWriteOutputs:
     def test_all_outputs_enabled(self, tmp_clip_dir):
         svc = CorridorKeyService()
         from backend.validators import ensure_output_dirs
+
         dirs = ensure_output_dirs(tmp_clip_dir)
         res = self._make_result_dict()
         cfg = OutputConfig(
-            fg_format="png", matte_format="png",
-            comp_format="png", processed_format="png",
+            fg_format="png",
+            matte_format="png",
+            comp_format="png",
+            processed_format="png",
         )
         svc._write_outputs(res, dirs, "frame_00000", "clip1", 0, cfg)
 
@@ -477,11 +499,14 @@ class TestWriteOutputs:
     def test_selective_disable(self, tmp_clip_dir):
         svc = CorridorKeyService()
         from backend.validators import ensure_output_dirs
+
         dirs = ensure_output_dirs(tmp_clip_dir)
         res = self._make_result_dict()
         cfg = OutputConfig(
-            fg_enabled=False, matte_enabled=True,
-            comp_enabled=False, processed_enabled=False,
+            fg_enabled=False,
+            matte_enabled=True,
+            comp_enabled=False,
+            processed_enabled=False,
             matte_format="png",
         )
         svc._write_outputs(res, dirs, "frame_00000", "clip1", 0, cfg)
@@ -494,6 +519,7 @@ class TestWriteOutputs:
         """If 'processed' not in result dict, skip gracefully."""
         svc = CorridorKeyService()
         from backend.validators import ensure_output_dirs
+
         dirs = ensure_output_dirs(tmp_clip_dir)
         res = {
             "fg": np.ones((4, 4, 3), dtype=np.float32),
@@ -502,9 +528,11 @@ class TestWriteOutputs:
             # 'processed' intentionally missing
         }
         cfg = OutputConfig(
-            fg_format="png", matte_format="png",
+            fg_format="png",
+            matte_format="png",
             comp_format="png",
-            processed_enabled=True, processed_format="png",
+            processed_enabled=True,
+            processed_format="png",
         )
         # Should not raise
         svc._write_outputs(res, dirs, "frame_00000", "clip1", 0, cfg)
@@ -624,8 +652,10 @@ class TestRunInference:
         svc, mock_engine = self._setup_service_with_mock_engine()
         params = InferenceParams()
         cfg = OutputConfig(
-            fg_format="png", matte_format="png",
-            comp_format="png", processed_format="png",
+            fg_format="png",
+            matte_format="png",
+            comp_format="png",
+            processed_format="png",
         )
         results = svc.run_inference(sample_clip, params, output_config=cfg)
         assert len(results) == 3  # 3 frames in fixture
@@ -638,9 +668,12 @@ class TestRunInference:
         input_files = sample_clip.input_asset.get_frame_files()
         first_stem = os.path.splitext(input_files[0])[0]
         results = svc.run_inference(
-            sample_clip, params, skip_stems={first_stem},
-            output_config=OutputConfig(fg_format="png", matte_format="png",
-                                       comp_format="png", processed_format="png"),
+            sample_clip,
+            params,
+            skip_stems={first_stem},
+            output_config=OutputConfig(
+                fg_format="png", matte_format="png", comp_format="png", processed_format="png"
+            ),
         )
         # First frame skipped (resumed), 2 processed
         skipped = [r for r in results if r.warning and "resumed" in r.warning]
@@ -654,9 +687,14 @@ class TestRunInference:
         job.request_cancel()
 
         with pytest.raises(JobCancelledError):
-            svc.run_inference(sample_clip, params, job=job,
-                              output_config=OutputConfig(fg_format="png", matte_format="png",
-                                                          comp_format="png", processed_format="png"))
+            svc.run_inference(
+                sample_clip,
+                params,
+                job=job,
+                output_config=OutputConfig(
+                    fg_format="png", matte_format="png", comp_format="png", processed_format="png"
+                ),
+            )
 
     def test_frame_read_error_continues(self, sample_clip, tmp_clip_dir):
         """FrameReadError on a frame → skip that frame, continue others."""
@@ -677,10 +715,12 @@ class TestRunInference:
 
         warnings = []
         results = svc.run_inference(
-            sample_clip, params,
+            sample_clip,
+            params,
             on_warning=lambda msg: warnings.append(msg),
-            output_config=OutputConfig(fg_format="png", matte_format="png",
-                                       comp_format="png", processed_format="png"),
+            output_config=OutputConfig(
+                fg_format="png", matte_format="png", comp_format="png", processed_format="png"
+            ),
         )
         failed = [r for r in results if not r.success]
         assert len(failed) >= 1
@@ -694,20 +734,26 @@ class TestRunInference:
 
         # Should propagate — not caught by the per-frame handler
         with pytest.raises(RuntimeError, match="GPU OOM"):
-            svc.run_inference(sample_clip, params,
-                              output_config=OutputConfig(fg_format="png", matte_format="png",
-                                                          comp_format="png", processed_format="png"))
+            svc.run_inference(
+                sample_clip,
+                params,
+                output_config=OutputConfig(
+                    fg_format="png", matte_format="png", comp_format="png", processed_format="png"
+                ),
+            )
 
     def test_progress_callback_cadence(self, sample_clip, tmp_clip_dir):
         """Codex: progress fires every 5th frame + final, not per-frame."""
         svc, _ = self._setup_service_with_mock_engine()
         params = InferenceParams()
         calls = []
-        results = svc.run_inference(
-            sample_clip, params,
+        svc.run_inference(
+            sample_clip,
+            params,
             on_progress=lambda name, cur, total, **kwargs: calls.append((cur, total)),
-            output_config=OutputConfig(fg_format="png", matte_format="png",
-                                       comp_format="png", processed_format="png"),
+            output_config=OutputConfig(
+                fg_format="png", matte_format="png", comp_format="png", processed_format="png"
+            ),
         )
         # With 3 frames: fires at frame 0 (0%5==0) and final (3)
         assert len(calls) >= 2
@@ -718,9 +764,13 @@ class TestRunInference:
         svc, _ = self._setup_service_with_mock_engine()
         params = InferenceParams()
         assert sample_clip.state == ClipState.READY
-        svc.run_inference(sample_clip, params,
-                          output_config=OutputConfig(fg_format="png", matte_format="png",
-                                                      comp_format="png", processed_format="png"))
+        svc.run_inference(
+            sample_clip,
+            params,
+            output_config=OutputConfig(
+                fg_format="png", matte_format="png", comp_format="png", processed_format="png"
+            ),
+        )
         assert sample_clip.state == ClipState.COMPLETE
 
     def test_zero_frame_clip_no_complete(self):
@@ -736,13 +786,19 @@ class TestRunInference:
             os.makedirs(alpha_dir)
 
             clip = ClipEntry(
-                name="empty", root_path=clip_root, state=ClipState.READY,
+                name="empty",
+                root_path=clip_root,
+                state=ClipState.READY,
                 input_asset=ClipAsset(input_dir, "sequence"),
                 alpha_asset=ClipAsset(alpha_dir, "sequence"),
             )
-            results = svc.run_inference(clip, params,
-                                        output_config=OutputConfig(fg_format="png", matte_format="png",
-                                                                    comp_format="png", processed_format="png"))
+            results = svc.run_inference(
+                clip,
+                params,
+                output_config=OutputConfig(
+                    fg_format="png", matte_format="png", comp_format="png", processed_format="png"
+                ),
+            )
             # 0 frames processed, 0 total — current code does 0==0 → COMPLETE
             # This test documents the current behavior
             assert len(results) == 0
@@ -778,9 +834,14 @@ class TestRunInference:
 
         params = InferenceParams()
         with pytest.raises(JobCancelledError):
-            svc.run_inference(sample_clip, params, job=job,
-                              output_config=OutputConfig(fg_format="png", matte_format="png",
-                                                          comp_format="png", processed_format="png"))
+            svc.run_inference(
+                sample_clip,
+                params,
+                job=job,
+                output_config=OutputConfig(
+                    fg_format="png", matte_format="png", comp_format="png", processed_format="png"
+                ),
+            )
         # Test passed — if finally block didn't run, we'd leak captures
 
     def test_frame_range_uses_stem_matched_partial_alpha_sequence(self):
@@ -820,8 +881,9 @@ class TestRunInference:
                 read_mask_paths.append(os.path.basename(path))
                 return fake_mask
 
-            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
-                "backend.service.read_mask_frame", side_effect=_record_mask
+            with (
+                patch("backend.service.read_image_frame", return_value=fake_img),
+                patch("backend.service.read_mask_frame", side_effect=_record_mask),
             ):
                 results = svc.run_inference(
                     clip,
@@ -898,9 +960,11 @@ class TestReprocessSingleFrame:
 
         fake_img = np.zeros((4, 4, 3), dtype=np.float32)
         fake_mask = np.ones((4, 4), dtype=np.float32)
-        with patch.object(svc, "_get_engine_pool", side_effect=_fake_get_engine_pool), patch(
-            "backend.service.read_image_frame", return_value=fake_img
-        ), patch("backend.service.read_mask_frame", return_value=fake_mask):
+        with (
+            patch.object(svc, "_get_engine_pool", side_effect=_fake_get_engine_pool),
+            patch("backend.service.read_image_frame", return_value=fake_img),
+            patch("backend.service.read_mask_frame", return_value=fake_mask),
+        ):
             result = svc.reprocess_single_frame(
                 sample_clip,
                 InferenceParams(),
@@ -946,8 +1010,9 @@ class TestReprocessSingleFrame:
 
             fake_img = np.zeros((4, 4, 3), dtype=np.float32)
             fake_mask = np.ones((4, 4), dtype=np.float32)
-            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
-                "backend.service.read_mask_frame", return_value=fake_mask
+            with (
+                patch("backend.service.read_image_frame", return_value=fake_img),
+                patch("backend.service.read_mask_frame", return_value=fake_mask),
             ):
                 svc.reprocess_single_frame(
                     clip,
@@ -993,8 +1058,9 @@ class TestReprocessSingleFrame:
 
             fake_img = np.zeros((4, 4, 3), dtype=np.float32)
             fake_mask = np.ones((4, 4), dtype=np.float32)
-            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
-                "backend.service.read_mask_frame", return_value=fake_mask
+            with (
+                patch("backend.service.read_image_frame", return_value=fake_img),
+                patch("backend.service.read_mask_frame", return_value=fake_mask),
             ):
                 svc.reprocess_single_frame(
                     clip,
@@ -1046,8 +1112,9 @@ class TestReprocessSingleFrame:
                 read_mask_paths.append(os.path.basename(path))
                 return fake_mask
 
-            with patch("backend.service.read_image_frame", return_value=fake_img), patch(
-                "backend.service.read_mask_frame", side_effect=_record_mask
+            with (
+                patch("backend.service.read_image_frame", return_value=fake_img),
+                patch("backend.service.read_mask_frame", side_effect=_record_mask),
             ):
                 result = svc.reprocess_single_frame(
                     clip,
@@ -1106,7 +1173,9 @@ class TestSam2PreviewInputColorSpace:
             frame_path = os.path.join(frames_dir, "frame_000000.exr")
             with open(frame_path, "w", encoding="utf-8") as handle:
                 handle.write("dummy")
-            with open(os.path.join(tmpdir, ".video_metadata.json"), "w", encoding="utf-8") as handle:
+            with open(
+                os.path.join(tmpdir, ".video_metadata.json"), "w", encoding="utf-8"
+            ) as handle:
                 json.dump({"codec": "prores"}, handle)
 
             clip = ClipEntry(
@@ -1122,13 +1191,16 @@ class TestSam2PreviewInputColorSpace:
                 negative_points=[],
             )
             fake_img = np.full((4, 4, 3), 0.5, dtype=np.float32)
-            with patch(
-                "backend.service.load_annotation_prompt_frames",
-                return_value=[prompt],
-            ), patch(
-                "backend.service.read_image_frame",
-                return_value=fake_img,
-            ) as mock_read:
+            with (
+                patch(
+                    "backend.service.load_annotation_prompt_frames",
+                    return_value=[prompt],
+                ),
+                patch(
+                    "backend.service.read_image_frame",
+                    return_value=fake_img,
+                ) as mock_read,
+            ):
                 result = svc.preview_sam2_prompt(clip, preferred_frame_index=0)
 
         assert result is not None
@@ -1161,13 +1233,16 @@ class TestSam2PreviewInputColorSpace:
                 negative_points=[],
             )
             fake_img = np.full((4, 4, 3), 0.5, dtype=np.float32)
-            with patch(
-                "backend.service.load_annotation_prompt_frames",
-                return_value=[prompt],
-            ), patch(
-                "backend.service.read_image_frame",
-                return_value=fake_img,
-            ) as mock_read:
+            with (
+                patch(
+                    "backend.service.load_annotation_prompt_frames",
+                    return_value=[prompt],
+                ),
+                patch(
+                    "backend.service.read_image_frame",
+                    return_value=fake_img,
+                ) as mock_read,
+            ):
                 result = svc.preview_sam2_prompt(
                     clip,
                     preferred_frame_index=0,
@@ -1203,7 +1278,7 @@ class TestRunGVM:
 
     def test_cancellation_before_gvm(self):
         svc = CorridorKeyService()
-        svc._device = 'cuda'  # skip GPU guard (we're testing cancellation)
+        svc._device = "cuda"  # skip GPU guard (we're testing cancellation)
         svc._active_model = _ActiveModel.GVM
         svc._gvm_processor = MagicMock()
 
@@ -1211,7 +1286,9 @@ class TestRunGVM:
             input_dir = os.path.join(tmpdir, "Input")
             os.makedirs(input_dir)
             clip = ClipEntry(
-                "test", tmpdir, state=ClipState.RAW,
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
                 input_asset=ClipAsset(input_dir, "sequence"),
             )
             job = GPUJob(JobType.GVM_ALPHA, "test")

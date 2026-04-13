@@ -90,7 +90,8 @@ verify-tasklist.md
 bench_results*.json
 
 # Test scripts & output (may contain local paths)
-test_*.py
+# Only the repo root — do not use bare `test_*.py` (that ignores `tests/test_*.py`).
+/test_*.py
 test_output/
 
 # Build artifacts

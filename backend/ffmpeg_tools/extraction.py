@@ -1,4 +1,5 @@
 """Frame extraction from video files via FFmpeg."""
+
 from __future__ import annotations
 
 import logging
@@ -23,12 +24,12 @@ logger = logging.getLogger(__name__)
 # Each entry: (hwaccel_name, pre-input flags for FFmpeg)
 _HWACCEL_PRIORITY: dict[str, list[tuple[str, list[str]]]] = {
     "win32": [
-        ("cuda",    ["-hwaccel", "cuda"]),
+        ("cuda", ["-hwaccel", "cuda"]),
         ("d3d11va", ["-hwaccel", "d3d11va"]),
-        ("dxva2",   ["-hwaccel", "dxva2"]),
+        ("dxva2", ["-hwaccel", "dxva2"]),
     ],
     "linux": [
-        ("cuda",  ["-hwaccel", "cuda"]),
+        ("cuda", ["-hwaccel", "cuda"]),
         ("vaapi", ["-hwaccel", "vaapi"]),
     ],
     "darwin": [
@@ -60,7 +61,9 @@ def detect_hwaccel(ffmpeg: str | None = None) -> list[str]:
     try:
         result = subprocess.run(
             [ffmpeg, "-hwaccels"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
         available = set(result.stdout.lower().split())
@@ -104,18 +107,15 @@ def _recompress_to_dwab(
     if os.path.isfile(marker):
         return
 
-    exr_files = sorted([f for f in os.listdir(out_dir)
-                        if f.lower().endswith('.exr')])
+    exr_files = sorted([f for f in os.listdir(out_dir) if f.lower().endswith(".exr")])
     total = len(exr_files)
     if total == 0:
         return
 
     if getattr(sys, "frozen", False):
-        _recompress_multiprocess(out_dir, exr_files, total, marker,
-                                 on_progress, cancel_event)
+        _recompress_multiprocess(out_dir, exr_files, total, marker, on_progress, cancel_event)
     else:
-        _recompress_subprocess(out_dir, exr_files, total, marker,
-                               on_progress, cancel_event)
+        _recompress_subprocess(out_dir, exr_files, total, marker, on_progress, cancel_event)
 
 
 def _recompress_one_exr(args: tuple) -> bool:
@@ -127,36 +127,41 @@ def _recompress_one_exr(args: tuple) -> bool:
         import numpy as np
         import OpenEXR
         import Imath
+
         img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
         if img is None:
             return False
         HALF = Imath.Channel(Imath.PixelType(Imath.PixelType.HALF))
         h, w = img.shape[:2]
         hdr = OpenEXR.Header(w, h)
-        hdr['compression'] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
+        hdr["compression"] = Imath.Compression(Imath.Compression.DWAB_COMPRESSION)
         if img.ndim == 2:
-            hdr['channels'] = {'Y': HALF}
+            hdr["channels"] = {"Y": HALF}
             out = OpenEXR.OutputFile(tmp, hdr)
-            out.writePixels({'Y': img.astype(np.float16).tobytes()})
+            out.writePixels({"Y": img.astype(np.float16).tobytes()})
             out.close()
         elif img.ndim == 3 and img.shape[2] == 3:
-            hdr['channels'] = {'R': HALF, 'G': HALF, 'B': HALF}
+            hdr["channels"] = {"R": HALF, "G": HALF, "B": HALF}
             out = OpenEXR.OutputFile(tmp, hdr)
-            out.writePixels({
-                'R': img[:, :, 2].astype(np.float16).tobytes(),
-                'G': img[:, :, 1].astype(np.float16).tobytes(),
-                'B': img[:, :, 0].astype(np.float16).tobytes(),
-            })
+            out.writePixels(
+                {
+                    "R": img[:, :, 2].astype(np.float16).tobytes(),
+                    "G": img[:, :, 1].astype(np.float16).tobytes(),
+                    "B": img[:, :, 0].astype(np.float16).tobytes(),
+                }
+            )
             out.close()
         elif img.ndim == 3 and img.shape[2] == 4:
-            hdr['channels'] = {'R': HALF, 'G': HALF, 'B': HALF, 'A': HALF}
+            hdr["channels"] = {"R": HALF, "G": HALF, "B": HALF, "A": HALF}
             out = OpenEXR.OutputFile(tmp, hdr)
-            out.writePixels({
-                'R': img[:, :, 2].astype(np.float16).tobytes(),
-                'G': img[:, :, 1].astype(np.float16).tobytes(),
-                'B': img[:, :, 0].astype(np.float16).tobytes(),
-                'A': img[:, :, 3].astype(np.float16).tobytes(),
-            })
+            out.writePixels(
+                {
+                    "R": img[:, :, 2].astype(np.float16).tobytes(),
+                    "G": img[:, :, 1].astype(np.float16).tobytes(),
+                    "B": img[:, :, 0].astype(np.float16).tobytes(),
+                    "A": img[:, :, 3].astype(np.float16).tobytes(),
+                }
+            )
             out.close()
         else:
             return False
@@ -190,8 +195,7 @@ def _recompress_multiprocess(
     done = 0
 
     ctx = multiprocessing.get_context("spawn")
-    work = [(os.path.join(out_dir, f), os.path.join(out_dir, f + ".tmp"))
-            for f in exr_files]
+    work = [(os.path.join(out_dir, f), os.path.join(out_dir, f + ".tmp")) for f in exr_files]
 
     with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as pool:
         futs = {pool.submit(_recompress_one_exr, item): item for item in work}
@@ -205,7 +209,7 @@ def _recompress_multiprocess(
             if on_progress:
                 on_progress(done, total)
 
-    with open(marker, 'w') as f:
+    with open(marker, "w") as f:
         f.write("done")
     logger.info(f"DWAB recompression complete: {total} frames")
 
@@ -221,7 +225,7 @@ def _recompress_subprocess(
     """DWAB recompress using a subprocess with ProcessPoolExecutor (dev mode)."""
     python = sys.executable
 
-    script_content = r'''
+    script_content = r"""
 import os, sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -289,10 +293,10 @@ if __name__ == "__main__":
             done += 1
             print(f"PROGRESS {done} {total}", flush=True)
     print("DONE", flush=True)
-'''
+"""
 
     script_path = os.path.join(out_dir, "_dwab_recompress.py")
-    with open(script_path, 'w') as f:
+    with open(script_path, "w") as f:
         f.write(script_content)
 
     logger.info(f"Recompressing {total} EXR frames to DWAB (subprocess)...")
@@ -306,6 +310,7 @@ if __name__ == "__main__":
     )
 
     import queue as _queue
+
     line_q: _queue.Queue[str | None] = _queue.Queue()
 
     def _reader():
@@ -359,11 +364,10 @@ if __name__ == "__main__":
 
     if proc.returncode != 0:
         stderr_out = proc.stderr.read() if proc.stderr else ""
-        logger.error(f"DWAB recompression failed (code {proc.returncode}): "
-                     f"{stderr_out[:500]}")
+        logger.error(f"DWAB recompression failed (code {proc.returncode}): {stderr_out[:500]}")
         return
 
-    with open(marker, 'w') as f:
+    with open(marker, "w") as f:
         f.write("done")
     logger.info(f"DWAB recompression complete: {total} frames")
 
@@ -426,13 +430,11 @@ def extract_frames(
     # is fully done, just count frames.
     dwab_marker = os.path.join(out_dir, ".dwab_done")
     if os.path.isfile(dwab_marker):
-        extracted = len([f for f in os.listdir(out_dir)
-                         if f.lower().endswith('.exr')])
+        extracted = len([f for f in os.listdir(out_dir) if f.lower().endswith(".exr")])
         logger.info(f"Extraction already complete: {extracted} DWAB frames")
         return extracted
 
-    existing = sorted([f for f in os.listdir(out_dir)
-                       if f.lower().endswith('.exr')])
+    existing = sorted([f for f in os.listdir(out_dir) if f.lower().endswith(".exr")])
     if existing:
         # Remove the last N frames — they may be corrupt or incomplete
         remove_count = min(_RESUME_ROLLBACK, len(existing))
@@ -440,8 +442,10 @@ def extract_frames(
             os.remove(os.path.join(out_dir, fname))
         start_frame = max(0, len(existing) - remove_count)
         if start_frame > 0:
-            logger.info(f"Resuming extraction from frame {start_frame} "
-                        f"({len(existing)} existed, rolled back {remove_count})")
+            logger.info(
+                f"Resuming extraction from frame {start_frame} "
+                f"({len(existing)} existed, rolled back {remove_count})"
+            )
 
     # EXR-specific FFmpeg args: ZIP16 compression, half-float.
     # Build an explicit colour conversion filter from probed metadata
@@ -464,10 +468,14 @@ def extract_frames(
             return [
                 ffmpeg,
                 *hw_flags,
-                "-ss", f"{seek_sec:.4f}",
-                "-i", video_path,
-                "-start_number", str(start_frame),
-                "-vsync", "passthrough",
+                "-ss",
+                f"{seek_sec:.4f}",
+                "-i",
+                video_path,
+                "-start_number",
+                str(start_frame),
+                "-vsync",
+                "passthrough",
                 *exr_args,
                 out_dir + "/" + pattern,
                 "-y",
@@ -475,9 +483,12 @@ def extract_frames(
         return [
             ffmpeg,
             *hw_flags,
-            "-i", video_path,
-            "-start_number", "0",
-            "-vsync", "passthrough",
+            "-i",
+            video_path,
+            "-start_number",
+            "0",
+            "-vsync",
+            "passthrough",
             *exr_args,
             out_dir + "/" + pattern,
             "-y",
@@ -489,8 +500,10 @@ def extract_frames(
 
         cmd = _build_cmd(hw_flags)
         hwaccel_label = hw_flags[1] if hw_flags else "software"
-        logger.info(f"Extracting frames (EXR half-float, decode={hwaccel_label}): "
-                    f"{video_path} -> {out_dir} (start_frame={start_frame})")
+        logger.info(
+            f"Extracting frames (EXR half-float, decode={hwaccel_label}): "
+            f"{video_path} -> {out_dir} (start_frame={start_frame})"
+        )
 
         proc = subprocess.Popen(
             cmd,
@@ -505,6 +518,7 @@ def extract_frames(
         stderr_tail: list[str] = []  # keep last N lines for error reporting
 
         import queue as _queue
+
         line_q: _queue.Queue[str | None] = _queue.Queue()
 
         def _reader():
@@ -562,11 +576,12 @@ def extract_frames(
 
     # If hardware decode failed, retry with software decode
     if returncode != 0 and hwaccel_flags and not (cancel_event and cancel_event.is_set()):
-        logger.warning(f"Hardware decode failed (code {returncode}), "
-                       f"retrying with software decode...")
+        logger.warning(
+            f"Hardware decode failed (code {returncode}), retrying with software decode..."
+        )
         # Clean up any partial frames from the failed attempt
         for f in os.listdir(out_dir):
-            if f.lower().endswith('.exr'):
+            if f.lower().endswith(".exr"):
                 os.remove(os.path.join(out_dir, f))
         last_frame = start_frame
         returncode, stderr_out = _run_ffmpeg([])  # empty = software decode
@@ -577,9 +592,18 @@ def extract_frames(
         if stderr_out:
             for line in stderr_out.splitlines():
                 low = line.lower()
-                if any(kw in low for kw in ("error", "invalid", "no such",
-                                             "not found", "unknown",
-                                             "unrecognized", "failed")):
+                if any(
+                    kw in low
+                    for kw in (
+                        "error",
+                        "invalid",
+                        "no such",
+                        "not found",
+                        "unknown",
+                        "unrecognized",
+                        "failed",
+                    )
+                ):
                     err_detail = line.strip()
                     break
         msg = f"FFmpeg extraction failed (code {returncode})"
@@ -588,8 +612,7 @@ def extract_frames(
         raise RuntimeError(msg)
 
     # Count extracted frames
-    extracted = len([f for f in os.listdir(out_dir)
-                     if f.lower().endswith('.exr')])
+    extracted = len([f for f in os.listdir(out_dir) if f.lower().endswith(".exr")])
     logger.info(f"Extracted {extracted} EXR frames (ZIP16)")
 
     # Pass 2: Recompress ZIP16 -> DWAB

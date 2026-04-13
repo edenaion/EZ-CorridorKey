@@ -1,6 +1,7 @@
 import torch
 import functools
 
+
 def get_default_device():
     if torch.cuda.is_available():
         return torch.device("cuda")
@@ -8,6 +9,7 @@ def get_default_device():
         return torch.device("mps")
     else:
         return torch.device("cpu")
+
 
 def safe_autocast_decorator(enabled=True):
     def decorator(func):
@@ -19,10 +21,15 @@ def safe_autocast_decorator(enabled=True):
                     return func(*args, **kwargs)
             else:
                 return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
+
 import contextlib
+
+
 @contextlib.contextmanager
 def safe_autocast(enabled=True):
     device = get_default_device()

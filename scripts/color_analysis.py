@@ -2,7 +2,9 @@
 
 Loads the same frame+mask, runs both engines, compares RGB channels in detail.
 """
+
 import os
+
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
 import sys
@@ -32,7 +34,7 @@ def load_mask(path):
 
 
 def run_engine(engine_class, frame, mask, ckpt):
-    engine = engine_class(checkpoint_path=ckpt, device='cuda', img_size=2048)
+    engine = engine_class(checkpoint_path=ckpt, device="cuda", img_size=2048)
     result = engine.process_frame(frame, mask)
     del engine
     torch.cuda.empty_cache()
@@ -44,11 +46,13 @@ def channel_stats(name, img):
     if img.ndim == 2:
         print(f"  {name}: min={img.min():.6f} max={img.max():.6f} mean={img.mean():.6f}")
         return
-    labels = ['R', 'G', 'B', 'A'][:img.shape[2]]
+    labels = ["R", "G", "B", "A"][: img.shape[2]]
     for i, ch in enumerate(labels):
         c = img[:, :, i]
-        print(f"  {name}[{ch}]: min={c.min():.6f} max={c.max():.6f} "
-              f"mean={c.mean():.6f} std={c.std():.6f}")
+        print(
+            f"  {name}[{ch}]: min={c.min():.6f} max={c.max():.6f} "
+            f"mean={c.mean():.6f} std={c.std():.6f}"
+        )
 
 
 def compare_channels(name, a, b):
@@ -57,13 +61,12 @@ def compare_channels(name, a, b):
         a = a[:, :, np.newaxis]
     if b.ndim == 2:
         b = b[:, :, np.newaxis]
-    labels = ['R', 'G', 'B', 'A'][:a.shape[2]]
+    labels = ["R", "G", "B", "A"][: a.shape[2]]
     for i, ch in enumerate(labels):
         diff = np.abs(a[:, :, i] - b[:, :, i])
         mse = float(np.mean((a[:, :, i] - b[:, :, i]) ** 2))
-        psnr = float('inf') if mse == 0 else 10 * np.log10(1.0 / mse)
-        print(f"  {name}[{ch}]: max_diff={diff.max():.8f} mae={diff.mean():.8f} "
-              f"psnr={psnr:.1f}dB")
+        psnr = float("inf") if mse == 0 else 10 * np.log10(1.0 / mse)
+        print(f"  {name}[{ch}]: max_diff={diff.max():.8f} mae={diff.mean():.8f} psnr={psnr:.1f}dB")
 
 
 def main():
@@ -84,24 +87,25 @@ def main():
     print("UPSTREAM ENGINE")
     print("=" * 60)
     sys.path.insert(0, UPSTREAM_ROOT)
-    mods = [k for k in sys.modules if k.startswith('CorridorKeyModule')]
+    mods = [k for k in sys.modules if k.startswith("CorridorKeyModule")]
     for m in mods:
         del sys.modules[m]
     from CorridorKeyModule.inference_engine import CorridorKeyEngine as UpEngine
+
     sys.path.pop(0)
 
     res_up = run_engine(UpEngine, frame, mask, ckpt)
     print("\nUpstream outputs:")
-    channel_stats("alpha", res_up['alpha'])
-    channel_stats("fg", res_up['fg'])
-    channel_stats("comp", res_up['comp'])
+    channel_stats("alpha", res_up["alpha"])
+    channel_stats("fg", res_up["fg"])
+    channel_stats("comp", res_up["comp"])
     print()
 
     # --- Ours ---
     print("=" * 60)
     print("OUR ENGINE")
     print("=" * 60)
-    mods = [k for k in sys.modules if k.startswith('CorridorKeyModule')]
+    mods = [k for k in sys.modules if k.startswith("CorridorKeyModule")]
     for m in mods:
         del sys.modules[m]
     sys.path.insert(0, PROJECT_ROOT)
@@ -110,9 +114,9 @@ def main():
     res_ours = run_engine(OurEngine, frame, mask, ckpt)
     torch._dynamo.reset()
     print("\nOur outputs:")
-    channel_stats("alpha", res_ours['alpha'])
-    channel_stats("fg", res_ours['fg'])
-    channel_stats("comp", res_ours['comp'])
+    channel_stats("alpha", res_ours["alpha"])
+    channel_stats("fg", res_ours["fg"])
+    channel_stats("comp", res_ours["comp"])
     print()
 
     # --- Comparison ---
@@ -121,13 +125,13 @@ def main():
     print("=" * 60)
 
     print("\nAlpha comparison:")
-    compare_channels("alpha", res_up['alpha'], res_ours['alpha'])
+    compare_channels("alpha", res_up["alpha"], res_ours["alpha"])
 
     print("\nFG comparison:")
-    compare_channels("fg", res_up['fg'], res_ours['fg'])
+    compare_channels("fg", res_up["fg"], res_ours["fg"])
 
     print("\nComp comparison:")
-    compare_channels("comp", res_up['comp'], res_ours['comp'])
+    compare_channels("comp", res_up["comp"], res_ours["comp"])
 
     # --- Saturation analysis ---
     print("\n" + "=" * 60)
@@ -135,13 +139,12 @@ def main():
     print("=" * 60)
 
     # Compare mean color of the subject region (where alpha > 0.5)
-    a_up = res_up['alpha'][:, :, 0] if res_up['alpha'].ndim == 3 else res_up['alpha']
-    a_ours = res_ours['alpha'][:, :, 0] if res_ours['alpha'].ndim == 3 else res_ours['alpha']
+    a_up = res_up["alpha"][:, :, 0] if res_up["alpha"].ndim == 3 else res_up["alpha"]
 
     # Subject mask (high alpha = foreground)
     subj_mask = a_up > 0.5
 
-    for name, comp in [("Upstream comp", res_up['comp']), ("Our comp", res_ours['comp'])]:
+    for name, comp in [("Upstream comp", res_up["comp"]), ("Our comp", res_ours["comp"])]:
         r = comp[:, :, 0][subj_mask]
         g = comp[:, :, 1][subj_mask]
         b = comp[:, :, 2][subj_mask]
@@ -157,12 +160,11 @@ def main():
         print(f"    Mean luminance:  {lum.mean():.6f}")
 
     # Direct diff of comp in subject region
-    comp_diff = res_up['comp'] - res_ours['comp']
-    print(f"\n  Comp diff (subject region):")
-    for i, ch in enumerate(['R', 'G', 'B']):
+    comp_diff = res_up["comp"] - res_ours["comp"]
+    print("\n  Comp diff (subject region):")
+    for i, ch in enumerate(["R", "G", "B"]):
         d = comp_diff[:, :, i][subj_mask]
-        print(f"    {ch}: mean_diff={d.mean():.8f} std={d.std():.8f} "
-              f"(positive=upstream brighter)")
+        print(f"    {ch}: mean_diff={d.mean():.8f} std={d.std():.8f} (positive=upstream brighter)")
 
 
 if __name__ == "__main__":

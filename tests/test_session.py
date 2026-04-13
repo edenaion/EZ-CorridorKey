@@ -1,4 +1,5 @@
 """Tests for session save/load — JSON sidecar, versioning, forward compat."""
+
 import json
 import os
 import pytest
@@ -32,10 +33,10 @@ class TestSessionData:
             "split_view": False,
         }
         path = os.path.join(str(tmp_path), ".corridorkey_session.json")
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             json.dump(session, f)
 
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             loaded = json.load(f)
 
         assert loaded["version"] == 1
@@ -56,11 +57,11 @@ class TestSessionData:
     def test_corrupt_session_file(self, tmp_path):
         """Corrupt JSON should not crash."""
         path = os.path.join(str(tmp_path), ".corridorkey_session.json")
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             f.write("{invalid json")
 
         with pytest.raises(json.JSONDecodeError):
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 json.load(f)
 
     def test_atomic_write_pattern(self, tmp_path):
@@ -69,12 +70,12 @@ class TestSessionData:
         tmp_path_file = path + ".tmp"
 
         data = {"version": 1, "test": True}
-        with open(tmp_path_file, 'w') as f:
+        with open(tmp_path_file, "w") as f:
             json.dump(data, f)
         os.rename(tmp_path_file, path)
 
         assert os.path.isfile(path)
         assert not os.path.exists(tmp_path_file)
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             loaded = json.load(f)
         assert loaded["test"] is True

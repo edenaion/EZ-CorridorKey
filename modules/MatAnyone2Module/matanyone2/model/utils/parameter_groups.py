@@ -17,8 +17,8 @@ def get_parameter_groups(model, stage_cfg, print_log=False):
     embed_params = []
     other_params = []
 
-    embedding_names = ['summary_pos', 'query_init', 'query_emb', 'obj_pe']
-    embedding_names = [e + '.weight' for e in embedding_names]
+    embedding_names = ["summary_pos", "query_init", "query_emb", "obj_pe"]
+    embedding_names = [e + ".weight" for e in embedding_names]
 
     # inspired by detectron2
     memo = set()
@@ -30,22 +30,22 @@ def get_parameter_groups(model, stage_cfg, print_log=False):
             continue
         memo.add(param)
 
-        if name.startswith('module'):
+        if name.startswith("module"):
             name = name[7:]
 
         inserted = False
-        if name.startswith('pixel_encoder.'):
+        if name.startswith("pixel_encoder."):
             backbone_params.append(param)
             inserted = True
             if print_log:
-                log.info(f'{name} counted as a backbone parameter.')
+                log.info(f"{name} counted as a backbone parameter.")
         else:
             for e in embedding_names:
                 if name.endswith(e):
                     embed_params.append(param)
                     inserted = True
                     if print_log:
-                        log.info(f'{name} counted as an embedding parameter.')
+                        log.info(f"{name} counted as an embedding parameter.")
                     break
 
         if not inserted:
@@ -53,20 +53,12 @@ def get_parameter_groups(model, stage_cfg, print_log=False):
 
     parameter_groups = [
         {
-            'params': backbone_params,
-            'lr': base_lr * backbone_lr_ratio,
-            'weight_decay': weight_decay
+            "params": backbone_params,
+            "lr": base_lr * backbone_lr_ratio,
+            "weight_decay": weight_decay,
         },
-        {
-            'params': embed_params,
-            'lr': base_lr,
-            'weight_decay': embed_weight_decay
-        },
-        {
-            'params': other_params,
-            'lr': base_lr,
-            'weight_decay': weight_decay
-        },
+        {"params": embed_params, "lr": base_lr, "weight_decay": embed_weight_decay},
+        {"params": other_params, "lr": base_lr, "weight_decay": weight_decay},
     ]
 
     return parameter_groups

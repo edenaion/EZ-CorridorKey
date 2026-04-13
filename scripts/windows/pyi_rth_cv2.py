@@ -7,6 +7,7 @@
    ships a bootstrap __init__.py that calls importlib.import_module("cv2")
    which in a frozen build finds itself again → infinite recursion.
 """
+
 import importlib.util
 import os
 import sys
@@ -27,9 +28,7 @@ def _preload_cv2_native():
                 break
         else:
             continue
-        spec = importlib.util.spec_from_file_location(
-            "cv2", pyd, submodule_search_locations=[]
-        )
+        spec = importlib.util.spec_from_file_location("cv2", pyd, submodule_search_locations=[])
         if spec and spec.loader:
             mod = importlib.util.module_from_spec(spec)
             sys.modules["cv2"] = mod

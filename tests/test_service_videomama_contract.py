@@ -5,6 +5,7 @@ _load_mask_frames_for_videomama() returns uint8 grayscale [0,255] with
 binary threshold at 10. The inference module expects uint8 for PIL conversion.
 The output from run_inference is uint8 RGB [0,255] (PIL Image -> np.array).
 """
+
 import json
 import os
 import tempfile
@@ -21,7 +22,9 @@ from backend.job_queue import GPUJob, JobType
 
 
 def _write_mask_manifest(root: str, source: str = "sam2") -> None:
-    with open(os.path.join(root, ".corridorkey_mask_manifest.json"), "w", encoding="utf-8") as handle:
+    with open(
+        os.path.join(root, ".corridorkey_mask_manifest.json"), "w", encoding="utf-8"
+    ) as handle:
         json.dump({"source": source, "frame_stems": ["frame_00000"]}, handle)
 
 
@@ -117,7 +120,7 @@ class TestVideoMaMaOutputWrite:
         out_bgr = cv2.cvtColor(frame_u8, cv2.COLOR_RGB2BGR)
         assert out_bgr.dtype == np.uint8
         assert out_bgr[0, 0, 0] == 255  # R=255 -> B=255
-        assert out_bgr[0, 0, 1] == 64   # G=64 -> G=64
+        assert out_bgr[0, 0, 1] == 64  # G=64 -> G=64
         assert out_bgr[0, 0, 2] == 128  # B=128 -> R=128
 
     def test_float_output_produces_valid_png(self):
@@ -136,7 +139,7 @@ class TestVideoMaMaOutputWrite:
         frame = np.array([[[1.5, -0.1, 0.5]]], dtype=np.float32)
         out = (np.clip(frame, 0.0, 1.0) * 255.0).astype(np.uint8)
         assert out[0, 0, 0] == 255  # 1.5 clamped to 1.0
-        assert out[0, 0, 1] == 0    # -0.1 clamped to 0.0
+        assert out[0, 0, 1] == 0  # -0.1 clamped to 0.0
         assert 125 <= out[0, 0, 2] <= 130  # 0.5 → ~128
 
 
@@ -153,7 +156,9 @@ class TestVideoMaMaMissingAssets:
             input_dir = os.path.join(tmpdir, "Input")
             os.makedirs(input_dir)
             clip = ClipEntry(
-                "test", tmpdir, state=ClipState.MASKED,
+                "test",
+                tmpdir,
+                state=ClipState.MASKED,
                 input_asset=ClipAsset(input_dir, "sequence"),
             )
             with pytest.raises(CorridorKeyError, match="missing mask asset"):
@@ -164,7 +169,7 @@ class TestVideoMaMaCancellation:
     def test_cancel_between_chunks(self):
         """Cancel is checked between chunks — partial AlphaHint files may exist."""
         svc = CorridorKeyService()
-        svc._device = 'cuda'  # skip GPU guard (we're testing cancellation)
+        svc._device = "cuda"  # skip GPU guard (we're testing cancellation)
         svc._active_model = _ActiveModel.VIDEOMAMA
         svc._videomama_pipeline = MagicMock()
 
@@ -186,7 +191,9 @@ class TestVideoMaMaCancellation:
             _write_mask_manifest(tmpdir)
 
             clip = ClipEntry(
-                "test", tmpdir, state=ClipState.MASKED,
+                "test",
+                tmpdir,
+                state=ClipState.MASKED,
                 input_asset=ClipAsset(input_dir, "sequence"),
                 mask_asset=ClipAsset(mask_dir, "sequence"),
             )
@@ -205,10 +212,13 @@ class TestVideoMaMaCancellation:
 
             mock_module = MagicMock()
             mock_module.run_inference = mock_run_inference
-            with patch.dict("sys.modules", {
-                "VideoMaMaInferenceModule": MagicMock(),
-                "VideoMaMaInferenceModule.inference": mock_module,
-            }):
+            with patch.dict(
+                "sys.modules",
+                {
+                    "VideoMaMaInferenceModule": MagicMock(),
+                    "VideoMaMaInferenceModule.inference": mock_module,
+                },
+            ):
                 with pytest.raises(JobCancelledError):
                     svc.run_videomama(clip, job=job)
 
@@ -216,7 +226,9 @@ class TestVideoMaMaCancellation:
 class DummySAM2Tracker:
     model_id = "facebook/sam2.1-hiera-small"
 
-    def track_video(self, frames, prompt_frames, on_progress=None, on_status=None, check_cancel=None):
+    def track_video(
+        self, frames, prompt_frames, on_progress=None, on_status=None, check_cancel=None
+    ):
         assert len(prompt_frames) == 1
         assert prompt_frames[0].frame_index == 0
         assert prompt_frames[0].mask is None
@@ -272,7 +284,9 @@ class TestSAM2Tracking:
                 )
 
             clip = ClipEntry(
-                "test", tmpdir, state=ClipState.RAW,
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
                 input_asset=ClipAsset(input_dir, "sequence"),
             )
 
@@ -286,7 +300,9 @@ class TestSAM2Tracking:
             assert clip.state == ClipState.MASKED
             assert not os.path.isdir(alpha_dir)
 
-            with open(os.path.join(tmpdir, ".corridorkey_mask_manifest.json"), "r", encoding="utf-8") as handle:
+            with open(
+                os.path.join(tmpdir, ".corridorkey_mask_manifest.json"), "r", encoding="utf-8"
+            ) as handle:
                 manifest = json.load(handle)
             assert manifest["source"] == "sam2"
             assert manifest["frame_stems"] == ["frame_00000", "frame_00001"]
@@ -321,7 +337,9 @@ class TestSAM2Tracking:
                 )
 
             clip = ClipEntry(
-                "test", tmpdir, state=ClipState.RAW,
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
                 input_asset=ClipAsset(input_dir, "sequence"),
             )
 
@@ -365,7 +383,9 @@ class TestSAM2Tracking:
                 )
 
             clip = ClipEntry(
-                "test", tmpdir, state=ClipState.RAW,
+                "test",
+                tmpdir,
+                state=ClipState.RAW,
                 input_asset=ClipAsset(input_dir, "sequence"),
             )
             warnings: list[str] = []

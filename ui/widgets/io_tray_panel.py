@@ -9,13 +9,22 @@ Ctrl+click to multi-select clips for batch operations.
 Right-click on INPUT cards shows project context menu.
 Supports drag-and-drop of video files and folders.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QSplitter,
-    QPushButton, QMenu, QFileDialog, QMessageBox,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QSplitter,
+    QPushButton,
+    QMenu,
+    QFileDialog,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -37,13 +46,13 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
     Supports drag-and-drop of video files and folders.
     """
 
-    clip_clicked = Signal(object)   # ClipEntry
+    clip_clicked = Signal(object)  # ClipEntry
     selection_changed = Signal(list)  # list[ClipEntry] — multi-select changed
     clips_dir_changed = Signal(str)  # folder path (import folder)
-    files_imported = Signal(list)    # list of video file paths
+    files_imported = Signal(list)  # list of video file paths
     sequence_folder_imported = Signal(str)  # folder path containing image sequence
     image_files_dropped = Signal(list)  # list of image file paths (for <5 popup)
-    extract_requested = Signal(list) # list[ClipEntry] — re-run extraction
+    extract_requested = Signal(list)  # list[ClipEntry] — re-run extraction
     export_video_requested = Signal(object, str)  # ClipEntry, source_dir — export as video
     reset_in_out_requested = Signal()  # clear all in/out markers
 
@@ -51,7 +60,9 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         super().__init__(parent)
         self.setObjectName("ioTrayPanel")
         self._model = model
-        self._select_anchor: str | None = None  # last single-clicked clip name for Shift+click range
+        self._select_anchor: str | None = (
+            None  # last single-clicked clip name for Shift+click range
+        )
         self.setMinimumHeight(80)
         self.setMaximumHeight(600)
         self.setAcceptDrops(True)
@@ -63,9 +74,7 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         # Content: two strips in a splitter (synced with dual viewer divider)
         self._tray_splitter = QSplitter(Qt.Horizontal)
         self._tray_splitter.setHandleWidth(1)
-        self._tray_splitter.setStyleSheet(
-            "QSplitter::handle { background-color: #2A2910; }"
-        )
+        self._tray_splitter.setStyleSheet("QSplitter::handle { background-color: #2A2910; }")
 
         # Input section
         input_widget = QWidget()
@@ -177,7 +186,8 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         clips_with_range = [c for c in self._model.clips if c.in_out_range is not None]
         if not clips_with_range:
             QMessageBox.information(
-                self, "No Markers",
+                self,
+                "No Markers",
                 "No clips have in/out markers set.",
             )
             return
@@ -185,21 +195,25 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         n = len(clips_with_range)
         # First confirmation
         result = QMessageBox.question(
-            self, "Reset In/Out Markers",
+            self,
+            "Reset In/Out Markers",
             f"This will clear in/out markers on {n} clip{'s' if n > 1 else ''}.\n\n"
             "All clips will revert to full-clip processing.\n"
             "Continue?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if result != QMessageBox.Yes:
             return
 
         # Second confirmation
         result2 = QMessageBox.warning(
-            self, "Confirm Reset",
+            self,
+            "Confirm Reset",
             f"Are you sure? This cannot be undone.\n\n"
             f"Clearing in/out markers on {n} clip{'s' if n > 1 else ''}.",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if result2 != QMessageBox.Yes:
             return
@@ -209,7 +223,9 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
     def _import_folder(self) -> None:
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Clips Directory", "",
+            self,
+            "Select Clips Directory",
+            "",
             QFileDialog.ShowDirsOnly,
         )
         if dir_path:
@@ -217,7 +233,9 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
     def _import_videos(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select Video Files", "",
+            self,
+            "Select Video Files",
+            "",
             VIDEO_FILE_FILTER,
         )
         if paths:
@@ -225,7 +243,9 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
     def _import_image_sequence(self) -> None:
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Image Sequence Folder", "",
+            self,
+            "Select Image Sequence Folder",
+            "",
             QFileDialog.ShowDirsOnly,
         )
         if dir_path:
@@ -239,6 +259,7 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
     def dropEvent(self, event) -> None:
         from backend.project import folder_has_image_sequence
+
         folders = []
         video_files = []
         image_files = []

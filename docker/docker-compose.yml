@@ -71,6 +71,46 @@ services:
     stdin_open: true
     tty: true
 
+  # AMD ROCm — baked .venv at build time (no 1-install.sh). Does not mount corridorkey_install
+  # over /opt/corridorkey (unlike CPU/GPU). CORRIDORKEY_INSTALL_* env vars do not re-provision
+  # deps; extend Dockerfile.rocm or run manual uv pip in a derived image for tracker/SAM2 extras.
+  corridorkey-rocm:
+    profiles: ["rocm"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rocm
+      target: rocm-vnc
+    image: corridorkey:rocm
+    container_name: corridorkey-rocm
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+    environment:
+      DISPLAY: ":1"
+      QT_QPA_PLATFORM: "xcb"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      CORRIDORKEY_CONTAINER_MODE: "1"
+      CORRIDORKEY_RESOLUTION: "1920x1080x24"
+      HSA_OVERRIDE_GFX_VERSION: "10.3.0"
+    ports:
+      - "127.0.0.1:6080:6080"
+      - "127.0.0.1:6081:6081"
+      - "127.0.0.1:5900:5900"
+    volumes:
+      - corridorkey_projects:/opt/corridorkey/Projects
+      - corridorkey_models_corridorkey:/opt/corridorkey/CorridorKeyModule/checkpoints
+      - corridorkey_models_gvm:/opt/corridorkey/gvm_core/weights
+      - corridorkey_models_videomama:/opt/corridorkey/VideoMaMaInferenceModule/checkpoints
+      - corridorkey_hf_cache:/root/.cache/huggingface/hub
+      - corridorkey_config:/root/.config/corridorkey
+      - corridorkey_logs:/opt/corridorkey/logs
+      - corridorkey_uploads:/opt/corridorkey/ClipsForInference
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
 volumes:
   corridorkey_install:
     name: corridorkey_install

@@ -7,15 +7,31 @@ All notable changes to EZ-CorridorKey are documented here.
 ## [Unreleased]
 
 ### Added
+- **ROCm / AMD GPU (Docker)** — optional `docker/Dockerfile.rocm` with default **`rocm-runtime`** target (`uv run python main.py`) and **`rocm-vnc`** target for browser access (noVNC / x11vnc / filebrowser, aligned with the default `docker/Dockerfile` stack). Compose profile **`rocm`** adds service `corridorkey-rocm`. Image applies ROCm PyTorch + `pytorch-triton-rocm` via `uv pip install … --reinstall` only inside the container (no ROCm optional extra in `pyproject.toml`).
+- **`device_utils.setup_rocm_env()`** — early HIP detection, `HSA_OVERRIDE_GFX_VERSION` default via `setdefault`, and stderr logging for HIP INFO before `main.setup_logging()` runs.
+- **`device_utils` in wheel/sdist** — `force-include` so the module ships with hatch-built wheels.
+- **CI: Ruff** — `.github/workflows/ruff.yml` is a **merge gate**: **`uv run ruff check .`** and **`uv run ruff format --check .`** on **`pull_request`** / **`push`** to **`main`** when Python or **`pyproject.toml`** changes (`permissions: contents: read`).
+- **CI** — `.github/workflows/rocm-ci.yml` runs mocked ROCm tests (`pytest tests/test_rocm_setup.py -m rocm --noconftest`) and attempts a **`rocm-runtime`** Docker build (`continue-on-error` due to image size / registry limits); `permissions: contents: read`; **`pull_request`** and **`push`** to **`main`** share the same **`paths`** filter (includes `docker/Dockerfile`, `docker/Dockerfile.rocm`, entrypoints, Compose, `device_utils.py`, tests, docs, and related files).
+- **ROCm polish** — `UV_LINK_MODE=copy` in `docker/Dockerfile.rocm`; Compose comments on baked `.venv` vs `CORRIDORKEY_INSTALL_*`; `docs/ROCm_Setup.md` expanded (Python 3.10, NVIDIA vs ROCm install table, SAM2/tracker, host `render` group); **`pytest` marker `rocm`** in `pyproject.toml`.
+- **`docs/AI_full_pass_review_instructions.md`** — playbook for a full line-by-line / full-file review of every path in a branch or PR (inventory, security, cross-doc consistency, verification commands, EZ-CorridorKey ROCm appendix); linked from `docs/ROCm_Setup.md` and `docs/ROCm_PR_handoff.md`.
 - **SECURITY.md** — vulnerability disclosure policy with GitHub private advisory and email contact.
 - **CONTRIBUTING.md** — contributor guidelines adapted from upstream, covering dev setup, PR workflow, and code style.
 
-### Fixed
-- **Docker: unauthenticated services** — VNC now requires a password (was `-nopw`), filebrowser now requires login (was `--noauth`).
-- **Docker: ports bound to all interfaces** — all exposed ports (5900, 6080, 6081) now bind to `127.0.0.1` only, preventing LAN/WAN access.
-
 ### Changed
+- **Ruff** — **`[tool.ruff]`** / **`[tool.ruff.lint]`** in **`pyproject.toml`** (default rules; ignore **`E402`**, **`E701`** with rationale). Applied **`ruff format`** across the tree and fixed remaining **ruff check** issues (bare **`except`**, unused bindings, **`__all__`** / re-exports, **`QApplication`** import scope, etc.) so the new CI gate passes.
+- **filebrowser install in Docker** — [`docker/Dockerfile`](../docker/Dockerfile) and [`docker/Dockerfile.rocm`](../docker/Dockerfile.rocm) fetch **`get.sh`** from a **pinned** [filebrowser/get](https://github.com/filebrowser/get) commit (`2aab36cbd9def8513160e31d753abc5a2e2aef0c`) instead of **`master`**; [`docs/ROCm_Setup.md`](../docs/ROCm_Setup.md) notes the policy.
+- **`docker/README.md`** — security note (VNC vs **filebrowser**); Compose defaults (**CPU** / **`gpu`** / **`rocm`**); first-start behavior (volume install vs baked ROCm); env / logs / update notes for **`corridorkey-rocm`**; profile-aware **`compose start`** / **`--force-recreate`** examples for **GPU**/**ROCm**/**CPU**.
+- **`docs/ROCm_Setup.md`** — CI section references workflow **`paths`** filters (when the job runs).
+- **`CONTRIBUTING.md`** — prerequisites mention **AMD (ROCm)** via Docker and link **`docs/ROCm_Setup.md`**.
+- **`[tool.uv.pip]`** — moved `torch-backend = "auto"` from `[tool.uv]` so current `uv` versions parse `pyproject.toml` without warnings.
+- **Docker: supervisord GUI env** — [`docker/supervisord.conf`](docker/supervisord.conf) passes **`CORRIDORKEY_CONTAINER_MODE="%(ENV_CORRIDORKEY_CONTAINER_MODE)s"`** into the CorridorKey subprocess; [`docker/entrypoint.sh`](docker/entrypoint.sh) and [`docker/entrypoint-rocm-vnc.sh`](docker/entrypoint-rocm-vnc.sh) default it to **`1`** so Compose / `docker run -e` can override (e.g. **`0`** for desktop-style sizing).
 - Updated EZSCAPE Discord link in README.
+
+### Fixed
+- **`.gitignore`** — root-only **`/test_*.py`** for ad-hoc scripts; the previous bare **`test_*.py`** rule ignored the entire pytest suite under **`tests/`** (including **`tests/test_rocm_setup.py`**), so CI would not see that file after checkout.
+- **`docker/Dockerfile`** — removed a duplicate **`xvfb`** package line in the apt install list.
+- **Docker: VNC password** — x11vnc uses `-passwd EZ-CorridorKey` (was `-nopw`). **filebrowser** is started without `--noauth` and listens on **127.0.0.1** inside the container; some **filebrowser** builds may prompt for first-run admin setup—see `docker/supervisord.conf`.
+- **Docker: ports bound to all interfaces** — all exposed ports (5900, 6080, 6081) now bind to `127.0.0.1` only, preventing LAN/WAN access.
 
 ---
 

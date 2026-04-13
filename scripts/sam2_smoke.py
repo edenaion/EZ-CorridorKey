@@ -47,7 +47,8 @@ def _resolve_frames_dir(clip_root: Path) -> Path:
 
 def _input_files(frames_dir: Path) -> list[str]:
     files = sorted(
-        name for name in os.listdir(frames_dir)
+        name
+        for name in os.listdir(frames_dir)
         if name.lower().endswith((".png", ".jpg", ".jpeg", ".exr", ".tif", ".tiff"))
     )
     if not files:
@@ -212,9 +213,15 @@ def run_smoke(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Quick SAM2 smoke test on the first N frames of a clip")
-    parser.add_argument("clip_root", help="Path to the clip root containing Frames/ and annotations.json")
-    parser.add_argument("--frames", type=int, default=5, help="Number of initial frames to test (default: 5)")
+    parser = argparse.ArgumentParser(
+        description="Quick SAM2 smoke test on the first N frames of a clip"
+    )
+    parser.add_argument(
+        "clip_root", help="Path to the clip root containing Frames/ and annotations.json"
+    )
+    parser.add_argument(
+        "--frames", type=int, default=5, help="Number of initial frames to test (default: 5)"
+    )
     parser.add_argument(
         "--sam2-model",
         choices=sorted(SAM2_MODEL_IDS.keys()),

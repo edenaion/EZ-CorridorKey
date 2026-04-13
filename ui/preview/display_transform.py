@@ -9,13 +9,13 @@ Codex critical finding: naive clip-to-8bit looks wrong for:
 - Processed (straight RGBA → composite with alpha for display)
 - Negative/HDR values (needs clamping before conversion)
 """
+
 from __future__ import annotations
 
 import os
 import logging
 import threading
 from collections import OrderedDict
-from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -82,7 +82,7 @@ def _do_decode(path: str, mode: ViewMode, *, input_exr_is_linear: bool = False) 
     if not os.path.isfile(path):
         return None
 
-    is_exr = path.lower().endswith('.exr')
+    is_exr = path.lower().endswith(".exr")
 
     try:
         if is_exr:
@@ -142,12 +142,16 @@ def _decode_exr(path: str, mode: ViewMode, *, input_exr_is_linear: bool = False)
             else:
                 # Strip alpha, treat as RGB
                 return _transform_linear_rgb(
-                    img[:, :, :3], mode, input_exr_is_linear=input_exr_is_linear,
+                    img[:, :, :3],
+                    mode,
+                    input_exr_is_linear=input_exr_is_linear,
                 )
         else:
             # Unexpected channel count, take first 3
             return _transform_linear_rgb(
-                img[:, :, :3], mode, input_exr_is_linear=input_exr_is_linear,
+                img[:, :, :3],
+                mode,
+                input_exr_is_linear=input_exr_is_linear,
             )
     return None
 

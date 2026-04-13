@@ -11,6 +11,7 @@ Systematically checks that:
 
 Run: python scripts/gui_smoke_test.py
 """
+
 import os
 import sys
 
@@ -21,7 +22,6 @@ sys.path.insert(0, ".")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import QTimer
 
 app = QApplication.instance() or QApplication(sys.argv)
 
@@ -47,6 +47,7 @@ print("=" * 60)
 print("\n[1] MainWindow Construction...")
 try:
     from ui.main_window import MainWindow
+
     win = MainWindow()
     check("MainWindow instantiated", True)
 except Exception as e:
@@ -70,7 +71,10 @@ for attr, expected_type in EXPECTED_WIDGETS:
 
 # Check optional widgets that may be created lazily
 OPTIONAL_ATTRS = [
-    "_io_tray", "_param_panel", "_queue_panel", "_welcome",
+    "_io_tray",
+    "_param_panel",
+    "_queue_panel",
+    "_welcome",
     "_dual_viewer",
 ]
 for attr in OPTIONAL_ATTRS:
@@ -85,8 +89,13 @@ MIXIN_METHODS = {
     "ShortcutsMixin": ["_setup_shortcuts", "_toggle_mute", "_toggle_playback", "_on_escape"],
     "ClipMixin": ["_on_clip_selected", "_on_selection_changed", "_switch_to_workspace"],
     "ImportMixin": ["_on_import_folder", "_on_import_videos", "_add_videos_to_project"],
-    "InferenceMixin": ["_on_run_inference", "_cancel_inference", "_on_run_gvm",
-                        "_on_run_pipeline", "_start_worker_if_needed"],
+    "InferenceMixin": [
+        "_on_run_inference",
+        "_cancel_inference",
+        "_on_run_gvm",
+        "_on_run_pipeline",
+        "_start_worker_if_needed",
+    ],
     "WorkerMixin": ["_on_worker_progress", "_on_worker_clip_finished", "_on_worker_error"],
     "AnnotationMixin": ["_toggle_annotation_fg", "_on_track_masks", "_auto_save_annotations"],
     "ExportMixin": ["_auto_extract_clips", "_on_export_video", "_set_in_point", "_set_out_point"],
@@ -96,8 +105,9 @@ MIXIN_METHODS = {
 for mixin_name, methods in MIXIN_METHODS.items():
     for method in methods:
         fn = getattr(win, method, None)
-        check(f"{mixin_name}.{method} bound", callable(fn),
-              f"Method {method} not found on MainWindow")
+        check(
+            f"{mixin_name}.{method} bound", callable(fn), f"Method {method} not found on MainWindow"
+        )
 
 # --- 4. Menu Bar ---
 print("[4] Checking menu bar...")
@@ -112,11 +122,11 @@ if menubar:
 
 # --- 5. Keyboard Shortcuts ---
 print("[5] Checking keyboard shortcuts...")
-from ui.shortcut_registry import ShortcutRegistry
 registry = getattr(win, "_shortcut_registry", None)
 if registry is None:
     # Try finding shortcuts via QShortcut children
     from PySide6.QtWidgets import QShortcut
+
     shortcuts = win.findChildren(QShortcut)
     check("Shortcuts registered", len(shortcuts) > 0, f"Found {len(shortcuts)} shortcuts")
 else:
@@ -153,6 +163,7 @@ if service:
 # --- 8. View Modes ---
 print("[8] Checking view mode handlers...")
 from ui.preview.frame_index import ViewMode
+
 for mode in ViewMode:
     method_name = f"_view_mode_{mode.name.lower()}"
     # Some modes map differently
@@ -163,6 +174,7 @@ for mode in ViewMode:
 # --- 9. Helper Classes ---
 print("[9] Checking helper classes...")
 from ui.main_window import _Toast, _MuteOverlay, _UpdateChecker
+
 check("_Toast class exists", _Toast is not None)
 check("_MuteOverlay class exists", _MuteOverlay is not None)
 check("_UpdateChecker class exists", _UpdateChecker is not None)
@@ -170,6 +182,7 @@ check("_UpdateChecker class exists", _UpdateChecker is not None)
 # --- 10. Standalone Functions ---
 print("[10] Checking standalone functions...")
 from ui.main_window import _remove_alpha_hint_assets, _import_alpha_video_as_sequence
+
 check("_remove_alpha_hint_assets exists", callable(_remove_alpha_hint_assets))
 check("_import_alpha_video_as_sequence exists", callable(_import_alpha_video_as_sequence))
 

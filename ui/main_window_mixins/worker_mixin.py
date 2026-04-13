@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import Slot
@@ -16,7 +15,9 @@ class WorkerMixin:
     """GPU worker signal handlers for MainWindow."""
 
     @Slot(str, str, int, int)
-    def _on_worker_progress(self, job_id: str, clip_name: str, current: int, total: int, fps: float = 0.0) -> None:
+    def _on_worker_progress(
+        self, job_id: str, clip_name: str, current: int, total: int, fps: float = 0.0
+    ) -> None:
         if self._cancel_requested_job_id == job_id:
             self._queue_panel.refresh()
             return
@@ -96,8 +97,12 @@ class WorkerMixin:
         # Map job type to correct next state.
         if job_type == JobType.SAM2_TRACK.value:
             target_state = ClipState.MASKED
-        elif job_type in (JobType.GVM_ALPHA.value, JobType.VIDEOMAMA_ALPHA.value,
-                          JobType.MATANYONE2_ALPHA.value, JobType.BIREFNET_ALPHA.value):
+        elif job_type in (
+            JobType.GVM_ALPHA.value,
+            JobType.VIDEOMAMA_ALPHA.value,
+            JobType.MATANYONE2_ALPHA.value,
+            JobType.BIREFNET_ALPHA.value,
+        ):
             target_state = ClipState.READY
         else:
             target_state = ClipState.COMPLETE
@@ -186,6 +191,7 @@ class WorkerMixin:
             self._status_bar.start_job_timer(label=next_label)
 
         from ui.sounds.audio_manager import UIAudio
+
         if target_state == ClipState.MASKED:
             UIAudio.mask_done()
             self._status_bar.set_message(f"Track Mask complete for {clip_name}")
@@ -201,7 +207,9 @@ class WorkerMixin:
             alpha_info = ""
             for c in self._clip_model.clips:
                 if c.name == clip_name and c.alpha_asset and c.input_asset:
-                    alpha_info = f" ({c.alpha_asset.frame_count}/{c.input_asset.frame_count} alpha frames)"
+                    alpha_info = (
+                        f" ({c.alpha_asset.frame_count}/{c.input_asset.frame_count} alpha frames)"
+                    )
                     break
             self._status_bar.set_message(
                 f"{type_label} complete for {clip_name}{alpha_info} -- Ready to Run Inference"
@@ -284,17 +292,21 @@ class WorkerMixin:
         self._queue_panel.refresh()
         logger.error(f"Worker error for {clip_name}: {error_msg}")
         from ui.sounds.audio_manager import UIAudio
+
         UIAudio.error()
 
         # Try to match a known error pattern for actionable diagnostics
         from ui.widgets.diagnostic_dialog import match_diagnostic, DiagnosticDialog
+
         diag = match_diagnostic(error_msg)
         if diag:
             dlg = DiagnosticDialog(
-                diag, error_msg,
+                diag,
+                error_msg,
                 gpu_info=self._service.get_vram_info(),
                 recent_errors=self._debug_console.recent_errors()
-                if hasattr(self, '_debug_console') else None,
+                if hasattr(self, "_debug_console")
+                else None,
                 parent=self,
             )
             dlg.exec()

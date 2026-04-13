@@ -36,7 +36,9 @@ def test_wrap_mlx_output_returns_straight_linear_processed_rgba():
     expected_alpha = raw["alpha"].astype(np.float32)[:, :, np.newaxis] / 255.0
 
     # Output is premultiplied RGBA, so RGB values are scaled by alpha
-    np.testing.assert_allclose(wrapped["processed"][:, :, :3], expected_rgb * expected_alpha, atol=1e-6)
+    np.testing.assert_allclose(
+        wrapped["processed"][:, :, :3], expected_rgb * expected_alpha, atol=1e-6
+    )
     np.testing.assert_allclose(wrapped["processed"][:, :, 3:], expected_alpha, atol=1e-6)
 
 
@@ -60,7 +62,9 @@ def test_wrap_mlx_output_matches_source_luminance_within_clamp():
     src_luma = float(np.sum(source * weights, axis=-1).mean())
     out_luma = float(np.sum(wrapped["processed"][:, :, :3] * weights, axis=-1).mean())
 
-    assert out_luma > float(np.sum(cu.srgb_to_linear(raw["fg"].astype(np.float32) / 255.0) * weights, axis=-1).mean())
+    assert out_luma > float(
+        np.sum(cu.srgb_to_linear(raw["fg"].astype(np.float32) / 255.0) * weights, axis=-1).mean()
+    )
     assert out_luma <= src_luma * 1.15
 
 
@@ -196,10 +200,13 @@ def test_try_mlx_float_outputs_handles_resize_path(monkeypatch):
     assert result["alpha"].shape == (2, 2, 1)
     assert result["fg"].shape == (2, 2, 3)
 
-    expected_rgb = np.asarray(
-        Image.fromarray(image_u8, mode="RGB").resize((1, 1), Image.Resampling.BICUBIC),
-        dtype=np.float32,
-    ) / 255.0
+    expected_rgb = (
+        np.asarray(
+            Image.fromarray(image_u8, mode="RGB").resize((1, 1), Image.Resampling.BICUBIC),
+            dtype=np.float32,
+        )
+        / 255.0
+    )
     expected_mask = (
         np.asarray(
             Image.fromarray(mask_u8, mode="L").resize((1, 1), Image.Resampling.BICUBIC),
@@ -250,7 +257,9 @@ def test_restore_opaque_source_detail_prefers_source_on_low_spill_edge_pixels():
     )
 
     np.testing.assert_allclose(restored[2, 1], source_lin[2, 1], atol=1e-6)
-    assert np.linalg.norm(restored[2, 3] - source_lin[2, 3]) < np.linalg.norm(restored[2, 3] - image_lin[2, 3])
+    assert np.linalg.norm(restored[2, 3] - source_lin[2, 3]) < np.linalg.norm(
+        restored[2, 3] - image_lin[2, 3]
+    )
 
 
 def test_restore_opaque_source_detail_keeps_model_control_on_green_spill_edge_pixels():
@@ -265,4 +274,6 @@ def test_restore_opaque_source_detail_keeps_model_control_on_green_spill_edge_pi
         source_lin, source_srgb, image_lin, alpha, edge_band_radius=1, edge_band_softness=1
     )
 
-    assert np.linalg.norm(restored[2, 3] - image_lin[2, 3]) < np.linalg.norm(restored[2, 3] - source_lin[2, 3])
+    assert np.linalg.norm(restored[2, 3] - image_lin[2, 3]) < np.linalg.norm(
+        restored[2, 3] - source_lin[2, 3]
+    )

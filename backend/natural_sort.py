@@ -5,11 +5,12 @@ Handles non-zero-padded frame numbers correctly:
 
 No external dependency — pure Python implementation.
 """
+
 from __future__ import annotations
 
 import re
 
-_SPLIT_RE = re.compile(r'(\d+)')
+_SPLIT_RE = re.compile(r"(\d+)")
 
 
 def natural_sort_key(text: str) -> list[str | int]:

@@ -24,6 +24,7 @@ Transitions:
     ERROR → EXTRACTING (retry extraction)
     COMPLETE → READY   (reprocess with different params)
 """
+
 from __future__ import annotations
 
 import json
@@ -64,11 +65,14 @@ _TRANSITIONS: dict[ClipState, set[ClipState]] = {
 
 class PipelineRoute(Enum):
     """Pipeline route for a clip in batch processing."""
-    INFERENCE_ONLY = "inference_only"       # READY/COMPLETE → inference
-    GVM_PIPELINE = "gvm_pipeline"           # RAW, no annotations → GVM → inference
-    VIDEOMAMA_PIPELINE = "videomama_pipeline"  # Annotations → track dense masks → VideoMaMa → inference
-    VIDEOMAMA_INFERENCE = "videomama_inference" # MASKED → VideoMaMa → inference
-    SKIP = "skip"                           # EXTRACTING or ERROR — cannot process
+
+    INFERENCE_ONLY = "inference_only"  # READY/COMPLETE → inference
+    GVM_PIPELINE = "gvm_pipeline"  # RAW, no annotations → GVM → inference
+    VIDEOMAMA_PIPELINE = (
+        "videomama_pipeline"  # Annotations → track dense masks → VideoMaMa → inference
+    )
+    VIDEOMAMA_INFERENCE = "videomama_inference"  # MASKED → VideoMaMa → inference
+    SKIP = "skip"  # EXTRACTING or ERROR — cannot process
 
 
 def mask_sequence_is_videomama_ready(root_path: str) -> bool:
@@ -112,6 +116,7 @@ def classify_pipeline_route(clip: "ClipEntry") -> PipelineRoute:
 @dataclass
 class ClipAsset:
     """Represents an input source — either an image sequence directory or a video file."""
+
     path: str
     asset_type: str  # 'sequence' or 'video'
     frame_count: int = 0
@@ -120,15 +125,16 @@ class ClipAsset:
         self._calculate_length()
 
     def _calculate_length(self):
-        if self.asset_type == 'sequence':
+        if self.asset_type == "sequence":
             if os.path.isdir(self.path):
                 files = [f for f in os.listdir(self.path) if _is_image_file(f)]
                 self.frame_count = len(files)
             else:
                 self.frame_count = 0
-        elif self.asset_type == 'video':
+        elif self.asset_type == "video":
             try:
                 import cv2
+
                 cap = cv2.VideoCapture(self.path)
                 if cap.isOpened():
                     self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -142,24 +148,26 @@ class ClipAsset:
 
         Uses natural sort so frame_2 sorts before frame_10 (not lexicographic).
         """
-        if self.asset_type != 'sequence' or not os.path.isdir(self.path):
+        if self.asset_type != "sequence" or not os.path.isdir(self.path):
             return []
         from .natural_sort import natsorted
+
         return natsorted([f for f in os.listdir(self.path) if _is_image_file(f)])
 
     def is_exr_sequence(self) -> bool:
         """True if this is an image sequence where the first frame is EXR."""
-        if self.asset_type != 'sequence':
+        if self.asset_type != "sequence":
             return False
         files = self.get_frame_files()
         if not files:
             return False
-        return files[0].lower().endswith('.exr')
+        return files[0].lower().endswith(".exr")
 
 
 @dataclass
 class InOutRange:
     """In/out frame range for sub-clip processing. Both indices inclusive, 0-based."""
+
     in_point: int
     out_point: int
 
@@ -181,6 +189,7 @@ class InOutRange:
 @dataclass
 class ClipEntry:
     """A single shot/clip with its assets and processing state."""
+
     name: str
     root_path: str
     state: ClipState = ClipState.RAW
@@ -192,8 +201,8 @@ class ClipEntry:
     warnings: list[str] = field(default_factory=list)
     error_message: Optional[str] = None
     extraction_progress: float = 0.0  # 0.0 to 1.0 during EXTRACTING
-    extraction_total: int = 0         # total frames expected during extraction
-    custom_output_dir: str = ""       # Per-clip output dir override (from clip.json)
+    extraction_total: int = 0  # total frames expected during extraction
+    custom_output_dir: str = ""  # Per-clip output dir override (from clip.json)
     _processing: bool = field(default=False, repr=False)  # lock: watcher must not reclassify
 
     @property
@@ -238,6 +247,7 @@ class ClipEntry:
         # 2. Global default from QSettings (Qt Core — no UI dependency)
         try:
             from PySide6.QtCore import QSettings
+
             global_dir = QSettings().value("output/default_directory", "", type=str)
             if global_dir:
                 # Use project/clip subfolders to prevent cross-project collision.
@@ -267,6 +277,7 @@ class ClipEntry:
             return ""
         try:
             import json
+
             with open(metadata_path, "r", encoding="utf-8") as handle:
                 payload = json.load(handle)
         except Exception:
@@ -279,10 +290,7 @@ class ClipEntry:
         return bool(
             self.input_asset is not None
             and self.input_asset.is_exr_sequence()
-            and (
-                not self.has_video_metadata()
-                or self._video_source_transfer() == "linear"
-            )
+            and (not self.has_video_metadata() or self._video_source_transfer() == "linear")
         )
 
     @property
@@ -354,7 +362,8 @@ class ClipEntry:
             return None
         try:
             import json
-            with open(manifest_path, 'r') as f:
+
+            with open(manifest_path, "r") as f:
                 return json.load(f)
         except Exception as e:
             logger.debug(f"Failed to read manifest at {manifest_path}: {e}")
@@ -363,6 +372,7 @@ class ClipEntry:
     def _resolve_original_path(self) -> Optional[str]:
         """Resolve the original video path from clip.json or project.json."""
         from .project import _read_clip_or_project_json
+
         data = _read_clip_or_project_json(self.root_path)
         if not data:
             return None
@@ -383,6 +393,7 @@ class ClipEntry:
         message if the referenced folder no longer exists.
         """
         from .project import _read_clip_or_project_json
+
         data = _read_clip_or_project_json(self.root_path)
         if not data:
             return None
@@ -398,9 +409,7 @@ class ClipEntry:
         self.state = ClipState.ERROR
         self.error_message = f"Source folder missing: {path}"
         self.source_type = "sequence"
-        logger.warning(
-            f"Clip '{self.name}': external sequence folder no longer exists: {path}"
-        )
+        logger.warning(f"Clip '{self.name}': external sequence folder no longer exists: {path}")
         return None
 
     def _resolve_source_type(self) -> str:
@@ -409,6 +418,7 @@ class ClipEntry:
         Returns 'video', 'sequence', or 'unknown' (legacy clips without metadata).
         """
         from .project import _read_clip_or_project_json
+
         data = _read_clip_or_project_json(self.root_path)
         if not data:
             return "unknown"
@@ -436,6 +446,7 @@ class ClipEntry:
 
         # Load per-clip output dir override from clip.json
         from .project import load_custom_output_dir
+
         self.custom_output_dir = load_custom_output_dir(self.root_path)
 
         # Input asset — check new names first, fall back to legacy
@@ -444,24 +455,25 @@ class ClipEntry:
         source_dir = os.path.join(self.root_path, "Source")
 
         if os.path.isdir(frames_dir) and os.listdir(frames_dir):
-            self.input_asset = ClipAsset(frames_dir, 'sequence')
+            self.input_asset = ClipAsset(frames_dir, "sequence")
             # Determine source_type: check clip.json for provenance
             self.source_type = self._resolve_source_type()
         elif os.path.isdir(input_dir) and os.listdir(input_dir):
-            self.input_asset = ClipAsset(input_dir, 'sequence')
+            self.input_asset = ClipAsset(input_dir, "sequence")
             self.source_type = self._resolve_source_type()
         elif os.path.isdir(source_dir):
             videos = [f for f in os.listdir(source_dir) if _is_video_file(f)]
             if videos:
                 self.input_asset = ClipAsset(
-                    os.path.join(source_dir, videos[0]), 'video',
+                    os.path.join(source_dir, videos[0]),
+                    "video",
                 )
                 self.source_type = "video"
             else:
                 # Source/ exists but is empty — check project.json for external reference
                 original = self._resolve_original_path()
                 if original:
-                    self.input_asset = ClipAsset(original, 'video')
+                    self.input_asset = ClipAsset(original, "video")
                     self.source_type = "video"
                 else:
                     raise ClipScanError(f"Clip '{self.name}': 'Source' dir has no video.")
@@ -469,7 +481,7 @@ class ClipEntry:
             # No local Frames/Input/Source — check clip.json for external sequence ref
             ext_seq = self._resolve_external_sequence()
             if ext_seq:
-                self.input_asset = ClipAsset(ext_seq, 'sequence')
+                self.input_asset = ClipAsset(ext_seq, "sequence")
                 self.source_type = "sequence"
             elif self.state == ClipState.ERROR:
                 # _resolve_external_sequence() set ERROR (missing source folder)
@@ -479,17 +491,16 @@ class ClipEntry:
                 candidates = glob_module.glob(os.path.join(self.root_path, "[Ii]nput.*"))
                 candidates = [c for c in candidates if _is_video_file(c)]
                 if candidates:
-                    self.input_asset = ClipAsset(candidates[0], 'video')
+                    self.input_asset = ClipAsset(candidates[0], "video")
                     self.source_type = "video"
                 elif os.path.isdir(input_dir):
-                    raise ClipScanError(
-                        f"Clip '{self.name}': Input dir is empty — no image files."
-                    )
+                    raise ClipScanError(f"Clip '{self.name}': Input dir is empty — no image files.")
                 else:
                     raise ClipScanError(f"Clip '{self.name}': no Input found.")
 
         # Load display name from project.json if available
         from .project import get_display_name
+
         display = get_display_name(self.root_path)
         if display != os.path.basename(self.root_path):
             self.name = display
@@ -497,30 +508,27 @@ class ClipEntry:
         # Alpha hint asset
         alpha_dir = os.path.join(self.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
-            self.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+            self.alpha_asset = ClipAsset(alpha_dir, "sequence")
         else:
-            alpha_candidates = glob_module.glob(
-                os.path.join(self.root_path, "AlphaHint.*")
-            )
+            alpha_candidates = glob_module.glob(os.path.join(self.root_path, "AlphaHint.*"))
             alpha_candidates = [c for c in alpha_candidates if _is_video_file(c)]
             if alpha_candidates:
-                self.alpha_asset = ClipAsset(alpha_candidates[0], 'video')
+                self.alpha_asset = ClipAsset(alpha_candidates[0], "video")
 
         # VideoMaMa mask hint — directory OR video file
         mask_dir = os.path.join(self.root_path, "VideoMamaMaskHint")
         if os.path.isdir(mask_dir) and os.listdir(mask_dir):
-            self.mask_asset = ClipAsset(mask_dir, 'sequence')
+            self.mask_asset = ClipAsset(mask_dir, "sequence")
         else:
             # Check for mask video file (VideoMamaMaskHint.mp4 etc.)
-            mask_candidates = glob_module.glob(
-                os.path.join(self.root_path, "VideoMamaMaskHint.*")
-            )
+            mask_candidates = glob_module.glob(os.path.join(self.root_path, "VideoMamaMaskHint.*"))
             mask_candidates = [c for c in mask_candidates if _is_video_file(c)]
             if mask_candidates:
-                self.mask_asset = ClipAsset(mask_candidates[0], 'video')
+                self.mask_asset = ClipAsset(mask_candidates[0], "video")
 
         # Load in/out range from project.json
         from .project import load_in_out_range
+
         self.in_out_range = load_in_out_range(self.root_path)
 
         # Determine initial state
@@ -570,8 +578,7 @@ class ClipEntry:
 
         if self.mask_asset is not None:
             self.state = ClipState.MASKED
-        elif (self.input_asset is not None
-              and self.input_asset.asset_type == "video"):
+        elif self.input_asset is not None and self.input_asset.asset_type == "video":
             # Video input needs extraction to image sequence
             self.state = ClipState.EXTRACTING
         else:

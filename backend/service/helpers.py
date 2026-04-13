@@ -1,15 +1,13 @@
 """Module-level helpers and standalone functions for the service package."""
+
 from __future__ import annotations
 
 import importlib
-import json
 import logging
 import os
 import sys
 import warnings
-from typing import Optional
 
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +24,7 @@ def _configure_runtime_warnings() -> None:
 _configure_runtime_warnings()
 
 # Project paths — frozen-build aware
-if getattr(sys, 'frozen', False):
+if getattr(sys, "frozen", False):
     BASE_DIR = sys._MEIPASS
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -70,9 +68,7 @@ def _import_matanyone2_processor_class():
             last_error = exc
 
     expected = " or ".join(missing_roots)
-    raise ModuleNotFoundError(
-        f"MatAnyone2 module not found. Expected {expected}"
-    ) from last_error
+    raise ModuleNotFoundError(f"MatAnyone2 module not found. Expected {expected}") from last_error
 
 
 def export_masks_headless(clip) -> str | None:
@@ -114,7 +110,7 @@ def export_masks_headless(clip) -> str | None:
     if clip.in_out_range:
         lo = clip.in_out_range.in_point
         hi = clip.in_out_range.out_point
-        stems = stems[lo:hi + 1]
+        stems = stems[lo : hi + 1]
         start_idx = lo
 
     return model.export_masks(clip.root_path, stems, w, h, start_index=start_idx)

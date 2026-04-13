@@ -10,6 +10,7 @@ Architecture (Codex findings incorporated):
 - Worker preview gated: only applied if viewing same clip + COMP mode + latest frame
 - Frame list snapshot built once per clip selection (atomic)
 """
+
 from __future__ import annotations
 
 import os
@@ -202,9 +203,7 @@ class PreviewViewport(QWidget):
             self._split_view._single_image = None
             self._split_view._left_image = None
             self._split_view._right_image = None
-            self._split_view.set_placeholder(
-                f"Extracting frames...\n{clip.name}"
-            )
+            self._split_view.set_placeholder(f"Extracting frames...\n{clip.name}")
             return
 
         # Build frame index
@@ -320,7 +319,9 @@ class PreviewViewport(QWidget):
         video_path = clip.input_asset.path if (clip.input_asset and asset_type == "video") else None
         seq_dir = clip.input_asset.path if (clip.input_asset and asset_type == "sequence") else None
         return build_frame_index(
-            clip.root_path, asset_type, video_path=video_path,
+            clip.root_path,
+            asset_type,
+            video_path=video_path,
             input_sequence_dir=seq_dir,
         )
 
@@ -390,7 +391,7 @@ class PreviewViewport(QWidget):
             else:
                 parts.append("sequence")
         parts.append(clip.state.value)
-        self._clip_info.setText("  \u00B7  ".join(parts))  # middle dot separator
+        self._clip_info.setText("  \u00b7  ".join(parts))  # middle dot separator
 
     def set_split_mode(self, enabled: bool) -> None:
         """Toggle split view on/off."""
@@ -437,10 +438,14 @@ class PreviewViewport(QWidget):
             video_path = self._frame_index.video_modes.get(mode)
             if video_path:
                 self._decoder.request_decode(
-                    "", mode, stem_index,
+                    "",
+                    mode,
+                    stem_index,
                     video_path=video_path,
                     video_frame_index=stem_index,
-                    input_exr_is_linear=(self._input_exr_is_linear if mode == ViewMode.INPUT else False),
+                    input_exr_is_linear=(
+                        self._input_exr_is_linear if mode == ViewMode.INPUT else False
+                    ),
                 )
             return
 
@@ -451,13 +456,13 @@ class PreviewViewport(QWidget):
                 path,
                 mode,
                 stem_index,
-                input_exr_is_linear=(self._input_exr_is_linear if mode == ViewMode.INPUT else False),
+                input_exr_is_linear=(
+                    self._input_exr_is_linear if mode == ViewMode.INPUT else False
+                ),
             )
         else:
             # Frame not available in this mode for this stem
-            self._split_view.set_placeholder(
-                f"No {mode.value} frame for stem {stem_index}"
-            )
+            self._split_view.set_placeholder(f"No {mode.value} frame for stem {stem_index}")
 
     def _load_split_images(self) -> None:
         """Load both input and current-mode images for split view."""

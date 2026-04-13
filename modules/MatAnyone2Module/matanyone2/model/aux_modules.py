@@ -1,6 +1,7 @@
 """
 For computing auxiliary outputs for auxiliary losses
 """
+
 from typing import Dict
 from omegaconf import DictConfig
 import torch
@@ -48,46 +49,55 @@ class AuxComputer(nn.Module):
         sensory_dim = cfg.model.sensory_dim
         embed_dim = cfg.model.embed_dim
 
-        if use_sensory_aux:  
+        if use_sensory_aux:
             self.sensory_aux = LinearPredictor(sensory_dim, embed_dim)
 
-    def _aggregate_with_selector(self, logits: torch.Tensor, selector: torch.Tensor) -> torch.Tensor:
+    def _aggregate_with_selector(
+        self, logits: torch.Tensor, selector: torch.Tensor
+    ) -> torch.Tensor:
         prob = torch.sigmoid(logits)
         if selector is not None:
             prob = prob * selector
         logits = aggregate(prob, dim=1)
         return logits
 
-    def forward(self, pix_feat: torch.Tensor, aux_input: Dict[str, torch.Tensor],
-                selector: torch.Tensor, seg_pass=False) -> Dict[str, torch.Tensor]:
-        sensory = aux_input['sensory']
-        q_logits = aux_input['q_logits']
+    def forward(
+        self,
+        pix_feat: torch.Tensor,
+        aux_input: Dict[str, torch.Tensor],
+        selector: torch.Tensor,
+        seg_pass=False,
+    ) -> Dict[str, torch.Tensor]:
+        sensory = aux_input["sensory"]
+        q_logits = aux_input["q_logits"]
 
         aux_output = {}
-        aux_output['attn_mask'] = aux_input['attn_mask']
+        aux_output["attn_mask"] = aux_input["attn_mask"]
 
         if self.use_sensory_aux:
             # B*num_objects*H*W
             logits = self.sensory_aux(pix_feat, sensory)
-            aux_output['sensory_logits'] = self._aggregate_with_selector(logits, selector)
+            aux_output["sensory_logits"] = self._aggregate_with_selector(logits, selector)
         if self.use_query_aux:
             # B*num_objects*num_levels*H*W
-            aux_output['q_logits'] = self._aggregate_with_selector(
+            aux_output["q_logits"] = self._aggregate_with_selector(
                 torch.stack(q_logits, dim=2),
-                selector.unsqueeze(2) if selector is not None else None)
+                selector.unsqueeze(2) if selector is not None else None,
+            )
 
         return aux_output
-    
-    def compute_mask(self, aux_input: Dict[str, torch.Tensor],
-                selector: torch.Tensor) -> Dict[str, torch.Tensor]:
+
+    def compute_mask(
+        self, aux_input: Dict[str, torch.Tensor], selector: torch.Tensor
+    ) -> Dict[str, torch.Tensor]:
         # sensory = aux_input['sensory']
-        q_logits = aux_input['q_logits']
+        q_logits = aux_input["q_logits"]
 
         aux_output = {}
 
         # B*num_objects*num_levels*H*W
-        aux_output['q_logits'] = self._aggregate_with_selector(
-            torch.stack(q_logits, dim=2),
-            selector.unsqueeze(2) if selector is not None else None)
+        aux_output["q_logits"] = self._aggregate_with_selector(
+            torch.stack(q_logits, dim=2), selector.unsqueeze(2) if selector is not None else None
+        )
 
         return aux_output

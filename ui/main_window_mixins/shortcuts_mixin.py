@@ -22,6 +22,7 @@ class ShortcutsMixin:
         from ui.widgets.preferences_dialog import KEY_UI_SOUNDS
         from PySide6.QtCore import QSettings
         from ui.main_window import _MuteOverlay
+
         muted = not UIAudio.is_muted()
         UIAudio.set_muted(muted)
         QSettings().setValue(KEY_UI_SOUNDS, not muted)
@@ -29,7 +30,7 @@ class ShortcutsMixin:
         if hasattr(self, "_volume_control"):
             self._volume_control.sync_mute_state()
         # Show overlay top-right
-        icon = "\U0001F507" if muted else "\U0001F50A"  # muted vs speaker
+        icon = "\U0001f507" if muted else "\U0001f50a"  # muted vs speaker
         text = f"{icon}  Sound {'OFF' if muted else 'ON'}"
         overlay = _MuteOverlay(self, text)
         overlay.show()
@@ -77,7 +78,8 @@ class ShortcutsMixin:
             return
 
         reply = QMessageBox.question(
-            self, "Cancel",
+            self,
+            "Cancel",
             f"Cancel {process_name}?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
@@ -86,6 +88,7 @@ class ShortcutsMixin:
             return
 
         from ui.sounds.audio_manager import UIAudio
+
         UIAudio.user_cancel()
 
         if process_name == "frame extraction":

@@ -3,6 +3,7 @@
 Locates ffmpeg/ffprobe binaries, validates version requirements,
 and provides repair/install functionality per platform.
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,16 +38,15 @@ _FFMPEG_SEARCH_PATHS_WINDOWS = [
 
 _FFMPEG_SEARCH_PATHS_UNIX = [
     _LOCAL_FFMPEG_BIN,
-    "/opt/homebrew/bin",        # macOS Homebrew (Apple Silicon)
-    "/usr/local/bin",           # macOS Homebrew (Intel) / Linux manual install
-    "/usr/bin",                 # Linux system package
-    "/snap/bin",                # Linux snap
+    "/opt/homebrew/bin",  # macOS Homebrew (Apple Silicon)
+    "/usr/local/bin",  # macOS Homebrew (Intel) / Linux manual install
+    "/usr/bin",  # Linux system package
+    "/snap/bin",  # Linux snap
     os.path.expanduser("~/bin"),
 ]
 
 _FFMPEG_SEARCH_PATHS = (
-    _FFMPEG_SEARCH_PATHS_WINDOWS if sys.platform == "win32"
-    else _FFMPEG_SEARCH_PATHS_UNIX
+    _FFMPEG_SEARCH_PATHS_WINDOWS if sys.platform == "win32" else _FFMPEG_SEARCH_PATHS_UNIX
 )
 _FFMPEG_RELEASE_RE = re.compile(
     r"\b(?:ffmpeg|ffprobe)(?:\.exe)?\s+version\s+(?:n)?(?P<major>\d+)(?:\.\d+)*",
@@ -129,9 +129,7 @@ def _read_program_version(binary_path: str, program_name: str) -> FFmpegVersionI
     )
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
-        raise RuntimeError(
-            f"{program_name} failed to report its version: {stderr[:300]}"
-        )
+        raise RuntimeError(f"{program_name} failed to report its version: {stderr[:300]}")
 
     output = result.stdout or result.stderr or ""
     first_line = next((line.strip() for line in output.splitlines() if line.strip()), "")
@@ -144,9 +142,7 @@ def _read_program_version(binary_path: str, program_name: str) -> FFmpegVersionI
     if _FFMPEG_DEV_BUILD_RE.search(first_line):
         return FFmpegVersionInfo(first_line=first_line, major=None, is_dev_build=True)
 
-    raise RuntimeError(
-        f"Could not determine {program_name} version from: {first_line}"
-    )
+    raise RuntimeError(f"Could not determine {program_name} version from: {first_line}")
 
 
 def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResult:
@@ -180,9 +176,7 @@ def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResul
     if ffmpeg_version.major is not None and ffmpeg_version.major < _MIN_FFMPEG_MAJOR:
         return FFmpegValidationResult(
             ok=False,
-            message=(
-                f"FFmpeg 7.0 or newer is required. Detected {ffmpeg_version.first_line}."
-            ),
+            message=(f"FFmpeg 7.0 or newer is required. Detected {ffmpeg_version.first_line}."),
             ffmpeg_path=ffmpeg,
             ffprobe_path=ffprobe,
             ffmpeg_version=ffmpeg_version,
@@ -242,10 +236,7 @@ def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResul
                 ffprobe_version=ffprobe_version,
             )
 
-        if (
-            sys.platform == "win32"
-            and "essentials_build" in ffprobe_version.first_line.lower()
-        ):
+        if sys.platform == "win32" and "essentials_build" in ffprobe_version.first_line.lower():
             return FFmpegValidationResult(
                 ok=False,
                 message=(
@@ -259,9 +250,7 @@ def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResul
             )
 
     if ffprobe_version is not None:
-        summary = (
-            f"FFmpeg OK: {ffmpeg_version.first_line} | {ffprobe_version.first_line}"
-        )
+        summary = f"FFmpeg OK: {ffmpeg_version.first_line} | {ffprobe_version.first_line}"
     else:
         summary = f"FFmpeg OK: {ffmpeg_version.first_line}"
 
@@ -306,12 +295,7 @@ def get_ffmpeg_install_help() -> str:
         install_cmd = "sudo pacman -S ffmpeg"
     else:
         install_cmd = "Install ffmpeg with your package manager"
-    return (
-        f"{install_cmd}\n\n"
-        "Then verify:\n"
-        "    ffmpeg -version\n"
-        "    ffprobe -version"
-    )
+    return f"{install_cmd}\n\nThen verify:\n    ffmpeg -version\n    ffprobe -version"
 
 
 def repair_ffmpeg_install(
@@ -324,6 +308,7 @@ def repair_ffmpeg_install(
     On Linux, raises with install instructions (sudo requires a terminal).
     """
     if sys.platform == "darwin":
+
         def _emit(phase: str, current: int = 0, total: int = 0) -> None:
             if progress_callback:
                 progress_callback(phase, current, total)
@@ -340,7 +325,9 @@ def repair_ffmpeg_install(
         try:
             subprocess.run(
                 ["brew", "install", "ffmpeg"],
-                check=True, capture_output=True, text=True,
+                check=True,
+                capture_output=True,
+                text=True,
             )
         except subprocess.CalledProcessError as exc:
             raise RuntimeError(

@@ -1,4 +1,5 @@
 """Guided pipelines — SAM2, VideoMaMa, MatAnyone2 (require masks/annotations)."""
+
 from __future__ import annotations
 
 import logging
@@ -83,11 +84,14 @@ class GuidedPipelinesMixin:
         )
         _check_cancel()
         if not named_frames:
-            raise CorridorKeyError(f"Clip '{clip.name}' has no readable input frames for SAM2 tracking")
+            raise CorridorKeyError(
+                f"Clip '{clip.name}' has no readable input frames for SAM2 tracking"
+            )
 
         start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
         allowed_indices = list(range(start_index, start_index + len(selected_files)))
         from . import load_annotation_prompt_frames
+
         prompt_frames = load_annotation_prompt_frames(
             clip.root_path,
             allowed_indices=allowed_indices,
@@ -108,10 +112,7 @@ class GuidedPipelinesMixin:
             )
             for prompt in prompt_frames
         ]
-        if not any(
-            prompt.positive_points or prompt.box is not None
-            for prompt in local_prompts
-        ):
+        if not any(prompt.positive_points or prompt.box is not None for prompt in local_prompts):
             message = "SAM2 tracking requires at least one non-empty foreground prompt"
             if on_warning:
                 on_warning(message)
@@ -225,6 +226,7 @@ class GuidedPipelinesMixin:
         start_index = clip.in_out_range.in_point if clip.in_out_range is not None else 0
         allowed_indices = list(range(start_index, start_index + len(selected_files)))
         from . import load_annotation_prompt_frames
+
         prompt_frames = load_annotation_prompt_frames(
             clip.root_path,
             allowed_indices=allowed_indices,
@@ -238,7 +240,11 @@ class GuidedPipelinesMixin:
             (item for item in prompt_frames if item.frame_index == preferred_frame_index),
             prompt_frames[0],
         )
-        if preferred_frame_index is not None and prompt.frame_index != preferred_frame_index and on_warning:
+        if (
+            preferred_frame_index is not None
+            and prompt.frame_index != preferred_frame_index
+            and on_warning
+        ):
             on_warning(
                 f"No prompts on frame {preferred_frame_index + 1}; previewing annotated frame {prompt.frame_index + 1} instead."
             )
@@ -259,7 +265,9 @@ class GuidedPipelinesMixin:
         )
         _check_cancel()
         if not named_frames:
-            raise CorridorKeyError(f"Clip '{clip.name}' has no readable input frames for SAM2 tracking")
+            raise CorridorKeyError(
+                f"Clip '{clip.name}' has no readable input frames for SAM2 tracking"
+            )
 
         from sam2_tracker import PromptFrame, SAM2NotInstalledError
 
@@ -321,16 +329,14 @@ class GuidedPipelinesMixin:
         if clip.mask_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing mask asset for VideoMaMa")
 
-        if self._device == 'cpu':
+        if self._device == "cpu":
             raise GPURequiredError("VideoMaMa")
         if clip.input_asset.asset_type != "sequence":
             raise CorridorKeyError("VideoMaMa currently requires an extracted image sequence")
         ann_path = os.path.join(clip.root_path, "annotations.json")
         has_annotations = os.path.isfile(ann_path) and os.path.getsize(ann_path) > 2
         if has_annotations and not mask_sequence_is_videomama_ready(clip.root_path):
-            raise CorridorKeyError(
-                "VideoMaMa requires dense tracked masks. Run Track Mask first."
-            )
+            raise CorridorKeyError("VideoMaMa requires dense tracked masks. Run Track Mask first.")
 
         def _status(msg: str) -> None:
             logger.info(f"VideoMaMa [{clip.name}]: {msg}")
@@ -370,7 +376,7 @@ class GuidedPipelinesMixin:
         # Phase 3: Load + stem-match masks
         _status("Loading masks...")
         mask_stems: dict[str, np.ndarray] = {}
-        if clip.mask_asset.asset_type == 'sequence':
+        if clip.mask_asset.asset_type == "sequence":
             mask_files = clip.mask_asset.get_frame_files()
             for i, fname in enumerate(mask_files):
                 _check_cancel("mask load")
@@ -402,8 +408,9 @@ class GuidedPipelinesMixin:
         # Resume logic
         existing_alpha = []
         if os.path.isdir(alpha_dir):
-            existing_alpha = [f for f in os.listdir(alpha_dir)
-                              if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            existing_alpha = [
+                f for f in os.listdir(alpha_dir) if f.lower().endswith((".png", ".jpg", ".jpeg"))
+            ]
         n_existing = len(existing_alpha)
         completed_chunks = n_existing // chunk_size
         start_chunk = max(0, completed_chunks - 1)
@@ -417,8 +424,10 @@ class GuidedPipelinesMixin:
             for fname in existing_alpha:
                 if fname not in keep:
                     os.remove(os.path.join(alpha_dir, fname))
-            logger.info(f"VideoMaMa resuming for '{clip.name}': {n_existing} alpha frames existed, "
-                        f"rolling back to chunk {start_chunk} (frame {start_frame})")
+            logger.info(
+                f"VideoMaMa resuming for '{clip.name}': {n_existing} alpha frames existed, "
+                f"rolling back to chunk {start_chunk} (frame {start_frame})"
+            )
 
         # Phase 4: Inference (per-chunk)
         sys.path.insert(0, os.path.join(BASE_DIR, "VideoMaMaInferenceModule"))
@@ -428,8 +437,9 @@ class GuidedPipelinesMixin:
         _status(f"Running inference (chunk 1/{total_chunks})...")
         frames_written = start_frame
         for chunk_idx, chunk_output in enumerate(
-            run_inference(pipeline, input_frames, mask_frames,
-                          chunk_size=chunk_size, on_status=on_status)
+            run_inference(
+                pipeline, input_frames, mask_frames, chunk_size=chunk_size, on_status=on_status
+            )
         ):
             _check_cancel("inference")
 
@@ -459,13 +469,15 @@ class GuidedPipelinesMixin:
                 if not cv2.imwrite(out_path, out_bgr):
                     raise WriteFailureError(clip.name, frames_written, out_path)
                 frames_written += 1
-            logger.debug(f"Clip '{clip.name}' chunk {chunk_idx}: {len(chunk_output)} frames in {time.monotonic() - t_chunk:.3f}s")
+            logger.debug(
+                f"Clip '{clip.name}' chunk {chunk_idx}: {len(chunk_output)} frames in {time.monotonic() - t_chunk:.3f}s"
+            )
 
             if on_progress:
                 on_progress(clip.name, frames_written, num_frames)
 
         # Refresh alpha asset
-        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+        clip.alpha_asset = ClipAsset(alpha_dir, "sequence")
 
         # Transition MASKED -> READY
         try:
@@ -474,7 +486,9 @@ class GuidedPipelinesMixin:
             if on_warning:
                 on_warning(f"State transition after VideoMaMa: {e}")
 
-        logger.info(f"VideoMaMa complete for '{clip.name}': {frames_written} alpha frames in {time.monotonic() - t_start:.1f}s")
+        logger.info(
+            f"VideoMaMa complete for '{clip.name}': {frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )
 
     def run_matanyone2(
         self,
@@ -493,7 +507,7 @@ class GuidedPipelinesMixin:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for MatAnyone2")
         if clip.mask_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing mask asset for MatAnyone2")
-        if self._device == 'cpu':
+        if self._device == "cpu":
             raise GPURequiredError("MatAnyone2")
         if clip.input_asset.asset_type != "sequence":
             raise CorridorKeyError("MatAnyone2 requires an extracted image sequence")
@@ -564,6 +578,7 @@ class GuidedPipelinesMixin:
                 self._active_model = _ActiveModel.NONE
                 try:
                     import torch as _torch
+
                     _torch.cuda.empty_cache()
                 except Exception:
                     pass
@@ -574,7 +589,7 @@ class GuidedPipelinesMixin:
             raise
 
         # Phase 5: Finalize
-        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+        clip.alpha_asset = ClipAsset(alpha_dir, "sequence")
 
         try:
             clip.transition_to(ClipState.READY)

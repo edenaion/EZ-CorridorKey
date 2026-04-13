@@ -6,6 +6,7 @@ Tracks which workspaces the user has opened, persisted as JSON at
 
 Independent of per-workspace session sidecars (.corridorkey_session.json).
 """
+
 from __future__ import annotations
 
 import json
@@ -23,10 +24,10 @@ _FILENAME = "recent_sessions.json"
 def _config_dir() -> str:
     """Platform-appropriate config directory for app-level settings."""
     # Portable: config lives next to the exe
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(sys.executable)
-        if os.path.isfile(os.path.join(exe_dir, 'portable.txt')):
-            return os.path.join(exe_dir, 'config')
+        if os.path.isfile(os.path.join(exe_dir, "portable.txt")):
+            return os.path.join(exe_dir, "config")
     if os.name == "nt":
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
         return os.path.join(base, "CorridorKey")
@@ -38,6 +39,7 @@ def _config_dir() -> str:
 @dataclass
 class RecentSession:
     """A recently-opened workspace."""
+
     workspace_path: str
     display_name: str
     last_opened: float
@@ -59,6 +61,7 @@ class RecentSessionsStore:
     Persisted as a JSON file in the app config directory.
     Thread-safe for single-threaded Qt main thread usage.
     """
+
     MAX_RECENT = 20
 
     def __init__(self, config_dir: str | None = None):
@@ -111,8 +114,12 @@ class RecentSessionsStore:
                     pass
 
     def add_or_update(
-        self, workspace_path: str, display_name: str, clip_count: int,
-        *, force: bool = False,
+        self,
+        workspace_path: str,
+        display_name: str,
+        clip_count: int,
+        *,
+        force: bool = False,
     ) -> None:
         """Add or update a workspace in the recents list.
 
@@ -126,14 +133,17 @@ class RecentSessionsStore:
         # Remove existing entry for this path
         self._sessions = [s for s in self._sessions if self._norm(s.workspace_path) != norm]
         # Add at front
-        self._sessions.insert(0, RecentSession(
-            workspace_path=workspace_path,
-            display_name=display_name,
-            last_opened=time.time(),
-            clip_count=clip_count,
-        ))
+        self._sessions.insert(
+            0,
+            RecentSession(
+                workspace_path=workspace_path,
+                display_name=display_name,
+                last_opened=time.time(),
+                clip_count=clip_count,
+            ),
+        )
         # Trim
-        self._sessions = self._sessions[:self.MAX_RECENT]
+        self._sessions = self._sessions[: self.MAX_RECENT]
         self._save()
 
     def remove(self, workspace_path: str) -> None:
@@ -159,5 +169,3 @@ class RecentSessionsStore:
             self._save()
             logger.info(f"Pruned {pruned} missing workspace(s) from recent sessions")
         return pruned
-
-

@@ -5,14 +5,20 @@ import os
 import re
 import sys
 
-from PySide6.QtWidgets import QWidget, QLabel, QMessageBox
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QWidget
 from PySide6.QtCore import Qt, Slot, QSettings
 
 from ui.widgets.preferences_dialog import (
-    PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
-    KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
-    KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION,
-    get_setting_bool, get_setting_str, get_setting_int,
+    PreferencesDialog,
+    KEY_SHOW_TOOLTIPS,
+    DEFAULT_SHOW_TOOLTIPS,
+    KEY_TRACKER_MODEL,
+    DEFAULT_TRACKER_MODEL,
+    KEY_MODEL_RESOLUTION,
+    DEFAULT_MODEL_RESOLUTION,
+    get_setting_bool,
+    get_setting_str,
+    get_setting_int,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +49,7 @@ class SettingsMixin:
     def _run_startup_diagnostics(self, device: str) -> None:
         """Check environment for known issues and show a diagnostic dialog."""
         from ui.widgets.diagnostic_dialog import run_startup_diagnostics, StartupDiagnosticDialog
+
         issues = run_startup_diagnostics(device)
         if issues:
             dlg = StartupDiagnosticDialog(issues, parent=self)
@@ -67,6 +74,7 @@ class SettingsMixin:
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
         from ui.widgets.hotkeys_dialog import HotkeysDialog
+
         dlg = HotkeysDialog(self._shortcut_registry, self)
         if dlg.exec() == HotkeysDialog.Accepted:
             self._setup_shortcuts()
@@ -86,6 +94,7 @@ class SettingsMixin:
         """Apply UI sounds on/off and volume from saved preferences."""
         from ui.widgets.preferences_dialog import KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS
         from ui.sounds.audio_manager import UIAudio
+
         UIAudio.set_muted(not get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS))
         # Restore volume level
         vol = QSettings().value("ui/sounds_volume", 1.0, type=float)
@@ -106,8 +115,11 @@ class SettingsMixin:
     def _apply_parallel_clips_setting(self) -> None:
         """Apply saved parallel clips preference to the GPU worker."""
         from ui.widgets.preferences_dialog import (
-            get_setting_int as _get_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS,
+            get_setting_int as _get_int,
+            KEY_PARALLEL_CLIPS,
+            DEFAULT_PARALLEL_CLIPS,
         )
+
         n = _get_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS)
         self._gpu_worker.set_max_workers(n)
 
@@ -170,11 +182,14 @@ class SettingsMixin:
 
     def _get_local_version(self) -> str:
         import tomllib
+
         candidates = []
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
             candidates.append(os.path.join(sys._MEIPASS, "pyproject.toml"))
         candidates.append(
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml")
+            os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml"
+            )
         )
         for path in candidates:
             try:
@@ -213,6 +228,7 @@ class SettingsMixin:
 
     def _check_for_updates(self) -> None:
         from ui.main_window import _UpdateChecker
+
         self._update_thread = _UpdateChecker(self._get_local_version())
         self._update_thread.update_available.connect(self._on_update_available)
         self._update_thread.start()
@@ -230,6 +246,7 @@ class SettingsMixin:
 
     def _run_update(self) -> None:
         import sys as _sys
+
         if getattr(_sys, "frozen", False):
             self._run_frozen_update()
         else:
@@ -238,16 +255,19 @@ class SettingsMixin:
     def _run_script_update(self) -> None:
         """Update via 3-update.sh / 3-update.bat (CLI/dev installs)."""
         reply = QMessageBox.question(
-            self, "Update EZ-CorridorKey",
+            self,
+            "Update EZ-CorridorKey",
             "This will save your session, close the app, and run the updater.\n"
             "The app will relaunch automatically after updating.\n\n"
             "Continue?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
         )
         if reply != QMessageBox.Yes:
             return
         self._auto_save_session()
         import subprocess
+
         root = os.path.dirname(os.path.dirname(__file__))
         if os.name == "nt":
             bat = os.path.join(root, "3-update.bat")
@@ -262,26 +282,29 @@ class SettingsMixin:
                 start_new_session=True,
             )
         from PySide6.QtWidgets import QApplication
+
         QApplication.instance().quit()
 
     def _run_frozen_update(self) -> None:
         """Update a frozen .app/.exe by downloading from GitHub Releases."""
         import sys as _sys
+
         reply = QMessageBox.question(
-            self, "Update EZ-CorridorKey",
+            self,
+            "Update EZ-CorridorKey",
             "This will download the latest version, replace the current app,\n"
             "and relaunch automatically.\n\n"
             "Your session will be saved. Continue?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
         )
         if reply != QMessageBox.Yes:
             return
         self._auto_save_session()
 
         from PySide6.QtWidgets import QProgressDialog
-        progress = QProgressDialog(
-            "Downloading update...", "Cancel", 0, 100, self
-        )
+
+        progress = QProgressDialog("Downloading update...", "Cancel", 0, 100, self)
         progress.setWindowTitle("Updating EZ-CorridorKey")
         progress.setMinimumWidth(400)
         progress.setModal(True)
@@ -299,9 +322,10 @@ class SettingsMixin:
             # Determine asset name by platform
             if _sys.platform == "darwin":
                 QMessageBox.information(
-                    self, "Update",
+                    self,
+                    "Update",
                     "macOS auto-update is not yet supported.\n"
-                    "Please download the latest .pkg from Gumroad or GitHub."
+                    "Please download the latest .pkg from Gumroad or GitHub.",
                 )
                 progress.close()
                 return
@@ -310,21 +334,17 @@ class SettingsMixin:
                 asset_ext = "zip"
             else:
                 QMessageBox.warning(
-                    self, "Update",
+                    self,
+                    "Update",
                     "Automatic updates are not supported on this platform.\n"
-                    "Please download the latest release from GitHub."
+                    "Please download the latest release from GitHub.",
                 )
                 progress.close()
                 return
 
             # Fetch latest release info from GitHub API
-            api_url = (
-                "https://api.github.com/repos/edenaion/EZ-CorridorKey"
-                "/releases/latest"
-            )
-            req = urllib.request.Request(
-                api_url, headers={"User-Agent": "CorridorKey"}
-            )
+            api_url = "https://api.github.com/repos/edenaion/EZ-CorridorKey/releases/latest"
+            req = urllib.request.Request(api_url, headers={"User-Agent": "CorridorKey"})
             with urllib.request.urlopen(req, timeout=15) as resp:
                 release = json.loads(resp.read().decode("utf-8"))
 
@@ -342,10 +362,11 @@ class SettingsMixin:
 
             if not download_url:
                 QMessageBox.warning(
-                    self, "Update",
+                    self,
+                    "Update",
                     f"No {asset_name} found in the latest release.\n"
                     f"Release: {tag or 'unknown'}\n\n"
-                    "Please download manually from GitHub."
+                    "Please download manually from GitHub.",
                 )
                 progress.close()
                 return
@@ -362,15 +383,12 @@ class SettingsMixin:
                     progress.setValue(pct)
                     progress.setLabelText(
                         f"Downloading update... "
-                        f"{block_num * block_size // (1024*1024)}/"
-                        f"{total_size // (1024*1024)} MB"
+                        f"{block_num * block_size // (1024 * 1024)}/"
+                        f"{total_size // (1024 * 1024)} MB"
                     )
-                from PySide6.QtWidgets import QApplication
                 QApplication.processEvents()
 
-            urllib.request.urlretrieve(
-                download_url, str(zip_path), reporthook=_report
-            )
+            urllib.request.urlretrieve(download_url, str(zip_path), reporthook=_report)
 
             progress.setLabelText("Installing update...")
             progress.setValue(95)
@@ -428,8 +446,8 @@ class SettingsMixin:
                 current_dir = Path(_sys.executable).resolve().parent
                 swap_script = tmp_dir / "swap_update.bat"
                 swap_script.write_text(
-                    f'@echo off\n'
-                    f'timeout /t 2 /nobreak >nul\n'
+                    f"@echo off\n"
+                    f"timeout /t 2 /nobreak >nul\n"
                     f'xcopy /s /e /y "{new_exe_dir}\\*" "{current_dir}\\"\n'
                     f'start "" "{_sys.executable}"\n'
                     f'rmdir /s /q "{tmp_dir}"\n',
@@ -449,7 +467,8 @@ class SettingsMixin:
         except Exception as e:
             progress.close()
             QMessageBox.critical(
-                self, "Update Failed",
+                self,
+                "Update Failed",
                 f"Could not update automatically:\n\n{e}\n\n"
-                "Please download the latest release manually from GitHub."
+                "Please download the latest release manually from GitHub.",
             )

@@ -17,6 +17,7 @@ A project is a timestamped container holding one or more clips:
 
 Legacy v1 format (no clips/ dir) is still supported for backward compat.
 """
+
 from __future__ import annotations
 
 import json
@@ -53,17 +54,18 @@ def get_data_dir() -> str:
     Dev mode: project root (same as _app_dir).
     Frozen: QSettings app/install_path, falling back to platform default.
     """
-    if not getattr(sys, 'frozen', False):
+    if not getattr(sys, "frozen", False):
         if _app_dir:
             return _app_dir
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     # Portable: all data next to the exe
     exe_dir = os.path.dirname(sys.executable)
-    if os.path.isfile(os.path.join(exe_dir, 'portable.txt')):
+    if os.path.isfile(os.path.join(exe_dir, "portable.txt")):
         return exe_dir
     # Frozen: read user-chosen install path
     try:
         from PySide6.QtCore import QSettings
+
         saved = QSettings().value("app/install_path", "", type=str)
         if saved and os.path.isdir(saved):
             return saved
@@ -73,7 +75,9 @@ def get_data_dir() -> str:
     if sys.platform == "win32":
         return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "EZ-CorridorKey")
     elif sys.platform == "darwin":
-        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", "EZ-CorridorKey")
+        return os.path.join(
+            os.path.expanduser("~"), "Library", "Application Support", "EZ-CorridorKey"
+        )
     return os.path.join(os.path.expanduser("~"), ".local", "share", "EZ-CorridorKey")
 
 
@@ -85,7 +89,7 @@ def projects_root() -> str:
     """
     if _app_dir:
         root = os.path.join(_app_dir, "Projects")
-    elif getattr(sys, 'frozen', False):
+    elif getattr(sys, "frozen", False):
         root = os.path.join(os.path.dirname(sys.executable), "Projects")
     else:
         # Fallback: two levels up from this file (backend/ -> repo root)
@@ -170,17 +174,22 @@ def create_project(
     clip_names: list[str] = []
     for video_path in source_video_paths:
         clip_name = _create_clip_folder(
-            clips_dir, video_path, copy_source=copy_source,
+            clips_dir,
+            video_path,
+            copy_source=copy_source,
         )
         clip_names.append(clip_name)
 
     # Write project.json (v2 — project-level metadata only)
-    write_project_json(project_dir, {
-        "version": 2,
-        "created": datetime.now().isoformat(),
-        "display_name": project_display_name,
-        "clips": clip_names,
-    })
+    write_project_json(
+        project_dir,
+        {
+            "version": 2,
+            "created": datetime.now().isoformat(),
+            "display_name": project_display_name,
+            "clips": clip_names,
+        },
+    )
 
     return project_dir
 
@@ -207,7 +216,9 @@ def add_clips_to_project(
     new_paths: list[str] = []
     for video_path in source_video_paths:
         clip_name = _create_clip_folder(
-            clips_dir, video_path, copy_source=copy_source,
+            clips_dir,
+            video_path,
+            copy_source=copy_source,
         )
         new_paths.append(os.path.join(clips_dir, clip_name))
 
@@ -280,13 +291,16 @@ def _create_clip_folder(
         logger.info(f"Referencing source video in place: {video_path}")
 
     # Write clip.json (per-clip metadata)
-    write_clip_json(clip_dir, {
-        "source": {
-            "original_path": os.path.abspath(video_path),
-            "filename": filename,
-            "copied": copy_source,
+    write_clip_json(
+        clip_dir,
+        {
+            "source": {
+                "original_path": os.path.abspath(video_path),
+                "filename": filename,
+                "copied": copy_source,
+            },
         },
-    })
+    )
 
     return clip_name
 
@@ -303,7 +317,8 @@ def get_clip_dirs(project_dir: str) -> list[str]:
             os.path.join(clips_dir, d)
             for d in os.listdir(clips_dir)
             if os.path.isdir(os.path.join(clips_dir, d))
-            and not d.startswith('.') and not d.startswith('_')
+            and not d.startswith(".")
+            and not d.startswith("_")
         )
     # v1 fallback: project dir itself is the clip
     return [project_dir]
@@ -457,6 +472,7 @@ def load_in_out_range(clip_root: str):
     if data and "in_out_range" in data:
         try:
             from .clip_state import InOutRange
+
             return InOutRange.from_dict(data["in_out_range"])
         except (KeyError, TypeError):
             return None
@@ -502,16 +518,22 @@ def folder_has_image_sequence(folder_path: str) -> bool:
     """
     if not os.path.isdir(folder_path):
         return False
-    return any(is_image_file(f) for f in os.listdir(folder_path)
-               if os.path.isfile(os.path.join(folder_path, f)))
+    return any(
+        is_image_file(f)
+        for f in os.listdir(folder_path)
+        if os.path.isfile(os.path.join(folder_path, f))
+    )
 
 
 def count_sequence_frames(folder_path: str) -> int:
     """Count image files in a folder (potential sequence frame count)."""
     if not os.path.isdir(folder_path):
         return 0
-    return sum(1 for f in os.listdir(folder_path)
-               if os.path.isfile(os.path.join(folder_path, f)) and is_image_file(f))
+    return sum(
+        1
+        for f in os.listdir(folder_path)
+        if os.path.isfile(os.path.join(folder_path, f)) and is_image_file(f)
+    )
 
 
 def validate_sequence_stems(folder_path: str) -> list[str]:

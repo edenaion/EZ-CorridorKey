@@ -1,4 +1,5 @@
 """Tests for backend.validators module."""
+
 import os
 import tempfile
 
@@ -25,6 +26,7 @@ from backend.errors import (
 
 # --- validate_frame_counts ---
 
+
 class TestValidateFrameCounts:
     def test_matching_counts(self):
         assert validate_frame_counts("shot1", 100, 100) == 100
@@ -34,6 +36,7 @@ class TestValidateFrameCounts:
 
     def test_mismatch_non_strict_logs_warning(self, caplog):
         import logging
+
         with caplog.at_level(logging.WARNING):
             validate_frame_counts("shot1", 100, 80)
         assert "frame count mismatch" in caplog.text
@@ -46,6 +49,7 @@ class TestValidateFrameCounts:
 
 
 # --- normalize_mask_channels ---
+
 
 class TestNormalizeMaskChannels:
     def test_2d_passthrough(self):
@@ -91,18 +95,19 @@ class TestNormalizeMaskChannels:
 
 # --- normalize_mask_dtype ---
 
+
 class TestNormalizeMaskDtype:
     def test_uint8(self):
         mask = np.array([0, 128, 255], dtype=np.uint8)
         result = normalize_mask_dtype(mask)
         assert result.dtype == np.float32
-        np.testing.assert_allclose(result, [0.0, 128/255.0, 1.0], atol=1e-5)
+        np.testing.assert_allclose(result, [0.0, 128 / 255.0, 1.0], atol=1e-5)
 
     def test_uint16(self):
         mask = np.array([0, 32768, 65535], dtype=np.uint16)
         result = normalize_mask_dtype(mask)
         assert result.dtype == np.float32
-        np.testing.assert_allclose(result, [0.0, 32768/65535.0, 1.0], atol=1e-5)
+        np.testing.assert_allclose(result, [0.0, 32768 / 65535.0, 1.0], atol=1e-5)
 
     def test_float32_passthrough(self):
         mask = np.array([0.0, 0.5, 1.0], dtype=np.float32)
@@ -116,6 +121,7 @@ class TestNormalizeMaskDtype:
 
 
 # --- validate_frame_read ---
+
 
 class TestValidateFrameRead:
     def test_valid_frame(self):
@@ -132,6 +138,7 @@ class TestValidateFrameRead:
 
 # --- validate_write ---
 
+
 class TestValidateWrite:
     def test_success(self):
         validate_write(True, "shot1", 0, "/path/frame.exr")
@@ -144,15 +151,16 @@ class TestValidateWrite:
 
 # --- ensure_output_dirs ---
 
+
 class TestEnsureOutputDirs:
     def test_creates_dirs(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             dirs = ensure_output_dirs(tmpdir)
-            assert os.path.isdir(dirs['root'])
-            assert os.path.isdir(dirs['fg'])
-            assert os.path.isdir(dirs['matte'])
-            assert os.path.isdir(dirs['comp'])
-            assert os.path.isdir(dirs['processed'])
+            assert os.path.isdir(dirs["root"])
+            assert os.path.isdir(dirs["fg"])
+            assert os.path.isdir(dirs["matte"])
+            assert os.path.isdir(dirs["comp"])
+            assert os.path.isdir(dirs["processed"])
 
     def test_idempotent(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -162,6 +170,7 @@ class TestEnsureOutputDirs:
 
 
 # --- read_mask_frame integration (regression for dtype→channel ordering bug) ---
+
 
 class TestReadMaskFrameNormalization:
     """Regression: read_mask_frame must normalize dtype BEFORE extracting channels.

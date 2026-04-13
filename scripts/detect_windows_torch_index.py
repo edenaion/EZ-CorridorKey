@@ -4,6 +4,7 @@ This helper is intentionally stdlib-only so it can run before the project
 environment exists. It prefers real `nvidia-smi` output, but supports mocked
 output via environment variables for batch smoke tests.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -11,7 +12,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 CU130_URL = "https://download.pytorch.org/whl/cu130"
@@ -128,14 +128,22 @@ def parse_cuda_version(text: str) -> str | None:
 
 def choose_index_url(cuda_version: str | None) -> tuple[str, str, str]:
     if not cuda_version:
-        return CPU_URL, "CPU-only PyTorch", "Could not determine CUDA version from nvidia-smi; installing CPU-only PyTorch."
+        return (
+            CPU_URL,
+            "CPU-only PyTorch",
+            "Could not determine CUDA version from nvidia-smi; installing CPU-only PyTorch.",
+        )
 
     try:
         major_s, minor_s = cuda_version.split(".", 1)
         major = int(major_s)
         minor = int(re.match(r"\d+", minor_s).group(0)) if re.match(r"\d+", minor_s) else 0
     except Exception:
-        return CPU_URL, "CPU-only PyTorch", f"Could not parse CUDA version '{cuda_version}'; installing CPU-only PyTorch."
+        return (
+            CPU_URL,
+            "CPU-only PyTorch",
+            f"Could not parse CUDA version '{cuda_version}'; installing CPU-only PyTorch.",
+        )
 
     if major >= 13:
         return CU130_URL, "PyTorch CUDA 13.0 wheels", ""
@@ -190,7 +198,9 @@ def detect() -> dict[str, str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Detect Windows PyTorch wheel index from nvidia-smi output")
+    parser = argparse.ArgumentParser(
+        description="Detect Windows PyTorch wheel index from nvidia-smi output"
+    )
     parser.add_argument("--format", choices=("env",), default="env")
     args = parser.parse_args()
 

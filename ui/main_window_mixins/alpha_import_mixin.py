@@ -24,7 +24,11 @@ class AlphaImportMixin:
         frames named to match input frame stems so index-based matching in
         the inference loop works correctly (frame 0 -> frame 0, etc.).
         """
-        from ui.main_window import _remove_alpha_hint_assets, _import_alpha_video_as_sequence, _Toast
+        from ui.main_window import (
+            _remove_alpha_hint_assets,
+            _import_alpha_video_as_sequence,
+            _Toast,
+        )
 
         clip = self._current_clip
         if clip is None or clip.state not in (ClipState.RAW, ClipState.MASKED, ClipState.READY):
@@ -35,16 +39,17 @@ class AlphaImportMixin:
         # If AlphaHint already exists, ask before replacing
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         alpha_video_candidates = [
-            c for c in glob_module.glob(os.path.join(clip.root_path, "AlphaHint.*"))
+            c
+            for c in glob_module.glob(os.path.join(clip.root_path, "AlphaHint.*"))
             if os.path.isfile(c) and is_video_file(c)
         ]
-        has_existing_alpha = (
-            (os.path.isdir(alpha_dir) and os.listdir(alpha_dir))
-            or bool(alpha_video_candidates)
+        has_existing_alpha = (os.path.isdir(alpha_dir) and os.listdir(alpha_dir)) or bool(
+            alpha_video_candidates
         )
         if has_existing_alpha:
             result = QMessageBox.question(
-                self, "Replace Alpha Hints?",
+                self,
+                "Replace Alpha Hints?",
                 f"Clip '{clip.name}' already has alpha hint images.\n\n"
                 "Do you want to replace them with new ones?",
                 QMessageBox.Yes | QMessageBox.No,
@@ -66,7 +71,8 @@ class AlphaImportMixin:
         clicked = picker.clickedButton()
         if clicked == folder_btn:
             source_path = QFileDialog.getExistingDirectory(
-                self, "Select Alpha Hint Folder",
+                self,
+                "Select Alpha Hint Folder",
                 "",
                 QFileDialog.ShowDirsOnly,
             )
@@ -96,7 +102,8 @@ class AlphaImportMixin:
 
             if not src_files:
                 QMessageBox.warning(
-                    self, "No Images",
+                    self,
+                    "No Images",
                     "No image files found in the selected folder.\n"
                     "Expected grayscale images (white=foreground, black=background).",
                 )
@@ -108,7 +115,8 @@ class AlphaImportMixin:
             n_src = alpha_video.frame_count
             if n_src <= 0:
                 QMessageBox.warning(
-                    self, "Unreadable Video",
+                    self,
+                    "Unreadable Video",
                     "Could not read frame count from the selected alpha video.",
                 )
                 return
@@ -118,8 +126,7 @@ class AlphaImportMixin:
         def _natural_key(path: str):
             """Sort key that handles any zero-padding scheme correctly."""
             name = os.path.basename(path)
-            return [int(c) if c.isdigit() else c.lower()
-                    for c in re_module.split(r'(\d+)', name)]
+            return [int(c) if c.isdigit() else c.lower() for c in re_module.split(r"(\d+)", name)]
 
         src_files.sort(key=_natural_key)
 
@@ -129,7 +136,8 @@ class AlphaImportMixin:
 
         if n_src != n_input:
             result = QMessageBox.warning(
-                self, "Frame Count Mismatch",
+                self,
+                "Frame Count Mismatch",
                 f"Clip '{clip.name}' has {n_input} input frames but you "
                 f"selected {n_src} alpha hints.\n\n"
                 f"Each input frame needs a matching alpha hint.\n"
@@ -168,7 +176,9 @@ class AlphaImportMixin:
                     shutil.rmtree(alpha_dir, ignore_errors=True)
                 logger.info(
                     "Imported %d/%d alpha frames from video into %s",
-                    imported_count, n_paired, alpha_dir,
+                    imported_count,
+                    n_paired,
+                    alpha_dir,
                 )
             else:
                 os.makedirs(alpha_dir, exist_ok=True)
@@ -194,7 +204,9 @@ class AlphaImportMixin:
                     shutil.rmtree(alpha_dir, ignore_errors=True)
                 logger.info(
                     "Imported %d/%d alpha hints into %s (renamed to match input stems)",
-                    imported_count, n_paired, alpha_dir,
+                    imported_count,
+                    n_paired,
+                    alpha_dir,
                 )
         except OSError as exc:
             QMessageBox.critical(

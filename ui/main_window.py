@@ -14,37 +14,40 @@ Layout:
     |  [progress]  frame counter  warnings  [RUN/STOP]     |
     +----------------------------------------------------------+
 """
+
 from __future__ import annotations
 
 import glob as glob_module
-import json
 import logging
 import os
-import re
 import shutil
-import sys
 
 import cv2
 import numpy as np
 from PySide6.QtWidgets import (
-    QMainWindow, QSplitter, QVBoxLayout, QWidget,
-    QLabel, QHBoxLayout, QMessageBox, QStackedWidget,
-    QProgressBar, QFileDialog, QInputDialog, QGraphicsOpacityEffect,
-    QPushButton,
+    QMainWindow,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+    QLabel,
+    QHBoxLayout,
+    QMessageBox,
+    QStackedWidget,
+    QProgressBar,
+    QGraphicsOpacityEffect,
 )
-from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve, QSettings, QThread, Signal
-from PySide6.QtGui import QKeySequence, QAction, QImage, QPainter
+from PySide6.QtCore import Qt, Slot, QTimer, QPropertyAnimation, QEasingCurve, QThread, Signal
+from PySide6.QtGui import QImage, QPainter
 
 from backend import (
-    CorridorKeyService, ClipAsset, ClipEntry, ClipState, InferenceParams,
-    InOutRange, OutputConfig, JobType,
-    PipelineRoute, classify_pipeline_route, mask_sequence_is_videomama_ready,
+    CorridorKeyService,
+    ClipEntry,
+    ClipState,
+    JobType,
 )
-from backend.project import VIDEO_FILE_FILTER, is_video_file
+from backend.project import is_video_file
 
 from ui.models.clip_model import ClipListModel
-from ui.preview.frame_index import ViewMode
-from ui.preview.display_transform import processed_rgba_to_qimage
 from ui.widgets.dual_viewer import DualViewerPanel
 from ui.widgets.parameter_panel import ParameterPanel
 from ui.widgets.status_bar import StatusBar
@@ -52,14 +55,9 @@ from ui.widgets.queue_panel import QueuePanel
 from ui.widgets.io_tray_panel import IOTrayPanel
 from ui.widgets.welcome_screen import WelcomeScreen
 from ui.widgets.preferences_dialog import (
-    PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
-    KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE,
-    KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES,
-    KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
-    KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION,
-    get_setting_bool, get_setting_str, get_setting_int,
+    get_setting_int,
 )
-from ui.workers.gpu_job_worker import GPUJobWorker, create_job_snapshot
+from ui.workers.gpu_job_worker import GPUJobWorker
 from ui.workers.gpu_monitor import GPUMonitor
 from ui.workers.thumbnail_worker import ThumbnailGenerator
 from ui.workers.extract_worker import ExtractWorker
@@ -67,21 +65,28 @@ from ui.recent_sessions import RecentSessionsStore
 from ui.shortcut_registry import ShortcutRegistry
 
 from ui.main_window_mixins import (
-    MenuMixin, ShortcutsMixin, ClipMixin, ImportMixin,
-    InferenceMixin, AlphaImportMixin, ModelRunMixin, CancelMixin,
-    WorkerMixin, AnnotationMixin,
-    ExportMixin, SessionMixin, SettingsMixin,
+    MenuMixin,
+    ShortcutsMixin,
+    ClipMixin,
+    ImportMixin,
+    InferenceMixin,
+    AlphaImportMixin,
+    ModelRunMixin,
+    CancelMixin,
+    WorkerMixin,
+    AnnotationMixin,
+    ExportMixin,
+    SessionMixin,
+    SettingsMixin,
 )
 
 logger = logging.getLogger(__name__)
 
 
-
 class _Toast(QLabel):
     """Non-blocking notification that auto-fades after a duration. Click to dismiss."""
 
-    def __init__(self, parent: QWidget, text: str, duration_ms: int = 4000,
-                 center: bool = False):
+    def __init__(self, parent: QWidget, text: str, duration_ms: int = 4000, center: bool = False):
         super().__init__(text, parent)
         self.setWordWrap(True)
         self.setAlignment(Qt.AlignCenter)
@@ -186,7 +191,7 @@ class _MuteOverlay(QLabel):
             "font-family: 'Open Sans'; font-size: 11px; font-weight: 600;"
         )
         # Position inside the brand bar (top strip, ~24px tall)
-        menu_h = parent.menuBar().height() if hasattr(parent, 'menuBar') else 22
+        menu_h = parent.menuBar().height() if hasattr(parent, "menuBar") else 22
         self.move((parent.width() - self._FIXED_W) // 2, menu_h + 2)
         self._opacity = QGraphicsOpacityEffect(self)
         self._opacity.setOpacity(1.0)
@@ -203,6 +208,7 @@ class _MuteOverlay(QLabel):
 
 class _UpdateChecker(QThread):
     """Background thread that checks GitHub for a newer version."""
+
     update_available = Signal(str)  # emits the remote version string
 
     def __init__(self, local_version: str):
@@ -212,10 +218,8 @@ class _UpdateChecker(QThread):
     def run(self):
         try:
             import urllib.request
-            url = (
-                "https://raw.githubusercontent.com/edenaion/EZ-CorridorKey"
-                "/main/pyproject.toml"
-            )
+
+            url = "https://raw.githubusercontent.com/edenaion/EZ-CorridorKey/main/pyproject.toml"
             req = urllib.request.Request(url, headers={"User-Agent": "CorridorKey"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 text = resp.read().decode("utf-8")
@@ -233,18 +237,27 @@ class _UpdateChecker(QThread):
         """Simple semver comparison: 1.4.0 > 1.3.1."""
         try:
             r = tuple(int(x) for x in remote.split("."))
-            l = tuple(int(x) for x in local.split("."))
-            return r > l
+            local_ver = tuple(int(x) for x in local.split("."))
+            return r > local_ver
         except (ValueError, AttributeError):
             return False
 
 
 class MainWindow(
     QMainWindow,
-    MenuMixin, ShortcutsMixin, ClipMixin, ImportMixin,
-    InferenceMixin, AlphaImportMixin, ModelRunMixin, CancelMixin,
-    WorkerMixin, AnnotationMixin,
-    ExportMixin, SessionMixin, SettingsMixin,
+    MenuMixin,
+    ShortcutsMixin,
+    ClipMixin,
+    ImportMixin,
+    InferenceMixin,
+    AlphaImportMixin,
+    ModelRunMixin,
+    CancelMixin,
+    WorkerMixin,
+    AnnotationMixin,
+    ExportMixin,
+    SessionMixin,
+    SettingsMixin,
 ):
     """CorridorKey main application window."""
 
@@ -252,7 +265,7 @@ class MainWindow(
 
     def _warn_mps_slow(self, feature_name: str) -> bool:
         """Show a one-time performance warning on MPS. Returns False if user cancels."""
-        if getattr(self._service, '_device', '') != 'mps':
+        if getattr(self._service, "_device", "") != "mps":
             return True
         if MainWindow._mps_warning_acknowledged:
             return True
@@ -273,8 +286,9 @@ class MainWindow(
             return True
         return False
 
-    def __init__(self, service: CorridorKeyService | None = None,
-                 store: RecentSessionsStore | None = None):
+    def __init__(
+        self, service: CorridorKeyService | None = None, store: RecentSessionsStore | None = None
+    ):
         super().__init__()
         self.setWindowTitle("EZ-CorridorKey")
         self.setMinimumSize(1100, 650)
@@ -294,7 +308,6 @@ class MainWindow(
             self._container_mode = False
             self.resize(1400, 800)
 
-
         self.setAcceptDrops(True)
 
         self._service = service or CorridorKeyService()
@@ -313,6 +326,7 @@ class MainWindow(
         self._pipeline_steps: dict[str, list[JobType]] = {}
         # Debug console — created eagerly so log handler captures from startup
         from ui.widgets.debug_console import DebugConsoleWidget
+
         self._debug_console = DebugConsoleWidget()
         self._prefs_dialog = None
 
@@ -348,8 +362,10 @@ class MainWindow(
 
         # Workers
         from ui.widgets.preferences_dialog import (
-            get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS,
+            KEY_PARALLEL_CLIPS,
+            DEFAULT_PARALLEL_CLIPS,
         )
+
         self._gpu_worker = GPUJobWorker(
             self._service,
             max_workers=get_setting_int(KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS),
@@ -651,9 +667,7 @@ class MainWindow(
             input_path=clip.input_asset.path,
             asset_type=clip.input_asset.asset_type,
             input_exr_is_linear=(
-                clip.should_default_input_linear()
-                if input_is_linear is None
-                else input_is_linear
+                clip.should_default_input_linear() if input_is_linear is None else input_is_linear
             ),
         )
 
@@ -680,9 +694,7 @@ class MainWindow(
             return
 
         # Cache the gradient image, regenerate only on resize
-        if (self._bg_cache is None
-                or self._bg_cache.width() != w
-                or self._bg_cache.height() != h):
+        if self._bg_cache is None or self._bg_cache.width() != w or self._bg_cache.height() != h:
             self._bg_cache = self._render_dithered_gradient(w, h)
 
         painter = QPainter(self)
@@ -720,14 +732,13 @@ class MainWindow(
         qimg = QImage(img_u8.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
         return qimg.copy()  # deep copy so numpy buffer can be freed
 
-
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._position_queue_panel()
 
     def _position_queue_panel(self) -> None:
         """Keep the floating queue panel sized to the viewer area height."""
-        if hasattr(self, '_workspace') and hasattr(self, '_queue_panel'):
+        if hasattr(self, "_workspace") and hasattr(self, "_queue_panel"):
             # Use the top section height (viewer+params) not the full workspace
             sizes = self._vsplitter.sizes()
             h = sizes[0] if sizes else self._workspace.height()
@@ -740,6 +751,7 @@ class MainWindow(
     def dragEnterEvent(self, event) -> None:
         if event.mimeData().hasUrls():
             from backend.project import is_video_file, is_image_file
+
             for url in event.mimeData().urls():
                 path = url.toLocalFile()
                 if os.path.isdir(path) or is_video_file(path) or is_image_file(path):
@@ -748,6 +760,7 @@ class MainWindow(
 
     def dropEvent(self, event) -> None:
         from backend.project import is_video_file, is_image_file, folder_has_image_sequence
+
         folders = []
         video_files = []
         image_files = []

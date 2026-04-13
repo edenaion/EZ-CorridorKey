@@ -1,5 +1,4 @@
 """Tests for thumbnail generation using the viewer decode path."""
-import os
 
 import pytest
 

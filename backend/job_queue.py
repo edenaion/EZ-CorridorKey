@@ -14,6 +14,7 @@ Design:
     - Deduplication prevents double-submit of same clip+job_type
     - Job history preserved for UI display (cancelled/completed/failed)
 """
+
 from __future__ import annotations
 
 import logging
@@ -53,6 +54,7 @@ class JobStatus(Enum):
 @dataclass
 class GPUJob:
     """A single GPU job to be executed."""
+
     job_type: JobType
     clip_name: str
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
@@ -80,7 +82,9 @@ class GPUJob:
 
 
 # Callback type aliases
-ProgressCallback = Callable[..., None]  # clip_name, current, total, **kwargs (fps, elapsed, eta_seconds)
+ProgressCallback = Callable[
+    ..., None
+]  # clip_name, current, total, **kwargs (fps, elapsed, eta_seconds)
 WarningCallback = Callable[[str], None]  # message
 CompletionCallback = Callable[[str], None]  # clip_name
 ErrorCallback = Callable[[str, str], None]  # clip_name, error_message
@@ -131,10 +135,7 @@ class GPUJobQueue:
         with self._lock:
             # Preview jobs: replace existing queued jobs of the same preview type.
             if job.job_type in (JobType.PREVIEW_REPROCESS, JobType.SAM2_PREVIEW):
-                replaced = [
-                    j for j in self._queue
-                    if j.job_type == job.job_type
-                ]
+                replaced = [j for j in self._queue if j.job_type == job.job_type]
                 for old in replaced:
                     self._queue.remove(old)
                     old.status = JobStatus.CANCELLED
@@ -211,7 +212,9 @@ class GPUJobQueue:
             except ValueError:
                 pass
             self._history.append(job)
-            logger.error(f"Job failed [{job.id}]: {job.job_type.value} for '{job.clip_name}': {error}")
+            logger.error(
+                f"Job failed [{job.id}]: {job.job_type.value} for '{job.clip_name}': {error}"
+            )
         # Emit AFTER lock release
         if self.on_error:
             self.on_error(job.clip_name, error)
@@ -240,11 +243,15 @@ class GPUJobQueue:
                     self._queue.remove(job)
                 job.status = JobStatus.CANCELLED
                 self._history.append(job)
-                logger.info(f"Job removed from queue [{job.id}]: {job.job_type.value} for '{job.clip_name}'")
+                logger.info(
+                    f"Job removed from queue [{job.id}]: {job.job_type.value} for '{job.clip_name}'"
+                )
             elif job.status == JobStatus.RUNNING:
                 # Signal cancel — worker calls mark_cancelled() after catching JobCancelledError
                 job.request_cancel()
-                logger.info(f"Job cancel requested [{job.id}]: {job.job_type.value} for '{job.clip_name}'")
+                logger.info(
+                    f"Job cancel requested [{job.id}]: {job.job_type.value} for '{job.clip_name}'"
+                )
 
     def cancel_current(self) -> None:
         """Cancel all currently running jobs."""

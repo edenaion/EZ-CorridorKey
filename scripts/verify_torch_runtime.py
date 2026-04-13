@@ -4,6 +4,7 @@ This runs inside the freshly created virtual environment at install time so the
 installer can fail fast with actionable diagnostics instead of reporting a
 "successful" install that only works on CPU.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -139,7 +140,10 @@ def evaluate_runtime(info: RuntimeInfo, expect_gpu: str = "auto") -> tuple[bool,
                 "Torch reports a CUDA build, but torch.cuda.is_available() is false. "
                 "Check that the NVIDIA driver is working and that the installed torch build matches the system.",
             )
-        return True, f"CUDA verified: torch {info.torch_version} with CUDA {info.torch_cuda_version}."
+        return (
+            True,
+            f"CUDA verified: torch {info.torch_version} with CUDA {info.torch_cuda_version}.",
+        )
 
     if info.platform.lower().startswith("macos") or sys.platform == "darwin":
         if info.mps_available:
@@ -158,7 +162,9 @@ def write_log(path: str | None, payload: dict[str, object]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Verify the installed torch runtime for CorridorKey")
+    parser = argparse.ArgumentParser(
+        description="Verify the installed torch runtime for CorridorKey"
+    )
     parser.add_argument("--log", default="", help="Optional JSON log path")
     parser.add_argument(
         "--expect-gpu",

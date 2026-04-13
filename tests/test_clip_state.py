@@ -1,4 +1,5 @@
 """Tests for backend.clip_state module — state machine transitions."""
+
 import json
 import os
 import tempfile
@@ -18,6 +19,7 @@ from backend.errors import InvalidStateTransitionError, ClipScanError
 
 
 # --- ClipState transitions ---
+
 
 class TestClipStateTransitions:
     def _make_clip(self, state: ClipState = ClipState.RAW) -> ClipEntry:
@@ -149,6 +151,7 @@ class TestPipelineRouteClassification:
 
 # --- ClipEntry asset scanning ---
 
+
 class TestClipEntryFindAssets:
     def test_finds_input_sequence(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -164,7 +167,7 @@ class TestClipEntryFindAssets:
             clip.find_assets()
 
             assert clip.input_asset is not None
-            assert clip.input_asset.asset_type == 'sequence'
+            assert clip.input_asset.asset_type == "sequence"
             assert clip.input_asset.frame_count == 5
             assert clip.state == ClipState.RAW
 
@@ -284,9 +287,13 @@ class TestClipEntryFindAssets:
             shot_dir = os.path.join(tmpdir, "shot1")
             frames_dir = os.path.join(shot_dir, "Frames")
             os.makedirs(frames_dir)
-            with open(os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8") as handle:
+            with open(
+                os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8"
+            ) as handle:
                 handle.write("dummy")
-            with open(os.path.join(shot_dir, ".video_metadata.json"), "w", encoding="utf-8") as handle:
+            with open(
+                os.path.join(shot_dir, ".video_metadata.json"), "w", encoding="utf-8"
+            ) as handle:
                 handle.write("{}")
 
             clip = ClipEntry(name="shot1", root_path=shot_dir)
@@ -302,7 +309,9 @@ class TestClipEntryFindAssets:
             shot_dir = os.path.join(tmpdir, "shot1")
             frames_dir = os.path.join(shot_dir, "Frames")
             os.makedirs(frames_dir)
-            with open(os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8") as handle:
+            with open(
+                os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8"
+            ) as handle:
                 handle.write("dummy")
 
             clip = ClipEntry(name="shot1", root_path=shot_dir)
@@ -318,9 +327,13 @@ class TestClipEntryFindAssets:
             shot_dir = os.path.join(tmpdir, "shot1")
             frames_dir = os.path.join(shot_dir, "Frames")
             os.makedirs(frames_dir)
-            with open(os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8") as handle:
+            with open(
+                os.path.join(frames_dir, "frame_000000.exr"), "w", encoding="utf-8"
+            ) as handle:
                 handle.write("dummy")
-            with open(os.path.join(shot_dir, ".video_metadata.json"), "w", encoding="utf-8") as handle:
+            with open(
+                os.path.join(shot_dir, ".video_metadata.json"), "w", encoding="utf-8"
+            ) as handle:
                 json.dump({"source_probe": {"color_transfer": "linear"}}, handle)
 
             clip = ClipEntry(name="shot1", root_path=shot_dir)
@@ -372,6 +385,7 @@ class TestClipEntryFindAssets:
 
             # Write project.json with display_name
             import json
+
             with open(os.path.join(shot_dir, "project.json"), "w") as f:
                 json.dump({"display_name": "My Custom Name"}, f)
 
@@ -382,6 +396,7 @@ class TestClipEntryFindAssets:
 
 
 # --- scan_clips_dir ---
+
 
 class TestScanClipsDir:
     def test_scans_multiple_clips(self):
@@ -509,6 +524,7 @@ class TestScanClipsDir:
 
 # --- scan_project_clips ---
 
+
 class TestScanProjectClips:
     def test_scans_v2_project(self):
         """scan_project_clips finds clips inside clips/ subdir."""
@@ -585,9 +601,12 @@ class TestScanProjectClips:
                 f.write("dummy")
 
             with open(os.path.join(clip_dir, "clip.json"), "w") as f:
-                json.dump({
-                    "in_out_range": {"in_point": 5, "out_point": 20},
-                }, f)
+                json.dump(
+                    {
+                        "in_out_range": {"in_point": 5, "out_point": 20},
+                    },
+                    f,
+                )
 
             clips = scan_project_clips(tmpdir)
             assert len(clips) == 1

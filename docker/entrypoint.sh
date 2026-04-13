@@ -11,6 +11,7 @@ INSTALL_ENV_SIG_FILE="${APP_DIR}/.install_env_signature"
 mkdir -p "${APP_DIR}" "${APP_DIR}/ClipsForInference"
 
 export CORRIDORKEY_RESOLUTION="${CORRIDORKEY_RESOLUTION:-1920x1080x24}"
+export CORRIDORKEY_CONTAINER_MODE="${CORRIDORKEY_CONTAINER_MODE:-1}"
 
 compute_source_signature() {
   (
@@ -165,7 +166,7 @@ run_installer_if_needed() {
 
 echo "noVNC: http://localhost:6080"
 echo "Upload: http://localhost:6081"
-echo "VNC:   localhost:5900 (no password)"
+echo "VNC:   localhost:5900 (password: EZ-CorridorKey — see docker/supervisord.conf)"
 echo ""
 
 sync_app_source_if_needed

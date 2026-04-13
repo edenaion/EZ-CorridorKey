@@ -25,6 +25,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 - [Inference Controls](#inference-controls) — Parameters and output formats
 - [Hardware Requirements](#hardware-requirements) — VRAM, GPU, and platform info
 - [Contributing](#contributing--support) — How to help and get help
+- [ROCm (AMD) Docker](docs/ROCm_Setup.md) — optional AMD GPU image (`Dockerfile.rocm`)
 
 [![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
 
@@ -94,6 +95,8 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 ### Alternate Installation: Docker
 
 For Linux users or remote/cloud setups, EZ-CorridorKey can run inside Docker with browser-based access via noVNC. See [docker/README.md](docker/README.md) for setup instructions. The native install above is recommended for Windows and macOS.
+
+**AMD GPU (ROCm):** use the separate image and instructions in [docs/ROCm_Setup.md](docs/ROCm_Setup.md) ([`docker/Dockerfile.rocm`](docker/Dockerfile.rocm)); Compose profile **`rocm`** (`docker compose --profile rocm …`). Stop the default CPU/GPU stack first if ports **6080–6081** are already bound.
 
 ---
 

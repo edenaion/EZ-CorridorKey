@@ -13,6 +13,7 @@ Brush size: Shift+left-drag up/down.
 Straight line: Alt+left-drag draws a straight line at current brush size.
 Undo: Ctrl+Z pops last stroke on the current frame.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,12 +32,14 @@ logger = logging.getLogger(__name__)
 
 # ── Data Model ──────────────────────────────────────────────────────────────
 
+
 @dataclass
 class AnnotationStroke:
     """A single brush stroke in image-pixel coordinates."""
+
     points: list[tuple[float, float]] = field(default_factory=list)
-    brush_type: str = "fg"   # "fg" (foreground/keep) or "bg" (background/remove)
-    radius: float = 15.0     # brush radius in image pixels
+    brush_type: str = "fg"  # "fg" (foreground/keep) or "bg" (background/remove)
+    radius: float = 15.0  # brush radius in image pixels
 
 
 class AnnotationModel:
@@ -49,8 +52,9 @@ class AnnotationModel:
         self._current_stroke: AnnotationStroke | None = None
         self._current_frame: int = -1
 
-    def start_stroke(self, stem_idx: int, x: float, y: float,
-                     brush_type: str, radius: float) -> None:
+    def start_stroke(
+        self, stem_idx: int, x: float, y: float, brush_type: str, radius: float
+    ) -> None:
         """Begin a new stroke on the given frame."""
         self._current_stroke = AnnotationStroke(
             points=[(x, y)],
@@ -161,9 +165,9 @@ class AnnotationModel:
         except (json.JSONDecodeError, OSError, KeyError, TypeError) as e:
             logger.warning(f"Failed to load annotations: {e}")
 
-    def export_masks(self, clip_root: str, frame_stems: list[str],
-                     width: int, height: int,
-                     start_index: int = 0) -> str:
+    def export_masks(
+        self, clip_root: str, frame_stems: list[str], width: int, height: int, start_index: int = 0
+    ) -> str:
         """Rasterize annotations to binary mask PNGs for VideoMamaMaskHint.
 
         Args:
@@ -199,8 +203,7 @@ class AnnotationModel:
         return mask_dir
 
     @staticmethod
-    def _rasterize_strokes(strokes: list[AnnotationStroke],
-                           width: int, height: int) -> np.ndarray:
+    def _rasterize_strokes(strokes: list[AnnotationStroke], width: int, height: int) -> np.ndarray:
         """Render strokes into a binary mask (0=bg, 255=fg).
 
         Foreground strokes draw white, background strokes draw black.
@@ -220,10 +223,8 @@ class AnnotationModel:
             # Connect consecutive points with thick lines for smooth strokes
             if len(stroke.points) >= 2:
                 for i in range(len(stroke.points) - 1):
-                    p1 = (int(round(stroke.points[i][0])),
-                           int(round(stroke.points[i][1])))
-                    p2 = (int(round(stroke.points[i + 1][0])),
-                           int(round(stroke.points[i + 1][1])))
+                    p1 = (int(round(stroke.points[i][0])), int(round(stroke.points[i][1])))
+                    p2 = (int(round(stroke.points[i + 1][0])), int(round(stroke.points[i + 1][1])))
                     cv2.line(mask, p1, p2, color, radius * 2)
 
         return mask
@@ -234,18 +235,22 @@ class AnnotationModel:
 # Foreground color palette — cycle with C key
 FG_PALETTE = [
     {"name": "Green", "fill": QColor(44, 195, 80, 128), "cursor": QColor(44, 195, 80, 200)},
-    {"name": "Blue",  "fill": QColor(50, 140, 255, 128), "cursor": QColor(50, 140, 255, 200)},
+    {"name": "Blue", "fill": QColor(50, 140, 255, 128), "cursor": QColor(50, 140, 255, 200)},
 ]
 _fg_palette_idx = 0
+
 
 def get_fg_color() -> QColor:
     return FG_PALETTE[_fg_palette_idx]["fill"]
 
+
 def get_fg_cursor() -> QColor:
     return FG_PALETTE[_fg_palette_idx]["cursor"]
 
+
 def get_fg_name() -> str:
     return FG_PALETTE[_fg_palette_idx]["name"]
+
 
 def cycle_fg_color() -> str:
     """Advance to next foreground color. Returns the new color name."""
@@ -253,16 +258,23 @@ def cycle_fg_color() -> str:
     _fg_palette_idx = (_fg_palette_idx + 1) % len(FG_PALETTE)
     return FG_PALETTE[_fg_palette_idx]["name"]
 
-_BG_COLOR = QColor(209, 0, 0, 128)       # #D10000 at 50% opacity
+
+_BG_COLOR = QColor(209, 0, 0, 128)  # #D10000 at 50% opacity
 _BG_CURSOR = QColor(209, 0, 0, 200)
-_RESIZE_TEXT = QColor(255, 242, 3, 220)   # brand yellow for size text
+_RESIZE_TEXT = QColor(255, 242, 3, 220)  # brand yellow for size text
 
 
 # ── Rendering ───────────────────────────────────────────────────────────────
 
-def paint_annotations(painter: QPainter, strokes: list[AnnotationStroke],
-                      current_stroke: AnnotationStroke | None,
-                      image_rect: QRectF, img_w: int, img_h: int) -> None:
+
+def paint_annotations(
+    painter: QPainter,
+    strokes: list[AnnotationStroke],
+    current_stroke: AnnotationStroke | None,
+    image_rect: QRectF,
+    img_w: int,
+    img_h: int,
+) -> None:
     """Paint annotation strokes onto the viewport.
 
     Converts image-pixel coords to display coords via image_rect.
@@ -304,8 +316,9 @@ def paint_annotations(painter: QPainter, strokes: list[AnnotationStroke],
     painter.restore()
 
 
-def paint_brush_cursor(painter: QPainter, pos: QPointF,
-                       radius_display: float, brush_type: str) -> None:
+def paint_brush_cursor(
+    painter: QPainter, pos: QPointF, radius_display: float, brush_type: str
+) -> None:
     """Draw a circle outline at the cursor position showing brush size."""
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing)
@@ -320,9 +333,9 @@ def paint_brush_cursor(painter: QPainter, pos: QPointF,
     painter.restore()
 
 
-def paint_resize_indicator(painter: QPainter, pos: QPointF,
-                           radius_display: float, radius_image: float,
-                           brush_type: str) -> None:
+def paint_resize_indicator(
+    painter: QPainter, pos: QPointF, radius_display: float, radius_image: float, brush_type: str
+) -> None:
     """Draw brush resize feedback: circle + size text."""
     paint_brush_cursor(painter, pos, radius_display, brush_type)
 

@@ -6,10 +6,10 @@ at the bottom that keeps them in sync.
 
 When no output exists yet (clip not processed), both viewers show the input.
 """
+
 from __future__ import annotations
 
 import logging
-import os
 
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QLabel
 from PySide6.QtCore import Qt, Signal, Slot
@@ -68,6 +68,7 @@ class DualViewerPanel(QWidget):
         # A/B wipe overlay — sits ON TOP of the splitter, covers both viewer
         # canvases without touching the top bars.  Hidden until activated.
         from ui.widgets.split_view import SplitViewWidget
+
         self._wipe_overlay = SplitViewWidget(parent=self)
         self._wipe_overlay.set_wipe_mode(True)
         self._wipe_overlay.hide()

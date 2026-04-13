@@ -3,6 +3,7 @@
 Collects a user description, auto-gathers system info and recent error logs,
 then opens the default browser to a pre-filled GitHub issue page.
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,8 +35,9 @@ _MAX_URL_LENGTH = 7500  # stay well under 8192 to avoid 414 errors
 def _get_app_version() -> str:
     """Read app version from pyproject.toml (single source of truth)."""
     import tomllib
+
     candidates = []
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, "frozen", False):
         candidates.append(os.path.join(sys._MEIPASS, "pyproject.toml"))
     candidates.append(
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pyproject.toml")
@@ -160,6 +162,7 @@ class ReportIssueDialog(QDialog):
         # PyTorch + CUDA
         try:
             import torch
+
             pairs.append(("PyTorch", torch.version.__version__))
             if torch.cuda.is_available():
                 pairs.append(("CUDA", torch.version.cuda or "N/A"))
@@ -175,10 +178,9 @@ class ReportIssueDialog(QDialog):
         if gpu.get("name"):
             pairs.append(("GPU", gpu["name"]))
             if "total_gb" in gpu and "used_gb" in gpu:
-                pairs.append((
-                    "VRAM",
-                    f"{gpu['total_gb']:.1f} GB total, {gpu['used_gb']:.1f} GB used"
-                ))
+                pairs.append(
+                    ("VRAM", f"{gpu['total_gb']:.1f} GB total, {gpu['used_gb']:.1f} GB used")
+                )
         else:
             pairs.append(("GPU", "N/A"))
 
@@ -202,9 +204,7 @@ class ReportIssueDialog(QDialog):
 
     def _build_system_info_md(self) -> str:
         """Markdown-formatted system info for the GitHub issue body."""
-        return "\n".join(
-            f"- **{label}:** {value}" for label, value in self._gather_info_pairs()
-        )
+        return "\n".join(f"- **{label}:** {value}" for label, value in self._gather_info_pairs())
 
     # ------------------------------------------------------------------
     # URL builder

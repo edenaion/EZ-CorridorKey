@@ -66,8 +66,7 @@ class ClipMixin:
         if batch_count > 1:
             # Check if any clip needs alpha generation (pipeline mode)
             needs_pipeline = any(
-                classify_pipeline_route(c) not in (
-                    PipelineRoute.INFERENCE_ONLY, PipelineRoute.SKIP)
+                classify_pipeline_route(c) not in (PipelineRoute.INFERENCE_ONLY, PipelineRoute.SKIP)
                 for c in clips
             )
             self._status_bar.update_button_state(
@@ -82,7 +81,9 @@ class ClipMixin:
             self._refresh_button_state()
         else:
             self._status_bar.update_button_state(
-                can_run=False, has_partial=False, has_in_out=False,
+                can_run=False,
+                has_partial=False,
+                has_in_out=False,
             )
 
     # ── Clip Selection ──
@@ -140,7 +141,9 @@ class ClipMixin:
 
     @Slot(str)
     def _on_clips_dir_changed(
-        self, dir_path: str, *,
+        self,
+        dir_path: str,
+        *,
         skip_session_restore: bool = False,
         select_clip: str | None = None,
     ) -> None:
@@ -150,24 +153,26 @@ class ClipMixin:
         # Reset status bar state on project load (no active job)
         self._status_bar.set_running(False)
         self._status_bar.update_button_state(
-            can_run=False, has_partial=False, has_in_out=False,
+            can_run=False,
+            has_partial=False,
+            has_in_out=False,
         )
         # Ensure workspace is visible (may come from welcome screen or menu)
         self._switch_to_workspace()
         try:
             # Detect if this is the Projects root (no standalone videos there)
             from backend.project import projects_root as _projects_root, get_display_name
+
             is_projects = os.path.normcase(os.path.abspath(dir_path)) == os.path.normcase(
                 os.path.abspath(_projects_root())
             )
             clips = self._service.scan_clips(
-                dir_path, allow_standalone_videos=not is_projects,
+                dir_path,
+                allow_standalone_videos=not is_projects,
             )
-            if (
-                previous_clips_dir is None
-                or os.path.normcase(os.path.abspath(previous_clips_dir))
-                != os.path.normcase(os.path.abspath(dir_path))
-            ):
+            if previous_clips_dir is None or os.path.normcase(
+                os.path.abspath(previous_clips_dir)
+            ) != os.path.normcase(os.path.abspath(dir_path)):
                 self._clip_input_is_linear = {}
             else:
                 current_names = {clip.name for clip in clips}
@@ -201,7 +206,8 @@ class ClipMixin:
 
             # Register in recent sessions store — per-project, not per-clip
             if is_projects:
-                from backend.project import is_v2_project, get_clip_dirs
+                from backend.project import get_clip_dirs
+
                 # Group clips by their project container
                 registered: set[str] = set()
                 for clip in clips:
@@ -219,10 +225,13 @@ class ClipMixin:
                         proj_name = get_display_name(project_path)
                         clip_count = len(get_clip_dirs(project_path))
                         self._recent_store.add_or_update(
-                            project_path, proj_name, clip_count,
+                            project_path,
+                            proj_name,
+                            clip_count,
                         )
             else:
                 from backend.project import is_v2_project as _is_v2
+
                 if _is_v2(dir_path):
                     display_name = get_display_name(dir_path)
                 else:
@@ -239,6 +248,7 @@ class ClipMixin:
             logger.error(f"Failed to scan clips: {e}")
             from ui.sounds.audio_manager import UIAudio
             from PySide6.QtWidgets import QMessageBox
+
             UIAudio.error()
             QMessageBox.critical(self, "Scan Error", f"Failed to scan clips directory:\n{e}")
 

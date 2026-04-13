@@ -1,0 +1,91 @@
+name: ROCm helpers & Docker image
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/rocm-ci.yml"
+      - "device_utils.py"
+      - "main.py"
+      - "tests/test_rocm_setup.py"
+      - "docker/Dockerfile"
+      - "docker/Dockerfile.rocm"
+      - "docker/entrypoint.sh"
+      - "docker/entrypoint-rocm-vnc.sh"
+      - "docker/docker-compose.yml"
+      - "docker/README.md"
+      - "docker/supervisord.conf"
+      - "pyproject.toml"
+      - "docs/ROCm_Setup.md"
+      - "docs/ROCm_PR_handoff.md"
+      - "docs/AI_full_pass_review_instructions.md"
+      - "CHANGELOG.md"
+      - "README.md"
+      - "CONTRIBUTING.md"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/rocm-ci.yml"
+      - "device_utils.py"
+      - "main.py"
+      - "tests/test_rocm_setup.py"
+      - "docker/Dockerfile"
+      - "docker/Dockerfile.rocm"
+      - "docker/entrypoint.sh"
+      - "docker/entrypoint-rocm-vnc.sh"
+      - "docker/docker-compose.yml"
+      - "docker/README.md"
+      - "docker/supervisord.conf"
+      - "pyproject.toml"
+      - "docs/ROCm_Setup.md"
+      - "docs/ROCm_PR_handoff.md"
+      - "docs/AI_full_pass_review_instructions.md"
+      - "CHANGELOG.md"
+      - "README.md"
+      - "CONTRIBUTING.md"
+
+permissions:
+  contents: read
+
+jobs:
+  pytest-rocm:
+    name: pytest (ROCm mocks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dev deps
+        run: uv sync --extra dev
+
+      - name: Run ROCm unit tests
+        # Limit path so pytest does not collect the whole suite (marker-only would scan all files).
+        run: uv run pytest tests/test_rocm_setup.py -m rocm -v --tb=short --noconftest
+
+  docker-rocm-runtime:
+    name: docker build (rocm-runtime)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ROCm runtime image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.rocm
+          target: rocm-runtime
+          push: false
+          tags: ez-corridorkey-rocm:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

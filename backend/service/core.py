@@ -9,6 +9,7 @@ Model Residency Policy:
     model type, the previous is unloaded and VRAM freed via
     torch.cuda.empty_cache(). This prevents OOM on 24GB cards.
 """
+
 from __future__ import annotations
 
 import gc
@@ -39,6 +40,7 @@ class InferenceParams:
     in CorridorKeyModule.inference_engine).  Change a default there and
     it propagates to every engine path and the service layer.
     """
+
     input_is_linear: bool = False
     despill_strength: float = _D["despill_strength"]
     auto_despeckle: bool = _D["auto_despeckle"]
@@ -54,7 +56,7 @@ class InferenceParams:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> 'InferenceParams':
+    def from_dict(cls, d: dict) -> "InferenceParams":
         known = {f.name for f in cls.__dataclass_fields__.values()}
         return cls(**{k: v for k, v in d.items() if k in known})
 
@@ -62,8 +64,9 @@ class InferenceParams:
 @dataclass
 class OutputConfig:
     """Which output types to produce and their format."""
+
     fg_enabled: bool = True
-    fg_format: str = "exr"   # "exr" or "png"
+    fg_format: str = "exr"  # "exr" or "png"
     matte_enabled: bool = True
     matte_format: str = "exr"
     comp_enabled: bool = True
@@ -76,7 +79,7 @@ class OutputConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> 'OutputConfig':
+    def from_dict(cls, d: dict) -> "OutputConfig":
         known = {f.name for f in cls.__dataclass_fields__.values()}
         return cls(**{k: v for k, v in d.items() if k in known})
 
@@ -98,6 +101,7 @@ class OutputConfig:
 @dataclass
 class FrameResult:
     """Result summary for a single processed frame (no numpy in this struct)."""
+
     frame_index: int
     input_stem: str
     success: bool
@@ -136,7 +140,7 @@ class CorridorKeyService(
         self._matanyone2_processor = None
         self._birefnet_processor = None
         self._active_model = _ActiveModel.NONE
-        self._device: str = 'cpu'
+        self._device: str = "cpu"
         self._job_queue: Optional[GPUJobQueue] = None
         self._sam2_model_id: str = "facebook/sam2.1-hiera-base-plus"
         # GPU mutex — serializes ALL model operations
@@ -173,6 +177,7 @@ class CorridorKeyService(
                 self._active_model = _ActiveModel.NONE
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             except Exception:
@@ -189,7 +194,9 @@ class CorridorKeyService(
             logger.warning("Invalid model resolution %d, ignoring", res)
             return
         if res != self._model_resolution:
-            logger.info("Model resolution: %d -> %d (engine reload required)", self._model_resolution, res)
+            logger.info(
+                "Model resolution: %d -> %d (engine reload required)", self._model_resolution, res
+            )
             self._model_resolution = res
             # Clear engine pool — next inference will rebuild at new resolution
             for eng in self._engine_pool:
@@ -199,6 +206,7 @@ class CorridorKeyService(
                 self._active_model = _ActiveModel.NONE
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             except Exception:
@@ -220,6 +228,7 @@ class CorridorKeyService(
                 gc.collect()
                 try:
                     import torch
+
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
                 except Exception:
@@ -252,16 +261,17 @@ class CorridorKeyService(
         """Detect best available compute device (CUDA > MPS > CPU)."""
         try:
             import torch
+
             if torch.cuda.is_available():
-                self._device = 'cuda'
-            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                self._device = 'mps'
+                self._device = "cuda"
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                self._device = "mps"
                 logger.info("Apple MPS acceleration available")
             else:
-                self._device = 'cpu'
+                self._device = "cpu"
                 logger.warning("No GPU acceleration available — using CPU (will be very slow)")
         except ImportError:
-            self._device = 'cpu'
+            self._device = "cpu"
             logger.warning("PyTorch not installed — using CPU")
         logger.info(f"Compute device: {self._device}")
         return self._device
@@ -270,17 +280,18 @@ class CorridorKeyService(
         """Get GPU VRAM info in GB. Returns empty dict if not CUDA."""
         try:
             import torch
+
             if not torch.cuda.is_available():
                 return {}
             props = torch.cuda.get_device_properties(0)
             total_bytes = props.total_mem
             reserved = torch.cuda.memory_reserved(0)
             return {
-                'total': total_bytes / (1024**3),
-                'reserved': reserved / (1024**3),
-                'allocated': torch.cuda.memory_allocated(0) / (1024**3),
-                'free': (total_bytes - reserved) / (1024**3),
-                'name': torch.cuda.get_device_name(0),
+                "total": total_bytes / (1024**3),
+                "reserved": reserved / (1024**3),
+                "allocated": torch.cuda.memory_allocated(0) / (1024**3),
+                "free": (total_bytes - reserved) / (1024**3),
+                "name": torch.cuda.get_device_name(0),
             }
         except Exception as e:
             logger.debug(f"VRAM query failed: {e}")
@@ -289,7 +300,9 @@ class CorridorKeyService(
     # --- Clip Scanning ---
 
     def scan_clips(
-        self, clips_dir: str, allow_standalone_videos: bool = True,
+        self,
+        clips_dir: str,
+        allow_standalone_videos: bool = True,
     ) -> list[ClipEntry]:
         """Scan a directory for clip folders."""
         return scan_clips_dir(clips_dir, allow_standalone_videos=allow_standalone_videos)

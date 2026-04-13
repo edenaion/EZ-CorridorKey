@@ -1,4 +1,5 @@
 """Validate the local FFmpeg install without importing the full backend package."""
+
 from __future__ import annotations
 
 import argparse

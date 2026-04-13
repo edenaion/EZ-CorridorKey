@@ -2,6 +2,7 @@
 
 Extracted from io_tray_panel.py for maintainability.
 """
+
 from __future__ import annotations
 
 from PySide6.QtWidgets import QWidget, QToolTip
@@ -68,8 +69,7 @@ class ThumbnailCanvas(QWidget):
         new_names = {c.name for c in clips}
         old_names = {c.name for c in self._clips}
         if new_names != old_names:
-            self._thumb_cache = {k: v for k, v in self._thumb_cache.items()
-                                 if k in new_names}
+            self._thumb_cache = {k: v for k, v in self._thumb_cache.items() if k in new_names}
         self._clips = list(clips)
         self._model = model
         self._reflow()
@@ -81,7 +81,7 @@ class ThumbnailCanvas(QWidget):
     def _reflow(self) -> None:
         """Recompute grid layout: wrap cards into rows, set min height for vertical scroll."""
         parent_scroll = self.parent()
-        if parent_scroll and hasattr(parent_scroll, 'viewport'):
+        if parent_scroll and hasattr(parent_scroll, "viewport"):
             avail_w = parent_scroll.viewport().width()
         else:
             avail_w = self.width()
@@ -173,8 +173,10 @@ class ThumbnailCanvas(QWidget):
             thumb = self._model.get_thumbnail(clip.name, kind=self._thumbnail_kind)
             if isinstance(thumb, QImage) and not thumb.isNull():
                 scaled = thumb.scaled(
-                    self.THUMB_W, self.THUMB_H,
-                    Qt.KeepAspectRatio, Qt.SmoothTransformation,
+                    self.THUMB_W,
+                    self.THUMB_H,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
                 )
                 self._thumb_cache[clip.name] = scaled
         if scaled is not None:
@@ -198,7 +200,8 @@ class ThumbnailCanvas(QWidget):
         bg_rect = QRect(
             rect.x() + self.CARD_WIDTH - pad - text_w - 6,
             rect.y() + pad,
-            text_w + 6, 14,
+            text_w + 6,
+            14,
         )
         p.fillRect(bg_rect, QColor(0, 0, 0, 128))
         p.setPen(badge_color)
@@ -218,7 +221,9 @@ class ThumbnailCanvas(QWidget):
 
         # Source type badge (top-left over thumbnail, input cards only)
         if not self._show_manifest_tooltip and clip.source_type != "unknown":
-            src_icon = "\U0001F39E" if clip.source_type == "video" else "\U0001F4F7"  # film frames / camera
+            src_icon = (
+                "\U0001f39e" if clip.source_type == "video" else "\U0001f4f7"
+            )  # film frames / camera
             src_font = p.font()
             src_font.setPointSize(9)
             src_font.setBold(False)
@@ -247,9 +252,11 @@ class ThumbnailCanvas(QWidget):
         if self._show_manifest_tooltip:
             icon_size = 18
             icon_rect = QRect(rect.x() + pad, rect.y() + pad, icon_size, icon_size)
-            is_icon_hovered = (clip.name == self._hovered_name
-                               and hasattr(self, '_hover_pos')
-                               and icon_rect.contains(self._hover_pos))
+            is_icon_hovered = (
+                clip.name == self._hovered_name
+                and hasattr(self, "_hover_pos")
+                and icon_rect.contains(self._hover_pos)
+            )
             bg_alpha = 200 if is_icon_hovered else 140
             p.fillRect(icon_rect, QColor(0, 0, 0, bg_alpha))
             folder_font = p.font()
@@ -257,7 +264,7 @@ class ThumbnailCanvas(QWidget):
             folder_font.setBold(False)
             p.setFont(folder_font)
             p.setPen(QColor("#FFF203") if is_icon_hovered else QColor("#C0C0A0"))
-            p.drawText(icon_rect, Qt.AlignCenter, "\U0001F4C2")
+            p.drawText(icon_rect, Qt.AlignCenter, "\U0001f4c2")
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         pos = event.position().toPoint()
@@ -289,6 +296,7 @@ class ThumbnailCanvas(QWidget):
                         self.folder_icon_clicked.emit(clip)
                         return
                 from ui.sounds.audio_manager import UIAudio
+
                 UIAudio.click()
                 if event.modifiers() & Qt.ShiftModifier:
                     self.shift_select_requested.emit(clip)
@@ -362,6 +370,6 @@ def _format_manifest_tooltip(clip: ClipEntry) -> str:
             sz = params.get("despeckle_size", 400)
             lines.append(f"<b>Despeckle:</b> On (size {sz})")
         else:
-            lines.append(f"<b>Despeckle:</b> Off")
+            lines.append("<b>Despeckle:</b> Off")
 
     return "<br>".join(lines)

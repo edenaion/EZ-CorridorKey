@@ -5,6 +5,7 @@ presents the user with a clear explanation and step-by-step fix instructions
 instead of a raw traceback.  If none of the steps resolve the issue, the
 user can click through to file a GitHub issue with system info pre-filled.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -28,6 +29,7 @@ from ui.widgets.diagnostic_checks import (  # noqa: F401
 
 
 # ── Dialog ────────────────────────────────────────────────────────────
+
 
 class DiagnosticDialog(QDialog):
     """Shows a known-error diagnosis with fix steps and a Report Issue fallback."""
@@ -58,9 +60,7 @@ class DiagnosticDialog(QDialog):
 
         # ── Title ──
         title_lbl = QLabel(diagnostic.title)
-        title_lbl.setStyleSheet(
-            "QLabel { font-size: 16px; font-weight: bold; color: #FFF203; }"
-        )
+        title_lbl.setStyleSheet("QLabel { font-size: 16px; font-weight: bold; color: #FFF203; }")
         root.addWidget(title_lbl)
 
         # ── Explanation ──
@@ -72,9 +72,7 @@ class DiagnosticDialog(QDialog):
         # ── Detail (optional runtime context) ──
         if detail:
             detail_lbl = QLabel(detail)
-            detail_lbl.setStyleSheet(
-                "QLabel { color: #999; font-style: italic; font-size: 12px; }"
-            )
+            detail_lbl.setStyleSheet("QLabel { color: #999; font-style: italic; font-size: 12px; }")
             root.addWidget(detail_lbl)
 
         # ── Steps (scrollable) ──
@@ -89,9 +87,7 @@ class DiagnosticDialog(QDialog):
         for i, step in enumerate(diagnostic.steps, 1):
             step_lbl = QLabel(f"{i}.  {step}")
             step_lbl.setWordWrap(True)
-            step_lbl.setTextInteractionFlags(
-                Qt.TextInteractionFlag.TextSelectableByMouse
-            )
+            step_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             step_lbl.setStyleSheet(
                 "QLabel { color: #E0E0E0; font-family: 'Consolas', monospace; "
                 "font-size: 12px; background: #1a1a1a; border-radius: 4px; "
@@ -106,12 +102,8 @@ class DiagnosticDialog(QDialog):
         # ── Error detail (collapsed) ──
         error_lbl = QLabel(f"Error: {error_msg}")
         error_lbl.setWordWrap(True)
-        error_lbl.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        error_lbl.setStyleSheet(
-            "QLabel { color: #888; font-size: 11px; padding: 4px; }"
-        )
+        error_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        error_lbl.setStyleSheet("QLabel { color: #888; font-size: 11px; padding: 4px; }")
         root.addWidget(error_lbl)
 
         # ── Buttons ──
@@ -201,8 +193,7 @@ class StartupDiagnosticDialog(QDialog):
     def _build_issue_card(issue: StartupIssue) -> QWidget:
         card = QWidget()
         card.setStyleSheet(
-            "QWidget { background: #1a1a1a; border: 1px solid #333; "
-            "border-radius: 6px; }"
+            "QWidget { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; }"
         )
         layout = QVBoxLayout(card)
         layout.setContentsMargins(12, 10, 12, 10)
@@ -226,19 +217,14 @@ class StartupDiagnosticDialog(QDialog):
         explain = QLabel(issue.diagnostic.explanation)
         explain.setWordWrap(True)
         explain.setStyleSheet(
-            "QLabel { color: #bbb; font-size: 12px; "
-            "background: transparent; border: none; }"
+            "QLabel { color: #bbb; font-size: 12px; background: transparent; border: none; }"
         )
         layout.addWidget(explain)
 
-        steps_text = "\n".join(
-            f"  {i}. {s}" for i, s in enumerate(issue.diagnostic.steps, 1)
-        )
+        steps_text = "\n".join(f"  {i}. {s}" for i, s in enumerate(issue.diagnostic.steps, 1))
         steps = QLabel(steps_text)
         steps.setWordWrap(True)
-        steps.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
+        steps.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         steps.setStyleSheet(
             "QLabel { color: #E0E0E0; font-family: 'Consolas', monospace; "
             "font-size: 11px; background: transparent; border: none; "

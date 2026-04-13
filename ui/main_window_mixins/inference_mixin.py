@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 
 import numpy as np
 from PySide6.QtWidgets import QMessageBox
@@ -9,8 +8,10 @@ from PySide6.QtCore import Slot, QThread
 from PySide6.QtGui import QImage
 
 from backend import (
-    ClipState, JobType,
-    PipelineRoute, classify_pipeline_route,
+    ClipState,
+    JobType,
+    PipelineRoute,
+    classify_pipeline_route,
 )
 from ui.preview.frame_index import ViewMode
 from ui.preview.display_transform import processed_rgba_to_qimage
@@ -26,9 +27,7 @@ class InferenceMixin:
     def _on_params_changed(self) -> None:
         """Handle parameter change — debounce before reprocess."""
         self._remember_current_clip_input_color_space()
-        self._dual_viewer.set_input_exr_is_linear(
-            self._param_panel.get_params().input_is_linear
-        )
+        self._dual_viewer.set_input_exr_is_linear(self._param_panel.get_params().input_is_linear)
         if self._current_clip is not None:
             self._refresh_input_thumbnail(
                 self._current_clip,
@@ -107,10 +106,12 @@ class InferenceMixin:
             if reply == QMessageBox.Yes:
                 self._submit_sam2_track_job(clip)
             else:
-                self._status_bar.set_message("Track preview ready. Refine paint strokes and run Track Mask again.")
+                self._status_bar.set_message(
+                    "Track preview ready. Refine paint strokes and run Track Mask again."
+                )
             return
 
-        if 'comp' not in result:
+        if "comp" not in result:
             return
 
         mode = self._dual_viewer.current_output_mode
@@ -121,24 +122,24 @@ class InferenceMixin:
             return
 
         # Pick the array that matches current view mode
-        if mode == ViewMode.MATTE and 'alpha' in result:
-            arr = result['alpha']
+        if mode == ViewMode.MATTE and "alpha" in result:
+            arr = result["alpha"]
             if arr.ndim == 3:
                 arr = arr[:, :, 0]
             # Matte display: clamp, light gamma lift, grayscale -> RGB
             display = np.power(np.clip(arr, 0.0, 1.0), 0.85)
             gray8 = (display * 255.0).astype(np.uint8)
             rgb = np.stack([gray8, gray8, gray8], axis=2)
-        elif mode == ViewMode.FG and 'fg' in result:
+        elif mode == ViewMode.FG and "fg" in result:
             # FG is already sRGB float [H,W,3]
-            rgb = (np.clip(result['fg'], 0.0, 1.0) * 255.0).astype(np.uint8)
-        elif mode == ViewMode.PROCESSED and 'processed' in result:
-            qimg = processed_rgba_to_qimage(result['processed'])
+            rgb = (np.clip(result["fg"], 0.0, 1.0) * 255.0).astype(np.uint8)
+        elif mode == ViewMode.PROCESSED and "processed" in result:
+            qimg = processed_rgba_to_qimage(result["processed"])
             self._dual_viewer.show_reprocess_preview(qimg)
             return
         else:
             # Default: COMP (also for INPUT/MASK/ALPHA which don't change on reprocess)
-            rgb = (np.clip(result['comp'], 0.0, 1.0) * 255.0).astype(np.uint8)
+            rgb = (np.clip(result["comp"], 0.0, 1.0) * 255.0).astype(np.uint8)
 
         h, w = rgb.shape[:2]
         qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
@@ -159,7 +160,8 @@ class InferenceMixin:
         clip = self._current_clip
         if clip.state not in (ClipState.READY, ClipState.COMPLETE):
             QMessageBox.warning(
-                self, "Not Ready",
+                self,
+                "Not Ready",
                 f"Clip '{clip.name}' is in {clip.state.value} state.\n"
                 "Only READY or COMPLETE clips can be processed.",
             )
@@ -191,7 +193,8 @@ class InferenceMixin:
                     if self._service.job_queue.submit(gvm_job):
                         clip.set_processing(True)
                         self._start_worker_if_needed(
-                            gvm_job.id, job_label="GVM Auto",
+                            gvm_job.id,
+                            job_label="GVM Auto",
                         )
                     return
                 elif clicked != btn_process:
@@ -254,7 +257,9 @@ class InferenceMixin:
         batch_count = self._io_tray.selected_count()
         if clip is None:
             self._status_bar.update_button_state(
-                can_run=False, has_partial=False, has_in_out=False,
+                can_run=False,
+                has_partial=False,
+                has_in_out=False,
             )
             return
         can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
@@ -319,8 +324,10 @@ class InferenceMixin:
 
         if not routes:
             from PySide6.QtWidgets import QMessageBox
+
             QMessageBox.information(
-                self, "Nothing to Process",
+                self,
+                "Nothing to Process",
                 "No selected clips are in a processable state.",
             )
             return

@@ -1,8 +1,8 @@
 """Tests for backend.ffmpeg_tools probe and EXR filter selection."""
+
 import io
 import json
 import subprocess
-import sys
 from pathlib import Path
 
 import backend.ffmpeg_tools as ffmpeg_tools
@@ -46,7 +46,10 @@ class TestProbeVideo:
             _probe.subprocess,
             "run",
             lambda *args, **kwargs: subprocess.CompletedProcess(
-                args[0], 0, stdout=payload, stderr="",
+                args[0],
+                0,
+                stdout=payload,
+                stderr="",
             ),
         )
 
@@ -67,57 +70,54 @@ class TestBuildExrVf:
         assert vf == "format=gbrpf32le"
 
     def test_yuv_input_with_missing_transfer_uses_explicit_scale(self):
-        vf = ffmpeg_tools.build_exr_vf({
-            "pix_fmt": "yuv422p10le",
-            "width": 1920,
-            "height": 1080,
-            "color_space": "bt709",
-            "color_primaries": "bt709",
-            "color_transfer": "",
-            "color_range": "",
-            "bits_per_raw_sample": 10,
-        })
-
-        assert (
-            vf ==
-            "scale=in_color_matrix=bt709:in_range=tv,format=gbrpf32le"
+        vf = ffmpeg_tools.build_exr_vf(
+            {
+                "pix_fmt": "yuv422p10le",
+                "width": 1920,
+                "height": 1080,
+                "color_space": "bt709",
+                "color_primaries": "bt709",
+                "color_transfer": "",
+                "color_range": "",
+                "bits_per_raw_sample": 10,
+            }
         )
+
+        assert vf == "scale=in_color_matrix=bt709:in_range=tv,format=gbrpf32le"
 
     def test_complete_yuv_metadata_is_preserved(self):
-        vf = ffmpeg_tools.build_exr_vf({
-            "pix_fmt": "yuv420p10le",
-            "width": 3840,
-            "height": 2160,
-            "color_space": "bt2020nc",
-            "color_primaries": "bt2020",
-            "color_transfer": "smpte2084",
-            "color_range": "tv",
-            "bits_per_raw_sample": 10,
-        })
-
-        assert (
-            vf ==
-            "scale=in_color_matrix=bt2020nc:in_range=tv,format=gbrpf32le"
+        vf = ffmpeg_tools.build_exr_vf(
+            {
+                "pix_fmt": "yuv420p10le",
+                "width": 3840,
+                "height": 2160,
+                "color_space": "bt2020nc",
+                "color_primaries": "bt2020",
+                "color_transfer": "smpte2084",
+                "color_range": "tv",
+                "bits_per_raw_sample": 10,
+            }
         )
 
+        assert vf == "scale=in_color_matrix=bt2020nc:in_range=tv,format=gbrpf32le"
+
     def test_sd_missing_transfer_uses_sd_fallback(self):
-        vf = ffmpeg_tools.build_exr_vf({
-            "pix_fmt": "yuv420p",
-            "width": 720,
-            "height": 576,
-            "color_space": "bt470bg",
-            "color_primaries": "bt470bg",
-            "color_transfer": "",
-            "color_range": "tv",
-            "bits_per_raw_sample": 8,
-        })
+        vf = ffmpeg_tools.build_exr_vf(
+            {
+                "pix_fmt": "yuv420p",
+                "width": 720,
+                "height": 576,
+                "color_space": "bt470bg",
+                "color_primaries": "bt470bg",
+                "color_transfer": "",
+                "color_range": "tv",
+                "bits_per_raw_sample": 8,
+            }
+        )
 
         # bt470bg is remapped: matrix->bt601
         # (FFmpeg's scale filter doesn't accept 'bt470bg' as in_color_matrix)
-        assert (
-            vf ==
-            "scale=in_color_matrix=bt601:in_range=tv,format=gbrpf32le"
-        )
+        assert vf == "scale=in_color_matrix=bt601:in_range=tv,format=gbrpf32le"
 
 
 class TestExtractFrames:
@@ -157,20 +157,24 @@ class TestExtractFrames:
         )
         monkeypatch.setattr(_extraction, "detect_hwaccel", lambda ffmpeg=None: [])
         monkeypatch.setattr(_extraction, "_recompress_to_dwab", lambda *args, **kwargs: None)
-        monkeypatch.setattr(_extraction, "probe_video", lambda path: {
-            "fps": 25.0,
-            "width": 1920,
-            "height": 1080,
-            "frame_count": 10,
-            "codec": "prores",
-            "duration": 0.4,
-            "pix_fmt": "yuv422p10le",
-            "color_space": "bt709",
-            "color_primaries": "bt709",
-            "color_transfer": "",
-            "color_range": "",
-            "bits_per_raw_sample": 10,
-        })
+        monkeypatch.setattr(
+            _extraction,
+            "probe_video",
+            lambda path: {
+                "fps": 25.0,
+                "width": 1920,
+                "height": 1080,
+                "frame_count": 10,
+                "codec": "prores",
+                "duration": 0.4,
+                "pix_fmt": "yuv422p10le",
+                "color_space": "bt709",
+                "color_primaries": "bt709",
+                "color_transfer": "",
+                "color_range": "",
+                "bits_per_raw_sample": 10,
+            },
+        )
         monkeypatch.setattr(_extraction.subprocess, "Popen", fake_popen)
 
         out_dir = tmp_path / "frames"
@@ -196,9 +200,7 @@ class TestVideoMetadata:
             "frame_count": 100,
             "codec": "prores",
             "duration": 4.0,
-            "exr_vf": (
-                "scale=in_color_matrix=bt709:in_range=tv,format=gbrpf32le"
-            ),
+            "exr_vf": ("scale=in_color_matrix=bt709:in_range=tv,format=gbrpf32le"),
             "source_probe": {
                 "frame_count": 100,
                 "pix_fmt": "yuv422p10le",
@@ -257,9 +259,7 @@ class TestValidateFFmpegInstall:
 
         def fake_run(cmd, **kwargs):
             program = Path(cmd[0]).name
-            first_line = (
-                f"{program} version 7.1.1-essentials_build-www.gyan.dev"
-            )
+            first_line = f"{program} version 7.1.1-essentials_build-www.gyan.dev"
             return subprocess.CompletedProcess(cmd, 0, stdout=f"{first_line}\n", stderr="")
 
         monkeypatch.setattr(_discovery.subprocess, "run", fake_run)

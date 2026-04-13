@@ -88,7 +88,9 @@ def test_collect_runtime_info_skips_torch_cuda_on_macos(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "torch", fake_torch)
     monkeypatch.delitem(sys.modules, "torchvision", raising=False)
-    monkeypatch.setattr(verify_torch_runtime.platform, "platform", lambda: "macOS-15.0-arm64-arm-64bit")
+    monkeypatch.setattr(
+        verify_torch_runtime.platform, "platform", lambda: "macOS-15.0-arm64-arm-64bit"
+    )
     monkeypatch.setattr(verify_torch_runtime, "find_nvidia_smi", lambda: "")
 
     info = verify_torch_runtime.collect_runtime_info()
