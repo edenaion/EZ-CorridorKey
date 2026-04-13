@@ -106,4 +106,7 @@ docker compose logs -f corridorkey-cpu
 
 ## Security note
 
-The web and VNC endpoints are unauthenticated by default. Do not expose these ports directly to the public internet.
+Password: 
+EZ-CorridorKey
+
+The web and VNC endpoints are authenticated with password EZ-CorridorKey. Do not expose these ports directly to the public internet.
