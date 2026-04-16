@@ -39,6 +39,9 @@ _Nothing yet — see 1.10.0 below._
 - **Ko-fi donation link in About dialog** -- Help > About now includes a link to support development.
 - **DCRepublic credited in About dialog** -- added to Special Thanks for Docker integration.
 - **Download Manager in Edit menu** -- model downloads moved from Preferences to Edit > Download Manager so they are always accessible without opening the preferences dialog.
+- **Signed release manifests** -- every GitHub release now ships `manifest.json` + `manifest.json.sig` (Ed25519 signature). The in-app updater verifies the signature against a baked-in public key before applying any update. If the signature is invalid or the downloaded zip's SHA-256 doesn't match the manifest, the update is rejected and the user is warned. Pre-signing releases (1.9.x and earlier) still work without a manifest.
+- **SHA-256 checksums on releases** -- build scripts now auto-generate `dist/SHA256SUMS.txt` with hashes for all release artifacts. Uploaded alongside binaries so users can manually verify downloads.
+- **Git commit signing** -- all commits to `main` must be signed (Ed25519 SSH key). Branch protection ruleset enforces this.
 - **SECURITY.md** -- vulnerability disclosure policy with GitHub private advisory and email contact.
 - **CONTRIBUTING.md** -- contributor guidelines adapted from upstream, covering dev setup, PR workflow, and code style.
 
@@ -56,6 +59,8 @@ _Nothing yet — see 1.10.0 below._
 - New regression firewall: `tests/test_module_checkpoint_paths.py` asserts that the BiRefNet and MatAnyone2 wrappers expose a `_candidate_checkpoint_dirs()` helper whose first entry is routed through `backend.project.get_data_dir()` rather than `os.path.dirname(__file__)`. This is the Mac read-only-bundle regression guard.
 - New regression firewall: `tests/test_birefnet_streaming.py` stress-tests the BiRefNet frame loader against a synthetic 100,001-frame sequence (comfortably past the 109,192-frame workload that triggered #95) and asserts that (a) `_iter_named_sequence_frames` is a real lazy generator, (b) exactly one frame lives in memory at any time during iteration, (c) `BiRefNetProcessor.process_frames` accepts a bare Python generator rather than requiring a list, and (d) the eager `_load_named_sequence_frames` still returns a list for backwards compat.
 - Pinned `sam-2` tracker dependency to commit `2b90b9f5ceec` for reproducible builds.
+- New supply-chain tooling: `scripts/generate_signing_key.py` (one-time Ed25519 keygen), `scripts/sign_release.py` (release manifest signer), `backend/update_verify.py` (runtime signature + hash verification). See AGENTS.md "Supply-chain security" section for full workflow.
+- Added `cryptography>=43.0` to dependencies for Ed25519 signature verification in the updater.
 
 ---
 

@@ -388,13 +388,80 @@ class SettingsMixin:
                 download_url, str(zip_path), reporthook=_report
             )
 
+            # ── Manifest verification ────────────────────────────
+            # Download manifest.json + manifest.json.sig from the same
+            # release and verify the signature before touching any files.
+            from backend.update_verify import (
+                verify_manifest, verify_file, get_expected_hash,
+                is_signing_key_configured, UpdateVerificationError,
+            )
+
+            verified = False
+            if is_signing_key_configured():
+                progress.setLabelText("Verifying update signature...")
+                progress.setValue(92)
+                QApplication.processEvents()
+
+                manifest_url = None
+                sig_url = None
+                for asset in release.get("assets", []):
+                    if asset["name"] == "manifest.json":
+                        manifest_url = asset["browser_download_url"]
+                    elif asset["name"] == "manifest.json.sig":
+                        sig_url = asset["browser_download_url"]
+
+                if manifest_url and sig_url:
+                    manifest_path = tmp_dir / "manifest.json"
+                    sig_path = tmp_dir / "manifest.json.sig"
+                    urllib.request.urlretrieve(manifest_url, str(manifest_path))
+                    urllib.request.urlretrieve(sig_url, str(sig_path))
+
+                    manifest_data = manifest_path.read_bytes()
+                    sig_data = sig_path.read_bytes()
+
+                    try:
+                        manifest = verify_manifest(manifest_data, sig_data)
+                        expected_hash = get_expected_hash(manifest, asset_name)
+                        if expected_hash:
+                            verify_file(zip_path, expected_hash)
+                        verified = True
+                    except UpdateVerificationError as e:
+                        progress.close()
+                        QMessageBox.critical(
+                            self, "Update Verification Failed",
+                            f"The update could not be verified and was NOT installed.\n\n"
+                            f"{e}\n\n"
+                            "This may indicate a security issue. Please download "
+                            "the latest release manually from GitHub or Gumroad."
+                        )
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+                        return
+                else:
+                    # No manifest in this release (pre-signing era).
+                    # Allow the update but log a warning.
+                    logger.warning(
+                        "No signed manifest found in release %s. "
+                        "Skipping signature verification.", tag
+                    )
+
             progress.setLabelText("Installing update...")
             progress.setValue(95)
             QApplication.processEvents()
 
-            # Extract zip
+            # Extract zip (with zip-slip protection)
             extract_dir = tmp_dir / "extracted"
             with zipfile.ZipFile(zip_path) as zf:
+                for member in zf.namelist():
+                    # Resolve the target path and verify it stays inside
+                    # extract_dir. A crafted zip with entries like
+                    # "../../malicious.py" would otherwise write outside
+                    # the temp directory.
+                    target = (extract_dir / member).resolve()
+                    if not str(target).startswith(str(extract_dir.resolve())):
+                        raise ValueError(
+                            f"Zip member {member!r} would extract outside "
+                            f"the target directory (zip-slip attack blocked)"
+                        )
                 zf.extractall(extract_dir)
 
             if _sys.platform == "darwin":
