@@ -62,6 +62,137 @@ def _checkpoint_dir() -> Path:
     return _data_root() / "CorridorKeyModule" / "checkpoints"
 
 
+def _hf_hub_cache_dir() -> Path:
+    """Hugging Face hub cache location, respecting HF_HOME / HF_HUB_CACHE env vars.
+
+    SAM2 checkpoints are downloaded into this shared cache regardless of the
+    user's chosen install path, so the wizard detects them here — same location
+    across fresh installs, reinstalls, and folder changes.
+    """
+    override = os.environ.get("HF_HUB_CACHE")
+    if override:
+        return Path(override)
+    hf_home = os.environ.get("HF_HOME")
+    if hf_home:
+        return Path(hf_home) / "hub"
+    return Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def _saved_install_path() -> Path:
+    """Return the user's last-saved install path, falling back to default."""
+    try:
+        from PySide6.QtCore import QSettings
+        saved = QSettings().value("app/install_path", "", type=str)
+        if saved:
+            return Path(saved)
+    except Exception:
+        pass
+    return _default_install_dir()
+
+
+def _current_version() -> str:
+    """Read version from pyproject.toml (frozen or dev). 0.0.0 on failure."""
+    try:
+        import tomllib
+    except Exception:
+        return "0.0.0"
+    candidates: list[Path] = []
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys._MEIPASS) / "pyproject.toml")
+    candidates.append(_project_root() / "pyproject.toml")
+    for path in candidates:
+        try:
+            with open(path, "rb") as fh:
+                return tomllib.load(fh)["project"]["version"]
+        except Exception:
+            continue
+    return "0.0.0"
+
+
+def detect_installed_models(install_path: Path | None = None) -> dict[str, bool]:
+    """Return {model_key: present} for every model in the wizard catalogue.
+
+    Models that live under the install path (CorridorKey, MLX, GVM, VideoMaMa,
+    MatAnyone2) are resolved against ``install_path``. Models that live in the
+    Hugging Face hub cache (SAM2) are resolved against the HF cache regardless
+    of the install path — that's how hf_hub_download stores them without a
+    local_dir override.
+
+    Detection is intentionally decoupled from scripts/setup_models.py because
+    that module bakes ``PROJECT_ROOT`` at import time, so re-scanning after a
+    path change would see stale paths.
+    """
+    root = Path(install_path) if install_path else _saved_install_path()
+    hf = _hf_hub_cache_dir()
+
+    results: dict[str, bool] = {}
+
+    # CorridorKey core .pth — any .pth in the checkpoints dir counts
+    ck_dir = root / "CorridorKeyModule" / "checkpoints"
+    try:
+        results["corridorkey"] = ck_dir.is_dir() and any(ck_dir.glob("*.pth"))
+    except OSError:
+        results["corridorkey"] = False
+
+    # CorridorKey MLX — specific .safetensors filename
+    results["corridorkey-mlx"] = (
+        ck_dir / "corridorkey_mlx.safetensors"
+    ).is_file()
+
+    # SAM2 Base+ — HF hub cache (shared across installs)
+    results["sam2"] = _hf_cache_has("facebook/sam2.1-hiera-base-plus", hf)
+
+    # GVM — unet safetensors
+    results["gvm"] = (
+        root / "gvm_core" / "weights" / "unet" / "diffusion_pytorch_model.safetensors"
+    ).is_file()
+
+    # MatAnyone2 — single .pth
+    results["matanyone2"] = (
+        root / "modules" / "MatAnyone2Module" / "checkpoints" / "matanyone2.pth"
+    ).is_file()
+
+    # BiRefNet default Matting variant — any .safetensors in the snapshot dir
+    brn_dir = root / "modules" / "BiRefNetModule" / "checkpoints" / "BiRefNet-matting"
+    try:
+        results["birefnet"] = brn_dir.is_dir() and any(
+            p.suffix == ".safetensors" for p in brn_dir.iterdir() if p.is_file()
+        )
+    except OSError:
+        results["birefnet"] = False
+
+    # VideoMaMa — needs BOTH the VideoMaMa weights and the SVD base model
+    vm_root = root / "VideoMaMaInferenceModule" / "checkpoints"
+    vm_main = vm_root / "VideoMaMa" / "diffusion_pytorch_model.safetensors"
+    vm_base = vm_root / "stable-video-diffusion-img2vid-xt" / "model_index.json"
+    results["videomama"] = vm_main.is_file() and vm_base.is_file()
+
+    return results
+
+
+def _hf_cache_has(repo_id: str, cache_dir: Path) -> bool:
+    """True when any snapshot for ``repo_id`` exists under the HF hub cache.
+
+    huggingface_hub stores repos as ``models--<org>--<name>/snapshots/<rev>/``.
+    We don't probe for a specific filename because users may have downloaded
+    different SAM2 variants (small / base-plus / large) and we just want to
+    know whether the shared cache already has a usable checkpoint.
+    """
+    try:
+        if not cache_dir.is_dir():
+            return False
+        repo_folder = "models--" + repo_id.replace("/", "--")
+        snapshots = cache_dir / repo_folder / "snapshots"
+        if not snapshots.is_dir():
+            return False
+        for snap in snapshots.iterdir():
+            if snap.is_dir() and any(snap.iterdir()):
+                return True
+    except OSError:
+        pass
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Model catalogue
 # ---------------------------------------------------------------------------
@@ -115,6 +246,15 @@ MODELS += [
         "default_checked": True,
     },
     {
+        "key": "birefnet",
+        "label": "BiRefNet Matting",
+        "size": "~940 MB",
+        "required": False,
+        "description": "Automatic alpha generator (subject matting). "
+                       "Optional: skipped downloads auto-fetch on first use.",
+        "default_checked": False,
+    },
+    {
         "key": "videomama",
         "label": "VideoMaMa Alpha Generator",
         "size": "~37 GB",
@@ -125,10 +265,75 @@ MODELS += [
 ]
 
 
+def _required_model_keys() -> list[str]:
+    return [m["key"] for m in MODELS if m.get("required")]
+
+
 def needs_setup() -> bool:
-    import glob
-    ckpt_dir = _checkpoint_dir()
-    return len(glob.glob(str(ckpt_dir / "*.pth"))) == 0
+    """True when the wizard should auto-open at startup.
+
+    Two triggers:
+    1. A required model is missing at the current install path. The user
+       cannot use the app without this, so we force-show the wizard.
+    2. The installed version has changed since the last successful launch
+       (fresh install or upgrade — including the 1.9.1 -> 1.9.2 jump). This
+       gives new/upgrading users a look at the catalogue so they can pick up
+       any optional models they want, and is dismissable via Cancel/X.
+    """
+    try:
+        install_path = _saved_install_path()
+        present = detect_installed_models(install_path)
+        for key in _required_model_keys():
+            if not present.get(key, False):
+                return True
+    except Exception:
+        logger.exception("detect_installed_models failed during needs_setup()")
+        # Safe fallback: mirror the old behaviour so a broken detect doesn't
+        # leave users stuck with no CorridorKey weights and no wizard.
+        import glob
+        ckpt_dir = _checkpoint_dir()
+        if len(glob.glob(str(ckpt_dir / "*.pth"))) == 0:
+            return True
+
+    try:
+        from PySide6.QtCore import QSettings
+        last_seen = QSettings().value("app/version_last_seen", "", type=str)
+        if last_seen != _current_version():
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def has_required_models() -> bool:
+    """True when every required model is present at the current install path.
+
+    Used by main.py to decide whether to exit after the wizard closes: if the
+    user cancelled without installing a required model, we still can't launch.
+    A version-bump-only trigger with all requireds present lets the user X out
+    and keep going.
+    """
+    try:
+        present = detect_installed_models(_saved_install_path())
+    except Exception:
+        logger.exception("detect_installed_models failed during has_required_models()")
+        return False
+    return all(present.get(k, False) for k in _required_model_keys())
+
+
+def mark_setup_seen() -> None:
+    """Persist the current version so the version-bump trigger doesn't fire again.
+
+    Called from main.py after the wizard runs (or is skipped) so that the next
+    launch on the same version does not re-show the wizard. A later version
+    upgrade bumps the key and re-triggers it once.
+    """
+    try:
+        from PySide6.QtCore import QSettings
+        QSettings().setValue("app/version_last_seen", _current_version())
+    except Exception:
+        logger.exception("Failed to persist app/version_last_seen")
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +421,8 @@ class _DownloadWorker(QThread):
             return setup_models.download_model("gvm")
         elif key == "matanyone2":
             return setup_models.download_matanyone2()
+        elif key == "birefnet":
+            return setup_models.download_birefnet()
         elif key == "videomama":
             return setup_models.download_model("videomama")
         return False
@@ -283,14 +490,17 @@ class _ModelRow(QWidget):
     def __init__(self, model: dict, parent=None):
         super().__init__(parent)
         self.key = model["key"]
+        self._required = bool(model["required"])
+        self._default_checked = bool(model["default_checked"])
+        self._base_desc = f"{model['description']}  ({model['size']})"
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(12)
 
         self.checkbox = QCheckBox()
-        self.checkbox.setChecked(model["default_checked"])
-        if model["required"]:
+        self.checkbox.setChecked(self._default_checked)
+        if self._required:
             self.checkbox.setChecked(True)
             self.checkbox.setEnabled(False)
         layout.addWidget(self.checkbox)
@@ -304,12 +514,12 @@ class _ModelRow(QWidget):
         label.setFont(label_font)
         label.setStyleSheet("color: #FFFFFF; background: transparent;")
         info.addWidget(label)
-        desc = QLabel(f"{model['description']}  ({model['size']})")
+        self._desc_label = QLabel(self._base_desc)
         desc_font = QFont()
         desc_font.setPointSize(11)
-        desc.setFont(desc_font)
-        desc.setStyleSheet("color: #999999; background: transparent;")
-        info.addWidget(desc)
+        self._desc_label.setFont(desc_font)
+        self._desc_label.setStyleSheet("color: #999999; background: transparent;")
+        info.addWidget(self._desc_label)
         layout.addLayout(info, 1)
 
         self.progress = QProgressBar()
@@ -336,6 +546,38 @@ class _ModelRow(QWidget):
 
     def is_selected(self) -> bool:
         return self.checkbox.isChecked()
+
+    def set_installed_state(self, installed: bool) -> None:
+        """Reflect whether this model is already present at the current install path.
+
+        Installed: green check, checkbox disabled+unchecked (nothing to do), label
+        shows "Installed". Missing: restore default checked state and the model
+        description. Required models stay checked+disabled in both states so the
+        user can't accidentally deselect them.
+        """
+        self.progress.setVisible(False)
+        if installed:
+            self.checkbox.blockSignals(True)
+            self.checkbox.setChecked(False)
+            self.checkbox.setEnabled(False)
+            self.checkbox.blockSignals(False)
+            self._desc_label.setText(self._base_desc + "  — Installed")
+            self._desc_label.setStyleSheet(
+                "color: #4CAF50; background: transparent;"
+            )
+            self.status_icon.setText("\u2714")
+            self.status_icon.setStyleSheet("color: #4CAF50; font-size: 20px;")
+        else:
+            self.checkbox.blockSignals(True)
+            self.checkbox.setChecked(self._default_checked or self._required)
+            self.checkbox.setEnabled(not self._required)
+            self.checkbox.blockSignals(False)
+            self._desc_label.setText(self._base_desc)
+            self._desc_label.setStyleSheet(
+                "color: #999999; background: transparent;"
+            )
+            self.status_icon.setText("")
+            self.status_icon.setStyleSheet("")
 
     def set_downloading(self):
         self.checkbox.setEnabled(False)
@@ -388,7 +630,7 @@ class SetupWizard(QDialog):
 
         subtitle = QLabel(
             "Select which models to download. The core CorridorKey model is required.\n"
-            "Optional models can be downloaded later from Preferences."
+            "Optional models can be downloaded later from Edit \u2192 Download Manager."
         )
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setWordWrap(True)
@@ -404,12 +646,16 @@ class SetupWizard(QDialog):
 
         loc_row = QHBoxLayout()
         loc_row.setSpacing(8)
-        self._loc_edit = QLineEdit(str(_default_install_dir()))
+        # Pre-fill with the user's previously saved install path so a re-open
+        # of the wizard scans the folder the user is actually installed to —
+        # not a fresh default that would report everything as missing.
+        self._loc_edit = QLineEdit(str(_saved_install_path()))
         self._loc_edit.setStyleSheet(
             "QLineEdit { background: #1a1a18; color: #fff; border: 1px solid #444; "
             "border-radius: 4px; padding: 6px; }"
         )
         self._loc_edit.setReadOnly(True)
+        self._loc_edit.textChanged.connect(self._refresh_installed_state)
         loc_row.addWidget(self._loc_edit, 1)
 
         browse_btn = QPushButton("Browse...")
@@ -420,6 +666,19 @@ class SetupWizard(QDialog):
         )
         browse_btn.clicked.connect(self._on_browse_location)
         loc_row.addWidget(browse_btn)
+
+        default_btn = QPushButton("Default Location")
+        default_btn.setToolTip(
+            "Reset the install path to the platform default "
+            "(in case you changed it and want to return)."
+        )
+        default_btn.setStyleSheet(
+            "QPushButton { color: #ccc; border: 1px solid #555; padding: 6px 14px; "
+            "border-radius: 4px; }"
+            "QPushButton:hover { color: #fff; border-color: #888; }"
+        )
+        default_btn.clicked.connect(self._on_default_location)
+        loc_row.addWidget(default_btn)
         layout.addLayout(loc_row)
 
         layout.addSpacing(8)
@@ -493,12 +752,39 @@ class SetupWizard(QDialog):
 
         layout.addLayout(btn_layout)
 
+        # Initial scan of the pre-filled install path so present/missing
+        # state is visible the moment the wizard opens — not only after the
+        # user interacts with the path picker.
+        self._refresh_installed_state()
+
+    def _refresh_installed_state(self) -> None:
+        """Scan the current install path and update each _ModelRow accordingly.
+
+        Called on wizard open and again every time ``_loc_edit`` changes
+        (Browse / Default Location). Downloads in progress must not be
+        clobbered — we skip the refresh if the worker is running.
+        """
+        if self._downloading:
+            return
+        install_path = Path(self._loc_edit.text()) if self._loc_edit.text() else None
+        try:
+            present = detect_installed_models(install_path)
+        except Exception:
+            logger.exception("Failed to detect installed models")
+            return
+        for key, row in self._rows.items():
+            row.set_installed_state(present.get(key, False))
+
     def _on_browse_location(self):
         path = QFileDialog.getExistingDirectory(
             self, "Choose Install Location", self._loc_edit.text()
         )
         if path:
             self._loc_edit.setText(path)
+
+    def _on_default_location(self):
+        """Reset the install path field to the platform default and re-scan."""
+        self._loc_edit.setText(str(_default_install_dir()))
 
     def _on_cancel(self):
         if self._downloading:
@@ -575,7 +861,7 @@ class SetupWizard(QDialog):
             self._overall_label.setStyleSheet("color: #4CAF50;")
         else:
             self._overall_label.setText(
-                "Some downloads failed. You can retry from Preferences later."
+                "Some downloads failed. You can retry from Edit \u2192 Download Manager."
             )
             self._overall_label.setStyleSheet("color: #F44336;")
 

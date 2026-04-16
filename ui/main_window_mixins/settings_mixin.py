@@ -71,6 +71,18 @@ class SettingsMixin:
         if dlg.exec() == HotkeysDialog.Accepted:
             self._setup_shortcuts()
 
+    def _show_download_manager(self) -> None:
+        """Open the Download Manager (SetupWizard) on demand.
+
+        Unlike the first-launch path, this entry is always available so users
+        can re-scan their install folder, install optional models they
+        skipped earlier, or point at a different folder.
+        """
+        from ui.widgets.setup_wizard import SetupWizard
+        dlg = SetupWizard(parent=self)
+        dlg.setWindowTitle("Download Manager")
+        dlg.exec()
+
     def _apply_tooltip_setting(self) -> None:
         """Enable or disable tooltips globally based on saved preference."""
         show = get_setting_bool(KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS)
