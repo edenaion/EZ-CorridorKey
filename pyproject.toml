@@ -1,6 +1,6 @@
 [project]
 name = "corridorkey"
-version = "1.9.2"
+version = "1.10.0"
 description = "AI Green Screen Keyer by Corridor Digital"
 license = {text = "CC-BY-NC-SA-4.0"}
 requires-python = ">=3.10,<3.14"
@@ -34,7 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "ruff"]
-tracker = ["sam-2 @ git+https://github.com/facebookresearch/sam2.git"]
+tracker = ["sam-2 @ git+https://github.com/facebookresearch/sam2.git@2b90b9f5ceec907a1c18123530e92e794ad901a4"]
 quality = [
     "scikit-image",
     "pytorch-msssim",
