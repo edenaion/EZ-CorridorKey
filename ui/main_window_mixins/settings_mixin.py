@@ -316,13 +316,8 @@ class SettingsMixin:
         try:
             # Determine asset name by platform
             if _sys.platform == "darwin":
-                QMessageBox.information(
-                    self, "Update",
-                    "macOS auto-update is not yet supported.\n"
-                    "Please download the latest .pkg from Gumroad or GitHub."
-                )
-                progress.close()
-                return
+                asset_platform = "macOS-arm64"
+                asset_ext = "zip"
             elif _sys.platform == "win32":
                 asset_platform = "Windows-x64"
                 asset_ext = "zip"
@@ -464,7 +459,17 @@ class SettingsMixin:
                             f"Zip member {member!r} would extract outside "
                             f"the target directory (zip-slip attack blocked)"
                         )
-                zf.extractall(extract_dir)
+                if _sys.platform == "darwin":
+                    # ditto preserves the .app bundle structure (symlinks,
+                    # xattrs, resource forks). Python's zipfile drops those
+                    # and breaks the Apple code signature on the bundle.
+                    extract_dir.mkdir(parents=True, exist_ok=True)
+                    subprocess.run(
+                        ["ditto", "-xk", str(zip_path), str(extract_dir)],
+                        check=True,
+                    )
+                else:
+                    zf.extractall(extract_dir)
 
             if _sys.platform == "darwin":
                 # Find the .app inside extracted dir
@@ -477,30 +482,85 @@ class SettingsMixin:
                 if not new_app:
                     raise FileNotFoundError("No .app found in downloaded archive")
 
-                # Current .app location
+                # Current .app location (.../EZ-CorridorKey.app/Contents/MacOS/binary)
                 current_app = Path(_sys.executable).resolve().parent.parent.parent
                 old_backup = current_app.with_name(current_app.name + ".old")
 
-                # Swap: current → .old, new → current
-                if old_backup.exists():
-                    shutil.rmtree(old_backup)
-                current_app.rename(old_backup)
-                shutil.move(str(new_app), str(current_app))
+                # Write a detached bash script that waits for this process
+                # to exit, then swaps the bundle and relaunches. Direct mv
+                # works when the user owns the .app (Finder drag install).
+                # osascript falls back to an admin prompt when /Applications
+                # is owned by root (pkg-installer case).
+                current_pid = os.getpid()
 
-                # Make executable
-                main_exe = current_app / "Contents" / "MacOS" / "EZ-CorridorKey"
-                if main_exe.exists():
-                    main_exe.chmod(0o755)
-
-                # Relaunch
-                subprocess.Popen(
-                    ["open", str(current_app)],
-                    start_new_session=True,
+                admin_helper = tmp_dir / "admin_swap.sh"
+                admin_helper.write_text(
+                    "#!/bin/bash\n"
+                    f'rm -rf "{old_backup}" 2>/dev/null || true\n'
+                    f'mv "{current_app}" "{old_backup}" && '
+                    f'mv "{new_app}" "{current_app}"\n'
                 )
+                admin_helper.chmod(0o755)
 
-                # Clean up old backup in background
-                shutil.rmtree(old_backup, ignore_errors=True)
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+                swap_script = tmp_dir / "swap_update.sh"
+                swap_script.write_text(
+                    "#!/bin/bash\n"
+                    "set -u\n"
+                    f'LOG="{tmp_dir}/swap.log"\n'
+                    'exec > "$LOG" 2>&1\n'
+                    "\n"
+                    f"PARENT_PID={current_pid}\n"
+                    "for i in $(seq 1 60); do\n"
+                    '    kill -0 "$PARENT_PID" 2>/dev/null || break\n'
+                    "    sleep 0.5\n"
+                    "done\n"
+                    "sleep 1\n"
+                    "\n"
+                    f'CURRENT_APP="{current_app}"\n'
+                    f'NEW_APP="{new_app}"\n'
+                    f'OLD_BACKUP="{old_backup}"\n'
+                    f'TMP_DIR="{tmp_dir}"\n'
+                    f'ADMIN_HELPER="{admin_helper}"\n'
+                    "\n"
+                    '# Try direct swap first (user-owned bundle)\n'
+                    'rm -rf "$OLD_BACKUP" 2>/dev/null || true\n'
+                    'if mv "$CURRENT_APP" "$OLD_BACKUP" 2>/dev/null && '
+                    'mv "$NEW_APP" "$CURRENT_APP" 2>/dev/null; then\n'
+                    '    echo "direct swap OK"\n'
+                    "else\n"
+                    '    # Roll back a partial move\n'
+                    '    if [ -d "$OLD_BACKUP" ] && [ ! -d "$CURRENT_APP" ]; then\n'
+                    '        mv "$OLD_BACKUP" "$CURRENT_APP" 2>/dev/null || true\n'
+                    "    fi\n"
+                    '    # Admin path: osascript prompts for the password once\n'
+                    '    osascript -e "do shell script \\"$ADMIN_HELPER\\" '
+                    'with administrator privileges" || {\n'
+                    '        echo "admin swap failed"\n'
+                    "        exit 1\n"
+                    "    }\n"
+                    "fi\n"
+                    "\n"
+                    '# Ticket is stapled; this is belt-and-suspenders\n'
+                    'xattr -dr com.apple.quarantine "$CURRENT_APP" 2>/dev/null || true\n'
+                    "\n"
+                    '# Relaunch\n'
+                    'open "$CURRENT_APP"\n'
+                    "\n"
+                    '# Backgrounded cleanup so we exit fast\n'
+                    'rm -rf "$OLD_BACKUP" 2>/dev/null &\n'
+                    "sleep 2\n"
+                    'rm -rf "$TMP_DIR" 2>/dev/null &\n'
+                    "exit 0\n"
+                )
+                swap_script.chmod(0o755)
+
+                subprocess.Popen(
+                    ["/bin/bash", str(swap_script)],
+                    start_new_session=True,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
 
             elif _sys.platform == "win32":
                 # Windows: extract, write a bat script to swap after exit
