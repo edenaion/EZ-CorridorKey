@@ -35,13 +35,19 @@ def _project_root() -> Path:
 
 
 def _default_install_dir() -> Path:
-    """Platform-appropriate default location for model data."""
-    if sys.platform == "darwin":
+    """Default model location: where the app is running from.
+
+    Works the same for Inno installs, portable zips, git clones, and the
+    source release zip. macOS frozen builds are the one exception since
+    .app bundles often sit in read-only /Applications and writing next to
+    them is a permissions fight, so we keep the platform user-data path.
+    """
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
         return Path.home() / "Library" / "Application Support" / "EZ-CorridorKey"
-    elif sys.platform == "win32":
-        return Path(os.environ.get("APPDATA", Path.home())) / "EZ-CorridorKey"
-    else:
-        return Path.home() / ".local" / "share" / "EZ-CorridorKey"
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    # Source install (git clone or GitHub source zip): the repo root.
+    return Path(__file__).resolve().parent.parent.parent
 
 
 def _data_root() -> Path:

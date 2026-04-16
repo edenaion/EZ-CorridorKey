@@ -174,7 +174,9 @@ class SettingsMixin:
             '<a href="https://github.com/DCRepublic">DCRepublic</a> — Docker integration'
             "</p>"
             "<p>"
-            '<a href="https://ko-fi.com/edenaion">Support on Ko-fi</a>'
+            '<a href="https://ko-fi.com/edenaion" style="color: #FF5915; '
+            'text-decoration: none; font-weight: bold;">'
+            "\u2615 Support on Ko-fi</a>"
             "</p>"
         )
         # QMessageBox uses an internal QLabel — find it and enable clickable links
