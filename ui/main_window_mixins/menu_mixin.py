@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
+import logging
+
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMessageBox, QPushButton, QWidget
 from PySide6.QtCore import Qt
+
+logger = logging.getLogger(__name__)
 
 
 class MenuMixin:
@@ -23,6 +27,16 @@ class MenuMixin:
         self._open_action = file_menu.addAction("Open Project...", self._on_open_project)
 
         file_menu.addSeparator()
+        self._set_project_output_action = file_menu.addAction(
+            "Set Project Output Folder...", self._on_set_project_output_dir,
+        )
+        self._clear_project_output_action = file_menu.addAction(
+            "Clear Project Output Folder", self._on_clear_project_output_dir,
+        )
+        self._set_project_output_action.setEnabled(False)
+        self._clear_project_output_action.setEnabled(False)
+
+        file_menu.addSeparator()
         file_menu.addAction("Export Video...", self._on_export_video)
         file_menu.addAction("Export All Videos", self._on_export_all_videos)
         file_menu.addSeparator()
@@ -33,6 +47,7 @@ class MenuMixin:
         edit_menu = menu_bar.addMenu("Edit")
         self._prefs_action = edit_menu.addAction("Preferences...", self._show_preferences)
         edit_menu.addAction("Hotkeys...", self._show_hotkeys)
+        edit_menu.addAction("Download Manager...", self._show_download_manager)
         edit_menu.addSeparator()
         edit_menu.addAction("Track Paint Masks", self._on_track_masks)
         edit_menu.addAction("Clear Paint Strokes", self._on_clear_annotations)
@@ -84,3 +99,39 @@ class MenuMixin:
     def _menu_click_sound(self) -> None:
         from ui.sounds.audio_manager import UIAudio
         UIAudio.click()
+
+    # -- Project output directory actions ----------------------------------
+
+    def _refresh_project_output_actions(self) -> None:
+        """Enable/disable project output menu items based on current state."""
+        has_project = bool(getattr(self, "_clips_dir", None))
+        self._set_project_output_action.setEnabled(has_project)
+        if has_project:
+            from backend.project import load_project_output_dir
+            has_override = bool(load_project_output_dir(self._clips_dir))
+        else:
+            has_override = False
+        self._clear_project_output_action.setEnabled(has_override)
+
+    def _on_set_project_output_dir(self) -> None:
+        if not self._clips_dir:
+            QMessageBox.information(self, "No Project", "Open a project first.")
+            return
+        from backend.project import load_project_output_dir, save_project_output_dir
+        current = load_project_output_dir(self._clips_dir)
+        folder = QFileDialog.getExistingDirectory(
+            self, "Set Project Output Folder", current or self._clips_dir,
+        )
+        if not folder:
+            return
+        save_project_output_dir(self._clips_dir, folder)
+        logger.info("Project output folder set: %s", folder)
+        self._refresh_project_output_actions()
+
+    def _on_clear_project_output_dir(self) -> None:
+        if not self._clips_dir:
+            return
+        from backend.project import save_project_output_dir
+        save_project_output_dir(self._clips_dir, None)
+        logger.info("Project output folder cleared")
+        self._refresh_project_output_actions()
