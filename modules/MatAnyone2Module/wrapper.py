@@ -19,7 +19,7 @@ import logging
 import os
 import sys
 import time
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import cv2
 import numpy as np
@@ -31,36 +31,77 @@ logger = logging.getLogger(__name__)
 _CKPT_URL = "https://github.com/pq-yang/MatAnyone2/releases/download/v1.0.0/matanyone2.pth"
 _CKPT_NAME = "matanyone2.pth"
 
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+_BUNDLED_CHECKPOINT_DIR = os.path.join(_MODULE_DIR, "checkpoints")
+
+
+def _candidate_checkpoint_dirs() -> List[str]:
+    """Return MatAnyone2 checkpoint directories to search, in priority order.
+
+    Order:
+      1. ``<data_dir>/modules/MatAnyone2Module/checkpoints`` — writable
+         on every platform. ``scripts/setup_models.py`` writes here in
+         frozen builds and the lazy runtime download targets here too.
+         This is the only path that works on installed macOS builds
+         because ``/Applications/EZ-CorridorKey.app/Contents/...`` is
+         read-only for non-admin users.
+      2. ``_BUNDLED_CHECKPOINT_DIR`` — the bundled directory beside
+         this file. In dev mode this is the repo's checkpoints folder;
+         in frozen builds this lives inside the bundle and is
+         read-only on macOS, but we keep it as a fallback so existing
+         manual/dev installs still work.
+      3. ``<project_root>/pretrained_models`` — legacy fallback from
+         the original MatAnyone2 repo layout.
+    """
+    dirs: List[str] = []
+    try:
+        from backend.project import get_data_dir  # Lazy import: avoid cycles
+        data_dir = get_data_dir()
+        if data_dir:
+            dirs.append(
+                os.path.join(
+                    data_dir, "modules", "MatAnyone2Module", "checkpoints"
+                )
+            )
+    except Exception:
+        pass
+    if _BUNDLED_CHECKPOINT_DIR not in dirs:
+        dirs.append(_BUNDLED_CHECKPOINT_DIR)
+    legacy = os.path.join(
+        os.path.dirname(os.path.dirname(_MODULE_DIR)), "pretrained_models"
+    )
+    if legacy not in dirs:
+        dirs.append(legacy)
+    return dirs
+
 
 def _ensure_checkpoint(ckpt_path: str | None = None) -> str:
     """Return path to matanyone2.pth, downloading if needed.
 
-    Search order:
-        1. Explicit ckpt_path (if provided and exists)
-        2. checkpoints/matanyone2.pth (sibling to wrapper.py)
-        3. pretrained_models/matanyone2.pth (legacy fallback)
-        4. Auto-download to checkpoints/
+    Resolution order:
+        1. Explicit ``ckpt_path`` if provided and exists.
+        2. The first candidate dir (see ``_candidate_checkpoint_dirs``)
+           that already contains ``matanyone2.pth``.
+        3. Download to the first candidate dir — always the writable
+           data-dir location — so a cold download never targets a
+           read-only bundle path.
     """
     if ckpt_path and os.path.isfile(ckpt_path):
         return ckpt_path
 
-    module_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(module_dir))
+    candidates = _candidate_checkpoint_dirs()
+    for base in candidates:
+        local_path = os.path.join(base, _CKPT_NAME)
+        if os.path.isfile(local_path):
+            return local_path
 
-    # Primary: checkpoints/ inside this module directory
-    ckpt_dir = os.path.join(module_dir, "checkpoints")
-    local_path = os.path.join(ckpt_dir, _CKPT_NAME)
-    if os.path.isfile(local_path):
-        return local_path
-
-    # Legacy fallback: pretrained_models/ at project root
-    legacy_path = os.path.join(project_root, "pretrained_models", _CKPT_NAME)
-    if os.path.isfile(legacy_path):
-        return legacy_path
-
-    # Auto-download to checkpoints/
-    logger.info("MatAnyone2 checkpoint not found, downloading...")
-    os.makedirs(ckpt_dir, exist_ok=True)
+    # Nothing found — download to the writable data-dir target.
+    download_dir = candidates[0]
+    local_path = os.path.join(download_dir, _CKPT_NAME)
+    logger.info(
+        "MatAnyone2 checkpoint not found, downloading to %s", local_path
+    )
+    os.makedirs(download_dir, exist_ok=True)
     from torch.hub import download_url_to_file
     download_url_to_file(_CKPT_URL, local_path)
     logger.info(f"Downloaded checkpoint to {local_path}")
