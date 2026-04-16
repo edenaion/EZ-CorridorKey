@@ -321,10 +321,16 @@ class ThumbnailCanvas(QWidget):
 
     def event(self, ev: QEvent) -> bool:
         if ev.type() == QEvent.ToolTip and self._show_manifest_tooltip:
-            clip, _ = self._card_at(ev.position().toPoint())
+            # Tooltip events arrive as QHelpEvent, which exposes pos() /
+            # globalPos() — NOT the position() / globalPosition()
+            # accessors that QMouseEvent grew in Qt 6. Calling position()
+            # here used to raise AttributeError inside QWidget::event on
+            # every hover once ToolTip was enabled (visible as noise in
+            # user bug reports, e.g. issue #95 log output).
+            clip, _ = self._card_at(ev.pos())
             tip = _format_manifest_tooltip(clip) if clip else ""
             if tip:
-                QToolTip.showText(ev.globalPosition().toPoint(), tip, self)
+                QToolTip.showText(ev.globalPos(), tip, self)
             else:
                 QToolTip.hideText()
             return True
