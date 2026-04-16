@@ -311,10 +311,57 @@ class FrameOpsMixin:
         job=None,
         on_status: Optional[Callable[[str], None]] = None,
     ) -> list[tuple[str, np.ndarray]]:
-        """Load named image-sequence frames as uint8 RGB for tracker/VideoMaMa."""
+        """Load named image-sequence frames as uint8 RGB into a list.
+
+        Eager variant: materializes every frame in memory. Safe for
+        short clips (a few hundred frames at HD), but OOMs at scale —
+        a 109,192-frame 4K UHD clip would need ~2.6 TiB of RAM. Use
+        :meth:`_iter_named_sequence_frames` for pipelines that can
+        consume frames one at a time.
+        """
+        return list(
+            self._iter_named_sequence_frames(
+                asset,
+                file_names,
+                clip_name,
+                gamma_correct_exr=gamma_correct_exr,
+                job=job,
+                on_status=on_status,
+            )
+        )
+
+    def _iter_named_sequence_frames(
+        self,
+        asset: ClipAsset,
+        file_names: list[str],
+        clip_name: str,
+        *,
+        gamma_correct_exr: bool = False,
+        job=None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ):
+        """Stream named image-sequence frames as uint8 RGB, one at a time.
+
+        Yields ``(name, uint8_rgb_array)`` tuples lazily. Exactly one
+        frame is ever held in memory across iterations, so peak RAM is
+        O(1) frames regardless of clip length — a 100k+ frame clip
+        streams at the same peak memory as a 10-frame clip.
+
+        This is the fix for issue #95: BiRefNet on a 109,192-frame 4K
+        UHD EXR sequence used to OOM at the list-materialization step
+        in ``_load_named_sequence_frames`` because NumPy can't allocate
+        ~2.6 TiB of uint8 pixel data in a single Python list. The
+        per-frame wrapper loop is already one-at-a-time, so streaming
+        the loader is a pure win: no speed impact (disk read was never
+        the bottleneck), no quality impact, no behavior change for
+        small clips.
+
+        Consumers that need random access or length must either call
+        :meth:`_load_named_sequence_frames` (eager list) or pass
+        ``num_frames`` explicitly alongside the generator.
+        """
         from . import read_image_frame
-        
-        named_frames: list[tuple[str, np.ndarray]] = []
+
         total = len(file_names)
         for index, fname in enumerate(file_names):
             if job and job.is_cancelled:
@@ -323,12 +370,10 @@ class FrameOpsMixin:
             img = read_image_frame(fpath, gamma_correct_exr=gamma_correct_exr)
             if img is None:
                 raise FrameReadError(clip_name, index, fpath)
-            named_frames.append(
-                (fname, (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8))
-            )
+            frame = (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8)
             if on_status and index % 20 == 0 and index > 0:
                 on_status(f"Loading frames ({index}/{total})...")
-        return named_frames
+            yield fname, frame
 
     @staticmethod
     def _resolve_sequence_input_is_linear(
