@@ -24,9 +24,8 @@ logger = logging.getLogger(__name__)
 # scripts/generate_signing_key.py. This key ships with every installed
 # copy of the app and is used to verify that updates came from edenaion.
 #
-# REPLACE THIS PLACEHOLDER before your first signed release.
 SIGNING_PUBLIC_KEY_PEM = b"""-----BEGIN PUBLIC KEY-----
-REPLACE_ME_WITH_REAL_KEY
+MCowBQYDK2VwAyEAeSFrBonqXDbDFPbrA/kpSe2OABoYttySeHnNt04aM+g=
 -----END PUBLIC KEY-----"""
 
 
