@@ -76,11 +76,24 @@ def main() -> None:
         manifest, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
 
-    # Load private key
-    passphrase = getpass("Signing key passphrase: ").encode()
+    # Load private key. Skip the passphrase prompt entirely when the PEM
+    # is unencrypted, because cryptography rejects a non-None password
+    # on an unencrypted key (and Windows terminals can return stray
+    # whitespace from a bare Enter, triggering that rejection).
+    key_bytes = args.key.read_bytes()
+    head = key_bytes[:200]
+    encrypted = (
+        b"BEGIN ENCRYPTED PRIVATE KEY" in head
+        or b"Proc-Type: 4,ENCRYPTED" in key_bytes
+    )
+    if encrypted:
+        typed = getpass("Signing key passphrase: ").strip()
+        passphrase = typed.encode() if typed else None
+    else:
+        passphrase = None
     try:
         priv_key = serialization.load_pem_private_key(
-            args.key.read_bytes(), password=passphrase
+            key_bytes, password=passphrase
         )
     except Exception as e:
         print(f"ERROR: could not load private key: {e}")

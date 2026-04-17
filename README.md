@@ -86,10 +86,11 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 
 **Updating:**
 
-- **Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app — it downloads a lightweight patch and relaunches.
-- **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git (or downloads a ZIP if git isn't available).
+- **Windows Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app. It downloads a lightweight patch and relaunches.
+- **macOS Desktop App users on 1.9.x:** 1.10.0 does **not** auto-update on Mac. You must download the new `.pkg` from Gumroad and run it manually. The installer replaces the existing `/Applications/EZ-CorridorKey.app` in place. Your preferences, projects, and downloaded models live in `~/Library/Application Support/EZ-CorridorKey/` and are preserved across the reinstall. Mac auto-update returns in 1.11.0 or later.
+- **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git, or downloads a ZIP if git isn't available.
 
-> **Note:** The update ZIP on GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) is for Desktop App Installer users only — it patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
+> **Note:** The update ZIP on GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) is for Windows Desktop App Installer users only. It patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
 
 ### Alternate Installation: Docker
 
@@ -486,9 +487,9 @@ All commits to `main` are signed with an Ed25519 SSH key. Branch protection enfo
 
 ### VirusTotal
 
-Independent scans (will be updated after 1.10.0 build):
+Independent scans:
 
-- [**EZ-CorridorKey-1.9.1-Windows-x64-Setup.exe** — VirusTotal scan](https://www.virustotal.com/gui/file-analysis/OWVkMGEwYTI1ZGI1YmUxNWU3N2IwOWRmOWNhZWQ4NWM6MTc3NTg2MzQ2MA==)
+- [**EZ-CorridorKey.exe** (v1.10.0, signed inner exe) — VirusTotal scan](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
 - [**1-install.bat** (v1.6.0) — 0 detections](https://www.virustotal.com/gui/file/c88b68b2fdc429de8bd70a5dde182486c788fcdc34eb508a4a137373d1ddb1bc)
 
 > **Third-party models:** The core CorridorKey checkpoint (`CorridorKey.pth`) is the only model we can vouch for. Optional models (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) are downloaded from their respective authors' repositories -- use them at your own discretion.
