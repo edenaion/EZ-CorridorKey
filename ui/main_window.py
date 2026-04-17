@@ -388,6 +388,7 @@ class MainWindow(
         self._apply_sound_setting()
         self._apply_tracker_model_setting()
         self._apply_model_resolution_setting()
+        self._apply_inference_backend_setting()
 
         # Check for updates (non-blocking background thread)
         if os.environ.get("CORRIDORKEY_SKIP_UPDATE_CHECK") != "1":
