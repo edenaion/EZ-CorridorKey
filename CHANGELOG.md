@@ -12,6 +12,8 @@ _Nothing yet — see 1.10.0 below._
 
 ## [1.10.0] - 2026-04-16 — Project output dirs, wizard overhaul, frozen build fixes
 
+1.10.0 closes out a long-running dev cycle. Expect less frequent updates as I work on my other projects gearing up to release.
+
 > **Pascal (GTX 10-series) users**: 1.10.0 ships the same PyTorch build as 1.9.1 (torch 2.9.1 + cu130), which does **not** include Pascal GPU kernels. If you are running on a GTX 10-series card you will need to perform a one-time manual PyTorch swap inside the app's `_internal` folder -- see [docs/PASCAL-MANUAL-INSTALL.md](docs/PASCAL-MANUAL-INSTALL.md) for step-by-step instructions. The startup diagnostic will detect your card and link you to the guide automatically. All RTX 20-series and newer users are unaffected and can update normally via Help > Check for Updates.
 
 > **macOS users on 1.9.x**: 1.10.0 does **not** auto-update on Mac. Help > Check for Updates has no Mac patch payload for this release. Download the new `EZ-CorridorKey-1.10.0-macOS-arm64.pkg` from Gumroad and run it manually. The installer replaces `/Applications/EZ-CorridorKey.app` in place. Your settings, projects, and any models you already downloaded live in `~/Library/Application Support/EZ-CorridorKey/` and carry over to the new version untouched. Mac auto-update returns in 1.11.0 or later once the update payload moves off GitHub Releases.
