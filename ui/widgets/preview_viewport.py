@@ -272,6 +272,10 @@ class PreviewViewport(QWidget):
         self._split_view.set_annotation_stem_index(new_idx)
         if self._scrubber:
             self._scrubber.set_frame(new_idx)
+        # Re-push per-stem availability because set_available_modes
+        # reset it to "all clip-available" and the current stem may
+        # actually only have a subset.
+        self._push_stem_availability(new_idx)
 
     def load_preview_from_file(self, file_path: str, clip_name: str, frame_index: int) -> None:
         """Load a worker preview image.
@@ -292,6 +296,9 @@ class PreviewViewport(QWidget):
             self._frame_index = self._build_frame_index(self._clip)
             # Enable mode buttons as new output types appear during inference
             self._mode_bar.set_available_modes(self._frame_index.available_modes())
+            # Re-evaluate per-stem availability at the viewer's current
+            # position so buttons toggle correctly as frames stream in.
+            self._push_stem_availability(self._current_stem_idx)
 
         # Only update the displayed image if in COMP mode at the latest frame
         if self._current_mode != ViewMode.COMP:
@@ -319,9 +326,16 @@ class PreviewViewport(QWidget):
         asset_type = clip.input_asset.asset_type if clip.input_asset else "sequence"
         video_path = clip.input_asset.path if (clip.input_asset and asset_type == "video") else None
         seq_dir = clip.input_asset.path if (clip.input_asset and asset_type == "sequence") else None
+        # Resolve output_dir via ClipEntry so per-clip and global "Default
+        # Output Directory" overrides are honored. Falls back to
+        # ``{clip_root}/Output`` when no override is set.
+        try:
+            output_dir = clip.output_dir
+        except Exception:
+            output_dir = None
         return build_frame_index(
             clip.root_path, asset_type, video_path=video_path,
-            input_sequence_dir=seq_dir,
+            input_sequence_dir=seq_dir, output_dir=output_dir,
         )
 
     def show_placeholder(self, text: str = "No clip selected") -> None:
@@ -378,17 +392,16 @@ class PreviewViewport(QWidget):
         self._navigate_to(stem_index)
 
     def _update_clip_info(self, clip: ClipEntry) -> None:
-        """Update the clip info label with resolution, frame count, and type."""
+        """Update the clip info label with frame count, dimensions, and state."""
         parts = []
         asset = clip.input_asset
         if asset:
-            # Frame count
             parts.append(f"{asset.frame_count} frames")
-            # Asset type
-            if asset.asset_type == "video":
-                parts.append("video")
-            else:
-                parts.append("sequence")
+            # Prefer dimensions over the asset_type string — "1920x1080" is
+            # far more useful than a fixed "sequence"/"video" label.
+            dims = asset.get_dimensions()
+            if dims:
+                parts.append(f"{dims[0]}x{dims[1]}")
         parts.append(clip.state.value)
         self._clip_info.setText("  \u00B7  ".join(parts))  # middle dot separator
 
@@ -421,14 +434,44 @@ class PreviewViewport(QWidget):
         if self._scrubber:
             self._scrubber.set_frame(stem_index)
         self.frame_changed.emit(stem_index)
+
+        # Disable mode buttons that don't have a frame at this stem so the
+        # user can't click into an empty state. The currently selected
+        # mode stays enabled — if it has no frame here, _request_frame
+        # falls back to showing the input frame.
+        self._push_stem_availability(stem_index)
+
         self._request_frame(stem_index, self._current_mode)
 
         # If split view, also load input frame for left side
         if self._split_view.split_enabled:
             self._load_split_images()
 
+    def _push_stem_availability(self, stem_index: int) -> None:
+        """Tell the mode bar which modes have a frame at ``stem_index``.
+
+        Safe to call even if ``stem_index`` is out of range — computes an
+        empty set in that case. Keeps the mode bar in sync with whatever
+        the current frame index believes about availability at this stem.
+        """
+        if not self._frame_index or stem_index < 0:
+            self._mode_bar.set_current_stem_availability(set())
+            return
+        present = {
+            mode for mode in ViewMode
+            if self._frame_index.has_frame(mode, stem_index)
+        }
+        self._mode_bar.set_current_stem_availability(present)
+
     def _request_frame(self, stem_index: int, mode: ViewMode) -> None:
-        """Request async decode of a frame."""
+        """Request async decode of a frame.
+
+        If the requested mode has no frame at this stem, silently falls
+        back to the input frame for the same stem so the viewport always
+        shows something sensible. The mode bar selection is preserved —
+        when the user scrubs back into a range where the selected mode
+        has data, the correct frame resumes automatically.
+        """
         if not self._frame_index:
             return
 
@@ -453,11 +496,36 @@ class PreviewViewport(QWidget):
                 stem_index,
                 input_exr_is_linear=(self._input_exr_is_linear if mode == ViewMode.INPUT else False),
             )
-        else:
-            # Frame not available in this mode for this stem
-            self._split_view.set_placeholder(
-                f"No {mode.value} frame for stem {stem_index}"
-            )
+            return
+
+        # Fallback: requested mode has no frame at this stem. Show the
+        # input frame so the viewport isn't empty. Do NOT change
+        # self._current_mode — the mode bar keeps the user's selection.
+        if mode != ViewMode.INPUT:
+            if self._frame_index.is_video_mode(ViewMode.INPUT):
+                video_path = self._frame_index.video_modes.get(ViewMode.INPUT)
+                if video_path:
+                    self._decoder.request_decode(
+                        "", ViewMode.INPUT, stem_index,
+                        video_path=video_path,
+                        video_frame_index=stem_index,
+                        input_exr_is_linear=self._input_exr_is_linear,
+                    )
+                    return
+            input_path = self._frame_index.get_path(ViewMode.INPUT, stem_index)
+            if input_path:
+                self._decoder.request_decode(
+                    input_path,
+                    ViewMode.INPUT,
+                    stem_index,
+                    input_exr_is_linear=self._input_exr_is_linear,
+                )
+                return
+
+        # Truly nothing to show for this stem (no input either).
+        self._split_view.set_placeholder(
+            f"No frame available for stem {stem_index}"
+        )
 
     def _load_split_images(self) -> None:
         """Load both input and current-mode images for split view."""
@@ -507,9 +575,11 @@ class PreviewViewport(QWidget):
             self._current_mode = ViewMode(mode_value)
         except ValueError:
             return
-        # Update button styles
-        for m, btn in self._mode_bar._buttons.items():
-            btn.setStyleSheet(self._mode_bar._button_style(m == self._current_mode))
+        # Ask the mode bar to re-render all buttons. It preserves the
+        # per-stem dim state it already knows about, so switching modes
+        # doesn't clobber the dim-on-missing-frame visual.
+        for m in self._mode_bar._buttons:
+            self._mode_bar._refresh_button_style(m)
         self.view_mode_changed.emit(mode_value)
 
         if self._current_stem_idx >= 0:

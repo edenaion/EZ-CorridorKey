@@ -23,6 +23,32 @@ from .gvm.utils.inference_utils import VideoReader, VideoWriter, ImageSequenceRe
 from .gvm.models.unet_spatio_temporal_condition import UNetSpatioTemporalConditionModel
 
 
+_BUNDLED_WEIGHTS_DIR = osp.join(osp.dirname(__file__), "weights")
+
+
+def _resolve_gvm_weights_dir():
+    """Return the first existing GVM weights directory, or None.
+
+    Checks ``<data_dir>/gvm_core/weights`` first (where ``setup_models.py``
+    writes in frozen builds), then falls back to the bundled directory
+    beside this file so existing manual installs keep working.
+    """
+    candidates = []
+    try:
+        from backend.project import get_data_dir  # Lazy import: avoid cycles
+        data_dir = get_data_dir()
+        if data_dir:
+            candidates.append(osp.join(data_dir, "gvm_core", "weights"))
+    except Exception:
+        pass
+    if _BUNDLED_WEIGHTS_DIR not in candidates:
+        candidates.append(_BUNDLED_WEIGHTS_DIR)
+    for path in candidates:
+        if osp.isdir(path):
+            return path
+    return None
+
+
 def seed_all(seed: int = 0):
     random.seed(seed)
     np.random.seed(seed)
@@ -62,11 +88,11 @@ class GVMProcessor:
                  seed=None):
         self.device = torch.device(device)
         
-        # Resolve default weights path relative to this file,
-        # falling back to the HuggingFace repo ID if local weights aren't present.
+        # Resolve default weights path from installed data dir first, then the
+        # bundled module dir, finally falling back to the HuggingFace repo ID.
         if model_base is None:
-            local_weights = osp.join(osp.dirname(__file__), "weights")
-            if osp.isdir(local_weights):
+            local_weights = _resolve_gvm_weights_dir()
+            if local_weights is not None:
                 model_base = local_weights
             else:
                 model_base = "geyongtao/gvm"
@@ -184,7 +210,12 @@ class GVMProcessor:
         if new_long > _scale_cap:
             new_long = _scale_cap
 
-        max_res_param = new_long
+        # torchvision Resize(size=S, max_size=M) requires M > S strictly.
+        # For square or near-square inputs, new_long can equal _base_res,
+        # which trips the constraint and crashes with
+        # "max_size must be strictly greater than the requested size
+        # for the smaller edge size". Guarantee a 1-px margin.
+        max_res_param = max(new_long, _base_res + 1)
 
         transform = Compose([
             ToTensor(),

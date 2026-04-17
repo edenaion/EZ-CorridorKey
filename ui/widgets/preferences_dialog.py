@@ -395,25 +395,7 @@ class PreferencesDialog(QDialog):
 
         # (added to layout below in display order)
 
-        # ── Models ──
-        models_group = QGroupBox("Models")
-        models_layout = QVBoxLayout(models_group)
-
-        models_info = QLabel(
-            "Download or re-download model checkpoints. "
-            "Already-installed models are skipped automatically."
-        )
-        models_info.setWordWrap(True)
-        models_info.setStyleSheet("color: #999980; font-size: 11px;")
-        models_layout.addWidget(models_info)
-
-        self._download_models_btn = QPushButton("Download Models...")
-        self._download_models_btn.setToolTip(
-            "Open the model download dialog to install or repair "
-            "CorridorKey, MLX, SAM2, GVM, and VideoMaMa checkpoints."
-        )
-        self._download_models_btn.clicked.connect(self._on_download_models)
-        models_layout.addWidget(self._download_models_btn)
+        # Model downloads now live in Edit > Download Manager (not Preferences).
 
         ffmpeg_group = QGroupBox("Video Tools")
         ffmpeg_layout = QVBoxLayout(ffmpeg_group)
@@ -470,14 +452,13 @@ class PreferencesDialog(QDialog):
         ffmpeg_layout.addLayout(ffmpeg_btn_row)
 
         # --- Layout order ---
-        # UI > Project > Playback > Tracking > Inference > Output > Models > Video Tools
+        # UI > Project > Playback > Tracking > Inference > Output > Video Tools
         layout.addWidget(ui_group)
         layout.addWidget(proj_group)
         layout.addWidget(play_group)
         layout.addWidget(tracking_group)
         layout.addWidget(inference_group)
         layout.addWidget(output_group)
-        layout.addWidget(models_group)
         layout.addWidget(ffmpeg_group)
 
         scroll.setWidget(scroll_content)
@@ -570,13 +551,6 @@ class PreferencesDialog(QDialog):
         parent = self.parent()
         if parent is not None and hasattr(parent, "_status_bar"):
             parent._status_bar.set_message(message)
-
-    def _on_download_models(self) -> None:
-        """Open the model download dialog (same UI as the first-launch wizard)."""
-        from ui.widgets.setup_wizard import SetupWizard
-        dialog = SetupWizard(parent=self)
-        dialog.setWindowTitle("Download Models")
-        dialog.exec()
 
     def _on_repair_ffmpeg(self) -> None:
         """Repair FFmpeg on Windows or show manual install guidance elsewhere."""

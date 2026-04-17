@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Callable, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple, Union
 
 import cv2
 import numpy as np
@@ -28,6 +28,63 @@ from PIL import Image
 from torchvision import transforms
 
 logger = logging.getLogger(__name__)
+
+_BUNDLED_CHECKPOINT_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "checkpoints"
+)
+
+
+def _candidate_checkpoint_dirs() -> List[str]:
+    """Return BiRefNet checkpoint directories to search, in priority order.
+
+    Order:
+      1. ``<data_dir>/modules/BiRefNetModule/checkpoints`` — writable on
+         every platform. The setup wizard downloads here in frozen builds
+         and the lazy runtime download in ``_ensure_loaded`` writes here
+         too. This is the only path that works on installed macOS builds
+         because ``/Applications/EZ-CorridorKey.app/Contents/...`` is
+         read-only for non-admin users.
+      2. ``_BUNDLED_CHECKPOINT_DIR`` — the directory next to this file.
+         In dev mode this is ``modules/BiRefNetModule/checkpoints``. In
+         frozen builds this lives inside the bundle and is read-only on
+         macOS, but stays as a fallback so existing manual/dev installs
+         keep working.
+    """
+    dirs: List[str] = []
+    try:
+        from backend.project import get_data_dir  # Lazy import: avoid cycles
+        data_dir = get_data_dir()
+        if data_dir:
+            dirs.append(
+                os.path.join(
+                    data_dir, "modules", "BiRefNetModule", "checkpoints"
+                )
+            )
+    except Exception:
+        pass
+    if _BUNDLED_CHECKPOINT_DIR not in dirs:
+        dirs.append(_BUNDLED_CHECKPOINT_DIR)
+    return dirs
+
+
+def _resolve_model_dir(repo_name: str) -> Tuple[Optional[str], str]:
+    """Locate an already-downloaded BiRefNet variant.
+
+    Returns ``(existing_dir_or_None, preferred_download_dir)``. The
+    preferred download dir is always the first candidate — the writable
+    data-dir location — so a cold lazy download never targets the
+    read-only bundled path.
+    """
+    candidates = _candidate_checkpoint_dirs()
+    for base in candidates:
+        candidate = os.path.join(base, repo_name)
+        if os.path.isdir(candidate) and any(
+            f.endswith((".safetensors", ".bin"))
+            for f in os.listdir(candidate)
+            if os.path.isfile(os.path.join(candidate, f))
+        ):
+            return candidate, os.path.join(candidates[0], repo_name)
+    return None, os.path.join(candidates[0], repo_name)
 
 # ── Model registry ──────────────────────────────────────────────────────────
 # Display name → HuggingFace repo suffix under ZhengPeng7/
@@ -113,25 +170,31 @@ class BiRefNetProcessor:
             )
 
         repo_id = f"ZhengPeng7/{repo_name}"
-        base_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoints")
-        model_local_dir = os.path.join(base_folder, repo_name)
 
-        # Download if needed (idempotent — skips existing files)
-        if not os.path.isdir(model_local_dir) or not any(
-            f.endswith(('.safetensors', '.bin')) for f in os.listdir(model_local_dir)
-            if os.path.isfile(os.path.join(model_local_dir, f))
-        ):
+        # Look for an existing checkpoint in the data-dir location first,
+        # then fall back to the bundled directory (dev/manual installs).
+        # If nothing exists, ``download_target`` is the writable data-dir
+        # path — never the read-only bundled path, which is what caused
+        # the "Permission denied" crash on installed macOS builds where
+        # the module lives inside /Applications/*.app/Contents/...
+        existing, download_target = _resolve_model_dir(repo_name)
+        if existing is not None:
+            model_local_dir = existing
+            logger.info(f"BiRefNet model cached: {model_local_dir}")
+        else:
+            model_local_dir = download_target
             if on_status:
                 on_status(f"Downloading {repo_name}...")
-            logger.info(f"Downloading BiRefNet model: {repo_id}")
+            logger.info(
+                f"Downloading BiRefNet model: {repo_id} -> {model_local_dir}"
+            )
+            os.makedirs(model_local_dir, exist_ok=True)
             from huggingface_hub import snapshot_download
             snapshot_download(
                 repo_id=repo_id,
                 local_dir=model_local_dir,
                 local_dir_use_symlinks=False,
             )
-        else:
-            logger.info(f"BiRefNet model cached: {model_local_dir}")
 
         if on_status:
             on_status(f"Loading BiRefNet ({self._usage})...")
@@ -166,7 +229,7 @@ class BiRefNetProcessor:
     @torch.inference_mode()
     def process_frames(
         self,
-        input_frames: list[np.ndarray],
+        input_frames: Union[Iterable[np.ndarray], list[np.ndarray]],
         output_dir: str,
         frame_names: list[str],
         progress_callback: Optional[Callable[[str, int, int], None]] = None,
@@ -174,11 +237,17 @@ class BiRefNetProcessor:
         cancel_check: Optional[Callable[[], bool]] = None,
         clip_name: str = "",
         dilate_radius: int = 0,
+        num_frames: Optional[int] = None,
     ) -> int:
         """Process frames and write alpha hint PNGs.
 
         Args:
-            input_frames: List of uint8 RGB numpy arrays (H,W,3).
+            input_frames: Iterable of uint8 RGB numpy arrays (H,W,3).
+                Accepts both eager lists and lazy generators. Large
+                clips should pass a generator — this loop only ever
+                holds one frame in memory at a time, so RAM stays
+                bounded regardless of clip length. This is the fix
+                for issue #95 (109k-frame 4K UHD OOM).
             output_dir: Directory to write alpha hint PNGs.
             frame_names: Output filenames (without extension), one per input frame.
             progress_callback: Called as (clip_name, frames_done, total_frames).
@@ -186,13 +255,23 @@ class BiRefNetProcessor:
             cancel_check: Returns True if job should be cancelled.
             clip_name: For progress callback identification.
             dilate_radius: Mask expansion (>0) or contraction (<0). 0 = no change.
+            num_frames: Explicit frame count for progress reporting when
+                ``input_frames`` is a generator. If omitted, falls back
+                to ``len(input_frames)`` which requires a sized iterable.
 
         Returns:
             Number of alpha frames written.
         """
         self._ensure_loaded(on_status=on_status)
 
-        num_frames = len(input_frames)
+        if num_frames is None:
+            try:
+                num_frames = len(input_frames)  # type: ignore[arg-type]
+            except TypeError:
+                # Generator / bare iterator — caller must pass num_frames
+                # explicitly for a meaningful progress bar. Fall back to
+                # len(frame_names) which is cheap and always known.
+                num_frames = len(frame_names)
         if num_frames == 0:
             return 0
 

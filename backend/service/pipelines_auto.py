@@ -133,22 +133,39 @@ class AutoPipelinesMixin:
         if _check_cancel():
             raise JobCancelledError(clip.name, 0)
 
-        # Phase 2: Load input frames
+        # Phase 2: Stream input frames
+        #
+        # Issue #95: a 109k-frame 4K UHD EXR clip OOMs if we materialize
+        # every frame into a Python list up front (~2.6 TiB of RAM).
+        # Instead, precompute everything that's cheap (filenames,
+        # stems, count) and stream actual pixel data through a
+        # generator so only one frame lives in RAM at a time.
         _status("Loading frames...")
         selected_input_names = self._selected_sequence_files(clip)
         if not selected_input_names:
             raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for BiRefNet")
 
-        named_input_frames = self._load_named_sequence_frames(
-            clip.input_asset,
-            selected_input_names,
-            clip.name,
-            job=job,
-            on_status=on_status,
+        frame_stems = [os.path.splitext(fname)[0] for fname in selected_input_names]
+        num_frames = len(selected_input_names)
+
+        # Deliberately pass on_status=None to the generator: in the
+        # streaming path the wrapper owns the phase text ("Running
+        # BiRefNet inference...") and the progress bar tracks frame
+        # counts via progress_callback. If the generator also fired
+        # "Loading frames (N/total)..." every 20 frames, it would
+        # overwrite the wrapper's phase text and make the status bar
+        # flip-flop once per chunk on long clips.
+        frame_iter = (
+            frame
+            for _, frame in self._iter_named_sequence_frames(
+                clip.input_asset,
+                selected_input_names,
+                clip.name,
+                job=job,
+                on_status=None,
+            )
         )
-        input_frames = [frame for _, frame in named_input_frames]
-        input_names = [fname for fname, _ in named_input_frames]
-        frame_stems = [os.path.splitext(fname)[0] for fname in input_names]
+
         if _check_cancel():
             raise JobCancelledError(clip.name, 0)
 
@@ -156,13 +173,14 @@ class AutoPipelinesMixin:
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         try:
             frames_written = processor.process_frames(
-                input_frames=input_frames,
+                input_frames=frame_iter,
                 output_dir=alpha_dir,
                 frame_names=frame_stems,
                 progress_callback=on_progress,
                 on_status=on_status,
                 cancel_check=_check_cancel,
                 clip_name=clip.name,
+                num_frames=num_frames,
             )
         except Exception as e:
             if "CUDA out of memory" in str(e) or "OutOfMemoryError" in type(e).__name__:

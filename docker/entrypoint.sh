@@ -163,9 +163,9 @@ run_installer_if_needed() {
   echo "${current_env_sig}" > "${INSTALL_ENV_SIG_FILE}"
 }
 
-echo "noVNC: http://localhost:6080"
-echo "Upload: http://localhost:6081"
-echo "VNC:   localhost:5900 (no password)"
+echo "noVNC:  http://localhost:6080           (password: EZ-CorridorKey)"
+echo "Upload: http://localhost:6081           (user: admin / password: EZ-CorridorKey)"
+echo "VNC:    localhost:5900                  (password: EZ-CorridorKey)"
 echo ""
 
 sync_app_source_if_needed

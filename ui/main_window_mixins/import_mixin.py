@@ -65,6 +65,7 @@ class ImportMixin:
         self._clips_dir = None
         self._current_clip = None
         self._clip_input_is_linear = {}
+        self._refresh_project_output_actions()
 
     @Slot(list)
     def _on_tray_folder_imported(self, dir_path: str) -> None:
