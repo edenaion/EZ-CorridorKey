@@ -12,6 +12,7 @@ from ui.widgets.preferences_dialog import (
     PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
     KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
     KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION,
+    KEY_INFERENCE_BACKEND,
     get_setting_bool, get_setting_str, get_setting_int,
 )
 
@@ -63,6 +64,7 @@ class SettingsMixin:
             self._apply_tracker_model_setting()
             self._apply_parallel_clips_setting()
             self._apply_model_resolution_setting()
+            self._apply_inference_backend_setting()
 
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
@@ -114,6 +116,15 @@ class SettingsMixin:
         """Apply saved model resolution preference to the backend service."""
         res = get_setting_int(KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION)
         self._service.set_model_resolution(res)
+
+    def _apply_inference_backend_setting(self) -> None:
+        """Apply saved inference backend (macOS MLX/MPS) to the backend service.
+
+        Drops the engine pool if the backend changed so the next inference
+        rebuilds on the newly selected backend without an app restart.
+        """
+        backend = get_setting_str(KEY_INFERENCE_BACKEND, "auto")
+        self._service.set_inference_backend(backend)
 
     def _apply_parallel_clips_setting(self) -> None:
         """Apply saved parallel clips preference to the GPU worker."""

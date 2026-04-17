@@ -130,6 +130,7 @@ class CorridorKeyService(
         self._engine_pool: list = []
         self._pool_size: int = 1
         self._model_resolution: int = 2048  # default: full quality
+        self._inference_backend: str = "auto"  # auto | mlx | torch (macOS only)
         self._gvm_processor = None
         self._sam2_tracker = None
         self._videomama_pipeline = None
@@ -203,6 +204,31 @@ class CorridorKeyService(
                     torch.cuda.empty_cache()
             except Exception:
                 pass
+
+    def set_inference_backend(self, backend: str) -> None:
+        """Change the inference backend (macOS: auto/mlx/torch). Drops the engine pool
+        so the next inference rebuilds on the new backend without a restart.
+        """
+        backend = (backend or "auto").lower()
+        if backend not in ("auto", "mlx", "torch"):
+            logger.warning("Invalid inference backend %r, ignoring", backend)
+            return
+        if backend == self._inference_backend:
+            return
+        logger.info("Inference backend: %s -> %s (engine reload required)", self._inference_backend, backend)
+        self._inference_backend = backend
+        for eng in self._engine_pool:
+            self._safe_offload(eng)
+        self._engine_pool.clear()
+        if self._active_model == _ActiveModel.INFERENCE:
+            self._active_model = _ActiveModel.NONE
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
 
     def set_pool_size(self, n: int) -> None:
         """Set the number of parallel inference engines."""
