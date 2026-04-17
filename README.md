@@ -1,10 +1,11 @@
 # EZ-CorridorKey **v1.10.0**
 
-[![Release](https://img.shields.io/github/v/release/edenaion/EZ-CorridorKey?style=flat-square&label=Release)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
-[![Stars](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
-[![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-blue?style=flat-square)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
-[![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/TyxNjcWeF3)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)]()
+[![Release](https://img.shields.io/github/v/release/edenaion/EZ-CorridorKey?style=flat-square&label=Release&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
+[![Stars](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
+[![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
+[![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
 > **Latest release: [v1.10.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.10.0)** — Project output dirs, wizard overhaul, signed updates, frozen build fixes. See the [full changelog](CHANGELOG.md).
 
@@ -501,7 +502,7 @@ Independent scans:
 EZ-CorridorKey is a labor of love — built and maintained by one man from Brooklyn for the VFX community. If this tool saves you time on a project, consider paying it forward:
 
 [![Ko-Fi](https://img.shields.io/badge/Ko--fi-Support%20Development-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/edenaion)
-[![EZSCAPE Plugins](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-000000?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yIDEyaDE4TTEyIDJjLTMgMy41LTUgNy01IDEwczIgNi41IDUgMTBjMy0zLjUgNS03IDUtMTBzLTItNi41LTUtMTAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==&logoColor=white)](https://www.ezscape.space)
+[![EZSCAPE Plugins](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=for-the-badge&labelColor=000000)](https://www.ezscape.space)
 [![RunPod](https://img.shields.io/badge/RunPod-Cloud%20GPU-673AB7?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNS0xMC01LTEwIDV6TTIgMTJsMTAgNSAxMC01LTEwLTUtMTAgNXoiLz48L3N2Zz4=&logoColor=white)](https://runpod.io?ref=2k18fmnh)
 
 - **Star this repo** if you find it useful -- it helps others discover the project
@@ -514,7 +515,7 @@ Need GPU compute for inference? [RunPod](https://runpod.io?ref=2k18fmnh) offers 
 
 ### Community
 
-[![Discord - EZSCAPE](https://img.shields.io/badge/EZSCAPE-Support%20%26%20Chill-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/TyxNjcWeF3)
+[![Discord - EZSCAPE](https://img.shields.io/badge/EZSCAPE-Support%20%26%20Chill-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![Discord - Corridor Creates](https://img.shields.io/badge/Corridor%20Creates-Community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/zvwUrdWXJm)
 
 ---
