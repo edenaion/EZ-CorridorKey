@@ -27,6 +27,22 @@ import importlib.util
 import os
 import sys
 
+import pytest
+
+# The in-app update zip is Windows-only. The build script lives under
+# scripts/windows/ which is gitignored and only present on Windows dev
+# checkouts. Skip the whole module on non-Windows so Mac / Linux test runs
+# stay green without masking real regressions on Windows.
+pytestmark = pytest.mark.skipif(
+    sys.platform != "win32" or not os.path.exists(
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "scripts", "windows", "build_update_zip.py",
+        )
+    ),
+    reason="build_update_zip.py is Windows-only and not present on this checkout",
+)
+
 
 def _load_build_update_zip():
     """Load the build_update_zip module without importing scripts.windows

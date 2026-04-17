@@ -74,10 +74,14 @@ class TestDeviceDetection:
         assert result in ("cpu", "cuda")  # depends on real env
 
     def test_detect_device_returns_string(self):
+        import sys
         svc = CorridorKeyService()
         result = svc.detect_device()
         assert isinstance(result, str)
-        assert result in ("cuda", "cpu")
+        if sys.platform == "darwin":
+            assert result in ("mps", "cpu")
+        else:
+            assert result in ("cuda", "cpu")
 
 
 # ── TestVRAMInfo ──
