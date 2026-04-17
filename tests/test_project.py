@@ -23,6 +23,10 @@ from backend.project import (
     set_display_name,
     save_in_out_range,
     load_in_out_range,
+    save_project_output_dir,
+    load_project_output_dir,
+    save_custom_output_dir,
+    load_custom_output_dir,
     is_video_file,
 )
 
@@ -509,3 +513,163 @@ class TestRemovedClips:
                 f.write(b"\x00" * 100)
             add_clips_to_project(project_dir, [video2])
             assert clip_name in get_removed_clips(project_dir)
+
+
+class TestProjectOutputDir:
+    """Tests for project-level output directory persistence."""
+
+    def test_save_and_load(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {"version": 2})
+            save_project_output_dir(tmpdir, "/my/output")
+            assert load_project_output_dir(tmpdir) == "/my/output"
+
+    def test_clear(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {"version": 2})
+            save_project_output_dir(tmpdir, "/my/output")
+            save_project_output_dir(tmpdir, None)
+            assert load_project_output_dir(tmpdir) == ""
+
+    def test_clear_with_empty_string(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {"version": 2})
+            save_project_output_dir(tmpdir, "/my/output")
+            save_project_output_dir(tmpdir, "")
+            assert load_project_output_dir(tmpdir) == ""
+
+    def test_load_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {"version": 2})
+            assert load_project_output_dir(tmpdir) == ""
+
+    def test_load_no_project_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            assert load_project_output_dir(tmpdir) == ""
+
+    def test_preserves_existing_fields(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            write_project_json(tmpdir, {
+                "version": 2, "display_name": "My Project", "clips": ["a"],
+            })
+            save_project_output_dir(tmpdir, "/output")
+            data = read_project_json(tmpdir)
+            assert data["display_name"] == "My Project"
+            assert data["clips"] == ["a"]
+            assert data["output_dir"] == "/output"
+
+
+class TestOutputDirResolution:
+    """Tests for the 4-tier output_dir resolution on ClipEntry."""
+
+    def _make_v2_clip(self, tmpdir, project_name="TestProject", clip_name="ClipA"):
+        """Create a v2 project structure and return (project_root, clip_root)."""
+        project_root = os.path.join(tmpdir, project_name)
+        clips_dir = os.path.join(project_root, "clips")
+        clip_root = os.path.join(clips_dir, clip_name)
+        os.makedirs(clip_root)
+        write_project_json(project_root, {"version": 2, "clips": [clip_name]})
+        return project_root, clip_root
+
+    def _make_clip_entry(self, clip_root, clip_name="ClipA", custom_output_dir=""):
+        from backend.clip_state import ClipEntry
+        return ClipEntry(
+            name=clip_name,
+            root_path=clip_root,
+            custom_output_dir=custom_output_dir,
+        )
+
+    def test_tier4_default_fallback(self):
+        """No overrides set: output_dir = {clip_root}/Output."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _, clip_root = self._make_v2_clip(tmpdir)
+            clip = self._make_clip_entry(clip_root)
+            with patch("PySide6.QtCore.QSettings.value", return_value=""):
+                assert clip.output_dir == os.path.join(clip_root, "Output")
+
+    def test_tier3_global_preference(self):
+        """Global QSettings dir set: output = {global}/{ProjectName}/{ClipName}."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root, clip_root = self._make_v2_clip(tmpdir)
+            clip = self._make_clip_entry(clip_root)
+            global_dir = os.path.join(tmpdir, "GlobalOutput")
+            with patch("PySide6.QtCore.QSettings.value", return_value=global_dir):
+                expected = os.path.join(global_dir, "TestProject", "ClipA")
+                assert clip.output_dir == expected
+
+    def test_tier2_project_override(self):
+        """Project-level output_dir in project.json overrides global."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root, clip_root = self._make_v2_clip(tmpdir)
+            project_out = os.path.join(tmpdir, "ProjectOutput")
+            save_project_output_dir(project_root, project_out)
+            clip = self._make_clip_entry(clip_root)
+            # Global is set too, but project should win
+            global_dir = os.path.join(tmpdir, "GlobalOutput")
+            with patch("PySide6.QtCore.QSettings.value", return_value=global_dir):
+                expected = os.path.join(project_out, "ClipA")
+                assert clip.output_dir == expected
+
+    def test_tier1_clip_override(self):
+        """Per-clip custom_output_dir overrides everything."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root, clip_root = self._make_v2_clip(tmpdir)
+            clip_out = os.path.join(tmpdir, "ClipSpecific")
+            # Set both project and global — clip should still win
+            save_project_output_dir(project_root, os.path.join(tmpdir, "ProjectOut"))
+            clip = self._make_clip_entry(clip_root, custom_output_dir=clip_out)
+            global_dir = os.path.join(tmpdir, "GlobalOutput")
+            with patch("PySide6.QtCore.QSettings.value", return_value=global_dir):
+                assert clip.output_dir == clip_out
+
+    def test_tier2_cleared_falls_to_tier3(self):
+        """Clearing the project override falls through to global."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root, clip_root = self._make_v2_clip(tmpdir)
+            save_project_output_dir(project_root, "/some/dir")
+            save_project_output_dir(project_root, None)  # clear
+            clip = self._make_clip_entry(clip_root)
+            global_dir = os.path.join(tmpdir, "GlobalOutput")
+            with patch("PySide6.QtCore.QSettings.value", return_value=global_dir):
+                expected = os.path.join(global_dir, "TestProject", "ClipA")
+                assert clip.output_dir == expected
+
+    def test_tier2_uses_clip_name_subfolder(self):
+        """Project output creates per-clip subfolders to prevent collision."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root, clip_root_a = self._make_v2_clip(tmpdir)
+            # Add a second clip folder
+            clip_root_b = os.path.join(project_root, "clips", "ClipB")
+            os.makedirs(clip_root_b)
+            project_out = os.path.join(tmpdir, "ProjectOutput")
+            save_project_output_dir(project_root, project_out)
+
+            clip_a = self._make_clip_entry(clip_root_a, clip_name="ClipA")
+            clip_b = self._make_clip_entry(clip_root_b, clip_name="ClipB")
+
+            with patch("PySide6.QtCore.QSettings.value", return_value=""):
+                assert clip_a.output_dir == os.path.join(project_out, "ClipA")
+                assert clip_b.output_dir == os.path.join(project_out, "ClipB")
+                # They must differ
+                assert clip_a.output_dir != clip_b.output_dir
+
+    def test_v1_layout_skips_project_tier(self):
+        """v1 projects (no clips/ dir) skip the project tier gracefully."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # v1: clip IS the project dir (no clips/ subdirectory)
+            from backend.clip_state import ClipEntry
+            clip = ClipEntry(name="MyClip", root_path=tmpdir)
+            with patch("PySide6.QtCore.QSettings.value", return_value=""):
+                assert clip.output_dir == os.path.join(tmpdir, "Output")
+
+    def test_full_cascade_tier1_wins(self):
+        """All 4 tiers set simultaneously: per-clip wins."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root, clip_root = self._make_v2_clip(tmpdir)
+            clip_out = os.path.join(tmpdir, "tier1")
+            project_out = os.path.join(tmpdir, "tier2")
+            global_out = os.path.join(tmpdir, "tier3")
+            save_project_output_dir(project_root, project_out)
+            clip = self._make_clip_entry(clip_root, custom_output_dir=clip_out)
+            with patch("PySide6.QtCore.QSettings.value", return_value=global_out):
+                assert clip.output_dir == clip_out

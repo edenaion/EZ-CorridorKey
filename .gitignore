@@ -109,3 +109,10 @@ scripts/windows/build_portable_zip.py
 scripts/windows/build_update_zip.py
 scripts/azure/
 scripts/build-release.sh
+
+# VS Code port forwarding
+.port
+
+# Release signing keys (NEVER commit the private key)
+ezck_signing_private.pem
+ezck_signing_public.pem

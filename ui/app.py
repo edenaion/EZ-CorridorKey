@@ -151,6 +151,14 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     # (Corridor Digital\CorridorKey → EZSCAPE\EZ-CorridorKey)
     _migrate_legacy_settings()
 
+    # Keep the Windows Apps & Features version in sync with the bundled build
+    # after a skinny update. No-op on non-Windows and in dev mode.
+    try:
+        from backend.version_sync import sync_uninstall_version
+        sync_uninstall_version()
+    except Exception as exc:
+        logger.debug("Version sync skipped: %s", exc)
+
     # ── Font loading (frozen-build aware) ──
     if getattr(sys, 'frozen', False):
         base = sys._MEIPASS

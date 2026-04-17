@@ -29,16 +29,33 @@ class ViewMode(str, Enum):
     PROCESSED = "Processed"
 
 
-# Maps ViewMode to the subdirectory relative to clip root
-_MODE_DIRS: dict[ViewMode, str] = {
+# Subdirectories relative to clip_root (unaffected by custom output dirs).
+_CLIP_ROOT_DIRS: dict[ViewMode, str] = {
     ViewMode.INPUT: "Input",
     ViewMode.MASK: "VideoMamaMaskHint",
     ViewMode.ALPHA: "AlphaHint",
-    ViewMode.FG: os.path.join("Output", "FG"),
-    ViewMode.MATTE: os.path.join("Output", "Matte"),
-    ViewMode.COMP: os.path.join("Output", "Comp"),
-    ViewMode.PROCESSED: os.path.join("Output", "Processed"),
 }
+
+# Subdirectories inside the resolved output_dir. These modes honor
+# per-clip and global "Default Output Directory" overrides; if no
+# override is set the caller should pass ``clip_root/Output`` here.
+_OUTPUT_DIR_SUBDIRS: dict[ViewMode, str] = {
+    ViewMode.FG: "FG",
+    ViewMode.MATTE: "Matte",
+    ViewMode.COMP: "Comp",
+    ViewMode.PROCESSED: "Processed",
+}
+
+# Complete iteration order for preview mode scanning.
+_ALL_MODES: tuple[ViewMode, ...] = (
+    ViewMode.INPUT,
+    ViewMode.MASK,
+    ViewMode.ALPHA,
+    ViewMode.FG,
+    ViewMode.MATTE,
+    ViewMode.COMP,
+    ViewMode.PROCESSED,
+)
 
 
 @dataclass
@@ -87,11 +104,13 @@ def build_frame_index(
     input_asset_type: str = "sequence",
     video_path: str | None = None,
     input_sequence_dir: str | None = None,
+    output_dir: str | None = None,
 ) -> FrameIndex:
     """Build a FrameIndex by scanning all relevant directories.
 
-    Scans Input/, AlphaHint/, and Output/{FG,Matte,Comp,Processed} for image
-    files, extracts stems, and builds a unified timeline.
+    Scans Input/, AlphaHint/, and the resolved output directory's
+    {FG,Matte,Comp,Processed} subfolders for image files, extracts stems,
+    and builds a unified timeline.
 
     Args:
         clip_root: Path to the clip's root directory.
@@ -101,11 +120,18 @@ def build_frame_index(
         input_sequence_dir: Explicit directory for input frames. Used for
                     externally-referenced image sequences where frames live
                     outside the clip folder.
+        output_dir: Resolved output directory for this clip. Honors per-clip
+                    and global "Default Output Directory" overrides. When
+                    ``None`` (legacy callers), falls back to
+                    ``{clip_root}/Output``.
     """
     index = FrameIndex()
     all_stems: set[str] = set()
 
-    for mode, rel_dir in _MODE_DIRS.items():
+    if output_dir is None:
+        output_dir = os.path.join(clip_root, "Output")
+
+    for mode in _ALL_MODES:
         # Resolve INPUT directory — try Frames/ (new) then Input/ (legacy)
         if mode == ViewMode.INPUT:
             # Handle video input
@@ -142,8 +168,15 @@ def build_frame_index(
                 dir_path = input_sequence_dir
             if dir_path is None:
                 continue
+        elif mode in _OUTPUT_DIR_SUBDIRS:
+            # FG/Matte/Comp/Processed live under the resolved output_dir,
+            # which may be overridden by a per-clip or global preference.
+            dir_path = os.path.join(output_dir, _OUTPUT_DIR_SUBDIRS[mode])
+        elif mode in _CLIP_ROOT_DIRS:
+            # Mask / Alpha hints always live next to the clip root.
+            dir_path = os.path.join(clip_root, _CLIP_ROOT_DIRS[mode])
         else:
-            dir_path = os.path.join(clip_root, rel_dir)
+            continue
 
         if not os.path.isdir(dir_path):
             continue

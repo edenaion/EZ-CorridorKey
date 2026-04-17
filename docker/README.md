@@ -29,9 +29,15 @@ To see logs during first run: omit `-d` to run in the foreground.
 
 ## Access the app
 
-- Web UI (noVNC): http://localhost:6080
-- Upload UI (file browser): http://localhost:6081
-- Raw VNC (optional): localhost:5900
+All three endpoints are bound to `127.0.0.1` only (never exposed to your LAN) and require authentication. The password for every endpoint is the repository name: **`EZ-CorridorKey`**.
+
+| Endpoint | URL | User | Password |
+|---|---|---|---|
+| Web UI (noVNC) | http://localhost:6080 | — | `EZ-CorridorKey` |
+| Upload UI (file browser) | http://localhost:6081 | `admin` | `EZ-CorridorKey` |
+| Raw VNC (optional) | localhost:5900 | — | `EZ-CorridorKey` |
+
+> **Changing the password:** edit the VNC password in [`supervisord.conf`](supervisord.conf) (`x11vnc -passwd ...`) and the filebrowser admin creds in the same file (`filebrowser users add admin <new-password>`), then recreate the container with `docker compose --profile gpu up -d corridorkey-gpu --force-recreate`. The filebrowser user only gets created on the first boot of a fresh `.filebrowser.db`; if you change the password after first boot you'll also need to `docker exec` in and run the `filebrowser users update admin --password <new>` command, or wipe the volume.
 
 ## Upload files
 
@@ -106,7 +112,10 @@ docker compose logs -f corridorkey-cpu
 
 ## Security note
 
-Password: 
-EZ-CorridorKey
+All three service ports (6080, 6081, 5900) bind to `127.0.0.1` only, so they are never reachable from your LAN or the internet out of the box. Every endpoint also requires a password (`EZ-CorridorKey` by default — see the table above). If you need remote access, tunnel over SSH rather than re-binding the ports to `0.0.0.0`:
 
-The web and VNC endpoints are authenticated with password EZ-CorridorKey. Do not expose these ports directly to the public internet.
+```bash
+ssh -L 6080:localhost:6080 -L 6081:localhost:6081 user@your-host
+```
+
+**Before publishing a Docker image publicly or handing the default container to untrusted users, change the password** in [`supervisord.conf`](supervisord.conf). The default is deliberately well-known — it exists so local/single-user setups don't have to guess a randomized password, not as real access control against a determined attacker.

@@ -484,6 +484,27 @@ def load_custom_output_dir(clip_root: str) -> str:
     return ""
 
 
+def save_project_output_dir(project_root: str, output_dir: str | None) -> None:
+    """Persist a project-level output directory to project.json.
+
+    Pass None or empty string to clear the override (revert to global/default).
+    """
+    data = read_project_json(project_root) or {}
+    if output_dir:
+        data["output_dir"] = output_dir
+    else:
+        data.pop("output_dir", None)
+    write_project_json(project_root, data)
+
+
+def load_project_output_dir(project_root: str) -> str:
+    """Load project-level output directory from project.json, or empty string."""
+    data = read_project_json(project_root)
+    if data and "output_dir" in data:
+        return str(data["output_dir"])
+    return ""
+
+
 def is_video_file(filename: str) -> bool:
     """Check if a filename has a video extension."""
     return os.path.splitext(filename)[1].lower() in _VIDEO_EXTS

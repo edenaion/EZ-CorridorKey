@@ -528,6 +528,18 @@ class CorridorKeyEngine:
         
         if res_alpha.ndim == 2: res_alpha = res_alpha[:, :, np.newaxis]
 
+        # --- REFINER ADDITIVE GUARD ---
+        # CorridorKey's refiner was trained to tighten rough green-screen
+        # alphas, so when it is fed an already-good input mask (e.g. from
+        # GVM Auto or VideoMaMa), it can erode wispy hair strands the guide
+        # had captured correctly. Take the per-pixel maximum between the
+        # refiner output and the original input guide: the refiner may
+        # *add* confidence (extend into areas the guide missed) but may
+        # never *subtract* confidence the guide already had. mask_linear is
+        # already at full (h, w) resolution and in [0, 1] float space, so
+        # no resize or normalization is needed here.
+        res_alpha = np.maximum(res_alpha, mask_linear)
+
         # --- SOURCE PASSTHROUGH ---
         # Interior pixels (face, body, clothes — everywhere alpha ≈ 1.0) are passed
         # through from the original source frame untouched.  The model's fg prediction

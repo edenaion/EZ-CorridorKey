@@ -235,6 +235,9 @@ class ClipMixin:
             if not skip_session_restore:
                 self._try_auto_load_session(dir_path)
 
+            # Refresh project-level menu state (output folder actions)
+            self._refresh_project_output_actions()
+
         except Exception as e:
             logger.error(f"Failed to scan clips: {e}")
             from ui.sounds.audio_manager import UIAudio
