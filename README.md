@@ -206,9 +206,9 @@ The entire pipeline is cancellable (Esc) and checkpointable — if interrupted, 
 
 Switch between view modes to inspect results:
 
-- **COMP** — key over checkerboard
 - **FG** — check for green fringing
 - **MATTE** — inspect alpha quality
+- **COMP** — key over checkerboard
 - **PROCESSED** — production RGBA
 
 Outputs are written to the project's `Output/` subdirectories during inference (configurable — see [Custom Output Directory](#custom-output-directory)).
