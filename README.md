@@ -60,7 +60,8 @@ The installer includes everything â€” Python runtime, AI models, GPU libraries â
 
 ### Terminal (CLI) Install (Windows / macOS / Linux)
 
-1. Clone or download this repository.
+1. Git Clone this repository:
+git clone https://github.com/edenaion/EZ-CorridorKey
 2. The one-click path provisions and uses managed Python 3.11 automatically, so you do not need to pre-install Python just to use `1-install`.
 3. Run the installer for your platform:
    - **Windows:** Double-click `1-install.bat`
