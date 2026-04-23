@@ -48,6 +48,8 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 ## Installation
 
+*Do NOT download the GitHub Zip, this is not a viable installation method. You will have issues. Do not rename the installation path to anything other than EZ-CorridorKey
+
 ### Desktop App Installer (recommended)
 
 **Don't want to deal with Python, git, or the command line?** A full Windows installer, portable exe, and macOS `.pkg` are available. Entirely optional and free — donations help support active development.
