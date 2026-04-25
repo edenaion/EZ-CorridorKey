@@ -340,30 +340,27 @@ if %errorlevel%==0 (
 REM ── Step 4d: Performance accelerators (TensorRT / Rust native) ──
 echo [4d/7] Installing performance accelerators...
 
+if not exist "logs\install" mkdir "logs\install" >nul 2>&1
+
 where nvidia-smi >nul 2>&1
 if !errorlevel! equ 0 (
-    echo   NVIDIA GPU detected, installing torch-tensorrt...
-    .venv\Scripts\python.exe -m pip install torch-tensorrt >nul 2>&1
+    REM torch-tensorrt's latest wheels require a newer torch than we pin (2.9.1).
+    REM Skip the pip install path here; tensorrt is best installed alongside the
+    REM torch upgrade upstream owns. Users on a matching torch version can run
+    REM `uv pip install torch-tensorrt` manually.
+    echo   Installing SageAttention ^(quantized attention, auto on Ampere+^)...
+    .venv\Scripts\python.exe -m pip install sageattention >"logs\install\sageattention.log" 2>&1
     if !errorlevel! equ 0 (
-        echo   [OK] torch-tensorrt installed
+        echo   [OK] SageAttention installed
     ) else (
-        echo   [WARN] torch-tensorrt install failed ^(will use default backend^)
+        echo   [WARN] SageAttention install failed ^(see logs\install\sageattention.log^)
     )
-    REM SageAttention: 2x on RTX 30xx/40xx, 5x on RTX 50xx. Opt-in via CORRIDORKEY_USE_SAGE=1.
-    echo   Installing SageAttention ^(quantized attention, opt-in via env var^)...
-    .venv\Scripts\python.exe -m pip install "sageattention>=2.2.0" >nul 2>&1
+    echo   Installing torchao ^(NVFP4 for RTX 50xx, auto-enabled on Blackwell^)...
+    .venv\Scripts\python.exe -m pip install torchao >"logs\install\torchao.log" 2>&1
     if !errorlevel! equ 0 (
-        echo   [OK] SageAttention installed ^(enable with CORRIDORKEY_USE_SAGE=1^)
+        echo   [OK] torchao installed
     ) else (
-        echo   [WARN] SageAttention install failed ^(SDPA fallback will be used^)
-    )
-    REM TorchAO: NVFP4 weight quantization for Blackwell. Opt-in via CORRIDORKEY_NVFP4=1.
-    echo   Installing torchao ^(NVFP4 for RTX 50xx, opt-in via env var^)...
-    .venv\Scripts\python.exe -m pip install "torchao>=0.17" >nul 2>&1
-    if !errorlevel! equ 0 (
-        echo   [OK] torchao installed ^(enable with CORRIDORKEY_NVFP4=1 on RTX 50xx^)
-    ) else (
-        echo   [WARN] torchao install failed ^(FP16 fallback will be used^)
+        echo   [WARN] torchao install failed ^(see logs\install\torchao.log^)
     )
 ) else (
     echo   No NVIDIA GPU detected, skipping torch-tensorrt
@@ -372,37 +369,41 @@ if !errorlevel! equ 0 (
 where cargo >nul 2>&1
 if !errorlevel! neq 0 (
     echo   Installing Rust toolchain...
-    powershell -Command "Invoke-WebRequest -Uri https://win.rustup.rs/x86_64 -OutFile rustup-init.exe" >nul 2>&1
+    powershell -Command "Invoke-WebRequest -Uri https://win.rustup.rs/x86_64 -OutFile rustup-init.exe" >"logs\install\rustup-download.log" 2>&1
     if exist rustup-init.exe (
-        rustup-init.exe -y --default-toolchain stable >nul 2>&1
+        rustup-init.exe -y --default-toolchain stable >"logs\install\rustup.log" 2>&1
         del rustup-init.exe >nul 2>&1
         set "PATH=%USERPROFILE%\.cargo\bin;!PATH!"
         where cargo >nul 2>&1
         if !errorlevel! equ 0 (
             echo   [OK] Rust installed
         ) else (
-            echo   [WARN] Rust install failed ^(Python fallback will be used^)
+            echo   [WARN] Rust install failed ^(see logs\install\rustup.log^)
         )
     ) else (
-        echo   [WARN] Rust download failed ^(Python fallback will be used^)
+        echo   [WARN] Rust download failed ^(see logs\install\rustup-download.log^)
     )
 )
 where cargo >nul 2>&1
 if !errorlevel! equ 0 (
-    echo   Building native Rust extension...
-    where maturin >nul 2>&1
-    if !errorlevel! equ 0 (
-        pushd corridorkey_native
-        maturin develop --release >nul 2>&1
-        if !errorlevel! equ 0 (
-            echo   [OK] Rust native extension installed
-        ) else (
-            echo   [WARN] Rust build failed ^(Python fallback will be used^)
+    REM Install maturin into the venv if it isn't already there
+    .venv\Scripts\python.exe -m pip show maturin >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo   Installing maturin ^(Rust extension build tool^)...
+        .venv\Scripts\python.exe -m pip install maturin >"logs\install\maturin.log" 2>&1
+        if !errorlevel! neq 0 (
+            echo   [WARN] maturin install failed ^(see logs\install\maturin.log^)
         )
-        popd
-    ) else (
-        echo   [WARN] maturin not found, skipping Rust build ^(pip install maturin^)
     )
+    echo   Building native Rust extension...
+    pushd corridorkey_native
+    ..\.venv\Scripts\python.exe -m maturin develop --release >"..\logs\install\maturin-build.log" 2>&1
+    if !errorlevel! equ 0 (
+        echo   [OK] Rust native extension installed
+    ) else (
+        echo   [WARN] Rust build failed ^(see logs\install\maturin-build.log^)
+    )
+    popd
 ) else (
     echo   Rust not available, skipping native extension ^(Python fallback will be used^)
 )

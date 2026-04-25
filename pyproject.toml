@@ -43,12 +43,14 @@ quality = [
     "lpips",
 ]
 mlx = ["corridorkey-mlx ; sys_platform == 'darwin' and python_version >= '3.11'"]
-# Quantized attention: 2x faster on RTX 30xx/40xx, 5x on RTX 50xx (Blackwell).
-# Opt-in via CORRIDORKEY_USE_SAGE=1 env var. Skipped on macOS (CUDA-only).
-# torchao adds NVFP4 model quantization for Blackwell (CORRIDORKEY_NVFP4=1).
+# Quantized attention: speedup over FlashAttention 2 on Ampere+.
+# torchao: NVFP4 model quantization for Blackwell.
+# PyPI ships sageattention 1.0.6 only; 2.x/3.x require source build or
+# prebuilt wheels from the project's GitHub releases. The install scripts
+# fall back to 1.0.6 if 2.2+ can't be resolved.
 perf-attn = [
-    "sageattention>=2.2.0 ; sys_platform != 'darwin'",
-    "torchao>=0.17 ; sys_platform != 'darwin'",
+    "sageattention ; sys_platform != 'darwin'",
+    "torchao ; sys_platform != 'darwin'",
 ]
 
 [build-system]

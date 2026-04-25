@@ -198,54 +198,41 @@ fi
 
 # ── Step 4d: Performance accelerators (TensorRT / MIGraphX / Rust native) ──
 echo "[4d/6] Installing performance accelerators..."
+mkdir -p logs/install
+
+# pip_try <log-name> <pkg> -- runs uv pip install or fallback, logging stderr
+pip_try() {
+    local log="logs/install/$1.log"
+    shift
+    if [ "$UV_AVAILABLE" -eq 1 ]; then
+        uv pip install --python .venv/bin/python "$@" >"$log" 2>&1
+    else
+        .venv/bin/python -m pip install "$@" >"$log" 2>&1
+    fi
+}
 
 if [ "$OS_TYPE" != "macos" ]; then
-    # Detect GPU vendor and install matching torch.compile backend
     if command -v nvidia-smi &>/dev/null; then
-        echo "  NVIDIA GPU detected, installing torch-tensorrt..."
-        if [ "$UV_AVAILABLE" -eq 1 ]; then
-            uv pip install --python .venv/bin/python torch-tensorrt 2>&1 && \
-                echo "  [OK] torch-tensorrt installed" || \
-                echo "  [WARN] torch-tensorrt install failed (will use default backend)"
+        # torch-tensorrt latest wheels require a newer torch than we pin (2.9.1).
+        # Skip auto-install; users on a matching torch can run `uv pip install torch-tensorrt` manually.
+        echo "  Installing SageAttention (quantized attention, auto on Ampere+)..."
+        if pip_try sageattention sageattention; then
+            echo "  [OK] SageAttention installed"
         else
-            .venv/bin/python -m pip install torch-tensorrt 2>&1 && \
-                echo "  [OK] torch-tensorrt installed" || \
-                echo "  [WARN] torch-tensorrt install failed (will use default backend)"
+            echo "  [WARN] SageAttention install failed (see logs/install/sageattention.log)"
         fi
-        # SageAttention: 2x faster than FA2 on RTX 30xx/40xx, 5x on RTX 50xx.
-        # Opt-in at runtime via CORRIDORKEY_USE_SAGE=1.
-        echo "  Installing SageAttention (quantized attention, opt-in via env var)..."
-        if [ "$UV_AVAILABLE" -eq 1 ]; then
-            uv pip install --python .venv/bin/python "sageattention>=2.2.0" 2>&1 && \
-                echo "  [OK] SageAttention installed (enable with CORRIDORKEY_USE_SAGE=1)" || \
-                echo "  [WARN] SageAttention install failed (SDPA fallback will be used)"
+        echo "  Installing torchao (NVFP4 for RTX 50xx, auto-enabled on Blackwell)..."
+        if pip_try torchao torchao; then
+            echo "  [OK] torchao installed"
         else
-            .venv/bin/python -m pip install "sageattention>=2.2.0" 2>&1 && \
-                echo "  [OK] SageAttention installed (enable with CORRIDORKEY_USE_SAGE=1)" || \
-                echo "  [WARN] SageAttention install failed (SDPA fallback will be used)"
-        fi
-        # TorchAO: NVFP4 weight quantization for Blackwell (RTX 50xx).
-        # Opt-in at runtime via CORRIDORKEY_NVFP4=1.
-        echo "  Installing torchao (NVFP4 quantization for Blackwell, opt-in)..."
-        if [ "$UV_AVAILABLE" -eq 1 ]; then
-            uv pip install --python .venv/bin/python "torchao>=0.17" 2>&1 && \
-                echo "  [OK] torchao installed (enable with CORRIDORKEY_NVFP4=1 on RTX 50xx)" || \
-                echo "  [WARN] torchao install failed (FP16 fallback will be used)"
-        else
-            .venv/bin/python -m pip install "torchao>=0.17" 2>&1 && \
-                echo "  [OK] torchao installed (enable with CORRIDORKEY_NVFP4=1 on RTX 50xx)" || \
-                echo "  [WARN] torchao install failed (FP16 fallback will be used)"
+            echo "  [WARN] torchao install failed (see logs/install/torchao.log)"
         fi
     elif [ -d "/opt/rocm" ] || command -v rocminfo &>/dev/null; then
         echo "  AMD ROCm detected, installing torch-migraphx..."
-        if [ "$UV_AVAILABLE" -eq 1 ]; then
-            uv pip install --python .venv/bin/python torch_migraphx 2>&1 && \
-                echo "  [OK] torch-migraphx installed" || \
-                echo "  [WARN] torch-migraphx install failed (will use default backend)"
+        if pip_try torch-migraphx torch_migraphx; then
+            echo "  [OK] torch-migraphx installed"
         else
-            .venv/bin/python -m pip install torch_migraphx 2>&1 && \
-                echo "  [OK] torch-migraphx installed" || \
-                echo "  [WARN] torch-migraphx install failed (will use default backend)"
+            echo "  [WARN] torch-migraphx install failed (see logs/install/torch-migraphx.log)"
         fi
     else
         echo "  No NVIDIA/AMD GPU detected, skipping torch.compile accelerator"
@@ -257,29 +244,25 @@ fi
 # Build Rust native extension (install cargo if missing)
 if ! command -v cargo &>/dev/null; then
     echo "  Installing Rust toolchain..."
-    if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>/dev/null; then
+    if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y >"logs/install/rustup.log" 2>&1; then
         source "$HOME/.cargo/env" 2>/dev/null
         echo "  [OK] Rust installed"
     else
-        echo "  [WARN] Rust install failed (Python fallback will be used)"
+        echo "  [WARN] Rust install failed (see logs/install/rustup.log)"
     fi
 fi
 if command -v cargo &>/dev/null; then
-    echo "  Building native Rust extension..."
-    MATURIN_CMD=""
-    if command -v maturin &>/dev/null; then
-        MATURIN_CMD="maturin"
-    elif command -v uvx &>/dev/null; then
-        MATURIN_CMD="uvx maturin"
-    fi
-    if [ -n "$MATURIN_CMD" ]; then
-        if (cd corridorkey_native && $MATURIN_CMD develop --release --uv) 2>&1; then
-            echo "  [OK] Rust native extension installed"
-        else
-            echo "  [WARN] Rust build failed (Python fallback will be used)"
+    if ! .venv/bin/python -m pip show maturin &>/dev/null; then
+        echo "  Installing maturin (Rust extension build tool)..."
+        if ! pip_try maturin maturin; then
+            echo "  [WARN] maturin install failed (see logs/install/maturin.log)"
         fi
+    fi
+    echo "  Building native Rust extension..."
+    if (cd corridorkey_native && ../.venv/bin/python -m maturin develop --release) >"logs/install/maturin-build.log" 2>&1; then
+        echo "  [OK] Rust native extension installed"
     else
-        echo "  [WARN] maturin not found, skipping Rust build (pip install maturin)"
+        echo "  [WARN] Rust build failed (see logs/install/maturin-build.log)"
     fi
 fi
 
