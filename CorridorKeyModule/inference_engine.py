@@ -298,6 +298,11 @@ class CorridorKeyEngine:
         t0 = _time.monotonic()
         model = model.to(self.device)
         model.eval()
+        # Convert weights to fp16, saves ~450 MB VRAM.
+        # Inference already runs in fp16 via autocast, so this is lossless.
+        if self.device.type != 'cpu':
+            model.half()
+            _diag("Model weights converted to fp16")
         _diag(f"Step 2 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"Model to device: {_time.monotonic() - t0:.1f}s")
 

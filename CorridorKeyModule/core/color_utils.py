@@ -1,8 +1,28 @@
+import math
+from functools import lru_cache
+
 import torch
+import torch.nn.functional as F
 import numpy as np
 
 def _is_tensor(x):
     return isinstance(x, torch.Tensor)
+
+
+# --- Pure-tensor paths (torch.compile safe, no isinstance dispatch) ---
+
+def linear_to_srgb_tensor(x: torch.Tensor) -> torch.Tensor:
+    """Pure-tensor Linear→sRGB. Use this for torch.compile contexts."""
+    x = x.clamp(min=0.0)
+    mask = x <= 0.0031308
+    return torch.where(mask, x * 12.92, 1.055 * torch.pow(x, 1.0 / 2.4) - 0.055)
+
+
+def srgb_to_linear_tensor(x: torch.Tensor) -> torch.Tensor:
+    """Pure-tensor sRGB→Linear. Use this for torch.compile contexts."""
+    x = x.clamp(min=0.0)
+    mask = x <= 0.04045
+    return torch.where(mask, x / 12.92, torch.pow((x + 0.055) / 1.055, 2.4))
 
 def linear_to_srgb(x):
     """
@@ -297,8 +317,88 @@ def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
     
     if is_3d:
         result_alpha = result_alpha[:, :, np.newaxis]
-        
+
     return result_alpha
+
+
+_gaussian_kernel_cache: dict[tuple, torch.Tensor] = {}
+
+
+def _gaussian_kernel_2d(size: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
+    """Create a normalized 2D Gaussian kernel [1, 1, size, size]."""
+    key = (size, device, dtype)
+    cached = _gaussian_kernel_cache.get(key)
+    if cached is not None:
+        return cached
+    coords = torch.arange(size, device=device, dtype=dtype) - (size - 1) / 2.0
+    g = torch.exp(-0.5 * (coords / max((size - 1) / 6.0, 1e-6)) ** 2)
+    kernel = g[:, None] * g[None, :]
+    kernel /= kernel.sum()
+    result = kernel.reshape(1, 1, size, size)
+    _gaussian_kernel_cache[key] = result
+    return result
+
+
+def clear_gpu_caches():
+    """Release cached GPU tensors (call on engine teardown)."""
+    _gaussian_kernel_cache.clear()
+
+
+def clean_matte_gpu(alpha_t: torch.Tensor, area_threshold: int = 300,
+                    dilation: int = 15, blur_size: int = 5) -> torch.Tensor:
+    """GPU-resident matte cleanup — no CPU roundtrip.
+
+    Uses morphological opening (erode then dilate) to remove small islands,
+    replacing OpenCV's connectedComponentsWithStats. The kernel size is derived
+    from area_threshold: kernel ≈ 2 * sqrt(area / π). Elongated thin structures
+    smaller than the kernel may also be removed (acceptable for matte cleanup).
+
+    Note: this version does not preserve hair-strand connectivity the way the
+    CPU clean_matte() does. Prefer the CPU version for production output;
+    use the GPU one for previews/realtime where speed matters more than detail.
+
+    alpha_t: Tensor [H, W] or [H, W, 1] float 0-1 on any device.
+    """
+    is_3d = alpha_t.ndim == 3
+    if is_3d:
+        alpha_t_2d = alpha_t[:, :, 0]
+    else:
+        alpha_t_2d = alpha_t
+
+    # Threshold to binary
+    mask = (alpha_t_2d > 0.5).float()
+
+    # Morphological opening to remove small islands
+    open_k = max(3, int(2 * math.sqrt(area_threshold / math.pi)) | 1)  # ensure odd
+    mask_4d = mask.unsqueeze(0).unsqueeze(0)  # [1, 1, H, W]
+    pad = open_k // 2
+
+    # Erode: invert → max_pool → invert
+    eroded = 1.0 - F.max_pool2d(1.0 - mask_4d, open_k, stride=1, padding=pad)
+    # Dilate: max_pool
+    opened = F.max_pool2d(eroded, open_k, stride=1, padding=pad)
+
+    # Additional dilation
+    if dilation > 0:
+        d_k = int(dilation * 2 + 1)
+        d_pad = d_k // 2
+        opened = F.max_pool2d(opened, d_k, stride=1, padding=d_pad)
+
+    # Gaussian blur
+    if blur_size > 0:
+        b_k = int(blur_size * 2 + 1)
+        b_pad = b_k // 2
+        g_kernel = _gaussian_kernel_2d(b_k, alpha_t.device, alpha_t.dtype)
+        opened = F.conv2d(opened, g_kernel, padding=b_pad)
+
+    safe_zone = opened.squeeze(0).squeeze(0)  # [H, W]
+    result = alpha_t_2d * safe_zone
+
+    if is_3d:
+        result = result.unsqueeze(-1)
+
+    return result
+
 
 def source_passthrough(original_srgb, model_fg_srgb, alpha, erode_px=None, blur_px=None):
     """
@@ -367,9 +467,11 @@ def source_passthrough(original_srgb, model_fg_srgb, alpha, erode_px=None, blur_
     return blend * original_srgb + (1.0 - blend) * model_fg_srgb
 
 
+@lru_cache(maxsize=8)
 def create_checkerboard(width, height, checker_size=64, color1=0.2, color2=0.4):
     """
     Creates a linear grayscale checkerboard pattern.
+    Cached because the same (w, h, checker_size) is reused on every frame.
     Returns: Numpy array [H, W, 3] float (0.0-1.0)
     """
     import numpy as np
