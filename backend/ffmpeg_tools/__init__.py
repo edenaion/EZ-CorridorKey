@@ -39,6 +39,7 @@ from .metadata import (
 )
 from .probe import probe_video
 from .stitching import stitch_video
+from .streaming import FFmpegFrameReader, FFmpegFrameWriter
 
 __all__ = [
     # discovery
@@ -64,4 +65,7 @@ __all__ = [
     # metadata
     "write_video_metadata",
     "read_video_metadata",
+    # streaming
+    "FFmpegFrameReader",
+    "FFmpegFrameWriter",
 ]
