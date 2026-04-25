@@ -309,6 +309,9 @@ class CorridorKeyService(
                 'name': torch.cuda.get_device_name(0),
             }
         except Exception as e:
+            # Broad except: torch's CUDADeviceProperties attributes vary
+            # across versions (total_mem vs total_memory), so AttributeError
+            # is a normal failure mode here on top of RuntimeError/OSError.
             logger.debug(f"VRAM query failed: {e}")
             return {}
 

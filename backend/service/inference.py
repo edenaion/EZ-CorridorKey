@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
 from typing import Callable, Optional
 
 import cv2
@@ -25,8 +28,52 @@ from .inference_parallel import ParallelInferenceMixin
 logger = logging.getLogger(__name__)
 
 
+# Sentinel pushed by the prefetch thread to signal end-of-stream
+_PREFETCH_DONE = object()
+
+
 class InferenceMixin(ParallelInferenceMixin):
     """Mixin providing core inference pipeline for CorridorKeyService."""
+
+    def _prefetch_frames(
+        self,
+        clip: ClipEntry,
+        frame_indices,
+        input_files: list[str],
+        alpha_files: list[str],
+        input_cap,
+        alpha_cap,
+        input_is_linear: bool,
+        alpha_stem_lookup,
+        prefetch_queue: Queue,
+        job: Optional[GPUJob],
+    ) -> None:
+        """Read frames ahead of GPU processing in a background thread.
+
+        Pushes (frame_index, img, mask, stem, is_linear, error_or_none) tuples
+        onto `prefetch_queue` and a final _PREFETCH_DONE sentinel.
+
+        Adapted from upstream PR #226: keeps the GPU busy while disk I/O
+        runs in parallel. Significant gain on 4K EXR sequences.
+        """
+        for i in frame_indices:
+            if job and job.is_cancelled:
+                break
+            try:
+                img, stem, is_linear = self._read_input_frame(
+                    clip, i, input_files, input_cap, input_is_linear,
+                )
+                mask = self._read_alpha_frame(
+                    clip, i, alpha_files, alpha_cap,
+                    input_stem=stem,
+                    alpha_stem_lookup=alpha_stem_lookup,
+                )
+            except (FrameReadError, OSError, RuntimeError) as e:
+                prefetch_queue.put((i, None, None, f"{i:05d}", input_is_linear, str(e)))
+                continue
+            prefetch_queue.put((i, img, mask, stem, is_linear, None))
+
+        prefetch_queue.put(_PREFETCH_DONE)
 
     def run_inference(
         self,
@@ -148,10 +195,36 @@ class InferenceMixin(ParallelInferenceMixin):
 
         _warmup_done = False
 
+        # Prefetch + async write pool — overlap I/O with GPU work.
+        # Reader fills the prefetch queue (depth 3) while the GPU processes
+        # the current frame, and a single-worker write pool runs disk I/O
+        # in parallel. Adapted from upstream PR #226.
+        prefetch_q: Queue = Queue(maxsize=3)
+        write_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ck-write")
+        write_futures: list[tuple[int, str, "object"]] = []
+
+        prefetch_thread = threading.Thread(
+            target=self._prefetch_frames,
+            args=(
+                clip, frame_indices, input_files, alpha_files,
+                input_cap, alpha_cap, params.input_is_linear,
+                alpha_stem_lookup, prefetch_q, job,
+            ),
+            daemon=True,
+        )
+        prefetch_thread.start()
+
         try:
-            for progress_i, i in enumerate(frame_indices):
+            progress_i = 0
+            while True:
                 if job and job.is_cancelled:
-                    raise JobCancelledError(clip.name, i)
+                    raise JobCancelledError(clip.name, progress_i)
+
+                item = prefetch_q.get()
+                if item is _PREFETCH_DONE:
+                    break
+
+                i, img, mask, input_stem, is_linear, read_error = item
 
                 if not _warmup_done and on_status:
                     on_status("Compiling (first frame may take a minute)...")
@@ -168,32 +241,35 @@ class InferenceMixin(ParallelInferenceMixin):
                         timing_kwargs["eta_seconds"] = remaining * avg_time
                     on_progress(clip.name, progress_i, range_count, **timing_kwargs)
 
+                if read_error:
+                    skipped.append(i)
+                    results.append(FrameResult(i, input_stem, False, read_error))
+                    if on_warning:
+                        on_warning(read_error)
+                    progress_i += 1
+                    continue
+
+                if img is None:
+                    skipped.append(i)
+                    results.append(FrameResult(i, f"{i:05d}", False, "video read failed"))
+                    progress_i += 1
+                    continue
+
+                if input_stem in skip_stems:
+                    results.append(FrameResult(i, input_stem, True, "resumed (skipped)"))
+                    progress_i += 1
+                    continue
+
+                if mask is None:
+                    skipped.append(i)
+                    results.append(FrameResult(i, input_stem, False, "alpha read failed"))
+                    progress_i += 1
+                    continue
+
+                if mask.shape[:2] != img.shape[:2]:
+                    mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+
                 try:
-                    img, input_stem, is_linear = self._read_input_frame(
-                        clip, i, input_files, input_cap, params.input_is_linear,
-                    )
-                    if img is None:
-                        skipped.append(i)
-                        results.append(FrameResult(i, f"{i:05d}", False, "video read failed"))
-                        continue
-
-                    if input_stem in skip_stems:
-                        results.append(FrameResult(i, input_stem, True, "resumed (skipped)"))
-                        continue
-
-                    mask = self._read_alpha_frame(
-                        clip, i, alpha_files, alpha_cap,
-                        input_stem=input_stem,
-                        alpha_stem_lookup=alpha_stem_lookup,
-                    )
-                    if mask is None:
-                        skipped.append(i)
-                        results.append(FrameResult(i, input_stem, False, "alpha read failed"))
-                        continue
-
-                    if mask.shape[:2] != img.shape[:2]:
-                        mask = cv2.resize(mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
-
                     t_frame = time.monotonic()
                     with self._gpu_lock:
                         res = engine.process_frame(
@@ -210,35 +286,34 @@ class InferenceMixin(ParallelInferenceMixin):
                             edge_erode_px=params.edge_erode_px,
                             edge_blur_px=params.edge_blur_px,
                         )
-                    dt = time.monotonic() - t_frame
-                    frame_times.append(dt)
-                    processed_count += 1
-
-                    if not _warmup_done:
-                        _warmup_done = True
-                        if on_status:
-                            on_status("")
-                    total_t = sum(frame_times)
-                    avg_fps = len(frame_times) / total_t if total_t > 0 else 0.0
-                    logger.debug(
-                        f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)"
-                    )
-
-                    self._write_outputs(res, dirs, input_stem, clip.name, i, cfg)
-                    results.append(FrameResult(i, input_stem, True))
-
                 except FrameReadError as e:
                     logger.warning(str(e))
                     skipped.append(i)
-                    results.append(FrameResult(i, f"{i:05d}", False, str(e)))
+                    results.append(FrameResult(i, input_stem, False, str(e)))
                     if on_warning:
                         on_warning(str(e))
+                    progress_i += 1
+                    continue
 
-                except WriteFailureError as e:
-                    logger.error(str(e))
-                    results.append(FrameResult(i, f"{i:05d}", False, str(e)))
-                    if on_warning:
-                        on_warning(str(e))
+                dt = time.monotonic() - t_frame
+                frame_times.append(dt)
+                processed_count += 1
+
+                if not _warmup_done:
+                    _warmup_done = True
+                    if on_status:
+                        on_status("")
+                total_t = sum(frame_times)
+                avg_fps = len(frame_times) / total_t if total_t > 0 else 0.0
+                logger.debug(f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)")
+
+                # Async write — disk I/O runs in parallel with the next GPU step
+                future = write_pool.submit(
+                    self._write_outputs, res, dirs, input_stem, clip.name, i, cfg,
+                )
+                write_futures.append((i, input_stem, future))
+                results.append(FrameResult(i, input_stem, True))
+                progress_i += 1
 
             if on_progress:
                 final_elapsed = time.monotonic() - t_start
@@ -248,7 +323,24 @@ class InferenceMixin(ParallelInferenceMixin):
                     final_kwargs["fps"] = len(frame_times) / total_t
                 on_progress(clip.name, range_count, range_count, **final_kwargs)
 
+            # Drain pending writes — collect any failures and convert successful
+            # FrameResults into failures for those that failed to write.
+            for i, _stem, fut in write_futures:
+                try:
+                    fut.result()
+                except WriteFailureError as e:
+                    logger.error(str(e))
+                    for r in results:
+                        if r.frame_index == i and r.success:
+                            r.success = False
+                            r.warning = str(e)
+                            break
+                    if on_warning:
+                        on_warning(str(e))
+
         finally:
+            prefetch_thread.join(timeout=5)
+            write_pool.shutdown(wait=True)
             if input_cap:
                 input_cap.release()
             if alpha_cap:
