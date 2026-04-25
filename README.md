@@ -260,15 +260,15 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 
 ### Paint
 
-| Shortcut                 | Action                                      |
-| ------------------------ | ------------------------------------------- |
-| **1**                    | Foreground paint brush (green)              |
-| **2**                    | Background paint brush (red)                |
-| **C**                    | Cycle foreground brush color (green / blue) |
-| **Shift + drag up/down** | Resize brush                                |
-| **Alt + left-drag**      | Draw straight line                          |
-| **Ctrl+Z**               | Undo last stroke on current frame           |
-| **Ctrl+C**               | Clear all paint strokes                     |
+| Shortcut                  | Action                                      |
+| --------------------------| ------------------------------------------- |
+| **1**                     | Foreground paint brush (green)              |
+| **2**                     | Background paint brush (red)                |
+| **C**                     | Cycle foreground brush color (green / blue) |
+| **Shift+LMB+drag up/down**| Resize brush                                |
+| **Alt+LMB+drag**          | Draw straight line                          |
+| **Ctrl+Z**                | Undo last stroke on current frame           |
+| **Ctrl+C**                | Clear all paint strokes                     |
 
 ---
 
