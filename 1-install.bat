@@ -349,6 +349,14 @@ if !errorlevel! equ 0 (
     ) else (
         echo   [WARN] torch-tensorrt install failed ^(will use default backend^)
     )
+    REM SageAttention: 2x on RTX 30xx/40xx, 5x on RTX 50xx. Opt-in via CORRIDORKEY_USE_SAGE=1.
+    echo   Installing SageAttention ^(quantized attention, opt-in via env var^)...
+    .venv\Scripts\python.exe -m pip install "sageattention>=2.2.0" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo   [OK] SageAttention installed ^(enable with CORRIDORKEY_USE_SAGE=1^)
+    ) else (
+        echo   [WARN] SageAttention install failed ^(SDPA fallback will be used^)
+    )
 ) else (
     echo   No NVIDIA GPU detected, skipping torch-tensorrt
 )

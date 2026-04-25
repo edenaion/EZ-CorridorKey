@@ -212,6 +212,18 @@ if [ "$OS_TYPE" != "macos" ]; then
                 echo "  [OK] torch-tensorrt installed" || \
                 echo "  [WARN] torch-tensorrt install failed (will use default backend)"
         fi
+        # SageAttention: 2x faster than FA2 on RTX 30xx/40xx, 5x on RTX 50xx.
+        # Opt-in at runtime via CORRIDORKEY_USE_SAGE=1.
+        echo "  Installing SageAttention (quantized attention, opt-in via env var)..."
+        if [ "$UV_AVAILABLE" -eq 1 ]; then
+            uv pip install --python .venv/bin/python "sageattention>=2.2.0" 2>&1 && \
+                echo "  [OK] SageAttention installed (enable with CORRIDORKEY_USE_SAGE=1)" || \
+                echo "  [WARN] SageAttention install failed (SDPA fallback will be used)"
+        else
+            .venv/bin/python -m pip install "sageattention>=2.2.0" 2>&1 && \
+                echo "  [OK] SageAttention installed (enable with CORRIDORKEY_USE_SAGE=1)" || \
+                echo "  [WARN] SageAttention install failed (SDPA fallback will be used)"
+        fi
     elif [ -d "/opt/rocm" ] || command -v rocminfo &>/dev/null; then
         echo "  AMD ROCm detected, installing torch-migraphx..."
         if [ "$UV_AVAILABLE" -eq 1 ]; then

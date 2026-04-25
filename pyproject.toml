@@ -43,6 +43,9 @@ quality = [
     "lpips",
 ]
 mlx = ["corridorkey-mlx ; sys_platform == 'darwin' and python_version >= '3.11'"]
+# Quantized attention: 2x faster on RTX 30xx/40xx, 5x on RTX 50xx (Blackwell).
+# Opt-in via CORRIDORKEY_USE_SAGE=1 env var. Skipped on macOS (CUDA-only).
+perf-attn = ["sageattention>=2.2.0 ; sys_platform != 'darwin'"]
 
 [build-system]
 requires = ["hatchling"]

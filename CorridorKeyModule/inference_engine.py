@@ -29,6 +29,37 @@ INFERENCE_DEFAULTS = {
     "edge_blur_px": None,
 }
 
+# ── SageAttention auto-detect (drop-in replacement for SDPA) ─────────────
+# SageAttention is a quantized attention kernel that replaces PyTorch's SDPA
+# on Ampere/Ada/Hopper/Blackwell GPUs:
+#   - Sage 2++ (INT8): ~1.5-2x vs FlashAttention 2 on RTX 30xx/40xx
+#   - Sage 3 (FP4):    ~5x vs FlashAttention 2 on RTX 50xx (Blackwell)
+# It auto-selects the right kernel based on the detected compute capability,
+# so we just need to import and use sageattn() with the same Q/K/V signature
+# as F.scaled_dot_product_attention.
+#
+# Opt-in via env var CORRIDORKEY_USE_SAGE=1 because:
+#   - The wheel needs CUDA 12+ and source-build needs a C compiler
+#   - Sage 3 paper notes "doesn't guarantee lossless on all models"
+#   - We validate output divergence at engine init and fall back on mismatch
+try:
+    from sageattention import sageattn as _sageattn  # type: ignore
+    _SAGE_AVAILABLE = True
+except Exception:
+    _sageattn = None
+    _SAGE_AVAILABLE = False
+
+
+def _attention_kernel():
+    """Return the active attention kernel: sageattn or SDPA.
+
+    Guarded by env var so default behaviour is byte-identical to before.
+    """
+    if _SAGE_AVAILABLE and os.environ.get("CORRIDORKEY_USE_SAGE", "").lower() in ("1", "true", "yes"):
+        return _sageattn
+    return F.scaled_dot_product_attention
+
+
 def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
     """Monkey-patch MaskUnitAttention.forward on global-attention blocks.
 
@@ -40,8 +71,13 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
     This patch forces Q/K/V to standard 4-D contiguous tensors, enabling
     FlashAttention and dropping VRAM usage per block dramatically.
 
+    The attention kernel itself is selected by _attention_kernel() — SDPA by
+    default, sageattn (quantized) if CORRIDORKEY_USE_SAGE=1 and the
+    sageattention package is installed.
+
     Credit: Jhe Kimchi (Discord contribution)
     """
+    attn_fn = _attention_kernel()
     patched = 0
 
     for blk in hiera_model.blocks:
@@ -51,7 +87,7 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
         if attn.use_mask_unit_attn:
             continue
 
-        def _make_patched_forward(original_attn):
+        def _make_patched_forward(original_attn, kernel):
             def _patched_forward(self, x: torch.Tensor) -> torch.Tensor:
                 B, N, _ = x.shape
                 qkv = self.qkv(x)
@@ -69,17 +105,48 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
                 k = k.contiguous()
                 v = v.contiguous()
 
-                x = F.scaled_dot_product_attention(q, k, v)
+                x = kernel(q, k, v)
                 x = x.transpose(1, 2).reshape(B, -1, self.dim_out)
                 x = self.proj(x)
                 return x
 
             return types.MethodType(_patched_forward, original_attn)
 
-        attn.forward = _make_patched_forward(attn)
+        attn.forward = _make_patched_forward(attn, attn_fn)
         patched += 1
 
     return patched
+
+
+def _validate_sage_attention(device: torch.device, tolerance: float = 5e-2) -> bool:
+    """Compare sageattn() vs F.scaled_dot_product_attention() on a dummy Q/K/V.
+
+    Returns True if the two kernels agree within `tolerance` on a small
+    tensor shaped like Hiera's global attention layers. Tolerance is loose
+    (5e-2) because Sage quantizes Q/K/V to INT8/FP4 internally, so we expect
+    small numerical drift even on a healthy run.
+
+    Only meaningful when _SAGE_AVAILABLE.
+    """
+    if not _SAGE_AVAILABLE:
+        return False
+    # Hiera Base Plus: 14 heads × 64 head_dim × 256 tokens (smallest global attn block)
+    B, H, N, D = 1, 14, 256, 64
+    try:
+        torch.manual_seed(0)
+        q = torch.randn(B, H, N, D, device=device, dtype=torch.float16)
+        k = torch.randn(B, H, N, D, device=device, dtype=torch.float16)
+        v = torch.randn(B, H, N, D, device=device, dtype=torch.float16)
+        with torch.inference_mode():
+            ref = F.scaled_dot_product_attention(q, k, v)
+            cand = _sageattn(q, k, v, tensor_layout="HND", is_causal=False)
+        diff = (ref.float() - cand.float()).abs().max().item()
+        ok = diff <= tolerance
+        logger.info(f"SageAttention validation: max|diff| vs SDPA = {diff:.3e} ({'OK' if ok else 'FAIL, falling back'})")
+        return ok
+    except Exception as e:
+        logger.warning(f"SageAttention validation failed: {type(e).__name__}: {e}")
+        return False
 
 class CorridorKeyEngine:
     # VRAM threshold for optimization profile selection.
@@ -358,13 +425,29 @@ class CorridorKeyEngine:
         # in ui/app.py::_configure_runtime_backends() so they take effect
         # before the first inference, not just after lazy model load.
 
-        # Step 5: Hiera attention patch
+        # Step 5: Hiera attention patch (with optional SageAttention validation)
+        # If CORRIDORKEY_USE_SAGE is on but Sage diverges from SDPA on these
+        # tensor shapes, we silently disable Sage for this session before
+        # patching, so the user gets the SDPA fallback instead of bad output.
+        sage_requested = (
+            _SAGE_AVAILABLE
+            and os.environ.get("CORRIDORKEY_USE_SAGE", "").lower() in ("1", "true", "yes")
+        )
+        if sage_requested and self.device.type == "cuda":
+            if not _validate_sage_attention(self.device):
+                os.environ["CORRIDORKEY_USE_SAGE"] = "0"
+                logger.warning("SageAttention disabled for this session — falling back to SDPA")
+
         self._status("Patching attention blocks...")
         t0 = _time.monotonic()
         try:
             hiera = model.encoder.model
             n_patched = _patch_hiera_global_attention(hiera)
-            logger.info(f"Hiera attention patch: {n_patched} blocks ({_time.monotonic() - t0:.1f}s)")
+            kernel_name = "sageattn" if (
+                _SAGE_AVAILABLE
+                and os.environ.get("CORRIDORKEY_USE_SAGE", "").lower() in ("1", "true", "yes")
+            ) else "SDPA"
+            logger.info(f"Hiera attention patch: {n_patched} blocks via {kernel_name} ({_time.monotonic() - t0:.1f}s)")
         except Exception as e:
             logger.warning(f"Hiera attention patch failed: {type(e).__name__}: {e}")
 
