@@ -91,6 +91,7 @@ bench_results*.json
 
 # Test scripts & output (may contain local paths)
 test_*.py
+!tests/test_*.py
 test_output/
 
 # Build artifacts

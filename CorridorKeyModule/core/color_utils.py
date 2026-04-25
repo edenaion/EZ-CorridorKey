@@ -492,7 +492,9 @@ def create_checkerboard(width, height, checker_size=64, color1=0.2, color2=0.4):
     
     # Map 0 to color1 and 1 to color2
     bg_img = np.where(checker == 0, color1, color2).astype(np.float32)
-    
-    # Make it 3-channel
-    return np.stack([bg_img, bg_img, bg_img], axis=-1)
+
+    # Make it 3-channel and freeze (cached array — callers must not mutate)
+    result = np.stack([bg_img, bg_img, bg_img], axis=-1)
+    result.flags.writeable = False
+    return result
 
