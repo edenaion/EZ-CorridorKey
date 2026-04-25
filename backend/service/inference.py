@@ -48,13 +48,8 @@ class InferenceMixin(ParallelInferenceMixin):
         prefetch_queue: Queue,
         job: Optional[GPUJob],
     ) -> None:
-        """Read frames ahead of GPU processing in a background thread.
-
-        Pushes (frame_index, img, mask, stem, is_linear, error_or_none) tuples
-        onto `prefetch_queue` and a final _PREFETCH_DONE sentinel.
-
-        Adapted from upstream PR #226: keeps the GPU busy while disk I/O
-        runs in parallel. Significant gain on 4K EXR sequences.
+        """Push (frame_index, img, mask, stem, is_linear, error_or_none) into
+        the queue ahead of the GPU loop, plus a final _PREFETCH_DONE sentinel.
         """
         for i in frame_indices:
             if job and job.is_cancelled:
@@ -195,10 +190,6 @@ class InferenceMixin(ParallelInferenceMixin):
 
         _warmup_done = False
 
-        # Prefetch + async write pool — overlap I/O with GPU work.
-        # Reader fills the prefetch queue (depth 3) while the GPU processes
-        # the current frame, and a single-worker write pool runs disk I/O
-        # in parallel. Adapted from upstream PR #226.
         prefetch_q: Queue = Queue(maxsize=3)
         write_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ck-write")
         write_futures: list[tuple[int, str, "object"]] = []
@@ -307,7 +298,6 @@ class InferenceMixin(ParallelInferenceMixin):
                 avg_fps = len(frame_times) / total_t if total_t > 0 else 0.0
                 logger.debug(f"Frame {i}: {dt * 1000:.0f}ms ({avg_fps:.1f} fps avg)")
 
-                # Async write — disk I/O runs in parallel with the next GPU step
                 future = write_pool.submit(
                     self._write_outputs, res, dirs, input_stem, clip.name, i, cfg,
                 )
@@ -323,8 +313,7 @@ class InferenceMixin(ParallelInferenceMixin):
                     final_kwargs["fps"] = len(frame_times) / total_t
                 on_progress(clip.name, range_count, range_count, **final_kwargs)
 
-            # Drain pending writes — collect any failures and convert successful
-            # FrameResults into failures for those that failed to write.
+            # Drain async writes; flip the matching FrameResult to failure on error.
             for i, _stem, fut in write_futures:
                 try:
                     fut.result()

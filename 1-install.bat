@@ -357,6 +357,14 @@ if !errorlevel! equ 0 (
     ) else (
         echo   [WARN] SageAttention install failed ^(SDPA fallback will be used^)
     )
+    REM TorchAO: NVFP4 weight quantization for Blackwell. Opt-in via CORRIDORKEY_NVFP4=1.
+    echo   Installing torchao ^(NVFP4 for RTX 50xx, opt-in via env var^)...
+    .venv\Scripts\python.exe -m pip install "torchao>=0.17" >nul 2>&1
+    if !errorlevel! equ 0 (
+        echo   [OK] torchao installed ^(enable with CORRIDORKEY_NVFP4=1 on RTX 50xx^)
+    ) else (
+        echo   [WARN] torchao install failed ^(FP16 fallback will be used^)
+    )
 ) else (
     echo   No NVIDIA GPU detected, skipping torch-tensorrt
 )
