@@ -196,7 +196,77 @@ else
     echo "[4c/6] MLX acceleration — skipped (Apple Silicon only)"
 fi
 
-echo "[4d/6] Optional SAM2 tracker..."
+# ── Step 4d: Performance accelerators (TensorRT / MIGraphX / Rust native) ──
+echo "[4d/6] Installing performance accelerators..."
+mkdir -p logs/install
+
+# pip_try <log-name> <pkg> -- runs uv pip install or fallback, logging stderr
+pip_try() {
+    local log="logs/install/$1.log"
+    shift
+    if [ "$UV_AVAILABLE" -eq 1 ]; then
+        uv pip install --python .venv/bin/python "$@" >"$log" 2>&1
+    else
+        .venv/bin/python -m pip install "$@" >"$log" 2>&1
+    fi
+}
+
+if [ "$OS_TYPE" != "macos" ]; then
+    if command -v nvidia-smi &>/dev/null; then
+        # torch-tensorrt latest wheels require a newer torch than we pin (2.9.1).
+        # Skip auto-install; users on a matching torch can run `uv pip install torch-tensorrt` manually.
+        echo "  Installing SageAttention (quantized attention, auto on Ampere+)..."
+        if pip_try sageattention sageattention; then
+            echo "  [OK] SageAttention installed"
+        else
+            echo "  [WARN] SageAttention install failed (see logs/install/sageattention.log)"
+        fi
+        echo "  Installing torchao (NVFP4 for RTX 50xx, auto-enabled on Blackwell)..."
+        if pip_try torchao torchao; then
+            echo "  [OK] torchao installed"
+        else
+            echo "  [WARN] torchao install failed (see logs/install/torchao.log)"
+        fi
+    elif [ -d "/opt/rocm" ] || command -v rocminfo &>/dev/null; then
+        echo "  AMD ROCm detected, installing torch-migraphx..."
+        if pip_try torch-migraphx torch_migraphx; then
+            echo "  [OK] torch-migraphx installed"
+        else
+            echo "  [WARN] torch-migraphx install failed (see logs/install/torch-migraphx.log)"
+        fi
+    else
+        echo "  No NVIDIA/AMD GPU detected, skipping torch.compile accelerator"
+    fi
+else
+    echo "  macOS: torch.compile accelerators not available"
+fi
+
+# Build Rust native extension (install cargo if missing)
+if ! command -v cargo &>/dev/null; then
+    echo "  Installing Rust toolchain..."
+    if curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y >"logs/install/rustup.log" 2>&1; then
+        source "$HOME/.cargo/env" 2>/dev/null
+        echo "  [OK] Rust installed"
+    else
+        echo "  [WARN] Rust install failed (see logs/install/rustup.log)"
+    fi
+fi
+if command -v cargo &>/dev/null; then
+    if ! .venv/bin/python -m pip show maturin &>/dev/null; then
+        echo "  Installing maturin (Rust extension build tool)..."
+        if ! pip_try maturin maturin; then
+            echo "  [WARN] maturin install failed (see logs/install/maturin.log)"
+        fi
+    fi
+    echo "  Building native Rust extension..."
+    if (cd corridorkey_native && ../.venv/bin/python -m maturin develop --release) >"logs/install/maturin-build.log" 2>&1; then
+        echo "  [OK] Rust native extension installed"
+    else
+        echo "  [WARN] Rust build failed (see logs/install/maturin-build.log)"
+    fi
+fi
+
+echo "[4e/6] Optional SAM2 tracker..."
 INSTALL_SAM2="y"
 if [ "$OS_TYPE" = "macos" ]; then
     echo "  [NOTE] SAM2 tracking on macOS is experimental in CorridorKey."

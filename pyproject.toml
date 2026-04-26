@@ -31,6 +31,7 @@ dependencies = [
     "PySide6>=6.7.0",
     "triton-windows>=3.5,<3.6; sys_platform == 'win32'",
     "cryptography>=43.0",
+    "protobuf>=5.0",
 ]
 
 [project.optional-dependencies]
@@ -42,6 +43,15 @@ quality = [
     "lpips",
 ]
 mlx = ["corridorkey-mlx ; sys_platform == 'darwin' and python_version >= '3.11'"]
+# Quantized attention: speedup over FlashAttention 2 on Ampere+.
+# torchao: NVFP4 model quantization for Blackwell.
+# PyPI ships sageattention 1.0.6 only; 2.x/3.x require source build or
+# prebuilt wheels from the project's GitHub releases. The install scripts
+# fall back to 1.0.6 if 2.2+ can't be resolved.
+perf-attn = [
+    "sageattention ; sys_platform != 'darwin'",
+    "torchao ; sys_platform != 'darwin'",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -55,6 +65,9 @@ allow-direct-references = true
 
 [tool.uv]
 torch-backend = "auto"
+constraint-dependencies = [
+    "opencv-python==99999",
+]
 
 [tool.uv.sources]
 corridorkey-mlx = { git = "https://github.com/nikopueringer/corridorkey-mlx.git", tag = "v1.0.0" }

@@ -29,7 +29,82 @@ INFERENCE_DEFAULTS = {
     "edge_blur_px": None,
 }
 
-def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
+# Optional accelerators — try-import once at module level so the wheels
+# stay optional and users without them get the SDPA / FP16 fallbacks.
+try:
+    from sageattention import sageattn as _sageattn  # type: ignore
+    _SAGE_AVAILABLE = True
+except Exception:
+    _sageattn = None
+    _SAGE_AVAILABLE = False
+
+try:
+    from torchao.quantization import quantize_ as _ao_quantize  # type: ignore
+    from torchao.quantization import NVFP4Config as _NVFP4Config  # type: ignore
+    _TORCHAO_AVAILABLE = True
+except Exception:
+    _ao_quantize = None
+    _NVFP4Config = None
+    _TORCHAO_AVAILABLE = False
+
+
+def _env_override(name: str) -> bool | None:
+    """Read a tri-state env var: True / False / None (unset)."""
+    raw = os.environ.get(name, "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return None
+
+
+def _device_capability(device: torch.device) -> tuple[int, int]:
+    """(major, minor) compute capability, or (0, 0) if not CUDA."""
+    if device.type != "cuda":
+        return (0, 0)
+    try:
+        return torch.cuda.get_device_capability(device)
+    except Exception:
+        return (0, 0)
+
+
+def _auto_enable_sage(device: torch.device) -> bool:
+    """Auto-enable SageAttention on Ampere+ when installed.
+
+    Override with CORRIDORKEY_USE_SAGE=0 to force off, =1 to force on
+    even when the capability check would skip it.
+    """
+    override = _env_override("CORRIDORKEY_USE_SAGE")
+    if override is not None:
+        return override and _SAGE_AVAILABLE
+    if not _SAGE_AVAILABLE:
+        return False
+    # Sage 2++ requires Ampere (SM 8.0+); Sage 3 auto-engages on Blackwell (SM 12+).
+    major, _ = _device_capability(device)
+    return major >= 8
+
+
+def _auto_enable_nvfp4(device: torch.device) -> bool:
+    """Auto-enable NVFP4 weight quantization on Blackwell when torchao is installed.
+
+    Override with CORRIDORKEY_NVFP4=0 to force off, =1 to force on.
+    """
+    override = _env_override("CORRIDORKEY_NVFP4")
+    if override is not None:
+        return override and _TORCHAO_AVAILABLE
+    if not _TORCHAO_AVAILABLE:
+        return False
+    # NVFP4 hardware lives on Blackwell 5th gen Tensor Cores (SM 12+)
+    major, _ = _device_capability(device)
+    return major >= 12
+
+
+def _attention_kernel(device: torch.device):
+    """Active attention kernel: sageattn when auto-enabled or forced, else SDPA."""
+    return _sageattn if _auto_enable_sage(device) else F.scaled_dot_product_attention
+
+
+def _patch_hiera_global_attention(hiera_model: nn.Module, device: torch.device) -> int:
     """Monkey-patch MaskUnitAttention.forward on global-attention blocks.
 
     Hiera's MaskUnitAttention creates Q/K/V with shape
@@ -42,6 +117,7 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
 
     Credit: Jhe Kimchi (Discord contribution)
     """
+    attn_fn = _attention_kernel(device)
     patched = 0
 
     for blk in hiera_model.blocks:
@@ -51,7 +127,7 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
         if attn.use_mask_unit_attn:
             continue
 
-        def _make_patched_forward(original_attn):
+        def _make_patched_forward(original_attn, kernel):
             def _patched_forward(self, x: torch.Tensor) -> torch.Tensor:
                 B, N, _ = x.shape
                 qkv = self.qkv(x)
@@ -69,17 +145,53 @@ def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
                 k = k.contiguous()
                 v = v.contiguous()
 
-                x = F.scaled_dot_product_attention(q, k, v)
+                x = kernel(q, k, v)
                 x = x.transpose(1, 2).reshape(B, -1, self.dim_out)
                 x = self.proj(x)
                 return x
 
             return types.MethodType(_patched_forward, original_attn)
 
-        attn.forward = _make_patched_forward(attn)
+        attn.forward = _make_patched_forward(attn, attn_fn)
         patched += 1
 
     return patched
+
+
+def _try_nvfp4_quantize(model: nn.Module, device: torch.device) -> bool:
+    """NVFP4 weight quantization — auto on Blackwell when torchao is installed."""
+    if not _auto_enable_nvfp4(device):
+        return False
+    try:
+        _ao_quantize(model, _NVFP4Config())
+        logger.info("Model quantized to NVFP4")
+        return True
+    except Exception as e:
+        logger.warning(f"NVFP4 quantization failed: {type(e).__name__}: {e}")
+        return False
+
+
+def _validate_sage_attention(device: torch.device, tolerance: float = 5e-2) -> bool:
+    """Cross-check sageattn vs SDPA on a dummy tensor; return False if they diverge."""
+    if not _SAGE_AVAILABLE:
+        return False
+    # Hiera Base Plus: 14 heads × 64 head_dim, 256 tokens at the smallest global block
+    B, H, N, D = 1, 14, 256, 64
+    try:
+        torch.manual_seed(0)
+        q = torch.randn(B, H, N, D, device=device, dtype=torch.float16)
+        k = torch.randn(B, H, N, D, device=device, dtype=torch.float16)
+        v = torch.randn(B, H, N, D, device=device, dtype=torch.float16)
+        with torch.inference_mode():
+            ref = F.scaled_dot_product_attention(q, k, v)
+            cand = _sageattn(q, k, v, tensor_layout="HND", is_causal=False)
+        diff = (ref.float() - cand.float()).abs().max().item()
+        ok = diff <= tolerance
+        logger.info(f"SageAttention validation: max|diff| vs SDPA = {diff:.3e} ({'OK' if ok else 'FAIL, falling back'})")
+        return ok
+    except Exception as e:
+        logger.warning(f"SageAttention validation failed: {type(e).__name__}: {e}")
+        return False
 
 class CorridorKeyEngine:
     # VRAM threshold for optimization profile selection.
@@ -298,6 +410,11 @@ class CorridorKeyEngine:
         t0 = _time.monotonic()
         model = model.to(self.device)
         model.eval()
+        # Convert weights to fp16, saves ~450 MB VRAM.
+        # Inference already runs in fp16 via autocast, so this is lossless.
+        if self.device.type != 'cpu':
+            model.half()
+            _diag("Model weights converted to fp16")
         _diag(f"Step 2 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"Model to device: {_time.monotonic() - t0:.1f}s")
 
@@ -349,17 +466,29 @@ class CorridorKeyEngine:
         _diag(f"Step 4 done: {_time.monotonic() - t0:.1f}s")
         logger.info(f"State dict loaded: {_time.monotonic() - t0:.1f}s")
 
+        # Step 4b: NVFP4 quantization on Blackwell. Must run AFTER load_state_dict.
+        _try_nvfp4_quantize(model, self.device)
+
         # TF32 and cuDNN benchmark settings are now applied at app startup
         # in ui/app.py::_configure_runtime_backends() so they take effect
         # before the first inference, not just after lazy model load.
 
-        # Step 5: Hiera attention patch
+        # Step 5: Hiera attention patch.
+        # _attention_kernel(device) auto-picks sageattn on Ampere+ when
+        # installed, SDPA otherwise. If sageattn diverges from SDPA on these
+        # tensor shapes we set CORRIDORKEY_USE_SAGE=0 so subsequent passes
+        # take the SDPA path even though Sage is "available".
+        if _auto_enable_sage(self.device) and not _validate_sage_attention(self.device):
+            os.environ["CORRIDORKEY_USE_SAGE"] = "0"
+            logger.warning("SageAttention disabled for this session — falling back to SDPA")
+
         self._status("Patching attention blocks...")
         t0 = _time.monotonic()
         try:
             hiera = model.encoder.model
-            n_patched = _patch_hiera_global_attention(hiera)
-            logger.info(f"Hiera attention patch: {n_patched} blocks ({_time.monotonic() - t0:.1f}s)")
+            n_patched = _patch_hiera_global_attention(hiera, self.device)
+            kernel_name = "sageattn" if _auto_enable_sage(self.device) else "SDPA"
+            logger.info(f"Hiera attention patch: {n_patched} blocks via {kernel_name} ({_time.monotonic() - t0:.1f}s)")
         except Exception as e:
             logger.warning(f"Hiera attention patch failed: {type(e).__name__}: {e}")
 

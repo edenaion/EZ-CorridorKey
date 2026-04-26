@@ -118,9 +118,8 @@ def stitch_video(
         raise RuntimeError("FFmpeg stitching timed out")
 
     if proc.returncode != 0 and not (cancel_event and cancel_event.is_set()):
-        # Last few stderr lines usually contain the actual error
-        tail = "\n".join(stderr_lines[-10:]) if stderr_lines else "(no output)"
-        logger.error(f"FFmpeg stitching failed (exit {proc.returncode}):\n{tail}")
-        raise RuntimeError(f"FFmpeg stitching failed:\n{tail}")
+        full = "\n".join(stderr_lines) if stderr_lines else "(no output)"
+        logger.error(f"FFmpeg stitching failed (exit {proc.returncode}):\n{full}")
+        raise RuntimeError(f"FFmpeg stitching failed:\n{full}")
 
     logger.info(f"Video stitched: {out_path}")

@@ -39,6 +39,12 @@ def _standard_nvidia_smi_paths() -> list[Path]:
             continue
         seen.add(key)
         candidates.append(candidate)
+    # Windows puts nvidia-smi in System32 on some driver installations
+    candidates.append(Path(r"C:\Windows\System32\nvidia-smi.exe"))
+    # Check CUDA_PATH env var (set by CUDA toolkit installer)
+    cuda_path = os.environ.get("CUDA_PATH")
+    if cuda_path:
+        candidates.append(Path(cuda_path) / "bin" / "nvidia-smi.exe")
     return candidates
 
 

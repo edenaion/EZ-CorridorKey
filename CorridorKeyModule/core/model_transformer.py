@@ -116,7 +116,8 @@ class CNNRefinerModule(nn.Module):
         self._tile_size = 0
         self._tile_overlap = 128
         self._compiled_process_tile = None
-        self._blend_weight_cache = {}
+        self._blend_weight_cache: dict = {}
+        self._blend_weight_cache_max = 64
 
     def _process_tile_impl(self, x):
         """Run refiner pipeline on a single tile. x: [B, 7, H, W]."""
@@ -154,29 +155,42 @@ class CNNRefinerModule(nn.Module):
         delta_sum = full_input.new_zeros((B, out_channels, H, W))
         weight_sum = full_input.new_zeros((B, 1, H, W))
 
-        for y0 in range(0, H, stride):
-            for x0 in range(0, W, stride):
-                y1 = min(y0 + tile_size, H)
-                x1 = min(x0 + tile_size, W)
-                # Adjust start to ensure full tile_size when possible.
-                y0_adj = max(0, y1 - tile_size)
-                x0_adj = max(0, x1 - tile_size)
+        # Collect tile coordinates
+        tile_specs = [
+            (max(0, min(y0 + tile_size, H) - tile_size),
+             max(0, min(x0 + tile_size, W) - tile_size),
+             min(y0 + tile_size, H),
+             min(x0 + tile_size, W))
+            for y0 in range(0, H, stride)
+            for x0 in range(0, W, stride)
+        ]
 
-                tile = full_input[:, :, y0_adj:y1, x0_adj:x1]
-                tile_delta = self._process_tile(tile)
+        # Batch all tiles into a single forward pass (B=1 path, inference always uses B=1).
+        # For B > 1, fall back to sequential processing per batch element.
+        if B == 1:
+            tiles = torch.stack([
+                full_input[0, :, y0a:y1, x0a:x1] for y0a, x0a, y1, x1 in tile_specs
+            ])
+            all_deltas = self._process_tile(tiles)
 
-                tile_h, tile_w = tile_delta.shape[2], tile_delta.shape[3]
-                # Only ramp edges that overlap with adjacent tiles, not image boundaries.
-                at_top = (y0_adj == 0)
-                at_bottom = (y1 == H)
-                at_left = (x0_adj == 0)
-                at_right = (x1 == W)
+            for idx, (y0_adj, x0_adj, y1, x1) in enumerate(tile_specs):
                 blend_w = self._get_blend_weight(
-                    tile_h, tile_w, tile_overlap,
-                    at_top, at_bottom, at_left, at_right,
+                    all_deltas.shape[2], all_deltas.shape[3], tile_overlap,
+                    y0_adj == 0, y1 == H, x0_adj == 0, x1 == W,
                     full_input.device, full_input.dtype,
                 )
-
+                delta = all_deltas[idx:idx + 1]
+                delta_sum[:, :, y0_adj:y1, x0_adj:x1] += delta * blend_w
+                weight_sum[:, :, y0_adj:y1, x0_adj:x1] += blend_w
+        else:
+            for y0_adj, x0_adj, y1, x1 in tile_specs:
+                tile = full_input[:, :, y0_adj:y1, x0_adj:x1]
+                tile_delta = self._process_tile(tile)
+                blend_w = self._get_blend_weight(
+                    tile_delta.shape[2], tile_delta.shape[3], tile_overlap,
+                    y0_adj == 0, y1 == H, x0_adj == 0, x1 == W,
+                    full_input.device, full_input.dtype,
+                )
                 delta_sum[:, :, y0_adj:y1, x0_adj:x1] += tile_delta * blend_w
                 weight_sum[:, :, y0_adj:y1, x0_adj:x1] += blend_w
 
@@ -210,6 +224,10 @@ class CNNRefinerModule(nn.Module):
             weight = self._blend_weight(h, w, overlap,
                                         at_top, at_bottom, at_left, at_right,
                                         device, dtype)
+            # Bound cache size to prevent unbounded growth across resolution changes
+            if len(self._blend_weight_cache) >= self._blend_weight_cache_max:
+                oldest = next(iter(self._blend_weight_cache))
+                del self._blend_weight_cache[oldest]
             self._blend_weight_cache[key] = weight
         return weight
 

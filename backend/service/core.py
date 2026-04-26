@@ -309,6 +309,7 @@ class CorridorKeyService(
                 'name': torch.cuda.get_device_name(0),
             }
         except Exception as e:
+            # Broad: torch property names drift across versions (total_mem vs total_memory)
             logger.debug(f"VRAM query failed: {e}")
             return {}
 

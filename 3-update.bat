@@ -115,7 +115,7 @@ if exist ".venv\Scripts\python.exe" (
 )
 
 if !UV_AVAILABLE!==1 (
-    uv pip install --python .venv\Scripts\python.exe --torch-backend=auto !INSTALL_TARGET! 2>&1
+    uv pip install --python .venv\Scripts\python.exe --torch-backend=auto --reinstall-package corridorkey !INSTALL_TARGET! 2>&1
     if %errorlevel%==0 (
         echo   [OK] Dependencies updated via uv
     ) else (
