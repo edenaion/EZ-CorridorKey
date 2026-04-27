@@ -292,3 +292,62 @@ class TestValidateFFmpegInstall:
 
         assert "Repair FFmpeg" in help_text
         assert "tools\\ffmpeg" in help_text
+
+
+class TestBuildExrVfGbrRegression:
+    """Regression tests for the GBR-on-YUV matrix bug (issue #95 follow-up).
+
+    ffprobe reports color_space=gbr for certain YUV ProRes clips.  "gbr" is a
+    pixel-format family label, not a valid in_color_matrix constant.  FFmpeg
+    rejects it with:
+        Unable to parse "in_color_matrix" option value "gbr"
+    The fix discards the bogus tag and falls back to the resolution heuristic.
+    """
+
+    _BASE = {
+        "pix_fmt": "yuv422p10le",
+        "width": 1920,
+        "height": 1080,
+        "color_primaries": "bt709",
+        "color_transfer": "bt709",
+        "color_range": "tv",
+        "bits_per_raw_sample": 10,
+    }
+
+    def test_gbr_on_yuv_hd_falls_back_to_bt709(self):
+        vf = ffmpeg_tools.build_exr_vf({**self._BASE, "color_space": "gbr"})
+        assert "gbr" not in vf, "Bogus 'gbr' matrix must not reach the FFmpeg filter"
+        assert "in_color_matrix=bt709" in vf
+
+    def test_gbr_on_yuv_uhd_falls_back_to_bt709(self):
+        info = {**self._BASE, "color_space": "gbr", "width": 3840, "height": 2160}
+        vf = ffmpeg_tools.build_exr_vf(info)
+        assert "gbr" not in vf
+        assert "in_color_matrix=bt709" in vf
+
+    def test_gbr_on_yuv_sd_falls_back_to_sd_matrix(self):
+        """SD content with bogus GBR tag should use smpte170m, not bt709."""
+        info = {
+            "pix_fmt": "yuv422p",
+            "width": 720,
+            "height": 480,
+            "color_space": "gbr",
+            "color_primaries": "smpte170m",
+            "color_transfer": "smpte170m",
+            "color_range": "tv",
+            "bits_per_raw_sample": 8,
+        }
+        vf = ffmpeg_tools.build_exr_vf(info)
+        assert "gbr" not in vf
+        assert "in_color_matrix=smpte170m" in vf
+
+    def test_gbr_pix_fmt_on_rgb_stream_is_untouched(self):
+        """gbrp* pixel formats are genuine RGB — no matrix needed."""
+        vf = ffmpeg_tools.build_exr_vf({"pix_fmt": "gbrp10le", "color_space": "gbr"})
+        assert vf == "format=gbrpf32le"
+
+    def test_normal_yuv_bt709_unchanged(self):
+        """Sanity-check: well-tagged YUV clips must not be affected by the fix."""
+        vf = ffmpeg_tools.build_exr_vf({**self._BASE, "color_space": "bt709"})
+        assert "in_color_matrix=bt709" in vf
+
