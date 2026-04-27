@@ -114,6 +114,21 @@ MATANYONE2_CHECKPOINT = {
     "size_bytes": 141_429_115,
 }
 
+# BiRefNet: 16 model variants all live under ZhengPeng7/ on HuggingFace.
+# The setup wizard offers the default "Matting" variant as an optional
+# pre-download (~940 MB) so installed macOS users don't hit a lazy
+# write-to-.app-bundle path on first use. Users who skip this get the
+# same model lazy-downloaded at first BiRefNet click — the wrapper's
+# ``_resolve_model_dir`` routes that lazy download to the same writable
+# location, so cold starts still work without pre-selection.
+BIREFNET_DEFAULT_CHECKPOINT = {
+    "repo_id": "ZhengPeng7/BiRefNet-matting",
+    "repo_name": "BiRefNet-matting",
+    "local_dir": PROJECT_ROOT / "modules" / "BiRefNetModule" / "checkpoints" / "BiRefNet-matting",
+    "size_human": "~940 MB",
+    "size_bytes": 940_000_000,
+}
+
 SAM2_MODELS = {
     "small": {
         "repo_id": "facebook/sam2.1-hiera-small",
@@ -443,6 +458,62 @@ def download_matanyone2() -> bool:
         return False
 
 
+def is_birefnet_installed() -> bool:
+    """Check if the default BiRefNet Matting variant is already downloaded.
+
+    We only check for any .safetensors in the target directory because
+    snapshot_download pulls a handful of files and any usable
+    BiRefNet-matting snapshot will contain at least one .safetensors.
+    """
+    local_dir = BIREFNET_DEFAULT_CHECKPOINT["local_dir"]
+    try:
+        if not local_dir.is_dir():
+            return False
+        return any(p.suffix == ".safetensors" for p in local_dir.iterdir() if p.is_file())
+    except OSError:
+        return False
+
+
+def download_birefnet() -> bool:
+    """Download the default BiRefNet Matting variant to the data-dir path.
+
+    The wrapper's ``_resolve_model_dir`` will find this at first use and
+    skip the lazy runtime download entirely. Users who skip this during
+    setup get the same content lazy-downloaded on demand — this is
+    strictly a UX improvement for pre-selecting the default variant.
+    """
+    cfg = BIREFNET_DEFAULT_CHECKPOINT
+    local_dir = cfg["local_dir"]
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    if is_birefnet_installed():
+        print(f"  [OK] BiRefNet ({cfg['repo_name']}) already installed")
+        return True
+
+    if not check_disk_space(cfg["size_bytes"], local_dir):
+        usage = shutil.disk_usage(local_dir)
+        free_gb = usage.free / (1024**3)
+        print(f"  [ERROR] Not enough disk space for BiRefNet ({cfg['size_human']})")
+        print(f"  Available: {free_gb:.1f} GB")
+        return False
+
+    print(f"  Downloading BiRefNet ({cfg['repo_name']}, {cfg['size_human']})...")
+    try:
+        from huggingface_hub import snapshot_download
+        snapshot_download(
+            repo_id=cfg["repo_id"],
+            local_dir=str(local_dir),
+            local_dir_use_symlinks=False,
+        )
+        print(f"  Saved to: {local_dir}")
+        return True
+    except Exception as e:
+        print(f"\n  [ERROR] Download failed: {e}")
+        print(f"  Manual download: https://huggingface.co/{cfg['repo_id']}")
+        print(f"  Place in: {local_dir}/")
+        return False
+
+
 def check_all():
     """Print status of all models."""
     print("\nModel Status:")
@@ -465,6 +536,12 @@ def check_all():
     ma2_mark = "[OK]" if ma2_installed else "[--]"
     ma2_status = "INSTALLED" if ma2_installed else "NOT INSTALLED"
     print(f"  {ma2_mark} matanyone2   {MATANYONE2_CHECKPOINT['size_human']:>8s}  {ma2_status} (optional)")
+
+    # BiRefNet default Matting variant
+    brn_installed = is_birefnet_installed()
+    brn_mark = "[OK]" if brn_installed else "[--]"
+    brn_status = "INSTALLED" if brn_installed else "NOT INSTALLED"
+    print(f"  {brn_mark} birefnet     {BIREFNET_DEFAULT_CHECKPOINT['size_human']:>8s}  {brn_status} (optional)")
 
     # MLX checkpoint (Apple Silicon only, but show status on all platforms)
     mlx_installed = is_mlx_installed()
@@ -503,6 +580,7 @@ def main():
     parser.add_argument("--gvm", action="store_true", help="Download GVM weights (~6GB, optional)")
     parser.add_argument("--videomama", action="store_true", help="Download VideoMaMa weights (~37GB, optional)")
     parser.add_argument("--matanyone2", action="store_true", help="Download MatAnyone2 weights (~141MB, optional)")
+    parser.add_argument("--birefnet", action="store_true", help="Download default BiRefNet Matting variant (~940MB, optional)")
     parser.add_argument("--all", action="store_true", help="Download all models")
     parser.add_argument("--check", action="store_true", help="Check installation status")
     args = parser.parse_args()
@@ -510,22 +588,24 @@ def main():
     mlx_flag = getattr(args, 'corridorkey_mlx', False)
 
     # Default to --check if no flags
-    if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.all, args.check]):
+    if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.birefnet, args.all, args.check]):
         args.check = True
 
     if args.check:
         check_all()
-        if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.all]):
+        if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.birefnet, args.all]):
             return
 
     targets = []
     sam2_targets: list[str] = []
     download_mlx = False
     download_ma2 = False
+    download_brn = False
     if args.all:
         targets = list(MODELS.keys())
         sam2_targets = list(SAM2_MODELS.keys())
         download_ma2 = True
+        download_brn = True
         # --all on Apple Silicon auto-includes MLX weights
         if sys.platform == "darwin" and platform.machine() == "arm64":
             download_mlx = True
@@ -536,6 +616,8 @@ def main():
             download_mlx = True
         if args.matanyone2:
             download_ma2 = True
+        if args.birefnet:
+            download_brn = True
         if args.sam2:
             if args.sam2 == "all":
                 sam2_targets = list(SAM2_MODELS.keys())
@@ -546,10 +628,16 @@ def main():
         if args.videomama:
             targets.append("videomama")
 
-    if not targets and not sam2_targets and not download_mlx and not download_ma2:
+    if not targets and not sam2_targets and not download_mlx and not download_ma2 and not download_brn:
         return
 
-    total_targets = len(targets) + len(sam2_targets) + (1 if download_mlx else 0) + (1 if download_ma2 else 0)
+    total_targets = (
+        len(targets)
+        + len(sam2_targets)
+        + (1 if download_mlx else 0)
+        + (1 if download_ma2 else 0)
+        + (1 if download_brn else 0)
+    )
     print(f"\nDownloading {total_targets} model(s)...\n")
     results = {}
     for name in targets:
@@ -563,6 +651,10 @@ def main():
     if download_ma2:
         print("[matanyone2]")
         results["matanyone2"] = download_matanyone2()
+        print()
+    if download_brn:
+        print("[birefnet]")
+        results["birefnet"] = download_birefnet()
         print()
     for name in sam2_targets:
         result_key = f"sam2-{name}"

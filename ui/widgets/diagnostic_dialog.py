@@ -23,6 +23,7 @@ from ui.widgets.diagnostic_checks import (  # noqa: F401
     Diagnostic,
     StartupIssue,
     match_diagnostic,
+    resolve_steps,
     run_startup_diagnostics,
 )
 
@@ -86,7 +87,7 @@ class DiagnosticDialog(QDialog):
         steps_layout.setContentsMargins(8, 4, 8, 4)
         steps_layout.setSpacing(8)
 
-        for i, step in enumerate(diagnostic.steps, 1):
+        for i, step in enumerate(resolve_steps(diagnostic), 1):
             step_lbl = QLabel(f"{i}.  {step}")
             step_lbl.setWordWrap(True)
             step_lbl.setTextInteractionFlags(
@@ -232,7 +233,7 @@ class StartupDiagnosticDialog(QDialog):
         layout.addWidget(explain)
 
         steps_text = "\n".join(
-            f"  {i}. {s}" for i, s in enumerate(issue.diagnostic.steps, 1)
+            f"  {i}. {s}" for i, s in enumerate(resolve_steps(issue.diagnostic), 1)
         )
         steps = QLabel(steps_text)
         steps.setWordWrap(True)

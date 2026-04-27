@@ -1,13 +1,13 @@
-# EZ-CorridorKey **v1.9.1**
+# EZ-CorridorKey **v1.10.0**
 
 [![Release](https://img.shields.io/github/v/release/edenaion/EZ-CorridorKey?style=flat-square&label=Release&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![Stars](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
 [![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
-[![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins/Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
-> **Latest release: [v1.9.1](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.9.1)** — Frozen build performance, MLX macOS packaging, UX fixes. See the [full changelog](CHANGELOG.md).
+> **Latest release: [v1.10.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.10.0)** — Project output dirs, wizard overhaul, signed updates, frozen build fixes. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -24,6 +24,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 - [View Modes](#view-modes) — Output channel switching
 - [Inference Controls](#inference-controls) — Parameters and output formats
 - [Hardware Requirements](#hardware-requirements) — VRAM, GPU, and platform info
+- [Security](#security) — Verified downloads, signed updates, checksums
 - [Contributing](#contributing--support) — How to help and get help
 
 [![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
@@ -47,9 +48,11 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 ## Installation
 
+*Do NOT download the GitHub Zip, this is not a viable installation method. You will have issues. Do not rename the installation path to anything other than EZ-CorridorKey
+
 ### Desktop App Installer (recommended)
 
-**Don't want to deal with Python, git, or the command line?** Starting with v1.9.0, a full Windows installer and portable exe are available — as well as a macOS `.pkg`. Entirely optional and free — donations help support active development.
+**Don't want to deal with Python, git, or the command line?** A full Windows installer, portable exe, and macOS `.pkg` are available. Entirely optional and free — donations help support active development.
 
 [![Download on Gumroad](https://img.shields.io/badge/Download-Gumroad-ff90e8?style=for-the-badge&logo=gumroad&logoColor=white)](https://edenaion.gumroad.com/)
 
@@ -57,7 +60,8 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 
 ### Terminal (CLI) Install (Windows / macOS / Linux)
 
-1. Clone or download this repository.
+1. Git Clone this repository:
+`git clone https://github.com/edenaion/EZ-CorridorKey`
 2. The one-click path provisions and uses managed Python 3.11 automatically, so you do not need to pre-install Python just to use `1-install`.
 3. Run the installer for your platform:
    - **Windows:** Double-click `1-install.bat`
@@ -81,15 +85,16 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 - Downloads and installs [FFmpeg](https://ffmpeg.org/) locally if not found on PATH (used for video import)
 - Downloads the CorridorKey model checkpoint (383 MB, required)
 - Optionally installs SAM2 tracking support and pre-downloads the default Base+ checkpoint (324 MB)
-- Optionally downloads GVM (~6 GB) and VideoMaMa (~37 GB) alpha hint generators
+- Optionally downloads BiRefNet (~940 MB), MatAnyone2 (~135 MB), GVM (~6 GB), and VideoMaMa (~37 GB) alpha hint generators
 - Creates a desktop shortcut (optional)
 
 **Updating:**
 
-- **Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app — it downloads a lightweight patch and relaunches.
-- **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git (or downloads a ZIP if git isn't available).
+- **Windows Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app. It downloads a lightweight patch and relaunches.
+- **macOS Desktop App users on 1.9.x:** 1.10.0 does **not** auto-update on Mac. You must download the new `.pkg` from Gumroad and run it manually. The installer replaces the existing `/Applications/EZ-CorridorKey.app` in place. Your preferences, projects, and downloaded models live in `~/Library/Application Support/EZ-CorridorKey/` and are preserved across the reinstall. Mac auto-update returns in 1.11.0 or later.
+- **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git, or downloads a ZIP if git isn't available.
 
-> **Note:** The update ZIP on GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) is for Desktop App Installer users only — it patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
+> **Note:** The update ZIP on GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) is for Windows Desktop App Installer users only. It patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
 
 ### Alternate Installation: Docker
 
@@ -204,9 +209,9 @@ The entire pipeline is cancellable (Esc) and checkpointable — if interrupted, 
 
 Switch between view modes to inspect results:
 
-- **COMP** — key over checkerboard
 - **FG** — check for green fringing
 - **MATTE** — inspect alpha quality
+- **COMP** — key over checkerboard
 - **PROCESSED** — production RGBA
 
 Outputs are written to the project's `Output/` subdirectories during inference (configurable — see [Custom Output Directory](#custom-output-directory)).
@@ -255,15 +260,15 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 
 ### Paint
 
-| Shortcut                 | Action                                      |
-| ------------------------ | ------------------------------------------- |
-| **1**                    | Foreground paint brush (green)              |
-| **2**                    | Background paint brush (red)                |
-| **C**                    | Cycle foreground brush color (green / blue) |
-| **Shift + drag up/down** | Resize brush                                |
-| **Alt + left-drag**      | Draw straight line                          |
-| **Ctrl+Z**               | Undo last stroke on current frame           |
-| **Ctrl+C**               | Clear all paint strokes                     |
+| Shortcut                  | Action                                      |
+| --------------------------| ------------------------------------------- |
+| **1**                     | Foreground paint brush (green)              |
+| **2**                     | Background paint brush (red)                |
+| **C**                     | Cycle foreground brush color (green / blue) |
+| **Shift+LMB+drag up/down**| Resize brush                                |
+| **Alt+LMB+drag**          | Draw straight line                          |
+| **Ctrl+Z**                | Undo last stroke on current frame           |
+| **Ctrl+C**                | Clear all paint strokes                     |
 
 ---
 
@@ -274,6 +279,8 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 | Mode          | Source                | What You See                                              |
 | ------------- | --------------------- | --------------------------------------------------------- |
 | **INPUT**     | `Input/` or `Frames/` | Original unprocessed footage                              |
+| **MASK**      | Paint strokes         | Foreground (green/blue) and background (red) paint masks  |
+| **ALPHA**     | `AlphaHint/`          | Alpha hint used as input to inference                     |
 | **FG**        | `Output/FG/`          | Foreground with green spill removed                       |
 | **MATTE**     | `Output/Matte/`       | Alpha matte (white = opaque, black = transparent)         |
 | **COMP**      | `Output/Comp/`        | Final key composited over checkerboard                    |
@@ -372,14 +379,15 @@ Access via Edit > Preferences.
 
 ### Custom Output Directory
 
-By default, inference output is written to `Output/` inside each clip folder. You can redirect output:
+By default, inference output is written to `Output/` inside each clip folder. You can redirect output at three levels:
 
 - **Global**: Preferences > Output > Default output directory
+- **Per-project**: File > Set Project Output Folder
 - **Per-clip**: Right-click a clip > Set Output Directory
 
-Priority: per-clip override > global preference > default.
+Priority: per-clip > per-project > global preference > default.
 
-When using a global directory, outputs are organized as `<dir>/<ProjectName>/<ClipName>/FG/`, `Matte/`, etc. to prevent collisions between projects.
+When using a non-default directory, outputs are organized as `<dir>/<ProjectName>/<ClipName>/FG/`, `Matte/`, etc. to prevent collisions between projects. The per-project setting persists to `project.json`.
 
 ---
 
@@ -443,12 +451,52 @@ EZ-CorridorKey's optimizations (Hiera FlashAttention, TF32 tensor cores, torch.c
 
 ## Security
 
-All installer scripts are open-source and readable in this repository. The Windows installer and portable exe are digitally signed via Azure Trusted Signing. Independent VirusTotal scans for the current release:
+### Verified download sources
 
-- [**EZ-CorridorKey-1.9.1-Windows-x64-Setup.exe** — VirusTotal scan](https://www.virustotal.com/gui/file-analysis/OWVkMGEwYTI1ZGI1YmUxNWU3N2IwOWRmOWNhZWQ4NWM6MTc3NTg2MzQ2MA==)
+The only official sources for EZ-CorridorKey are:
+
+☼ **GitHub:** [github.com/edenaion/EZ-CorridorKey/releases](https://github.com/edenaion/EZ-CorridorKey/releases)
+☼ **Gumroad:** [edenaion.gumroad.com](https://edenaion.gumroad.com/)
+
+Any other site hosting EZ-CorridorKey downloads is **unverified and potentially malware**. Do not download from third-party mirrors, repackaging sites, or file-sharing links. If you see EZ-CorridorKey hosted elsewhere, please report it in [GitHub Issues](https://github.com/edenaion/EZ-CorridorKey/issues) or in the [EZSCAPE Discord](https://discord.gg/TyxNjcWeF3).
+
+### Code signing
+
+☼ **Windows:** The installer (.exe) is signed via Azure Trusted Signing. Windows SmartScreen shows **EZscape Ventures LLC** as the verified publisher.
+☼ **macOS:** The .pkg is code-signed and Apple-notarized under **Developer ID: Edward Zisk (UX6RDC39ZW)**. Gatekeeper verifies it on first launch.
+
+### Signed updates
+
+Starting with v1.10.0, every GitHub release ships a signed manifest (`manifest.json` + `manifest.json.sig`). When the in-app updater downloads a new version, it verifies the Ed25519 signature and SHA-256 hash before applying the update. If either check fails, the update is rejected and the user is warned.
+
+This means even if the GitHub account were compromised, the attacker could not push a malicious update to installed users without also possessing the offline signing key.
+
+The verification code is open source: [`backend/update_verify.py`](backend/update_verify.py).
+
+### Checksums
+
+Each release includes a `SHA256SUMS.txt` file listing the SHA-256 hash of every release artifact. Download it alongside the binary and verify manually:
+
+```bash
+# macOS / Linux
+sha256sum -c SHA256SUMS.txt
+
+# Windows PowerShell
+(Get-FileHash EZ-CorridorKey-1.10.0-Windows-x64-Setup.exe -Algorithm SHA256).Hash
+```
+
+### Git integrity
+
+All commits to `main` are signed with an Ed25519 SSH key. Branch protection enforces signed commits, pull request reviews, and blocks force pushes and branch deletion.
+
+### VirusTotal
+
+Independent scans:
+
+- [**EZ-CorridorKey.exe** (v1.10.0, signed inner exe) — VirusTotal scan](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
 - [**1-install.bat** (v1.6.0) — 0 detections](https://www.virustotal.com/gui/file/c88b68b2fdc429de8bd70a5dde182486c788fcdc34eb508a4a137373d1ddb1bc)
 
-> **Third-party models:** The core CorridorKey checkpoint (`CorridorKey.pth`) is the only model we can vouch for. Optional models (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) are downloaded from their respective authors' repositories — use them at your own discretion.
+> **Third-party models:** The core CorridorKey checkpoint (`CorridorKey.pth`) is the only model we can vouch for. Optional models (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) are downloaded from their respective authors' repositories -- use them at your own discretion.
 
 ---
 

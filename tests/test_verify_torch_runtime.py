@@ -1,6 +1,8 @@
 import sys
 import types
 
+import pytest
+
 from scripts import verify_torch_runtime
 from scripts.verify_torch_runtime import RuntimeInfo, evaluate_runtime
 
@@ -57,6 +59,10 @@ def test_macos_runtime_passes_without_nvidia():
     assert "macOS runtime verified" in message
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="evaluate_runtime takes the macOS branch on Darwin hosts",
+)
 def test_cpu_runtime_passes_when_no_gpu_is_expected():
     ok, message = evaluate_runtime(
         _info(

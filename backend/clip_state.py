@@ -115,9 +115,48 @@ class ClipAsset:
     path: str
     asset_type: str  # 'sequence' or 'video'
     frame_count: int = 0
+    # Cached (width, height) after first probe. None until probed.
+    _dimensions: Optional[tuple] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self):
         self._calculate_length()
+
+    def get_dimensions(self) -> Optional[tuple]:
+        """Return (width, height) of the asset, or None if it can't be probed.
+
+        Results are cached after the first successful probe. For videos, opens
+        via OpenCV to read frame dimensions. For image sequences, reads the
+        first frame's header. Probe failures are cached as None and retried
+        on subsequent calls only if the asset object is re-created.
+        """
+        if self._dimensions is not None:
+            return self._dimensions
+        try:
+            if self.asset_type == 'video':
+                import cv2
+                cap = cv2.VideoCapture(self.path)
+                if cap.isOpened():
+                    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    cap.release()
+                    if w > 0 and h > 0:
+                        self._dimensions = (w, h)
+                        return self._dimensions
+            elif self.asset_type == 'sequence':
+                files = self.get_frame_files()
+                if not files:
+                    return None
+                first = os.path.join(self.path, files[0])
+                # Use cv2.imread with IMREAD_UNCHANGED to support EXR/PNG/TIFF.
+                import cv2
+                img = cv2.imread(first, cv2.IMREAD_UNCHANGED)
+                if img is not None:
+                    h, w = img.shape[:2]
+                    self._dimensions = (int(w), int(h))
+                    return self._dimensions
+        except Exception as e:
+            logger.debug(f"ClipAsset.get_dimensions failed for {self.path}: {e}")
+        return None
 
     def _calculate_length(self):
         if self.asset_type == 'sequence':
@@ -230,30 +269,46 @@ class ClipEntry:
         self.error_message = message
 
     @property
+    def _project_root(self) -> str | None:
+        """Derive the v2 project root from this clip's root_path, or None for v1."""
+        parent = os.path.dirname(self.root_path)
+        if os.path.basename(parent) == "clips":
+            return os.path.dirname(parent)
+        return None
+
+    @property
     def output_dir(self) -> str:
-        """Resolved output directory.  Priority: per-clip > global pref > default."""
+        """Resolved output directory.
+
+        Priority: per-clip > per-project > global pref > default.
+        """
         # 1. Per-clip override (from clip.json)
         if self.custom_output_dir:
             return self.custom_output_dir
-        # 2. Global default from QSettings (Qt Core — no UI dependency)
+
+        # 2. Per-project override (from project.json)
+        project_root = self._project_root
+        if project_root:
+            from .project import load_project_output_dir
+            project_dir = load_project_output_dir(project_root)
+            if project_dir:
+                return os.path.join(project_dir, self.name)
+
+        # 3. Global default from QSettings (Qt Core — no UI dependency)
         try:
             from PySide6.QtCore import QSettings
             global_dir = QSettings().value("output/default_directory", "", type=str)
             if global_dir:
                 # Use project/clip subfolders to prevent cross-project collision.
-                # v2: root_path = .../ProjectName/clips/ClipName
-                # v1: root_path = .../ProjectName (project IS the clip)
-                parent = os.path.dirname(self.root_path)
-                if os.path.basename(parent) == "clips":
-                    # v2 layout — go up one more to get project name
-                    project_name = os.path.basename(os.path.dirname(parent))
+                if project_root:
+                    project_name = os.path.basename(project_root)
                 else:
                     # v1 layout — root_path is the project dir itself
                     project_name = os.path.basename(self.root_path)
                 return os.path.join(global_dir, project_name, self.name)
         except Exception:
             pass
-        # 3. Default: Output/ inside clip folder
+        # 4. Default: Output/ inside clip folder
         return os.path.join(self.root_path, "Output")
 
     def has_video_metadata(self) -> bool:

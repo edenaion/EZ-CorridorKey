@@ -49,6 +49,62 @@ def _get_app_version() -> str:
     return "unknown"
 
 
+def _detect_install_method() -> str:
+    """Return a short human-readable label for how the app was installed.
+
+    The label is included in bug reports so we can immediately tell whether
+    a user is on a frozen Windows installer, a macOS .app, a portable build,
+    or a dev clone — and for dev clones, whether they're running in a venv
+    or system Python. Removes guesswork from issue triage.
+    """
+    if getattr(sys, "frozen", False):
+        exe_path = os.path.abspath(sys.executable)
+        exe_dir = os.path.dirname(exe_path)
+
+        # Portable marker takes precedence — a portable build can sit on
+        # Windows, macOS or Linux.
+        if os.path.isfile(os.path.join(exe_dir, "portable.txt")):
+            return "Portable (frozen)"
+
+        # macOS .app bundle: walk parents looking for a *.app component.
+        # Substring checks are separator-sensitive and misfire when running
+        # tests on a different OS than the one being emulated.
+        if sys.platform == "darwin":
+            for part in exe_path.replace("\\", "/").split("/"):
+                if part.endswith(".app"):
+                    return "macOS .app (pkg/dmg)"
+
+        if sys.platform == "win32":
+            # PyInstaller onedir ships an _internal/ sibling to the exe.
+            if os.path.isdir(os.path.join(exe_dir, "_internal")):
+                return "Windows Installer (.exe)"
+            return "Windows frozen (layout unknown)"
+
+        return "Frozen build (platform unknown)"
+
+    # Dev / source mode.
+    in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+    venv_tag = "venv" if in_venv else "system Python"
+
+    # Walk upward from this file looking for a .git directory — handles
+    # both flat checkouts and worktree layouts without hardcoding depth.
+    probe = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(6):
+        if os.path.isdir(os.path.join(probe, ".git")):
+            return f"git clone ({venv_tag})"
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    # No .git directory in any ancestor. The overwhelmingly common way
+    # to end up here is the user downloading the GitHub source .zip (or
+    # a release source tarball) and running 1-install.bat against it.
+    # Flag it as such so triage can recommend switching to a git clone,
+    # where the updater uses a clean git pull instead of the robocopy
+    # fallback in 3-update.bat/sh.
+    return f"GitHub source zip (no .git, {venv_tag})"
+
+
 class ReportIssueDialog(QDialog):
     """Dialog that collects bug info and opens a pre-filled GitHub issue."""
 
@@ -153,6 +209,7 @@ class ReportIssueDialog(QDialog):
         """Collect all system info as (label, value) pairs."""
         pairs: list[tuple[str, str]] = [
             ("App Version", _get_app_version()),
+            ("Install Method", _detect_install_method()),
             ("OS", self._os_string()),
             ("Python", platform.python_version()),
         ]

@@ -148,12 +148,22 @@ def run_gui() -> int:
 
     app = create_app()
 
-    # First-launch setup: download model checkpoints if missing
-    from ui.widgets.setup_wizard import needs_setup, SetupWizard
+    # First-launch / version-upgrade setup: show the Download Manager when a
+    # required model is missing OR the installed version changed since the
+    # last successful launch. The user can dismiss the version-upgrade case
+    # and continue; missing-required still blocks launch.
+    from ui.widgets.setup_wizard import (
+        SetupWizard,
+        needs_setup,
+        has_required_models,
+        mark_setup_seen,
+    )
     if needs_setup():
         wizard = SetupWizard()
-        if wizard.exec() == SetupWizard.Rejected:
+        wizard.exec()
+        if not has_required_models():
             return 0
+    mark_setup_seen()
 
     # Frozen builds: point projects at the user-chosen install directory
     # (same location as model checkpoints) instead of the exe directory.

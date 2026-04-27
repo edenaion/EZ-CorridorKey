@@ -124,8 +124,12 @@ if [ "$UV_AVAILABLE" -eq 0 ]; then
             CUDA_MAJOR=$(echo "$CUDA_VER" | cut -d. -f1)
             CUDA_MINOR=$(echo "$CUDA_VER" | cut -d. -f2)
             echo "  CUDA $CUDA_VER detected"
+            # cu128 wheels cover Pascal through Blackwell and run on
+            # any CUDA 12.6-13.x driver. cu130 was removed here in
+            # 1.9.2 because it drops Pascal (sm_60/61) kernels and
+            # crashes GTX 10-series users with "no kernel image".
             if [ "$CUDA_MAJOR" -ge 13 ]; then
-                INDEX_URL="https://download.pytorch.org/whl/cu130"
+                INDEX_URL="https://download.pytorch.org/whl/cu128"
             elif [ "$CUDA_MAJOR" -eq 12 ] && [ "$CUDA_MINOR" -ge 6 ]; then
                 INDEX_URL="https://download.pytorch.org/whl/cu128"
             elif [ "$CUDA_MAJOR" -eq 12 ]; then

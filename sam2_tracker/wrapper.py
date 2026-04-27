@@ -155,6 +155,22 @@ class SAM2Tracker:
                 "to generate dense masks from annotations."
             ) from exc
 
+        # sam2/__init__.py registers its config module with hydra on first
+        # import, but is guarded by `if not GlobalHydra.is_initialized()`.
+        # If any other dep touched hydra first (diffusers variants, some
+        # transformers paths, job-worker reloads) that guard flips and
+        # sam2's configs never register, so `compose()` below fails with
+        # "GlobalHydra is not initialized" (the state was wrong, not empty).
+        # Reset and re-initialize with sam2's config module every time so
+        # the predictor always finds its YAMLs.
+        try:
+            from hydra import initialize_config_module
+            from hydra.core.global_hydra import GlobalHydra
+            GlobalHydra.instance().clear()
+            initialize_config_module("sam2", version_base="1.2")
+        except Exception:
+            logger.exception("Failed to initialize hydra for sam2 configs")
+
         # GUI launches already have their own progress UI; external console bars
         # only create stderr failures and noisy logs.
         if sys.stderr is None:
@@ -275,34 +291,46 @@ class SAM2Tracker:
                     offload_state_to_cpu=self.offload_state_to_cpu,
                 )
 
-                if on_status:
-                    on_status("Applying annotation prompts")
-                for prompt in sorted_prompts:
-                    if check_cancel:
-                        check_cancel()
-                    if prompt.mask is not None:
-                        frame_idx, obj_ids, mask_logits = predictor.add_new_mask(
-                            inference_state=inference_state,
-                            frame_idx=prompt.frame_index,
-                            obj_id=1,
-                            mask=(prompt.mask > 0),
-                        )
-                    else:
-                        frame_idx = prompt.frame_index
-                        obj_ids = []
-                        mask_logits = None
-                        for batch_points, batch_labels, batch_box, clear_old_points in self._iter_prompt_refinement_batches(prompt):
-                            if check_cancel:
-                                check_cancel()
-                            frame_idx, obj_ids, mask_logits = predictor.add_new_points_or_box(
+                def _apply_prompts():
+                    """Add every sorted prompt into the predictor's state.
+
+                    Returns the last (frame_idx, obj_ids, mask_logits) tuple
+                    from each prompt frame so the caller can record the
+                    conditioning-frame masks into masks_by_frame.
+                    """
+                    recorded: list[tuple[int, object, object]] = []
+                    for prompt in sorted_prompts:
+                        if check_cancel:
+                            check_cancel()
+                        if prompt.mask is not None:
+                            frame_idx, obj_ids, mask_logits = predictor.add_new_mask(
                                 inference_state=inference_state,
                                 frame_idx=prompt.frame_index,
                                 obj_id=1,
-                                points=batch_points if batch_points.size else None,
-                                labels=batch_labels if batch_labels.size else None,
-                                clear_old_points=clear_old_points,
-                                box=batch_box,
+                                mask=(prompt.mask > 0),
                             )
+                        else:
+                            frame_idx = prompt.frame_index
+                            obj_ids = []
+                            mask_logits = None
+                            for batch_points, batch_labels, batch_box, clear_old_points in self._iter_prompt_refinement_batches(prompt):
+                                if check_cancel:
+                                    check_cancel()
+                                frame_idx, obj_ids, mask_logits = predictor.add_new_points_or_box(
+                                    inference_state=inference_state,
+                                    frame_idx=prompt.frame_index,
+                                    obj_id=1,
+                                    points=batch_points if batch_points.size else None,
+                                    labels=batch_labels if batch_labels.size else None,
+                                    clear_old_points=clear_old_points,
+                                    box=batch_box,
+                                )
+                        recorded.append((frame_idx, obj_ids, mask_logits))
+                    return recorded
+
+                if on_status:
+                    on_status("Applying annotation prompts")
+                for frame_idx, obj_ids, mask_logits in _apply_prompts():
                     masks_by_frame[frame_idx] = self._extract_object_mask(
                         obj_ids=obj_ids,
                         mask_logits=mask_logits,
@@ -311,12 +339,29 @@ class SAM2Tracker:
                     if on_progress:
                         on_progress(len(masks_by_frame), total)
 
+                # Two-pass propagation: forward from the earliest prompt, then
+                # reverse from the latest. SAM2's inference_state accumulates a
+                # memory bank during a forward pass; reusing that same state for
+                # the reverse pass feeds forward-direction memory into the
+                # backward traversal and degrades masks in the overlap region
+                # (classic "hat stays, body drops" drift). reset_state() wipes
+                # both the tracking results and the prompts, so we re-apply the
+                # prompts before each propagation direction.
                 if on_status:
                     on_status("SAM2 propagation")
                 for pass_start, reverse in (
                     (earliest_prompt, False),
                     (latest_prompt, True),
                 ):
+                    # Skip the reverse pass when it would cover nothing new
+                    # (e.g. all prompts on frame 0 → reverse covers only frame 0).
+                    if reverse and pass_start <= earliest_prompt:
+                        continue
+
+                    if reverse:
+                        predictor.reset_state(inference_state)
+                        _apply_prompts()
+
                     max_frames = total - pass_start if not reverse else pass_start + 1
                     for frame_idx, obj_ids, mask_logits in predictor.propagate_in_video(
                         inference_state,

@@ -250,19 +250,33 @@ def clean_matte(alpha_np, area_threshold=300, dilation=15, blur_size=5):
         is_3d = True
         alpha_np = alpha_np[:, :, 0]
         
-    # Threshold to binary
-    mask_8u = (alpha_np > 0.5).astype(np.uint8) * 255
-    
+    # Threshold to binary at a LOW value so that wispy hair strands (alpha < 0.5)
+    # stay connected to the main subject. A 0.5 threshold — the previous default —
+    # severed hair strands from the body and the component-area filter then deleted
+    # them, producing the hair-hole regression. 0.02 keeps anything the model
+    # thinks is even slightly foreground as part of the candidate mask.
+    mask_8u = (alpha_np > 0.02).astype(np.uint8) * 255
+
     # Find connected components
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_8u, connectivity=8)
-    
+
     # Create an empty mask for the cleaned components
     cleaned_mask = np.zeros_like(mask_8u)
-    
-    # Keep components larger than the threshold (skip label 0, which is background)
-    for i in range(1, num_labels):
-        if stats[i, cv2.CC_STAT_AREA] >= area_threshold:
-            cleaned_mask[labels == i] = 255
+
+    # Always keep the largest non-background component — that is the subject,
+    # and with the low threshold above, hair strands are part of it.
+    # Additionally keep any other component whose area exceeds area_threshold
+    # (covers legitimate detached pieces like stray curls). Everything smaller
+    # is treated as noise / tracking markers and dropped.
+    if num_labels > 1:
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        largest_label = int(np.argmax(areas)) + 1
+        cleaned_mask[labels == largest_label] = 255
+        for i in range(1, num_labels):
+            if i == largest_label:
+                continue
+            if stats[i, cv2.CC_STAT_AREA] >= area_threshold:
+                cleaned_mask[labels == i] = 255
             
     # Dilate
     if dilation > 0:
