@@ -110,6 +110,7 @@ class ParallelInferenceMixin:
                         source_passthrough=params.source_passthrough,
                         edge_erode_px=params.edge_erode_px,
                         edge_blur_px=params.edge_blur_px,
+                        screen_color=params.screen_color,
                     )
                     out_q.put((frame_idx, stem, res, None))
                     if not warmup_done.is_set():

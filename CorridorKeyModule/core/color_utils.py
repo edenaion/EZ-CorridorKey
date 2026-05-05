@@ -1,8 +1,57 @@
+import cv2
 import torch
 import numpy as np
 
 def _is_tensor(x):
     return isinstance(x, torch.Tensor)
+
+
+def detect_screen_color(frame: np.ndarray) -> str:
+    """Detect whether a frame has a green or blue chroma key background.
+
+    Samples the border region (outer 5% on each edge) and checks the
+    dominant hue in HSV space. Green hue sits around 35-85 in OpenCV's
+    0-179 scale, blue around 100-130.
+
+    Args:
+        frame: BGR or RGB uint8 image (H, W, 3).
+
+    Returns:
+        "green" or "blue".
+    """
+    h, w = frame.shape[:2]
+    margin_y = max(1, h // 20)
+    margin_x = max(1, w // 20)
+
+    # Collect border pixels: top, bottom, left, right strips
+    top = frame[:margin_y, :, :]
+    bottom = frame[h - margin_y:, :, :]
+    left = frame[margin_y:h - margin_y, :margin_x, :]
+    right = frame[margin_y:h - margin_y, w - margin_x:, :]
+
+    border = np.concatenate([
+        top.reshape(-1, 3),
+        bottom.reshape(-1, 3),
+        left.reshape(-1, 3),
+        right.reshape(-1, 3),
+    ], axis=0)
+
+    # Convert to HSV. Input may be RGB or BGR uint8; use RGB2HSV since
+    # the inference pipeline stores frames as RGB after cv2.cvtColor.
+    border_rgb = border.reshape(1, -1, 3).astype(np.uint8)
+    hsv = cv2.cvtColor(border_rgb, cv2.COLOR_RGB2HSV).reshape(-1, 3)
+
+    # Filter out low-saturation pixels (not colored enough to classify)
+    sat_mask = hsv[:, 1] > 40
+    if sat_mask.sum() < 10:
+        return "green"  # default fallback
+
+    mean_hue = float(hsv[sat_mask, 0].mean())
+
+    # OpenCV hue: 0-179. Green ~35-85, Blue ~100-130
+    if mean_hue >= 90:
+        return "blue"
+    return "green"
 
 def linear_to_srgb(x):
     """
@@ -181,57 +230,64 @@ def apply_garbage_matte(predicted_matte, garbage_matte_input, dilation=10):
             
     return predicted_matte * garbage_mask
 
-def despill(image, green_limit_mode='average', strength=1.0):
+def despill(image, green_limit_mode='average', strength=1.0, screen_color='green'):
     """
-    Removes green spill from an RGB image using a luminance-preserving method.
+    Removes screen spill from an RGB image using a luminance-preserving method.
     image: RGB float (0-1).
-    green_limit_mode: 'average' ((R+B)/2) or 'max' (max(R, B)).
+    green_limit_mode: 'average' or 'max' limit for the spill channel.
     strength: 0.0 to 1.0 multiplier for the despill effect.
+    screen_color: 'green' (spill ch=1) or 'blue' (spill ch=2).
     """
     if strength <= 0.0:
         return image
-        
+
+    # Channel indices: spill channel and the two "other" channels
+    if screen_color == 'blue':
+        sp, o1, o2 = 2, 0, 1  # blue is spill, red and green are others
+    else:
+        sp, o1, o2 = 1, 0, 2  # green is spill, red and blue are others
+
     if _is_tensor(image):
-        # PyTorch Impl
-        r = image[..., 0]
-        g = image[..., 1]
-        b = image[..., 2]
-        
+        spill_ch = image[..., sp]
+        other1 = image[..., o1]
+        other2 = image[..., o2]
+
         if green_limit_mode == 'max':
-            limit = torch.max(r, b)
+            limit = torch.max(other1, other2)
         else:
-            limit = (r + b) / 2.0
-            
-        spill_amount = torch.clamp(g - limit, min=0.0)
-        
-        g_new = g - spill_amount
-        r_new = r + (spill_amount * 0.5)
-        b_new = b + (spill_amount * 0.5)
-        
-        despilled = torch.stack([r_new, g_new, b_new], dim=-1)
-        
+            limit = (other1 + other2) / 2.0
+
+        spill_amount = torch.clamp(spill_ch - limit, min=0.0)
+
+        channels = [image[..., 0], image[..., 1], image[..., 2]]
+        channels[sp] = spill_ch - spill_amount
+        channels[o1] = other1 + (spill_amount * 0.5)
+        channels[o2] = other2 + (spill_amount * 0.5)
+
+        despilled = torch.stack(channels, dim=-1)
+
         if strength < 1.0:
             return image * (1.0 - strength) + despilled * strength
         return despilled
     else:
-        # Numpy Impl
-        r = image[..., 0]
-        g = image[..., 1]
-        b = image[..., 2]
-        
+        spill_ch = image[..., sp]
+        other1 = image[..., o1]
+        other2 = image[..., o2]
+
         if green_limit_mode == 'max':
-            limit = np.maximum(r, b)
+            limit = np.maximum(other1, other2)
         else:
-            limit = (r + b) / 2.0
-            
-        spill_amount = np.maximum(g - limit, 0.0)
-        
-        g_new = g - spill_amount
-        r_new = r + (spill_amount * 0.5)
-        b_new = b + (spill_amount * 0.5)
-        
-        despilled = np.stack([r_new, g_new, b_new], axis=-1)
-        
+            limit = (other1 + other2) / 2.0
+
+        spill_amount = np.maximum(spill_ch - limit, 0.0)
+
+        channels = [image[..., 0].copy(), image[..., 1].copy(), image[..., 2].copy()]
+        channels[sp] = spill_ch - spill_amount
+        channels[o1] = other1 + (spill_amount * 0.5)
+        channels[o2] = other2 + (spill_amount * 0.5)
+
+        despilled = np.stack(channels, axis=-1)
+
         if strength < 1.0:
             return image * (1.0 - strength) + despilled * strength
         return despilled

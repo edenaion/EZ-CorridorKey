@@ -211,7 +211,7 @@ MODELS: list[dict] = [
         "label": "CorridorKey Model",
         "size": "383 MB",
         "required": True,
-        "description": "Core green-screen keying model (required)",
+        "description": "Core chroma keying model (required)",
         "default_checked": True,
     },
 ]

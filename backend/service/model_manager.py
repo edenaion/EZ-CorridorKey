@@ -180,7 +180,7 @@ class ModelManagerMixin:
 
         self._active_model = needed
 
-    def _get_engine_pool(self, on_status=None) -> list:
+    def _get_engine_pool(self, on_status=None, screen_color: str = "green") -> list:
         """Lazy-load the CorridorKey inference engine pool.
 
         Creates up to _pool_size engines. If the pool already has enough
@@ -189,8 +189,26 @@ class ModelManagerMixin:
 
         Uses the backend factory to auto-detect MLX on Apple Silicon.
         MLX forces pool_size=1 (unified memory, no multi-engine benefit).
+
+        If screen_color differs from the currently loaded variant, the
+        pool is cleared and reloaded with the correct checkpoint.
         """
         self._ensure_model(_ActiveModel.INFERENCE, on_status=on_status)
+
+        # Reload if screen color changed (green <-> blue checkpoint)
+        if self._engine_pool and self._engine_screen_color != screen_color:
+            logger.info("Screen color changed %s -> %s, reloading engine pool",
+                        self._engine_screen_color, screen_color)
+            for eng in self._engine_pool:
+                self._safe_offload(eng)
+            self._engine_pool.clear()
+            gc.collect()
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
 
         # Pool already has enough engines
         if len(self._engine_pool) >= self._pool_size:
@@ -228,8 +246,10 @@ class ModelManagerMixin:
                     img_size=_img_size,
                     optimization_mode=opt_mode,
                     on_status=on_status if i == 0 else None,
+                    screen_color=screen_color,
                 )
                 self._engine_pool.append(engine)
+                self._engine_screen_color = screen_color
                 logger.info(f"Engine {i + 1} loaded in {time.monotonic() - t0:.1f}s")
             except (RuntimeError, torch.cuda.OutOfMemoryError):
                 logger.warning(

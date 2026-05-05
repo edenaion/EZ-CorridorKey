@@ -49,6 +49,36 @@ class InferenceMixin:
             if clip.state == ClipState.COMPLETE:
                 self._refresh_export_thumbnail(clip)
 
+    @Slot(str)
+    def _on_screen_color_changed(self, color: str) -> None:
+        """Update the UI accent color when BG Color changes.
+
+        Reloads the QSS with the appropriate accent palette and
+        updates the brand mark text color.
+        """
+        from ui.theme import load_stylesheet, ACCENT_COLORS
+
+        # Resolve "auto" to detected color for the current clip
+        effective = color
+        if color == "auto" and self._current_clip is not None:
+            effective = getattr(self._current_clip, 'screen_color', 'green')
+        if effective not in ("green", "blue"):
+            effective = "green"
+
+        # Swap QSS accent colors
+        from PySide6.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            app.setStyleSheet(load_stylesheet(screen_color=effective))
+
+        # Update brand mark text
+        palette = ACCENT_COLORS[effective]
+        self._brand_label.setText(
+            f'<span style="color:#FFF203;">EZ-</span>'
+            f'<span style="color:#FFF203;">CORRIDOR</span>'
+            f'<span style="color:{palette["accent"]};">KEY</span>'
+        )
+
     @Slot(bool)
     def _on_live_preview_toggled(self, checked: bool) -> None:
         """When live preview is re-enabled, immediately reprocess current frame."""
@@ -267,7 +297,12 @@ class InferenceMixin:
 
     @Slot()
     def _on_run_all_ready(self) -> None:
-        """Queue all READY clips for inference."""
+        """Queue all READY clips for inference.
+
+        Sorts clips by screen_color so all green clips run first, then
+        all blue clips (or vice versa). This minimizes checkpoint reloads
+        in mixed-color projects.
+        """
         ready_clips = self._clip_model.clips_by_state(ClipState.READY)
         if not ready_clips:
             QMessageBox.information(self, "No Clips", "No READY clips to process.")
@@ -275,6 +310,13 @@ class InferenceMixin:
 
         params = self._param_panel.get_params()
         output_config = self._param_panel.get_output_config()
+
+        # Sort by screen_color to minimize model reloads
+        ready_clips = sorted(
+            ready_clips,
+            key=lambda c: getattr(c, 'screen_color', 'green'),
+        )
+
         queued = 0
         for clip in ready_clips:
             job = create_job_snapshot(clip, params)
