@@ -217,24 +217,6 @@ class ParameterPanel(QWidget):
         self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
         alpha_layout.addWidget(self._matanyone2_btn)
 
-        vmama_row = QHBoxLayout()
-        vmama_row.setContentsMargins(0, 0, 0, 0)
-        vmama_row.setSpacing(0)
-
-        self._vmama_import_btn = QPushButton("+")
-        self._vmama_import_btn.setFixedWidth(28)
-        self._vmama_import_btn.setToolTip(
-            "Import your own mask for VideoMaMa.\n\n"
-            "Bypasses the Track Mask step. Select a folder or\n"
-            "video of grayscale masks and they will be used as\n"
-            "VideoMaMa's guidance input directly."
-        )
-        self._vmama_import_btn.setStyleSheet(
-            "QPushButton { font-weight: bold; font-size: 14px; padding: 0px; }"
-        )
-        self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
-        vmama_row.addWidget(self._vmama_import_btn)
-
         self._videomama_btn = QPushButton("VIDEOMAMA")
         self._videomama_btn.setEnabled(False)
         self._videomama_btn.setToolTip(
@@ -244,9 +226,26 @@ class ParameterPanel(QWidget):
             "3. Click VIDEOMAMA to generate AlphaHint"
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
-        vmama_row.addWidget(self._videomama_btn, 1)
+        alpha_layout.addWidget(self._videomama_btn)
 
-        alpha_layout.addLayout(vmama_row)
+        # + overlay: parented to inner (scroll content) so it scrolls
+        # with the panel but is NOT a child of VIDEOMAMA button, so it
+        # stays enabled when VIDEOMAMA is disabled.
+        self._vmama_import_btn = QPushButton("+", inner)
+        self._vmama_import_btn.setFixedSize(26, 26)
+        self._vmama_import_btn.setToolTip(
+            "Import your own mask for VideoMaMa.\n\n"
+            "Bypasses the Track Mask step. Select a folder or\n"
+            "video of grayscale masks and they will be used as\n"
+            "VideoMaMa's guidance input directly."
+        )
+        self._vmama_import_btn.setStyleSheet(
+            "QPushButton { font-weight: bold; font-size: 14px; padding: 0px;"
+            "  background: #454430; border: 1px solid #5A5940; }"
+            "QPushButton:hover { background: #5A5940; }"
+        )
+        self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
+        self._vmama_import_btn.raise_()
 
         or_label2 = QLabel("— or —")
         or_label2.setAlignment(Qt.AlignCenter)
@@ -486,6 +485,14 @@ class ParameterPanel(QWidget):
         for widget in self._middle_click_defaults:
             widget.installEventFilter(self)
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._reposition_vmama_import()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._reposition_vmama_import()
+
     def eventFilter(self, obj, event) -> bool:
         """Middle-click resets a control to its default value."""
         if event.type() == QEvent.MouseButtonPress and event.button() == Qt.MiddleButton:
@@ -631,6 +638,14 @@ class ParameterPanel(QWidget):
         self._videomama_btn.setEnabled(enabled)
         # The + import button is always enabled (bypasses tracking)
         self._vmama_import_btn.setEnabled(True)
+        self._reposition_vmama_import()
+
+    def _reposition_vmama_import(self) -> None:
+        """Place the + button over the left edge of the VIDEOMAMA button."""
+        btn = self._videomama_btn
+        pos = btn.mapTo(self._vmama_import_btn.parentWidget(), btn.rect().topLeft())
+        y_center = pos.y() + (btn.height() - self._vmama_import_btn.height()) // 2
+        self._vmama_import_btn.move(pos.x() + 1, y_center)
 
     def set_matanyone2_enabled(self, enabled: bool) -> None:
         """Enable/disable MatAnyone2 button based on clip state."""
