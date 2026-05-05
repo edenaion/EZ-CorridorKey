@@ -13,6 +13,42 @@ logger = logging.getLogger(__name__)
 class ClipMixin:
     """Clip selection and navigation methods for MainWindow."""
 
+    def _detect_and_apply_screen_color(self, clip: ClipEntry) -> None:
+        """Auto-detect screen color for a clip and update the UI accent.
+
+        Reads the middle frame once, caches the result, and triggers
+        the accent color swap if BG Color is set to Auto.
+        """
+        import numpy as np
+
+        cached = getattr(clip, '_screen_color_cache', None)
+        if not cached and clip.input_asset is not None:
+            try:
+                from CorridorKeyModule.core.color_utils import detect_screen_color
+                from backend.frame_io import read_image_frame
+
+                files = clip.input_asset.get_frame_files()
+                if files:
+                    mid_idx = len(files) // 2
+                    fpath = os.path.join(clip.input_asset.path, files[mid_idx])
+                    frame = read_image_frame(fpath)
+                    if frame is not None:
+                        if frame.dtype != np.uint8:
+                            frame = (np.clip(frame, 0.0, 1.0) * 255).astype(np.uint8)
+                        cached = detect_screen_color(frame)
+                        clip._screen_color_cache = cached
+                        logger.info("Screen color for '%s': %s", clip.name, cached)
+            except Exception as e:
+                logger.debug("Screen color detection skipped for '%s': %s", clip.name, e)
+
+        if not cached:
+            cached = "green"
+
+        # Only swap accent if BG Color dropdown is set to Auto
+        bg_idx = self._param_panel._bg_color.currentIndex()
+        effective = cached if bg_idx == 0 else ["auto", "green", "blue"][bg_idx]
+        self._on_screen_color_changed(effective)
+
     def _sync_selected_clip_view(self, clip: ClipEntry) -> None:
         """Reload the selected clip while preserving its remembered input interpretation."""
         self._dual_viewer.set_clip(clip)
@@ -98,6 +134,10 @@ class ClipMixin:
                 self._last_clip_index = i
                 break
         logger.debug(f"Clip selected: '{clip.name}' state={clip.state.value}")
+
+        # Detect screen color (green/blue) on clip selection so the UI
+        # accent swaps immediately without waiting for inference.
+        self._detect_and_apply_screen_color(clip)
 
         # Highlight in I/O tray (single-select unless multi-select is active)
         batch_count = self._io_tray.selected_count()

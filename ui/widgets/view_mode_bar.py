@@ -38,7 +38,7 @@ _MODE_TOOLTIPS: dict[ViewMode, str] = {
         "Hotkey: F3"
     ),
     ViewMode.FG: (
-        "Foreground — subject with green spill removed.\n"
+        "Foreground — subject with screen spill removed.\n"
         "Colors may look shifted; this is the despilled intermediate.\n\n"
         "Hotkey: F4"
     ),

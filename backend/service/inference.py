@@ -28,6 +28,42 @@ logger = logging.getLogger(__name__)
 class InferenceMixin(ParallelInferenceMixin):
     """Mixin providing core inference pipeline for CorridorKeyService."""
 
+    def _resolve_screen_color(self, clip: ClipEntry) -> str:
+        """Detect green vs blue from the clip's middle frame.
+
+        Reads a single frame at the midpoint and checks the dominant
+        border hue. Caches the result on the clip entry.
+        """
+        cached = getattr(clip, '_screen_color_cache', None)
+        if cached:
+            return cached
+
+        from CorridorKeyModule.core.color_utils import detect_screen_color
+        from . import read_image_frame
+
+        try:
+            if clip.input_asset is None:
+                return "green"
+            files = clip.input_asset.get_frame_files()
+            if not files:
+                return "green"
+            mid_idx = len(files) // 2
+            fpath = os.path.join(clip.input_asset.path, files[mid_idx])
+            frame = read_image_frame(fpath)
+            if frame is None:
+                return "green"
+            # detect_screen_color expects uint8; convert from float32 [0,1]
+            if frame.dtype != np.uint8:
+                frame = (np.clip(frame, 0.0, 1.0) * 255).astype(np.uint8)
+            result = detect_screen_color(frame)
+            clip._screen_color_cache = result
+            logger.info("Auto-detected screen color for '%s': %s (frame %d/%d)",
+                        clip.name, result, mid_idx, len(files))
+            return result
+        except Exception as e:
+            logger.warning("Screen color detection failed for '%s': %s", clip.name, e)
+            return "green"
+
     def run_inference(
         self,
         clip: ClipEntry,
@@ -49,6 +85,12 @@ class InferenceMixin(ParallelInferenceMixin):
         if clip.input_asset is None or clip.alpha_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input or alpha asset")
 
+        # Resolve "auto" screen color from the clip's middle frame
+        if params.screen_color == "auto":
+            from .core import InferenceParams
+            resolved = self._resolve_screen_color(clip)
+            params = InferenceParams(**{**params.to_dict(), "screen_color": resolved})
+
         self._begin_inference()
         try:
             if on_status:
@@ -56,7 +98,8 @@ class InferenceMixin(ParallelInferenceMixin):
             logger.info("run_inference: waiting for _gpu_lock")
             with self._gpu_lock:
                 logger.info("run_inference: acquired _gpu_lock")
-                engines = self._get_engine_pool(on_status=on_status)
+                engines = self._get_engine_pool(on_status=on_status,
+                                                screen_color=params.screen_color)
 
             if len(engines) == 1:
                 return self._run_inference_sequential(
@@ -209,6 +252,7 @@ class InferenceMixin(ParallelInferenceMixin):
                             source_passthrough=params.source_passthrough,
                             edge_erode_px=params.edge_erode_px,
                             edge_blur_px=params.edge_blur_px,
+                            screen_color=params.screen_color,
                         )
                     dt = time.monotonic() - t_frame
                     frame_times.append(dt)
@@ -316,6 +360,12 @@ class InferenceMixin(ParallelInferenceMixin):
         """
         from . import read_image_frame
 
+        # Resolve "auto" screen color
+        if params.screen_color == "auto":
+            from .core import InferenceParams
+            resolved = self._resolve_screen_color(clip)
+            params = InferenceParams(**{**params.to_dict(), "screen_color": resolved})
+
         t_start = time.monotonic()
         if clip.input_asset is None or clip.alpha_asset is None:
             return None
@@ -324,7 +374,8 @@ class InferenceMixin(ParallelInferenceMixin):
             return None
 
         with self._gpu_lock:
-            engines = self._get_engine_pool(on_status=on_status)
+            engines = self._get_engine_pool(on_status=on_status,
+                                            screen_color=params.screen_color)
             engine = engines[0]
 
         # Read the specific input frame
@@ -379,6 +430,7 @@ class InferenceMixin(ParallelInferenceMixin):
                 source_passthrough=params.source_passthrough,
                 edge_erode_px=params.edge_erode_px,
                 edge_blur_px=params.edge_blur_px,
+                screen_color=params.screen_color,
             )
         logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")
         return res

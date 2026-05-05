@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import urllib.request
@@ -27,13 +28,81 @@ _WINDOWS_FFMPEG_BUNDLE_URL = (
     "ffmpeg-master-latest-win64-gpl.zip"
 )
 
+# QSettings key for user-configured FFmpeg directory
+_QSETTINGS_FFMPEG_DIR = "tools/ffmpeg_custom_dir"
+
+
+def _get_custom_ffmpeg_dir() -> str | None:
+    """Read the user-configured custom FFmpeg directory from QSettings."""
+    try:
+        from PySide6.QtCore import QSettings
+        val = QSettings().value(_QSETTINGS_FFMPEG_DIR, "", type=str)
+        return val if val and os.path.isdir(val) else None
+    except Exception:
+        return None
+
+
+def set_custom_ffmpeg_dir(path: str) -> None:
+    """Persist a user-chosen FFmpeg directory in QSettings."""
+    from PySide6.QtCore import QSettings
+    QSettings().setValue(_QSETTINGS_FFMPEG_DIR, path)
+
+
+def _build_windows_search_paths() -> list[str]:
+    """Build an extended list of Windows directories to search for FFmpeg."""
+    paths = [_LOCAL_FFMPEG_BIN]
+
+    # User-configured custom path (highest priority after bundled)
+    custom = _get_custom_ffmpeg_dir()
+    if custom:
+        paths.append(custom)
+
+    # Standard install locations
+    paths.extend([
+        r"C:\Program Files\ffmpeg\bin",
+        r"C:\Program Files (x86)\ffmpeg\bin",
+        r"C:\ffmpeg\bin",
+    ])
+
+    # Common user-level locations
+    local_app = os.environ.get("LOCALAPPDATA", "")
+    if local_app:
+        paths.append(os.path.join(local_app, "ffmpeg", "bin"))
+        paths.append(os.path.join(local_app, "Programs", "ffmpeg", "bin"))
+
+    # Scoop / Chocolatey / winget
+    userprofile = os.environ.get("USERPROFILE", "")
+    if userprofile:
+        paths.append(os.path.join(userprofile, "scoop", "shims"))
+        paths.append(os.path.join(userprofile, "scoop", "apps", "ffmpeg", "current", "bin"))
+
+    # Chocolatey
+    choco = os.environ.get("ChocolateyInstall", r"C:\ProgramData\chocolatey")
+    paths.append(os.path.join(choco, "bin"))
+
+    # Glob for extracted ffmpeg-* folders in Downloads and Desktop
+    if userprofile:
+        for parent in ("Downloads", "Desktop"):
+            parent_dir = os.path.join(userprofile, parent)
+            if os.path.isdir(parent_dir):
+                try:
+                    for name in os.listdir(parent_dir):
+                        if name.lower().startswith("ffmpeg") and os.path.isdir(
+                            os.path.join(parent_dir, name)
+                        ):
+                            candidate = os.path.join(parent_dir, name, "bin")
+                            if os.path.isdir(candidate):
+                                paths.append(candidate)
+                            # Some users extract without the inner folder
+                            paths.append(os.path.join(parent_dir, name))
+                except OSError:
+                    pass
+
+    return paths
+
+
 # Common install locations per platform
-_FFMPEG_SEARCH_PATHS_WINDOWS = [
-    _LOCAL_FFMPEG_BIN,
-    r"C:\Program Files\ffmpeg\bin",
-    r"C:\Program Files (x86)\ffmpeg\bin",
-    r"C:\ffmpeg\bin",
-]
+_FFMPEG_SEARCH_PATHS_WINDOWS = _build_windows_search_paths()
 
 _FFMPEG_SEARCH_PATHS_UNIX = [
     _LOCAL_FFMPEG_BIN,
@@ -86,36 +155,48 @@ def _local_ffmpeg_binary(name: str) -> str | None:
     return candidate if os.path.isfile(candidate) else None
 
 
-def find_ffmpeg() -> str | None:
-    """Locate ffmpeg binary. Prefer the bundled local build when present."""
-    local = _local_ffmpeg_binary("ffmpeg")
+def _find_binary(name: str) -> str | None:
+    """Locate an FFmpeg-family binary by name (e.g. 'ffmpeg', 'ffprobe')."""
+    # 1. Bundled local build
+    local = _local_ffmpeg_binary(name)
     if local:
         return local
-    found = shutil.which("ffmpeg")
+
+    # 2. User-configured custom directory
+    custom = _get_custom_ffmpeg_dir()
+    if custom:
+        ext = ".exe" if sys.platform == "win32" else ""
+        candidate = os.path.join(custom, f"{name}{ext}")
+        if os.path.isfile(candidate):
+            return candidate
+
+    # 3. System PATH
+    found = shutil.which(name)
     if found:
         return found
+
+    # 4. Platform-specific search paths
     ext = ".exe" if sys.platform == "win32" else ""
-    for d in _FFMPEG_SEARCH_PATHS:
-        candidate = os.path.join(d, f"ffmpeg{ext}")
+    # Rebuild Windows paths each call so a newly-set custom dir is picked up
+    search_paths = (
+        _build_windows_search_paths() if sys.platform == "win32"
+        else _FFMPEG_SEARCH_PATHS_UNIX
+    )
+    for d in search_paths:
+        candidate = os.path.join(d, f"{name}{ext}")
         if os.path.isfile(candidate):
             return candidate
     return None
+
+
+def find_ffmpeg() -> str | None:
+    """Locate ffmpeg binary. Prefer the bundled local build when present."""
+    return _find_binary("ffmpeg")
 
 
 def find_ffprobe() -> str | None:
     """Locate ffprobe binary. Prefer the bundled local build when present."""
-    local = _local_ffmpeg_binary("ffprobe")
-    if local:
-        return local
-    found = shutil.which("ffprobe")
-    if found:
-        return found
-    ext = ".exe" if sys.platform == "win32" else ""
-    for d in _FFMPEG_SEARCH_PATHS:
-        candidate = os.path.join(d, f"ffprobe{ext}")
-        if os.path.isfile(candidate):
-            return candidate
-    return None
+    return _find_binary("ffprobe")
 
 
 def _read_program_version(binary_path: str, program_name: str) -> FFmpegVersionInfo:
@@ -371,7 +452,27 @@ def repair_ffmpeg_install(
     os.makedirs(tools_dir, exist_ok=True)
 
     _emit("Downloading FFmpeg", 0, 0)
-    with urllib.request.urlopen(_WINDOWS_FFMPEG_BUNDLE_URL, timeout=60) as response:
+    # Build an SSL context that works in frozen (PyInstaller) builds where
+    # Python's bundled cert store may be incomplete. Try certifi first,
+    # then the system default, then fall back to unverified as last resort.
+    ssl_ctx: ssl.SSLContext | None = None
+    try:
+        import certifi
+        ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        try:
+            ssl_ctx = ssl.create_default_context()
+        except Exception:
+            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+            logger.warning(
+                "SSL certificate verification disabled for FFmpeg download — "
+                "certifi is missing and the system cert store failed."
+            )
+    with urllib.request.urlopen(
+        _WINDOWS_FFMPEG_BUNDLE_URL, timeout=60, context=ssl_ctx,
+    ) as response:
         total_header = response.headers.get("Content-Length", "")
         total_bytes = int(total_header) if total_header.isdigit() else 0
         downloaded = 0

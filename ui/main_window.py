@@ -418,13 +418,13 @@ class MainWindow(
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(12, 6, 12, 6)
 
-        brand = QLabel(
+        self._brand_label = QLabel(
             '<span style="color:#FFF203;">EZ-</span>'
             '<span style="color:#FFF203;">CORRIDOR</span>'
             '<span style="color:#2CC350;">KEY</span>'
         )
-        brand.setObjectName("brandMark")
-        top_bar.addWidget(brand)
+        self._brand_label.setObjectName("brandMark")
+        top_bar.addWidget(self._brand_label)
         top_bar.addStretch()
 
         # GPU info (right side of brand bar)
@@ -569,6 +569,8 @@ class MainWindow(
         self._param_panel.matanyone2_requested.connect(self._on_run_matanyone2)
         self._param_panel.track_masks_requested.connect(self._on_track_masks)
         self._param_panel.import_alpha_requested.connect(self._on_import_alpha)
+        self._param_panel.import_vmama_mask_requested.connect(self._on_import_vmama_mask)
+        self._param_panel.screen_color_changed.connect(self._on_screen_color_changed)
 
         # Annotation stroke finished -> update annotation counter + auto-save
         self._dual_viewer.input_viewer._split_view.stroke_finished.connect(

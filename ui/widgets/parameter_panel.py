@@ -70,12 +70,14 @@ class ParameterPanel(QWidget):
 
     params_changed = Signal()  # emitted when any parameter changes
     parallel_frames_changed = Signal(int)  # parallel engine count changed
+    screen_color_changed = Signal(str)  # "green" or "blue" — UI accent swap
     gvm_requested = Signal()      # GVM AUTO button clicked
     birefnet_requested = Signal(str)  # BiRefNet button clicked, emits model variant name
     videomama_requested = Signal() # VIDEOMAMA button clicked
     matanyone2_requested = Signal()  # MatAnyone2 button clicked
     track_masks_requested = Signal()  # Track annotation prompts into dense masks
     import_alpha_requested = Signal()  # Import own AlphaHint folder
+    import_vmama_mask_requested = Signal()  # Import mask for VideoMaMa bypass
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -215,6 +217,8 @@ class ParameterPanel(QWidget):
         self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
         alpha_layout.addWidget(self._matanyone2_btn)
 
+        vmama_row = QHBoxLayout()
+        vmama_row.setSpacing(4)
         self._videomama_btn = QPushButton("VIDEOMAMA")
         self._videomama_btn.setEnabled(False)
         self._videomama_btn.setToolTip(
@@ -224,7 +228,22 @@ class ParameterPanel(QWidget):
             "3. Click VIDEOMAMA to generate AlphaHint"
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
-        alpha_layout.addWidget(self._videomama_btn)
+        vmama_row.addWidget(self._videomama_btn, 1)
+
+        self._vmama_import_btn = QPushButton("+")
+        self._vmama_import_btn.setFixedSize(28, 28)
+        self._vmama_import_btn.setToolTip(
+            "Import your own mask for VideoMaMa.\n\n"
+            "Bypasses the Track Mask step. Select a folder or\n"
+            "video of grayscale masks and they will be used as\n"
+            "VideoMaMa's guidance input directly."
+        )
+        self._vmama_import_btn.setStyleSheet(
+            "QPushButton { font-weight: bold; font-size: 16px; padding: 0px; }"
+        )
+        self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
+        vmama_row.addWidget(self._vmama_import_btn)
+        alpha_layout.addLayout(vmama_row)
 
         or_label2 = QLabel("— or —")
         or_label2.setAlignment(Qt.AlignCenter)
@@ -250,6 +269,26 @@ class ParameterPanel(QWidget):
         inf_layout = QVBoxLayout(inf_group)
         inf_layout.setSpacing(8)
 
+        # BG Color (screen color: auto-detect, green, or blue)
+        bg_row = QHBoxLayout()
+        self._bg_color_label = QLabel("BG Color")
+        self._bg_color_label.setFixedWidth(80)
+        self._bg_color_label.setToolTip(
+            "Background screen color for this clip.\n\n"
+            "Auto: detected from the middle frame of the clip.\n"
+            "Green: force green screen processing.\n"
+            "Blue: force blue screen processing.\n\n"
+            "Controls which checkpoint, despill math, and spill\n"
+            "detection are used. Also changes the UI accent color."
+        )
+        bg_row.addWidget(self._bg_color_label)
+        self._bg_color = QComboBox()
+        self._bg_color.addItems(["Auto", "Green", "Blue"])
+        self._bg_color.setToolTip(self._bg_color_label.toolTip())
+        self._bg_color.currentIndexChanged.connect(self._on_bg_color_changed)
+        bg_row.addWidget(self._bg_color, 1)
+        inf_layout.addLayout(bg_row)
+
         # Color Space
         cs_row = QHBoxLayout()
         self._color_space_label = QLabel("Color Space")
@@ -270,8 +309,8 @@ class ParameterPanel(QWidget):
         self._despill_slider.setRange(0, 10)
         self._despill_slider.setValue(5)
         self._despill_slider.setToolTip(
-            "Green spill removal strength (0.0–1.0).\n"
-            "Removes green color bleed from hair, skin, and edges.\n"
+            "Screen spill removal strength (0.0-1.0).\n"
+            "Removes background color bleed from hair, skin, and edges.\n"
             "1.0 = full despill, 0.0 = no despill (keep original colors)."
         )
         self._despill_slider.valueChanged.connect(self._on_despill_changed)
@@ -289,7 +328,7 @@ class ParameterPanel(QWidget):
         self._despeckle_check.stateChanged.connect(self._on_despeckle_toggled)
         despeckle_row.addWidget(self._despeckle_check)
         self._despeckle_size = _no_scroll_wheel(QSpinBox())
-        self._despeckle_size.setRange(50, 2000)
+        self._despeckle_size.setRange(0, 999999)
         self._despeckle_size.setValue(400)
         self._despeckle_size.setSuffix("px")
         self._despeckle_size.setToolTip(
@@ -335,7 +374,7 @@ class ParameterPanel(QWidget):
         self._fg_check.setChecked(True)
         self._fg_check.setToolTip(
             "Foreground — despilled subject on black background.\n"
-            "Green spill removed from hair and edges.\n"
+            "Screen spill removed from hair and edges.\n"
             "Straight alpha (not premultiplied)."
         )
         fg_row.addWidget(self._fg_check, 1)
@@ -471,6 +510,12 @@ class ParameterPanel(QWidget):
         self._refiner_label.setText(f"Refiner: {display:.1f}")
         self._emit_changed()
 
+    def _on_bg_color_changed(self, index: int) -> None:
+        """BG Color dropdown changed. Emit signal for accent swap."""
+        color = ["auto", "green", "blue"][index]
+        self.screen_color_changed.emit(color)
+        self._emit_changed()
+
     def _on_birefnet_clicked(self) -> None:
         """Emit birefnet_requested with the currently selected model variant."""
         self.birefnet_requested.emit(self._birefnet_model.currentText())
@@ -492,6 +537,8 @@ class ParameterPanel(QWidget):
 
     def get_params(self) -> InferenceParams:
         """Snapshot current parameter values into a frozen InferenceParams."""
+        bg_idx = self._bg_color.currentIndex()
+        screen_color = ["auto", "green", "blue"][bg_idx]
         return InferenceParams(
             input_is_linear=self._color_space.currentIndex() == 1,
             despill_strength=self._despill_slider.value() / 10.0,
@@ -500,6 +547,7 @@ class ParameterPanel(QWidget):
             despeckle_dilation=25,  # fixed default
             despeckle_blur=5,       # fixed default
             refiner_scale=self._refiner_slider.value() / 10.0,
+            screen_color=screen_color,
         )
 
     def get_output_config(self) -> OutputConfig:
