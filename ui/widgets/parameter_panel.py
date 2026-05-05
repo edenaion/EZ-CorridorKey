@@ -228,10 +228,9 @@ class ParameterPanel(QWidget):
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
         alpha_layout.addWidget(self._videomama_btn)
 
-        # + overlay: parented to inner (scroll content) so it scrolls
-        # with the panel but is NOT a child of VIDEOMAMA button, so it
-        # stays enabled when VIDEOMAMA is disabled.
-        self._vmama_import_btn = QPushButton("+", inner)
+        # + overlay: child of VIDEOMAMA button for automatic positioning.
+        # We override setEnabled on the + button to ignore parent disable.
+        self._vmama_import_btn = QPushButton("+", self._videomama_btn)
         self._vmama_import_btn.setFixedSize(26, 26)
         self._vmama_import_btn.setToolTip(
             "Import your own mask for VideoMaMa.\n\n"
@@ -246,6 +245,14 @@ class ParameterPanel(QWidget):
         )
         self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
         self._vmama_import_btn.raise_()
+        # Position: left edge, vertically centered inside the button
+        orig_resize = self._videomama_btn.resizeEvent
+        def _on_vmama_resize(e):
+            if orig_resize:
+                orig_resize(e)
+            h = self._videomama_btn.height()
+            self._vmama_import_btn.move(0, (h - 26) // 2)
+        self._videomama_btn.resizeEvent = _on_vmama_resize
 
         or_label2 = QLabel("— or —")
         or_label2.setAlignment(Qt.AlignCenter)
@@ -485,14 +492,6 @@ class ParameterPanel(QWidget):
         for widget in self._middle_click_defaults:
             widget.installEventFilter(self)
 
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._reposition_vmama_import()
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        self._reposition_vmama_import()
-
     def eventFilter(self, obj, event) -> bool:
         """Middle-click resets a control to its default value."""
         if event.type() == QEvent.MouseButtonPress and event.button() == Qt.MiddleButton:
@@ -636,16 +635,10 @@ class ParameterPanel(QWidget):
     def set_videomama_enabled(self, enabled: bool) -> None:
         """Enable/disable VideoMaMa button based on clip state."""
         self._videomama_btn.setEnabled(enabled)
-        # The + import button is always enabled (bypasses tracking)
-        self._vmama_import_btn.setEnabled(True)
-        self._reposition_vmama_import()
-
-    def _reposition_vmama_import(self) -> None:
-        """Place the + button over the left edge of the VIDEOMAMA button."""
-        btn = self._videomama_btn
-        pos = btn.mapTo(self._vmama_import_btn.parentWidget(), btn.rect().topLeft())
-        y_center = pos.y() + (btn.height() - self._vmama_import_btn.height()) // 2
-        self._vmama_import_btn.move(pos.x() + 1, y_center)
+        # Qt disables children when parent is disabled. Force + back on
+        # after a 0ms timer so it runs after Qt propagates the disable.
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, lambda: self._vmama_import_btn.setEnabled(True))
 
     def set_matanyone2_enabled(self, enabled: bool) -> None:
         """Enable/disable MatAnyone2 button based on clip state."""
