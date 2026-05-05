@@ -405,36 +405,6 @@ class ParameterPanel(QWidget):
         vmama_row.addWidget(self._vmama_import_btn)
         alpha_layout.addLayout(vmama_row)
 
-        # + overlay: parented to the alpha group (not videomama_btn) so it
-        # is never disabled when videomama_btn is disabled.
-        self._vmama_import_btn = QPushButton("+", alpha_group)
-        self._vmama_import_btn.setFixedSize(26, 26)
-        self._vmama_import_btn.setToolTip(
-            self.tr(
-                "Import your own mask for VideoMaMa.\n\n"
-                "Bypasses the Track Mask step. Select a folder or\n"
-                "video of grayscale masks and they will be used as\n"
-                "VideoMaMa's guidance input directly."
-            )
-        )
-        self._vmama_import_btn.setStyleSheet(
-            "QPushButton { font-weight: bold; font-size: 14px; padding: 0px;"
-            "  background: #454430; border: 1px solid #5A5940; }"
-            "QPushButton:hover { background: #5A5940; }"
-        )
-        self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
-        self._vmama_import_btn.raise_()
-        # Reposition over videomama_btn whenever it moves/resizes
-        orig_resize = self._videomama_btn.resizeEvent
-        def _on_vmama_resize(e):
-            if orig_resize:
-                orig_resize(e)
-            pos = self._videomama_btn.mapTo(alpha_group, self._videomama_btn.rect().topLeft())
-            h = self._videomama_btn.height()
-            self._vmama_import_btn.move(pos.x() + 3, pos.y() + (h - 26) // 2)
-            self._vmama_import_btn.raise_()
-        self._videomama_btn.resizeEvent = _on_vmama_resize
-
         or_label2 = QLabel("— or —")
         or_label2.setAlignment(Qt.AlignCenter)
         or_label2.setStyleSheet("color: #808070; font-size: 11px;")
@@ -818,6 +788,12 @@ class ParameterPanel(QWidget):
     def _on_refiner_changed(self, value: int) -> None:
         display = value / 10.0
         self._refiner_label.setText(self.tr("Refiner: %s") % f"{display:.1f}")
+        self._emit_changed()
+
+    def _on_bg_color_changed(self, index: int) -> None:
+        """BG Color dropdown changed. Emit signal for accent swap."""
+        color = ["auto", "green", "blue"][index]
+        self.screen_color_changed.emit(color)
         self._emit_changed()
 
     def _on_bg_color_changed(self, index: int) -> None:

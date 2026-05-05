@@ -88,6 +88,7 @@ class InferenceMixin(ParallelInferenceMixin):
 
         # Resolve "auto" screen color from the clip's middle frame
         if params.screen_color == "auto":
+            from .core import InferenceParams
             resolved = self._resolve_screen_color(clip)
             params = InferenceParams(**{**params.to_dict(), "screen_color": resolved})
 
@@ -362,6 +363,7 @@ class InferenceMixin(ParallelInferenceMixin):
 
         # Resolve "auto" screen color
         if params.screen_color == "auto":
+            from .core import InferenceParams
             resolved = self._resolve_screen_color(clip)
             params = InferenceParams(**{**params.to_dict(), "screen_color": resolved})
 

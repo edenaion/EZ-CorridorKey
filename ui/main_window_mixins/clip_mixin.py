@@ -27,60 +27,29 @@ class ClipMixin:
         if not cached and clip.input_asset is not None:
             try:
                 from CorridorKeyModule.core.color_utils import detect_screen_color
-                from backend.frame_io import read_image_frame, read_video_frame_at
+                from backend.frame_io import read_image_frame
 
-                frame = None
-                if clip.input_asset.asset_type == 'sequence':
-                    files = clip.input_asset.get_frame_files()
-                    if files:
-                        mid_idx = len(files) // 2
-                        fpath = os.path.join(clip.input_asset.path, files[mid_idx])
-                        frame = read_image_frame(fpath)
-                elif clip.input_asset.asset_type == 'video':
-                    mid_idx = max(0, clip.input_asset.frame_count // 2)
-                    frame = read_video_frame_at(clip.input_asset.path, mid_idx)
-
-                if frame is not None:
-                    if frame.dtype != np.uint8:
-                        frame = (np.clip(frame, 0.0, 1.0) * 255).astype(np.uint8)
-                    cached = detect_screen_color(frame)
-                    clip._screen_color_cache = cached
-                    logger.info("Screen color for '%s': %s", clip.name, cached)
+                files = clip.input_asset.get_frame_files()
+                if files:
+                    mid_idx = len(files) // 2
+                    fpath = os.path.join(clip.input_asset.path, files[mid_idx])
+                    frame = read_image_frame(fpath)
+                    if frame is not None:
+                        if frame.dtype != np.uint8:
+                            frame = (np.clip(frame, 0.0, 1.0) * 255).astype(np.uint8)
+                        cached = detect_screen_color(frame)
+                        clip._screen_color_cache = cached
+                        logger.info("Screen color for '%s': %s", clip.name, cached)
             except Exception as e:
-                logger.warning("Screen color detection failed for '%s': %s", clip.name, e, exc_info=True)
+                logger.debug("Screen color detection skipped for '%s': %s", clip.name, e)
 
         if not cached:
             cached = "green"
-
-        # If blue detected, check if blue checkpoint is available
-        if cached == "blue":
-            from CorridorKeyModule.backend import has_blue_checkpoint
-            if not has_blue_checkpoint():
-                self._offer_blue_checkpoint_download()
 
         # Only swap accent if BG Color dropdown is set to Auto
         bg_idx = self._param_panel._bg_color.currentIndex()
         effective = cached if bg_idx == 0 else ["auto", "green", "blue"][bg_idx]
         self._on_screen_color_changed(effective)
-
-    def _offer_blue_checkpoint_download(self) -> None:
-        """Show a dialog offering to download the blue screen checkpoint."""
-        from PySide6.QtWidgets import QMessageBox
-
-        reply = QMessageBox.question(
-            self,
-            _tr("Blue Screen Model Required"),
-            _tr("This clip uses a blue screen background.\n\n"
-                "The blue screen keying model (401 MB) is not installed. "
-                "Without it, the green model will be used as a fallback.\n\n"
-                "Download the blue screen model now?"),
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        if reply == QMessageBox.Yes:
-            from ui.widgets.setup_wizard import SetupWizard
-            wizard = SetupWizard(self, preselected=["corridorkey-blue"])
-            wizard.exec()
 
     def _sync_selected_clip_view(self, clip: ClipEntry) -> None:
         """Reload the selected clip while preserving its remembered input interpretation."""
@@ -171,10 +140,6 @@ class ClipMixin:
         # Detect screen color (green/blue) on clip selection so the UI
         # accent swaps immediately without waiting for inference.
         self._detect_and_apply_screen_color(clip)
-
-        # Restore per-clip chroma key parameters (eyedropper color, strength, etc.)
-        if hasattr(self, '_load_chroma_params_for_clip'):
-            self._load_chroma_params_for_clip(clip)
 
         # Highlight in I/O tray (single-select unless multi-select is active)
         batch_count = self._io_tray.selected_count()
