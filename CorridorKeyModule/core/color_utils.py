@@ -48,8 +48,10 @@ def detect_screen_color(frame: np.ndarray) -> str:
 
     mean_hue = float(hsv[sat_mask, 0].mean())
 
-    # OpenCV hue: 0-179. Green ~35-85, Blue ~100-130
-    if mean_hue >= 90:
+    # OpenCV hue: 0-179. Green ~35-75, Blue ~85-130.
+    # Threshold at 80 catches real-world blue screens where border
+    # pixels include some skin/clothing that pulls the average down.
+    if mean_hue >= 80:
         return "blue"
     return "green"
 
