@@ -20,7 +20,6 @@ from ..errors import (
 from ..frame_io import read_video_frame_at, read_video_mask_at
 from ..job_queue import GPUJob
 from ..validators import ensure_output_dirs, validate_frame_counts
-from .core import InferenceParams
 from .inference_parallel import ParallelInferenceMixin
 
 logger = logging.getLogger(__name__)
@@ -88,6 +87,7 @@ class InferenceMixin(ParallelInferenceMixin):
 
         # Resolve "auto" screen color from the clip's middle frame
         if params.screen_color == "auto":
+            from .core import InferenceParams
             resolved = self._resolve_screen_color(clip)
             params = InferenceParams(**{**params.to_dict(), "screen_color": resolved})
 
@@ -362,6 +362,7 @@ class InferenceMixin(ParallelInferenceMixin):
 
         # Resolve "auto" screen color
         if params.screen_color == "auto":
+            from .core import InferenceParams
             resolved = self._resolve_screen_color(clip)
             params = InferenceParams(**{**params.to_dict(), "screen_color": resolved})
 
