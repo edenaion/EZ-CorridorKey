@@ -217,8 +217,13 @@ class ParameterPanel(QWidget):
         self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
         alpha_layout.addWidget(self._matanyone2_btn)
 
-        vmama_row = QHBoxLayout()
-        vmama_row.setSpacing(4)
+        # VideoMaMa button with small import overlay on the right edge.
+        # The container holds the full-width button; the + sits on top.
+        vmama_container = QWidget()
+        vmama_container_layout = QHBoxLayout(vmama_container)
+        vmama_container_layout.setContentsMargins(0, 0, 0, 0)
+        vmama_container_layout.setSpacing(0)
+
         self._videomama_btn = QPushButton("VIDEOMAMA")
         self._videomama_btn.setEnabled(False)
         self._videomama_btn.setToolTip(
@@ -228,10 +233,10 @@ class ParameterPanel(QWidget):
             "3. Click VIDEOMAMA to generate AlphaHint"
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
-        vmama_row.addWidget(self._videomama_btn, 1)
+        vmama_container_layout.addWidget(self._videomama_btn)
 
-        self._vmama_import_btn = QPushButton("+")
-        self._vmama_import_btn.setFixedSize(28, 28)
+        self._vmama_import_btn = QPushButton("+", vmama_container)
+        self._vmama_import_btn.setFixedSize(24, 24)
         self._vmama_import_btn.setToolTip(
             "Import your own mask for VideoMaMa.\n\n"
             "Bypasses the Track Mask step. Select a folder or\n"
@@ -239,11 +244,15 @@ class ParameterPanel(QWidget):
             "VideoMaMa's guidance input directly."
         )
         self._vmama_import_btn.setStyleSheet(
-            "QPushButton { font-weight: bold; font-size: 16px; padding: 0px; }"
+            "QPushButton { font-weight: bold; font-size: 14px; padding: 0px;"
+            "  background: #454430; border: 1px solid #5A5940; }"
+            "QPushButton:hover { background: #5A5940; }"
         )
         self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
-        vmama_row.addWidget(self._vmama_import_btn)
-        alpha_layout.addLayout(vmama_row)
+        # Position in top-right corner via event filter
+        self._vmama_import_btn.raise_()
+
+        alpha_layout.addWidget(vmama_container)
 
         or_label2 = QLabel("— or —")
         or_label2.setAlignment(Qt.AlignCenter)

@@ -25,21 +25,27 @@ class ClipMixin:
         if not cached and clip.input_asset is not None:
             try:
                 from CorridorKeyModule.core.color_utils import detect_screen_color
-                from backend.frame_io import read_image_frame
+                from backend.frame_io import read_image_frame, read_video_frame_at
 
-                files = clip.input_asset.get_frame_files()
-                if files:
-                    mid_idx = len(files) // 2
-                    fpath = os.path.join(clip.input_asset.path, files[mid_idx])
-                    frame = read_image_frame(fpath)
-                    if frame is not None:
-                        if frame.dtype != np.uint8:
-                            frame = (np.clip(frame, 0.0, 1.0) * 255).astype(np.uint8)
-                        cached = detect_screen_color(frame)
-                        clip._screen_color_cache = cached
-                        logger.info("Screen color for '%s': %s", clip.name, cached)
+                frame = None
+                if clip.input_asset.asset_type == 'sequence':
+                    files = clip.input_asset.get_frame_files()
+                    if files:
+                        mid_idx = len(files) // 2
+                        fpath = os.path.join(clip.input_asset.path, files[mid_idx])
+                        frame = read_image_frame(fpath)
+                elif clip.input_asset.asset_type == 'video':
+                    mid_idx = max(0, clip.input_asset.frame_count // 2)
+                    frame = read_video_frame_at(clip.input_asset.path, mid_idx)
+
+                if frame is not None:
+                    if frame.dtype != np.uint8:
+                        frame = (np.clip(frame, 0.0, 1.0) * 255).astype(np.uint8)
+                    cached = detect_screen_color(frame)
+                    clip._screen_color_cache = cached
+                    logger.info("Screen color for '%s': %s", clip.name, cached)
             except Exception as e:
-                logger.debug("Screen color detection skipped for '%s': %s", clip.name, e)
+                logger.warning("Screen color detection failed for '%s': %s", clip.name, e, exc_info=True)
 
         if not cached:
             cached = "green"
