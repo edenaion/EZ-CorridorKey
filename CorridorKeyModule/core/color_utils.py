@@ -9,49 +9,34 @@ def _is_tensor(x):
 def detect_screen_color(frame: np.ndarray) -> str:
     """Detect whether a frame has a green or blue chroma key background.
 
-    Samples the border region (outer 5% on each edge) and checks the
-    dominant hue in HSV space. Green hue sits around 35-85 in OpenCV's
-    0-179 scale, blue around 100-130.
+    Downsamples the entire frame, converts to HSV, and counts how many
+    saturated pixels are green vs blue. Whichever has more wins.
 
     Args:
-        frame: BGR or RGB uint8 image (H, W, 3).
+        frame: RGB uint8 image (H, W, 3).
 
     Returns:
         "green" or "blue".
     """
+    # Downsample to ~256px wide for speed
     h, w = frame.shape[:2]
-    margin_y = max(1, h // 20)
-    margin_x = max(1, w // 20)
+    scale = 256.0 / max(w, 1)
+    small = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
 
-    # Collect border pixels: top, bottom, left, right strips
-    top = frame[:margin_y, :, :]
-    bottom = frame[h - margin_y:, :, :]
-    left = frame[margin_y:h - margin_y, :margin_x, :]
-    right = frame[margin_y:h - margin_y, w - margin_x:, :]
+    hsv = cv2.cvtColor(small.reshape(1, -1, 3), cv2.COLOR_RGB2HSV).reshape(-1, 3)
 
-    border = np.concatenate([
-        top.reshape(-1, 3),
-        bottom.reshape(-1, 3),
-        left.reshape(-1, 3),
-        right.reshape(-1, 3),
-    ], axis=0)
-
-    # Convert to HSV. Input may be RGB or BGR uint8; use RGB2HSV since
-    # the inference pipeline stores frames as RGB after cv2.cvtColor.
-    border_rgb = border.reshape(1, -1, 3).astype(np.uint8)
-    hsv = cv2.cvtColor(border_rgb, cv2.COLOR_RGB2HSV).reshape(-1, 3)
-
-    # Filter out low-saturation pixels (not colored enough to classify)
+    # Only count saturated pixels (S > 40) — skin, clothes, dark areas are excluded
     sat_mask = hsv[:, 1] > 40
     if sat_mask.sum() < 10:
-        return "green"  # default fallback
+        return "green"
 
-    mean_hue = float(hsv[sat_mask, 0].mean())
+    hues = hsv[sat_mask, 0]
 
-    # OpenCV hue: 0-179. Green ~35-75, Blue ~85-130.
-    # Threshold at 80 catches real-world blue screens where border
-    # pixels include some skin/clothing that pulls the average down.
-    if mean_hue >= 80:
+    # OpenCV hue: 0-179. Green ~35-80, Blue ~85-130.
+    green_count = int(((hues >= 35) & (hues < 80)).sum())
+    blue_count = int(((hues >= 85) & (hues <= 130)).sum())
+
+    if blue_count > green_count:
         return "blue"
     return "green"
 
