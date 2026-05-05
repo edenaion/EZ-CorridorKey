@@ -375,6 +375,24 @@ class ParameterPanel(QWidget):
         self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
         alpha_layout.addWidget(self._matanyone2_btn)
 
+        vmama_row = QHBoxLayout()
+        vmama_row.setContentsMargins(0, 0, 0, 0)
+        vmama_row.setSpacing(0)
+
+        self._vmama_import_btn = QPushButton("+")
+        self._vmama_import_btn.setFixedWidth(28)
+        self._vmama_import_btn.setToolTip(
+            "Import your own mask for VideoMaMa.\n\n"
+            "Bypasses the Track Mask step. Select a folder or\n"
+            "video of grayscale masks and they will be used as\n"
+            "VideoMaMa's guidance input directly."
+        )
+        self._vmama_import_btn.setStyleSheet(
+            "QPushButton { font-weight: bold; font-size: 14px; padding: 0px; }"
+        )
+        self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
+        vmama_row.addWidget(self._vmama_import_btn)
+
         self._videomama_btn = QPushButton("VIDEOMAMA")
         self._videomama_btn.setEnabled(False)
         self._videomama_btn.setToolTip(
@@ -386,27 +404,9 @@ class ParameterPanel(QWidget):
             )
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
-        alpha_layout.addWidget(self._videomama_btn)
+        vmama_row.addWidget(self._videomama_btn, 1)
 
-        # Small + button overlaid on the right edge of the VIDEOMAMA button
-        self._vmama_import_btn = QPushButton("+", self._videomama_btn)
-        self._vmama_import_btn.setFixedSize(24, 24)
-        self._vmama_import_btn.setToolTip(
-            "Import your own mask for VideoMaMa.\n\n"
-            "Bypasses the Track Mask step. Select a folder or\n"
-            "video of grayscale masks and they will be used as\n"
-            "VideoMaMa's guidance input directly."
-        )
-        self._vmama_import_btn.setStyleSheet(
-            "QPushButton { font-weight: bold; font-size: 14px; padding: 0px;"
-            "  background: #454430; border-left: 1px solid #5A5940; }"
-            "QPushButton:hover { background: #5A5940; }"
-        )
-        self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
-        # Reposition when the parent button resizes
-        self._videomama_btn.resizeEvent = lambda e: self._vmama_import_btn.move(
-            0, (self._videomama_btn.height() - 24) // 2
-        )
+        alpha_layout.addLayout(vmama_row)
 
         or_label2 = QLabel("— or —")
         or_label2.setAlignment(Qt.AlignCenter)
