@@ -573,36 +573,7 @@ class MainWindow(
         self._param_panel.track_masks_requested.connect(self._on_track_masks)
         self._param_panel.import_alpha_requested.connect(self._on_import_alpha)
         self._param_panel.import_vmama_mask_requested.connect(self._on_import_vmama_mask)
-        self._param_panel.chroma_key_requested.connect(self._on_run_chroma_key)
-        self._param_panel.chroma_key_preview.connect(self._on_chroma_key_param_changed)
-        self._param_panel.eyedropper_requested.connect(self._on_eyedropper_toggle)
         self._param_panel.screen_color_changed.connect(self._on_screen_color_changed)
-
-        # Eyedropper color sampling from either viewport (including wipe overlay)
-        self._dual_viewer.input_viewer._split_view.color_sampled.connect(self._on_color_sampled)
-        self._dual_viewer.output_viewer._split_view.color_sampled.connect(self._on_color_sampled)
-        self._dual_viewer._wipe_overlay.color_sampled.connect(self._on_color_sampled)
-        # Live preview during eyedropper drag
-        self._dual_viewer.input_viewer._split_view.color_preview.connect(self._on_color_preview)
-        self._dual_viewer.output_viewer._split_view.color_preview.connect(self._on_color_preview)
-        self._dual_viewer._wipe_overlay.color_preview.connect(self._on_color_preview)
-        # Full sample list for multi-reference keying
-        self._dual_viewer.input_viewer._split_view.screen_samples_ready.connect(self._on_screen_samples)
-        self._dual_viewer.output_viewer._split_view.screen_samples_ready.connect(self._on_screen_samples)
-        self._dual_viewer._wipe_overlay.screen_samples_ready.connect(self._on_screen_samples)
-
-        # Share annotation and holdout models between viewports
-        self._dual_viewer.setup_shared_annotations()
-        self._dual_viewer.setup_shared_holdout()
-
-        # Stroke finished -> context-aware save (holdout vs SAM2)
-        def _on_stroke_finished():
-            if self._is_chroma_key_active():
-                self._auto_save_holdout()
-                self._schedule_chroma_key_preview()
-            else:
-                self._auto_save_annotations()
-                self._update_annotation_info()
 
         self._dual_viewer.input_viewer._split_view.stroke_finished.connect(
             _on_stroke_finished

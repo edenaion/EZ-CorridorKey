@@ -9,34 +9,47 @@ def _is_tensor(x):
 def detect_screen_color(frame: np.ndarray) -> str:
     """Detect whether a frame has a green or blue chroma key background.
 
-    Downsamples the entire frame, converts to HSV, and counts how many
-    saturated pixels are green vs blue. Whichever has more wins.
+    Samples the border region (outer 5% on each edge) and checks the
+    dominant hue in HSV space. Green hue sits around 35-85 in OpenCV's
+    0-179 scale, blue around 100-130.
 
     Args:
-        frame: RGB uint8 image (H, W, 3).
+        frame: BGR or RGB uint8 image (H, W, 3).
 
     Returns:
         "green" or "blue".
     """
-    # Downsample to ~256px wide for speed
     h, w = frame.shape[:2]
-    scale = 256.0 / max(w, 1)
-    small = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    margin_y = max(1, h // 20)
+    margin_x = max(1, w // 20)
 
-    hsv = cv2.cvtColor(small.reshape(1, -1, 3), cv2.COLOR_RGB2HSV).reshape(-1, 3)
+    # Collect border pixels: top, bottom, left, right strips
+    top = frame[:margin_y, :, :]
+    bottom = frame[h - margin_y:, :, :]
+    left = frame[margin_y:h - margin_y, :margin_x, :]
+    right = frame[margin_y:h - margin_y, w - margin_x:, :]
 
-    # Only count saturated pixels (S > 40) — skin, clothes, dark areas are excluded
+    border = np.concatenate([
+        top.reshape(-1, 3),
+        bottom.reshape(-1, 3),
+        left.reshape(-1, 3),
+        right.reshape(-1, 3),
+    ], axis=0)
+
+    # Convert to HSV. Input may be RGB or BGR uint8; use RGB2HSV since
+    # the inference pipeline stores frames as RGB after cv2.cvtColor.
+    border_rgb = border.reshape(1, -1, 3).astype(np.uint8)
+    hsv = cv2.cvtColor(border_rgb, cv2.COLOR_RGB2HSV).reshape(-1, 3)
+
+    # Filter out low-saturation pixels (not colored enough to classify)
     sat_mask = hsv[:, 1] > 40
     if sat_mask.sum() < 10:
-        return "green"
+        return "green"  # default fallback
 
-    hues = hsv[sat_mask, 0]
+    mean_hue = float(hsv[sat_mask, 0].mean())
 
-    # OpenCV hue: 0-179. Green ~35-80, Blue ~85-130.
-    green_count = int(((hues >= 35) & (hues < 80)).sum())
-    blue_count = int(((hues >= 85) & (hues <= 130)).sum())
-
-    if blue_count > green_count:
+    # OpenCV hue: 0-179. Green ~35-85, Blue ~100-130
+    if mean_hue >= 90:
         return "blue"
     return "green"
 

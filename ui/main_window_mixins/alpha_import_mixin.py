@@ -167,7 +167,7 @@ class AlphaImportMixin:
             msg = f"Import {n_paired} alpha images into '{clip.name}' as {target_name}?"
         if n_src != n_input:
             msg += f"\n({abs(n_src - n_input)} frames will have no alpha)"
-        if QMessageBox.question(self, _tr("Import Alpha"), msg) != QMessageBox.Yes:
+        if QMessageBox.question(self, "Import Alpha", msg) != QMessageBox.Yes:
             return
 
         imported_count = 0
@@ -211,21 +211,7 @@ class AlphaImportMixin:
                         imported_count += 1
                         continue
 
-                    if src_ext == ".exr":
-                        img = cv2.imread(
-                            src_path,
-                            cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED,
-                        )
-                        if img is not None:
-                            if img.ndim == 3:
-                                img = img[:, :, 0]
-                            if img.dtype != np.uint8:
-                                img = np.clip(
-                                    img.astype(np.float32), 0.0, 1.0,
-                                )
-                                img = (img * 255.0).astype(np.uint8)
-                    else:
-                        img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+                    img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
                     if img is None:
                         logger.warning("Failed to import alpha image: %s", src_path)
                         continue
