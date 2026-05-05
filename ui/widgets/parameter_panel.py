@@ -411,7 +411,7 @@ class ParameterPanel(QWidget):
             if orig_resize:
                 orig_resize(e)
             h = self._videomama_btn.height()
-            self._vmama_import_btn.move(0, (h - 26) // 2)
+            self._vmama_import_btn.move(3, (h - 26) // 2)
         self._videomama_btn.resizeEvent = _on_vmama_resize
 
         or_label2 = QLabel("— or —")
