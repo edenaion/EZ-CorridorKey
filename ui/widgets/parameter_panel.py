@@ -921,6 +921,8 @@ class ParameterPanel(QWidget):
     def set_videomama_enabled(self, enabled: bool) -> None:
         """Enable/disable VideoMaMa button based on clip state."""
         self._videomama_btn.setEnabled(enabled)
+        # The + import button is always enabled (bypasses tracking)
+        self._vmama_import_btn.setEnabled(True)
 
     def set_matanyone2_enabled(self, enabled: bool) -> None:
         """Enable/disable MatAnyone2 button based on clip state."""
