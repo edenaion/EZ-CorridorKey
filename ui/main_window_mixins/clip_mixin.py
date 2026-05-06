@@ -50,10 +50,35 @@ class ClipMixin:
         if not cached:
             cached = "green"
 
+        # If blue detected, check if blue checkpoint is available
+        if cached == "blue":
+            from CorridorKeyModule.backend import has_blue_checkpoint
+            if not has_blue_checkpoint():
+                self._offer_blue_checkpoint_download()
+
         # Only swap accent if BG Color dropdown is set to Auto
         bg_idx = self._param_panel._bg_color.currentIndex()
         effective = cached if bg_idx == 0 else ["auto", "green", "blue"][bg_idx]
         self._on_screen_color_changed(effective)
+
+    def _offer_blue_checkpoint_download(self) -> None:
+        """Show a dialog offering to download the blue screen checkpoint."""
+        from PySide6.QtWidgets import QMessageBox
+
+        reply = QMessageBox.question(
+            self,
+            "Blue Screen Model Required",
+            "This clip uses a blue screen background.\n\n"
+            "The blue screen keying model (401 MB) is not installed. "
+            "Without it, the green model will be used as a fallback.\n\n"
+            "Download the blue screen model now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if reply == QMessageBox.Yes:
+            from ui.widgets.setup_wizard import SetupWizard
+            wizard = SetupWizard(self, preselected=["corridorkey-blue"])
+            wizard.exec()
 
     def _sync_selected_clip_view(self, clip: ClipEntry) -> None:
         """Reload the selected clip while preserving its remembered input interpretation."""

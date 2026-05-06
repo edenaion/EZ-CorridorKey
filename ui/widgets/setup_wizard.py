@@ -140,6 +140,9 @@ def detect_installed_models(install_path: Path | None = None) -> dict[str, bool]
     except OSError:
         results["corridorkey"] = False
 
+    # CorridorKey Blue — specific filename check
+    results["corridorkey-blue"] = (ck_dir / "CorridorKeyBlue_1.0.pth").is_file()
+
     # CorridorKey MLX — specific .safetensors filename
     results["corridorkey-mlx"] = (
         ck_dir / "corridorkey_mlx.safetensors"
@@ -208,10 +211,18 @@ _IS_APPLE_SILICON = sys.platform == "darwin" and platform.machine() == "arm64"
 MODELS: list[dict] = [
     {
         "key": "corridorkey",
-        "label": "CorridorKey Model",
+        "label": "CorridorKey Green",
         "size": "383 MB",
         "required": True,
-        "description": "Core chroma keying model (required)",
+        "description": "Core green screen keying model (required)",
+        "default_checked": True,
+    },
+    {
+        "key": "corridorkey-blue",
+        "label": "CorridorKey Blue",
+        "size": "401 MB",
+        "required": False,
+        "description": "Blue screen keying model",
         "default_checked": True,
     },
 ]
@@ -419,6 +430,8 @@ class _DownloadWorker(QThread):
     def _download_one(self, setup_models, key: str) -> bool:
         if key == "corridorkey":
             return setup_models.download_model("corridorkey")
+        elif key == "corridorkey-blue":
+            return setup_models.download_model("corridorkey-blue")
         elif key == "corridorkey-mlx":
             return setup_models.download_corridorkey_mlx()
         elif key == "sam2":
@@ -613,8 +626,9 @@ class _ModelRow(QWidget):
 # ---------------------------------------------------------------------------
 
 class SetupWizard(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, preselected: list[str] | None = None):
         super().__init__(parent)
+        self._preselected = preselected
         self.setWindowTitle("EZ-CorridorKey Setup")
         self.setMinimumSize(700, 500)
         self.setModal(True)
@@ -762,6 +776,13 @@ class SetupWizard(QDialog):
         # state is visible the moment the wizard opens — not only after the
         # user interacts with the path picker.
         self._refresh_installed_state()
+
+        # If opened with preselected keys, check only those and uncheck others
+        if self._preselected is not None:
+            for key, row in self._rows.items():
+                if row._required:
+                    continue
+                row.checkbox.setChecked(key in self._preselected)
 
     def _refresh_installed_state(self) -> None:
         """Scan the current install path and update each _ModelRow accordingly.
