@@ -34,22 +34,16 @@ from ui.widgets.wipe_controller import (
 import os as _os
 from functools import lru_cache as _lru_cache
 from PySide6.QtGui import QPixmap as _QPixmap
-from PySide6.QtSvg import QSvgRenderer as _QSvgRenderer
 
 
 @_lru_cache(maxsize=1)
 def _eyedropper_cursor() -> QCursor:
-    """Build a QCursor from the eyedropper SVG. Hotspot at tip (3, 28)."""
-    svg_path = _os.path.join(
-        _os.path.dirname(__file__), '..', 'theme', 'icons', 'eyedropper.svg',
+    """Build a QCursor from the eyedropper PNG. Hotspot at tip (1, 29)."""
+    png_path = _os.path.join(
+        _os.path.dirname(__file__), '..', 'theme', 'icons', 'eyedropper.png',
     )
-    renderer = _QSvgRenderer(svg_path)
-    pix = _QPixmap(32, 32)
-    pix.fill(Qt.transparent)
-    p = QPainter(pix)
-    renderer.render(p)
-    p.end()
-    return QCursor(pix, 3, 28)
+    pix = _QPixmap(png_path)
+    return QCursor(pix, 1, 29)
 
 
 class SplitViewWidget(QWidget):
