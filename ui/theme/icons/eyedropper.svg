@@ -1,14 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <!-- Eyedropper / color picker cursor -->
-  <!-- Hotspot should be at (1, 30) — the tip of the dropper -->
-  <g transform="translate(2,1)">
-    <!-- Dropper body (angled) -->
-    <path d="M22 2 L26 6 L14 18 L10 14 Z" fill="#E0E0E0" stroke="#222" stroke-width="1.2"/>
-    <!-- Dropper tip / nib -->
-    <path d="M10 14 L14 18 L7 25 Q5 27 3 25 L3 25 Q1 23 3 21 Z" fill="#FFF203" stroke="#222" stroke-width="1.2"/>
-    <!-- Bulb at top -->
-    <circle cx="24" cy="4" r="3.5" fill="#555" stroke="#222" stroke-width="1"/>
-    <!-- Tip point -->
-    <line x1="2" y1="27" x2="4" y2="25" stroke="#FFF203" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Classic eyedropper tool cursor, tip at bottom-left (2,30) -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Tip / nib (pointed) -->
+    <path d="M3 29 L8 24" stroke-width="2"/>
+    <!-- Lower barrel (narrowing to tip) -->
+    <path d="M8 24 L10 20 L16 26 L12 28 Z" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+    <!-- Upper barrel / body -->
+    <path d="M10 20 L20 10 L24 14 L16 26" fill="#CCCCCC" stroke="#000000" stroke-width="0.8"/>
+    <!-- Ring between barrel and bulb -->
+    <line x1="20" y1="10" x2="24" y2="14" stroke="#000000" stroke-width="1.5"/>
+    <!-- Bulb / reservoir -->
+    <path d="M20 10 L22 5 Q25 2 28 5 L28 5 Q31 8 28 11 L24 14" fill="#888888" stroke="#000000" stroke-width="0.8"/>
   </g>
+  <!-- Black outline for visibility on light backgrounds -->
+  <path d="M3 29 L8 24" stroke="#000000" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.3"/>
 </svg>
