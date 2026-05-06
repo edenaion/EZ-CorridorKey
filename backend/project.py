@@ -463,6 +463,24 @@ def load_in_out_range(clip_root: str):
     return None
 
 
+def save_chroma_params(clip_root: str, params: dict | None) -> None:
+    """Persist chroma key parameters to clip.json. Pass None to clear."""
+    data = read_clip_json(clip_root) or {}
+    if params:
+        data["chroma_params"] = params
+    else:
+        data.pop("chroma_params", None)
+    write_clip_json(clip_root, data)
+
+
+def load_chroma_params(clip_root: str) -> dict | None:
+    """Load chroma key parameters from clip.json, or None if not set."""
+    data = _read_clip_or_project_json(clip_root)
+    if data and "chroma_params" in data:
+        return data["chroma_params"]
+    return None
+
+
 def save_custom_output_dir(clip_root: str, output_dir: str | None) -> None:
     """Persist a custom output directory to clip.json.
 

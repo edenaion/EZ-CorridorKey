@@ -17,6 +17,7 @@ from .project import (
     folder_has_image_sequence, count_sequence_frames,
     validate_sequence_stems, find_clip_by_source,
     save_custom_output_dir, load_custom_output_dir,
+    save_chroma_params, load_chroma_params,
 )
 from .project_media import (
     create_clip_from_sequence,
@@ -70,6 +71,8 @@ __all__ = [
     "find_clip_by_source",
     "save_custom_output_dir",
     "load_custom_output_dir",
+    "save_chroma_params",
+    "load_chroma_params",
     "create_clip_from_sequence",
     "add_sequences_to_project",
     "create_project_from_media",

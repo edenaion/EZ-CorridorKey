@@ -170,6 +170,10 @@ class ClipMixin:
         # accent swaps immediately without waiting for inference.
         self._detect_and_apply_screen_color(clip)
 
+        # Restore per-clip chroma key parameters (eyedropper color, strength, etc.)
+        if hasattr(self, '_load_chroma_params_for_clip'):
+            self._load_chroma_params_for_clip(clip)
+
         # Highlight in I/O tray (single-select unless multi-select is active)
         batch_count = self._io_tray.selected_count()
         if batch_count <= 1:

@@ -834,6 +834,42 @@ class ParameterPanel(QWidget):
             "edge_blur": self._ck_edge_blur.value(),
         }
 
+    def set_chroma_params(self, params: dict) -> None:
+        """Restore chroma key parameters from a saved dict (per-clip persistence)."""
+        self._suppress_signals = True
+        try:
+            sc = params.get("screen_color")
+            if sc is not None:
+                self.set_sampled_screen_color(*sc)
+            else:
+                self._ck_screen_color = None
+                self._color_swatch.setStyleSheet(
+                    "background: #333; border: 1px solid #5A5940;"
+                )
+            self._ck_strength.setValue(int(params.get("strength", 1.0) * 10))
+            self._ck_clip_black.setValue(int(params.get("clip_black", 0.0) * 100))
+            self._ck_clip_white.setValue(int(params.get("clip_white", 1.0) * 100))
+            self._ck_shrink_grow.setValue(params.get("shrink_grow", 0))
+            self._ck_edge_blur.setValue(params.get("edge_blur", 0))
+        finally:
+            self._suppress_signals = False
+
+    def reset_chroma_params(self) -> None:
+        """Reset chroma key parameters to defaults (new clip with no saved state)."""
+        self._suppress_signals = True
+        try:
+            self._ck_screen_color = None
+            self._color_swatch.setStyleSheet(
+                "background: #333; border: 1px solid #5A5940;"
+            )
+            self._ck_strength.setValue(10)
+            self._ck_clip_black.setValue(0)
+            self._ck_clip_white.setValue(100)
+            self._ck_shrink_grow.setValue(0)
+            self._ck_edge_blur.setValue(0)
+        finally:
+            self._suppress_signals = False
+
     def _on_chroma_key_generate(self) -> None:
         """Emit chroma_key_requested with current params."""
         self.chroma_key_requested.emit(self.get_chroma_params())
