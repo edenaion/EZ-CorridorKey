@@ -629,7 +629,7 @@ class SetupWizard(QDialog):
     def __init__(self, parent=None, preselected: list[str] | None = None):
         super().__init__(parent)
         self._preselected = preselected
-        self.setWindowTitle("EZ-CorridorKey Setup")
+        self.setWindowTitle(self.tr("EZ-CorridorKey Setup"))
         self.setMinimumSize(700, 500)
         self.setModal(True)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)

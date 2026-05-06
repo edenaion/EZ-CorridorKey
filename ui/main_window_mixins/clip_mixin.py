@@ -69,11 +69,11 @@ class ClipMixin:
 
         reply = QMessageBox.question(
             self,
-            "Blue Screen Model Required",
-            "This clip uses a blue screen background.\n\n"
-            "The blue screen keying model (401 MB) is not installed. "
-            "Without it, the green model will be used as a fallback.\n\n"
-            "Download the blue screen model now?",
+            _tr("Blue Screen Model Required"),
+            _tr("This clip uses a blue screen background.\n\n"
+                "The blue screen keying model (401 MB) is not installed. "
+                "Without it, the green model will be used as a fallback.\n\n"
+                "Download the blue screen model now?"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )

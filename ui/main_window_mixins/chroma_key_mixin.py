@@ -10,6 +10,8 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QMessageBox
 
+from . import _tr
+
 from backend import ClipState, JobType
 from ui.workers.job_helpers import create_job_snapshot
 
@@ -47,9 +49,9 @@ class ChromaKeyMixin:
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir) and os.listdir(alpha_dir):
             result = QMessageBox.question(
-                self, "Replace Alpha Hints?",
-                f"Clip '{clip.name}' already has alpha hint images.\n\n"
-                "Do you want to replace them with chroma key hints?",
+                self, _tr("Replace Alpha Hints?"),
+                _tr("Clip '%s' already has alpha hint images.\n\n"
+                    "Do you want to replace them with chroma key hints?") % clip.name,
                 QMessageBox.Yes | QMessageBox.No,
             )
             if result != QMessageBox.Yes:

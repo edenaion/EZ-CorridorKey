@@ -167,7 +167,7 @@ class AlphaImportMixin:
             msg = f"Import {n_paired} alpha images into '{clip.name}' as {target_name}?"
         if n_src != n_input:
             msg += f"\n({abs(n_src - n_input)} frames will have no alpha)"
-        if QMessageBox.question(self, "Import Alpha", msg) != QMessageBox.Yes:
+        if QMessageBox.question(self, _tr("Import Alpha"), msg) != QMessageBox.Yes:
             return
 
         imported_count = 0

@@ -43,6 +43,7 @@ class _DummyParamPanel:
     def set_matanyone2_enabled(self, enabled): pass
     def set_import_alpha_enabled(self, enabled): pass
     def set_annotation_info(self, annotated, total): pass
+    def reset_chroma_params(self): pass
 
 
 class _DummyDualViewer:

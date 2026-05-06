@@ -475,15 +475,17 @@ class PreferencesDialog(QDialog):
         self._repair_ffmpeg_btn.clicked.connect(self._on_repair_ffmpeg)
         ffmpeg_btn_row.addWidget(self._repair_ffmpeg_btn)
 
-        self._browse_ffmpeg_btn = QPushButton("Browse...")
+        self._browse_ffmpeg_btn = QPushButton(self.tr("Browse..."))
         self._browse_ffmpeg_btn.setToolTip(
-            "Point CorridorKey at your own FFmpeg installation.\n"
-            "Select the folder containing ffmpeg.exe and ffprobe.exe."
+            self.tr(
+                "Point CorridorKey at your own FFmpeg installation.\n"
+                "Select the folder containing ffmpeg.exe and ffprobe.exe."
+            )
         )
         self._browse_ffmpeg_btn.clicked.connect(self._on_browse_ffmpeg)
         ffmpeg_btn_row.addWidget(self._browse_ffmpeg_btn)
 
-        self._open_ffmpeg_btn = QPushButton("Open FFmpeg Folder")
+        self._open_ffmpeg_btn = QPushButton(self.tr("Open FFmpeg Folder"))
         self._open_ffmpeg_btn.setToolTip(
             self.tr(
                 "Open CorridorKey's bundled FFmpeg folder.\n"
@@ -605,7 +607,7 @@ class PreferencesDialog(QDialog):
         """Let the user point CorridorKey at their own FFmpeg folder."""
         path = QFileDialog.getExistingDirectory(
             self,
-            "Select FFmpeg Folder (containing ffmpeg.exe and ffprobe.exe)",
+            self.tr("Select FFmpeg Folder (containing ffmpeg.exe and ffprobe.exe)"),
             "",
         )
         if not path:
@@ -628,19 +630,19 @@ class PreferencesDialog(QDialog):
         if not has_ffmpeg:
             QMessageBox.warning(
                 self,
-                "FFmpeg Not Found",
-                f"Could not find ffmpeg{ext} in:\n\n{path}\n\n"
-                "Select the folder that contains ffmpeg.exe and ffprobe.exe "
-                "(usually the 'bin' folder inside the FFmpeg download).",
+                self.tr("FFmpeg Not Found"),
+                self.tr("Could not find ffmpeg%s in:\n\n%s\n\n"
+                        "Select the folder that contains ffmpeg.exe and ffprobe.exe "
+                        "(usually the 'bin' folder inside the FFmpeg download).") % (ext, path),
             )
             return
 
         if not has_ffprobe:
             QMessageBox.warning(
                 self,
-                "FFprobe Missing",
-                f"Found ffmpeg{ext} but ffprobe{ext} is missing from:\n\n{path}\n\n"
-                "CorridorKey requires both. Download a full FFmpeg build.",
+                self.tr("FFprobe Missing"),
+                self.tr("Found ffmpeg%s but ffprobe%s is missing from:\n\n%s\n\n"
+                        "CorridorKey requires both. Download a full FFmpeg build.") % (ext, ext, path),
             )
             return
 
@@ -652,11 +654,11 @@ class PreferencesDialog(QDialog):
         result = validate_ffmpeg_install(require_probe=True)
         if result.ok:
             QMessageBox.information(
-                self, "FFmpeg Found", result.message,
+                self, self.tr("FFmpeg Found"), result.message,
             )
         else:
             QMessageBox.warning(
-                self, "FFmpeg Issue", result.message,
+                self, self.tr("FFmpeg Issue"), result.message,
             )
 
     def _open_local_ffmpeg_dir(self) -> None:
