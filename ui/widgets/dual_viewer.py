@@ -214,6 +214,7 @@ class DualViewerPanel(QWidget):
             self._scrubber.set_frame(clamped_frame)
             if self._input_viewer.current_stem_index != clamped_frame:
                 self._input_viewer.navigate_to_frame(clamped_frame)
+            self._output_viewer.navigate_to_frame(clamped_frame)
         self._update_coverage(self._clip, fi)
 
     def show_placeholder(self, text: str = "No clip selected") -> None:

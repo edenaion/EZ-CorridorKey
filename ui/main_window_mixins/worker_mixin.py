@@ -129,6 +129,12 @@ class WorkerMixin:
             self._refresh_input_thumbnail(finished_clip)
             self._refresh_export_thumbnail(finished_clip)
 
+        # Reload full-res frame on the output viewer. During rendering the
+        # preview system sends downscaled 960px images; without this the
+        # viewer keeps showing the low-res preview after the job finishes.
+        if self._current_clip and self._current_clip.name == clip_name:
+            self._dual_viewer.refresh_generated_assets()
+
         # Pipeline auto-chain: queue the next stage, if any.
         if clip_name in self._pipeline_steps and self._pipeline_steps[clip_name]:
             next_step = self._pipeline_steps[clip_name].pop(0)
