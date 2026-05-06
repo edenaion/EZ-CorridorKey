@@ -214,7 +214,15 @@ MODELS: list[dict] = [
         "label": "CorridorKey Green",
         "size": "383 MB",
         "required": True,
-        "description": "Core chroma keying model (required)",
+        "description": "Core green screen keying model (required)",
+        "default_checked": True,
+    },
+    {
+        "key": "corridorkey-blue",
+        "label": "CorridorKey Blue",
+        "size": "401 MB",
+        "required": False,
+        "description": "Blue screen keying model",
         "default_checked": True,
     },
 ]
@@ -621,7 +629,7 @@ class SetupWizard(QDialog):
     def __init__(self, parent=None, preselected: list[str] | None = None):
         super().__init__(parent)
         self._preselected = preselected
-        self.setWindowTitle(self.tr("EZ-CorridorKey Setup"))
+        self.setWindowTitle("EZ-CorridorKey Setup")
         self.setMinimumSize(700, 500)
         self.setModal(True)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
