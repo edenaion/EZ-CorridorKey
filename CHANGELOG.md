@@ -6,7 +6,9 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [Unreleased]
 
-_Nothing yet — see 1.11.0 below._
+### Added
+
+☼ **Localization / i18n support** ([#109](https://github.com/edenaion/EZ-CorridorKey/issues/109)) — all 329 user-visible strings are now marked for translation using Qt's built-in i18n system. A language picker in Preferences lets users select their display language. Translators can contribute new languages by editing standard `.ts` files with Qt Linguist. See `ui/translations/TRANSLATING.md` for step-by-step instructions: copy `corridorkey_en.ts` to your language code, translate in Qt Linguist, compile with `pyside6-lrelease`, and submit a PR.
 
 ---
 
