@@ -34,15 +34,22 @@ from ui.widgets.wipe_controller import (
 import os as _os
 from functools import lru_cache as _lru_cache
 from PySide6.QtGui import QPixmap as _QPixmap
+from PySide6.QtSvg import QSvgRenderer as _QSvgRenderer
 
 
 @_lru_cache(maxsize=1)
 def _eyedropper_cursor() -> QCursor:
-    """Build a QCursor from the eyedropper PNG. Hotspot at tip (1, 29)."""
-    from ui.theme import THEME_DIR
-    png_path = _os.path.join(THEME_DIR, 'icons', 'eyedropper.png')
-    pix = _QPixmap(png_path)
-    return QCursor(pix, 1, 29)
+    """Build a QCursor from the eyedropper SVG. Hotspot at tip (3, 28)."""
+    svg_path = _os.path.join(
+        _os.path.dirname(__file__), '..', 'theme', 'icons', 'eyedropper.svg',
+    )
+    renderer = _QSvgRenderer(svg_path)
+    pix = _QPixmap(32, 32)
+    pix.fill(Qt.transparent)
+    p = QPainter(pix)
+    renderer.render(p)
+    p.end()
+    return QCursor(pix, 3, 28)
 
 
 class SplitViewWidget(QWidget):
@@ -117,10 +124,6 @@ class SplitViewWidget(QWidget):
         # Eyedropper state
         self._eyedropper_mode: bool = False
         self._eyedropper_source: QImage | None = None  # input frame to sample from
-        self._eyedropper_color: QColor | None = None   # live sampled color under cursor
-        self._eyedropper_pos: QPointF = QPointF()       # cursor position for loupe
-
-        self.setMouseTracking(True)
 
     # ── Public API ──
 
@@ -191,10 +194,9 @@ class SplitViewWidget(QWidget):
         """Toggle eyedropper color sampling mode."""
         self._eyedropper_mode = enabled
         if enabled:
-            self.setCursor(Qt.BlankCursor)
+            self.setCursor(_eyedropper_cursor())
         elif not self._annotation_mode:
             self.unsetCursor()
-        self._eyedropper_color = None
         self.update()
 
     def set_eyedropper_source(self, image: QImage | None) -> None:
@@ -269,10 +271,6 @@ class SplitViewWidget(QWidget):
         # Annotation overlay (after image, before extraction)
         if self._active_annotation_model is not None and self._annotation_mode:
             self._paint_annotations(painter)
-
-        # Eyedropper loupe overlay
-        if self._eyedropper_mode and self._eyedropper_color is not None:
-            self._paint_eyedropper_loupe(painter)
 
         # Extraction progress overlay (replaces placeholder during extraction)
         if self._extraction_total > 0:
@@ -368,134 +366,6 @@ class SplitViewWidget(QWidget):
             self._image_rect,
             self._DIVIDER_WIDTH,
         )
-
-    def _sample_eyedropper(self, pos: QPointF) -> QColor | None:
-        """Sample the input frame at the given display position."""
-        source = self._eyedropper_source
-        if source is None:
-            return None
-        displayed = self._single_image or self._left_image
-        if displayed is None:
-            return None
-        dest = self._image_rect(displayed)
-        iw, ih = source.width(), source.height()
-        dw, dh = displayed.width(), displayed.height()
-        img_x = (pos.x() - dest.x()) * dw / dest.width()
-        img_y = (pos.y() - dest.y()) * dh / dest.height()
-        sx = int(min(max(img_x * iw / dw, 0), iw - 1))
-        sy = int(min(max(img_y * ih / dh, 0), ih - 1))
-        return source.pixelColor(sx, sy)
-
-    def _paint_eyedropper_loupe(self, painter: QPainter) -> None:
-        """Draw eyedropper loupe: magnified region + color swatch at cursor."""
-        pos = self._eyedropper_pos
-        color = self._eyedropper_color
-        source = self._eyedropper_source
-        if color is None or source is None:
-            return
-
-        displayed = self._single_image or self._left_image
-        if displayed is None:
-            return
-
-        # Map display position to source image coords
-        dest = self._image_rect(displayed)
-        iw, ih = source.width(), source.height()
-        dw, dh = displayed.width(), displayed.height()
-        img_x = (pos.x() - dest.x()) * dw / dest.width()
-        img_y = (pos.y() - dest.y()) * dh / dest.height()
-        cx = int(min(max(img_x * iw / dw, 0), iw - 1))
-        cy = int(min(max(img_y * ih / dh, 0), ih - 1))
-
-        loupe_radius = 40
-        mag = 6  # magnification factor
-        sample_r = loupe_radius // mag  # pixels to sample from source
-
-        # Extract magnified region from source image
-        x0 = max(0, cx - sample_r)
-        y0 = max(0, cy - sample_r)
-        x1 = min(iw, cx + sample_r + 1)
-        y1 = min(ih, cy + sample_r + 1)
-        region = source.copy(x0, y0, x1 - x0, y1 - y0)
-        scaled = region.scaled(
-            (x1 - x0) * mag, (y1 - y0) * mag, Qt.IgnoreAspectRatio,
-            Qt.FastTransformation,
-        )
-
-        # Position loupe above-right of cursor
-        lx = pos.x() + 20
-        ly = pos.y() - loupe_radius * 2 - 30
-        if ly < 10:
-            ly = pos.y() + 20
-        if lx + loupe_radius * 2 > self.width() - 10:
-            lx = pos.x() - loupe_radius * 2 - 20
-
-        center = QPointF(lx + loupe_radius, ly + loupe_radius)
-
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        # Clip to circle for the magnified view
-        from PySide6.QtGui import QPainterPath
-        clip = QPainterPath()
-        clip.addEllipse(center, loupe_radius, loupe_radius)
-        painter.setClipPath(clip)
-
-        # Draw magnified region centered in the loupe
-        src_cx = (cx - x0) * mag
-        src_cy = (cy - y0) * mag
-        painter.drawImage(
-            QRectF(center.x() - loupe_radius, center.y() - loupe_radius,
-                   loupe_radius * 2, loupe_radius * 2),
-            scaled,
-            QRectF(src_cx - loupe_radius, src_cy - loupe_radius,
-                   loupe_radius * 2, loupe_radius * 2),
-        )
-        painter.setClipping(False)
-
-        # Crosshair in center of loupe
-        ch_size = 4
-        painter.setPen(QPen(QColor(0, 0, 0, 180), 2))
-        painter.drawLine(center.x() - ch_size, center.y(),
-                         center.x() + ch_size, center.y())
-        painter.drawLine(center.x(), center.y() - ch_size,
-                         center.x(), center.y() + ch_size)
-        painter.setPen(QPen(QColor(255, 255, 255, 200), 1))
-        painter.drawLine(center.x() - ch_size, center.y(),
-                         center.x() + ch_size, center.y())
-        painter.drawLine(center.x(), center.y() - ch_size,
-                         center.x(), center.y() + ch_size)
-
-        # Circle border
-        painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(QColor(0, 0, 0, 200), 2))
-        painter.drawEllipse(center, loupe_radius, loupe_radius)
-        painter.setPen(QPen(QColor(255, 255, 255, 220), 1))
-        painter.drawEllipse(center, loupe_radius, loupe_radius)
-
-        # Color swatch below the loupe
-        swatch_w = loupe_radius * 2
-        swatch_h = 22
-        swatch_x = center.x() - loupe_radius
-        swatch_y = center.y() + loupe_radius + 2
-        painter.setPen(QPen(QColor(0, 0, 0, 200), 1))
-        painter.setBrush(color)
-        painter.drawRoundedRect(QRectF(swatch_x, swatch_y, swatch_w, swatch_h), 4, 4)
-
-        # RGB text on the swatch
-        font = painter.font()
-        font.setPointSize(8)
-        font.setBold(True)
-        painter.setFont(font)
-        text_color = QColor("#000") if color.lightnessF() > 0.5 else QColor("#FFF")
-        painter.setPen(text_color)
-        painter.drawText(
-            QRectF(swatch_x, swatch_y, swatch_w, swatch_h),
-            Qt.AlignCenter,
-            f"{color.red()}, {color.green()}, {color.blue()}",
-        )
-
-        painter.restore()
 
     def _paint_placeholder(self, painter: QPainter) -> None:
         """Draw placeholder text."""
@@ -847,13 +717,6 @@ class SplitViewWidget(QWidget):
                 self._wipe_offset = new_offset
             elif self._wipe_dragging == "line":
                 self._wipe_angle = new_angle
-            self.update()
-            return
-
-        # Eyedropper: live-sample color under cursor for loupe display
-        if self._eyedropper_mode:
-            self._eyedropper_pos = event.position()
-            self._eyedropper_color = self._sample_eyedropper(event.position())
             self.update()
             return
 

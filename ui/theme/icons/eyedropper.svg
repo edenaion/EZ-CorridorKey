@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Eyedropper / color picker cursor -->
+  <!-- Hotspot should be at (1, 30) — the tip of the dropper -->
+  <g transform="translate(2,1)">
+    <!-- Dropper body (angled) -->
+    <path d="M22 2 L26 6 L14 18 L10 14 Z" fill="#E0E0E0" stroke="#222" stroke-width="1.2"/>
+    <!-- Dropper tip / nib -->
+    <path d="M10 14 L14 18 L7 25 Q5 27 3 25 L3 25 Q1 23 3 21 Z" fill="#FFF203" stroke="#222" stroke-width="1.2"/>
+    <!-- Bulb at top -->
+    <circle cx="24" cy="4" r="3.5" fill="#555" stroke="#222" stroke-width="1"/>
+    <!-- Tip point -->
+    <line x1="2" y1="27" x2="4" y2="25" stroke="#FFF203" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+</svg>
