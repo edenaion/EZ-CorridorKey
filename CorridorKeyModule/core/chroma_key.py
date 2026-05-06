@@ -32,7 +32,7 @@ def chroma_key_matte(
         frame_rgb: Input frame as RGB uint8 (H, W, 3).
         screen_color: Sampled screen RGB (r, g, b) 0-255. Required for best
             results. None falls back to pure-green or pure-blue reference.
-        screen_type: "green" or "blue".
+        screen_type: "green", "blue", or "auto" (detects from frame).
         strength: Key gain. Higher = more aggressive. Range: 0.1 - 10.0.
         clip_black: Alpha values below this become fully transparent (0-1).
         clip_white: Alpha values above this become fully opaque (0-1).
@@ -48,6 +48,14 @@ def chroma_key_matte(
     )
 
     img = frame_rgb.astype(np.float32) / 255.0
+
+    # ── Resolve screen type ──
+    # "auto" detects from the frame: whichever channel (G or B) has more
+    # excess over the other two across the image is the screen channel.
+    if screen_type not in ("green", "blue"):
+        g_excess = np.clip(img[:, :, 1] - np.maximum(img[:, :, 0], img[:, :, 2]), 0, None).mean()
+        b_excess = np.clip(img[:, :, 2] - np.maximum(img[:, :, 0], img[:, :, 1]), 0, None).mean()
+        screen_type = "blue" if b_excess > g_excess else "green"
 
     # Reference screen color in float
     if screen_color is not None:
