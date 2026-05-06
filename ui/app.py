@@ -132,6 +132,26 @@ def _migrate_legacy_settings() -> None:
     logger.info("Migrated %d settings from Corridor Digital/CorridorKey", len(old_keys))
 
 
+def _prewarm_mlx() -> None:
+    """Import mlx.core on the main thread so Metal initializes safely.
+
+    The PyInstaller runtime hook (pyi_rth_mlx.py) does this too, but its
+    failure is silent.  This second attempt runs after paths are fully set
+    up and logs any failure so we can diagnose crash reports where Metal
+    abort()s because mlx.core first loaded on a worker thread.
+    """
+    if sys.platform != "darwin":
+        return
+    if "mlx.core" in sys.modules:
+        return  # Already initialized (runtime hook succeeded)
+    try:
+        import mlx.core as mx
+        mx.eval(mx.zeros(1))
+        logger.info("MLX Metal prewarm succeeded on main thread")
+    except Exception as exc:
+        logger.warning("MLX prewarm failed (will fall back to MPS): %s", exc)
+
+
 def create_app(argv: list[str] | None = None) -> QApplication:
     """Create and configure the QApplication with brand theming.
 
@@ -141,6 +161,7 @@ def create_app(argv: list[str] | None = None) -> QApplication:
         argv = sys.argv
 
     _configure_runtime_backends()
+    _prewarm_mlx()
 
     app = QApplication(argv)
     app.setApplicationName("EZ-CorridorKey")

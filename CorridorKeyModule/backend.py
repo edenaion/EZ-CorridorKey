@@ -87,6 +87,20 @@ def _auto_detect_backend() -> str:
         logger.info("No %s checkpoint found — using torch backend", MLX_EXT)
         return "torch"
 
+    # MLX's Metal backend must be initialized on the main thread.  If the
+    # main-thread prewarm (pyi_rth_mlx.py / app.py) failed silently and
+    # mlx.core was never imported, attempting the first import here on a
+    # worker thread will cause Metal to abort() the process.  Fall back to
+    # Torch/MPS instead of crashing.
+    import threading
+    if "mlx.core" not in sys.modules and threading.current_thread() is not threading.main_thread():
+        logger.warning(
+            "mlx.core not initialized on main thread — falling back to "
+            "torch/MPS to avoid Metal abort().  This usually means the MLX "
+            "prewarm failed at startup; check earlier log messages."
+        )
+        return "torch"
+
     logger.info("Apple Silicon + MLX available — using mlx backend")
     return "mlx"
 

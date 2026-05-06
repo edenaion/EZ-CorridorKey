@@ -67,8 +67,12 @@ def _prewarm_mlx():
         import mlx.core as mx
         # Force Metal device initialization by running a trivial op
         mx.eval(mx.zeros(1))
-    except Exception:
-        pass  # MLX not available — app will fall back to torch
+    except Exception as exc:
+        # Log to stderr since logging isn't configured yet at runtime-hook time.
+        # If this fails, the app-level prewarm in ui/app.py gets a second shot.
+        import traceback
+        print(f"[pyi_rth_mlx] MLX prewarm failed: {exc}", flush=True)
+        traceback.print_exc()
 
 
 _fixup_mlx_paths()
