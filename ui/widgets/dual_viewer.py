@@ -124,16 +124,21 @@ class DualViewerPanel(QWidget):
     # ── Eyedropper ──
 
     def set_eyedropper_mode(self, enabled: bool) -> None:
-        """Toggle eyedropper on both viewports. Always samples from the input frame."""
+        """Toggle eyedropper on both viewports and wipe overlay.
+
+        Always samples from the input frame so the screen color comes from
+        the original footage regardless of which viewer the click lands on.
+        """
         self._input_viewer.set_eyedropper_mode(enabled)
         self._output_viewer.set_eyedropper_mode(enabled)
-        # Provide the input frame as the eyedropper source for the output viewer
-        # so it samples screen color from the original footage, not the keyed result.
+        self._wipe_overlay.set_eyedropper_mode(enabled)
         if enabled:
             input_img = self._input_viewer._split_view._single_image
             self._output_viewer.set_eyedropper_source(input_img)
+            self._wipe_overlay.set_eyedropper_source(input_img)
         else:
             self._output_viewer.set_eyedropper_source(None)
+            self._wipe_overlay.set_eyedropper_source(None)
 
     # ── Both-viewport annotation ──
 
