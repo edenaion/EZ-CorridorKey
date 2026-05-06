@@ -123,12 +123,19 @@ class ChromaKeyMixin:
 
         logger.debug(f"Chroma key preview: reading {input_path}")
 
-        # Read frame
-        frame_bgr = cv2.imread(input_path, cv2.IMREAD_COLOR)
+        # Read frame (handle EXR float data properly)
+        is_exr = input_path.lower().endswith(".exr")
+        if is_exr:
+            frame_bgr = cv2.imread(input_path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
+        else:
+            frame_bgr = cv2.imread(input_path, cv2.IMREAD_COLOR)
         if frame_bgr is None:
             logger.warning(f"Chroma key preview: cv2.imread failed for {input_path}")
             return
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        # EXR comes as float32 in 0-1 range; convert to uint8 for display
+        if frame_rgb.dtype != np.uint8:
+            frame_rgb = (np.clip(frame_rgb, 0.0, 1.0) * 255.0).astype(np.uint8)
 
         # Resolve screen type: use auto-detected color if BG Color is "auto"
         params = self._param_panel.get_chroma_params()

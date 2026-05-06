@@ -258,11 +258,17 @@ class AutoPipelinesMixin:
                 raise JobCancelledError(clip.name, i)
 
             frame_path = os.path.join(clip.input_asset.path, fname)
-            frame_bgr = _cv2.imread(frame_path, _cv2.IMREAD_COLOR)
+            is_exr = fname.lower().endswith(".exr")
+            if is_exr:
+                frame_bgr = _cv2.imread(frame_path, _cv2.IMREAD_ANYCOLOR | _cv2.IMREAD_ANYDEPTH)
+            else:
+                frame_bgr = _cv2.imread(frame_path, _cv2.IMREAD_COLOR)
             if frame_bgr is None:
                 logger.warning(f"Chroma key: could not read {frame_path}, skipping")
                 continue
             frame_rgb = _cv2.cvtColor(frame_bgr, _cv2.COLOR_BGR2RGB)
+            if frame_rgb.dtype != _np.uint8:
+                frame_rgb = (_np.clip(frame_rgb, 0.0, 1.0) * 255.0).astype(_np.uint8)
 
             matte = chroma_key_matte(
                 frame_rgb,
