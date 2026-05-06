@@ -222,7 +222,9 @@ class AutoPipelinesMixin:
     ) -> None:
         """Generate alpha hints via chroma key color-difference method.
 
-        Pure CPU — no GPU lock needed, no model loading.
+        Pipelined: prefetch reads in a ThreadPool, process on GPU, write
+        output PNGs in a ThreadPool. Disk I/O overlaps with GPU compute
+        so throughput is limited by the slowest single stage, not the sum.
         Transitions clip: RAW -> READY (creates AlphaHint directory).
 
         chroma_params keys:
@@ -236,6 +238,7 @@ class AutoPipelinesMixin:
         """
         import cv2 as _cv2
         import numpy as _np
+        from concurrent.futures import ThreadPoolExecutor, Future
         from CorridorKeyModule.core.chroma_key import chroma_key_matte
 
         if clip.input_asset is None:
@@ -254,42 +257,88 @@ class AutoPipelinesMixin:
         if on_progress:
             on_progress(clip.name, 0, num_frames)
 
-        for i, fname in enumerate(selected_input_names):
-            if job and job.is_cancelled:
-                raise JobCancelledError(clip.name, i)
+        input_dir = clip.input_asset.path
+        ck_params = {
+            "screen_color": chroma_params.get("screen_color"),
+            "screen_type": chroma_params.get("screen_type", "green"),
+            "strength": chroma_params.get("strength", 1.0),
+            "clip_black": chroma_params.get("clip_black", 0.0),
+            "clip_white": chroma_params.get("clip_white", 1.0),
+            "shrink_grow": chroma_params.get("shrink_grow", 0),
+            "edge_blur": chroma_params.get("edge_blur", 0),
+        }
 
-            frame_path = os.path.join(clip.input_asset.path, fname)
+        # ── Read helper (runs in read ThreadPool, releases GIL via cv2) ──
+        def _read_frame(fname: str) -> tuple[str, _np.ndarray | None]:
+            fpath = os.path.join(input_dir, fname)
             is_exr = fname.lower().endswith(".exr")
             if is_exr:
-                frame_bgr = _cv2.imread(frame_path, _cv2.IMREAD_ANYCOLOR | _cv2.IMREAD_ANYDEPTH)
+                bgr = _cv2.imread(fpath, _cv2.IMREAD_ANYCOLOR | _cv2.IMREAD_ANYDEPTH)
             else:
-                frame_bgr = _cv2.imread(frame_path, _cv2.IMREAD_COLOR)
-            if frame_bgr is None:
-                logger.warning(f"Chroma key: could not read {frame_path}, skipping")
-                continue
-            frame_rgb = _cv2.cvtColor(frame_bgr, _cv2.COLOR_BGR2RGB)
-            if frame_rgb.dtype != _np.uint8:
-                frame_rgb = (_np.clip(frame_rgb, 0.0, 1.0) * 255.0).astype(_np.uint8)
+                bgr = _cv2.imread(fpath, _cv2.IMREAD_COLOR)
+            if bgr is None:
+                logger.warning(f"Chroma key: could not read {fpath}, skipping")
+                return fname, None
+            rgb = _cv2.cvtColor(bgr, _cv2.COLOR_BGR2RGB)
+            if rgb.dtype != _np.uint8:
+                rgb = (_np.clip(rgb, 0.0, 1.0) * 255.0).astype(_np.uint8)
+            return fname, rgb
 
-            matte = chroma_key_matte(
-                frame_rgb,
-                screen_color=chroma_params.get("screen_color"),
-                screen_type=chroma_params.get("screen_type", "green"),
-                strength=chroma_params.get("strength", 1.0),
-                clip_black=chroma_params.get("clip_black", 0.0),
-                clip_white=chroma_params.get("clip_white", 1.0),
-                shrink_grow=chroma_params.get("shrink_grow", 0),
-                edge_blur=chroma_params.get("edge_blur", 0),
-            )
-
-            stem = os.path.splitext(fname)[0]
-            out_path = os.path.join(alpha_dir, f"{stem}.png")
+        # ── Write helper (runs in write ThreadPool) ──
+        def _write_matte(out_path: str, matte: _np.ndarray) -> None:
             _cv2.imwrite(out_path, matte)
 
-            if on_progress:
-                elapsed = time.monotonic() - t_start
-                fps = (i + 1) / elapsed if elapsed > 0 else 0
-                on_progress(clip.name, i + 1, num_frames, fps=fps)
+        _PREFETCH = 4
+        _WRITE_WORKERS = 4
+
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="ck-read") as read_pool, \
+             ThreadPoolExecutor(max_workers=_WRITE_WORKERS, thread_name_prefix="ck-write") as write_pool:
+
+            # Submit first batch of reads
+            read_futures: list[Future] = []
+            for fname in selected_input_names[:_PREFETCH]:
+                read_futures.append(read_pool.submit(_read_frame, fname))
+
+            write_futures: list[Future] = []
+            next_read_idx = _PREFETCH
+
+            for i in range(num_frames):
+                if job and job.is_cancelled:
+                    raise JobCancelledError(clip.name, i)
+
+                # Wait for next pre-read frame
+                fname, frame_rgb = read_futures[i].result()
+
+                # Submit next read (keep prefetch queue full)
+                if next_read_idx < num_frames:
+                    read_futures.append(
+                        read_pool.submit(_read_frame, selected_input_names[next_read_idx])
+                    )
+                    next_read_idx += 1
+
+                if frame_rgb is None:
+                    continue
+
+                # GPU chroma key
+                matte = chroma_key_matte(frame_rgb, **ck_params)
+
+                # Submit async write
+                stem = os.path.splitext(fname)[0]
+                out_path = os.path.join(alpha_dir, f"{stem}.png")
+                write_futures.append(write_pool.submit(_write_matte, out_path, matte))
+
+                # Drain completed writes to prevent unbounded memory growth
+                if len(write_futures) > _WRITE_WORKERS * 2:
+                    write_futures = [f for f in write_futures if not f.done()]
+
+                if on_progress:
+                    elapsed = time.monotonic() - t_start
+                    fps = (i + 1) / elapsed if elapsed > 0 else 0
+                    on_progress(clip.name, i + 1, num_frames, fps=fps)
+
+            # Wait for all writes to finish
+            for f in write_futures:
+                f.result()
 
         clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
 

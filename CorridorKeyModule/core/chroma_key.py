@@ -26,7 +26,10 @@ _device = None
 
 
 def _get_torch_device():
-    """Return (torch_module, device) or (None, None) if CUDA unavailable."""
+    """Return (torch_module, device) or (None, None) if no GPU available.
+
+    Tries CUDA first, then MPS (Apple Metal) as fallback.
+    """
     global _torch, _device
     if _torch is not None:
         return _torch, _device
@@ -35,7 +38,12 @@ def _get_torch_device():
         if torch.cuda.is_available():
             _torch = torch
             _device = torch.device("cuda")
-            logger.debug("Chroma key: using PyTorch GPU (%s)", torch.cuda.get_device_name())
+            logger.debug("Chroma key: using CUDA (%s)", torch.cuda.get_device_name())
+            return _torch, _device
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            _torch = torch
+            _device = torch.device("mps")
+            logger.debug("Chroma key: using Metal (MPS)")
             return _torch, _device
     except ImportError:
         pass
