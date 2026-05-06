@@ -742,8 +742,6 @@ class ParameterPanel(QWidget):
             self._despill_slider: (self._despill_slider.setValue, 5),       # 0.5
             self._refiner_slider: (self._refiner_slider.setValue, 10),      # 1.0
             self._despeckle_size: (self._despeckle_size.setValue, 400),      # 400px
-            self._garbage_matte_px: (self._garbage_matte_px.setValue, 20),  # 20px
-            self._parallel_spin: (self._parallel_spin.setValue, 1),         # 1
             self._ck_strength: (self._ck_strength.setValue, 10),            # 1.0
             self._ck_clip_black: (self._ck_clip_black.setValue, 0),         # 0.0
             self._ck_clip_white: (self._ck_clip_white.setValue, 100),       # 1.0

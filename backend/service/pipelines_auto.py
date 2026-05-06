@@ -235,6 +235,7 @@ class AutoPipelinesMixin:
             edge_blur: int (pixels)
         """
         import cv2 as _cv2
+        import numpy as _np
         from CorridorKeyModule.core.chroma_key import chroma_key_matte
 
         if clip.input_asset is None:
