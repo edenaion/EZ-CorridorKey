@@ -88,13 +88,23 @@ def chroma_key_matte(
     # ── Strength as gain on key signal ──
     key = np.clip(key * strength, 0.0, 1.0)
 
-    # ── Smoothstep: sharpens foreground core, preserves edge gradients ──
-    # Hermite interpolation: 3t^2 - 2t^3
-    key = key * key * (3.0 - 2.0 * key)
+    # ── Saturation gate ──
+    # Desaturated pixels (white coats, gray objects) can't be screen even
+    # if they have slight screen-channel excess from spill. Real screen
+    # is always highly saturated. Ramp: sat < 0.2 → gate=0, sat > 0.4 → gate=1.
+    px_max = img.max(axis=2).clip(min=0.01)
+    px_min = img.min(axis=2)
+    saturation = 1.0 - px_min / px_max
+    sat_gate = np.clip((saturation - 0.2) / 0.2, 0.0, 1.0)
+    key = key * sat_gate
+
+    # ── Smootherstep: sharpens foreground core, preserves edge gradients ──
+    # 5th-order Perlin interpolation: 6t^5 - 15t^4 + 10t^3
+    key = key * key * key * (key * (key * 6.0 - 15.0) + 10.0)
 
     # ── Darkness protection ──
     # Very dark pixels cannot be screen. Smooth ramp from 3% to 12%.
-    brightness = img.max(axis=2)
+    brightness = px_max  # reuse from saturation calc
     dark_gate = np.clip((brightness - 0.03) / 0.09, 0.0, 1.0)
     key = key * dark_gate
 
