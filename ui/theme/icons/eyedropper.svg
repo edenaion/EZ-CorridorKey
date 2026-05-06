@@ -1,17 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <!-- Classic eyedropper tool cursor, tip at bottom-left (2,30) -->
-  <g fill="none" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Tip / nib (pointed) -->
-    <path d="M3 29 L8 24" stroke-width="2"/>
-    <!-- Lower barrel (narrowing to tip) -->
-    <path d="M8 24 L10 20 L16 26 L12 28 Z" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
-    <!-- Upper barrel / body -->
-    <path d="M10 20 L20 10 L24 14 L16 26" fill="#CCCCCC" stroke="#000000" stroke-width="0.8"/>
-    <!-- Ring between barrel and bulb -->
-    <line x1="20" y1="10" x2="24" y2="14" stroke="#000000" stroke-width="1.5"/>
-    <!-- Bulb / reservoir -->
-    <path d="M20 10 L22 5 Q25 2 28 5 L28 5 Q31 8 28 11 L24 14" fill="#888888" stroke="#000000" stroke-width="0.8"/>
+  <!-- Eyedropper cursor based on iconmonstr eyedropper-1. Tip at ~(2,30). -->
+  <g transform="translate(1,0)">
+    <!-- Dark outline (slightly larger) for visibility on light backgrounds -->
+    <g fill="#000000" opacity="0.4" transform="translate(0.5,0.5)">
+      <path d="M2.5 29.5 L5.5 26 L4 24.5 Z"/>
+      <path d="M5.5 26 L7 24 L14.5 16.5 L18 20 L10.5 27.5 L8 28 Z"/>
+      <path d="M14.5 16.5 L21 10 L24.5 13.5 L18 20 Z"/>
+      <path d="M21 10 L23 7.5 Q24 6 25.5 5.5 Q28.5 4 29 7 Q29 9 27 10.5 L24.5 13.5 Z"/>
+    </g>
+    <!-- White body -->
+    <g fill="#FFFFFF" stroke="#000000" stroke-width="0.8">
+      <!-- Tip point -->
+      <path d="M2 29 L5 25.5 L3.5 24 Z"/>
+      <!-- Lower barrel -->
+      <path d="M5 25.5 L6.5 23.5 L14 16 L17.5 19.5 L10 27 L7.5 27.5 Z"/>
+      <!-- Upper barrel -->
+      <path d="M14 16 L20.5 9.5 L24 13 L17.5 19.5 Z"/>
+      <!-- Bulb -->
+      <path d="M20.5 9.5 L22.5 7 Q23.5 5.5 25 5 Q28 3.5 28.5 6.5 Q28.5 8.5 26.5 10 L24 13 Z"/>
+    </g>
+    <!-- Center line detail on barrel -->
+    <line x1="8" y1="25" x2="16" y2="17" stroke="#999999" stroke-width="0.6" stroke-linecap="round"/>
   </g>
-  <!-- Black outline for visibility on light backgrounds -->
-  <path d="M3 29 L8 24" stroke="#000000" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.3"/>
 </svg>
