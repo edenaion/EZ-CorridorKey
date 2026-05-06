@@ -30,12 +30,10 @@ class AnnotationMixin:
         if iv.annotation_mode == "fg":
             iv.set_annotation_mode(None)
             ov.set_annotation_mode(None)
-            self._dual_viewer.set_holdout_active(False)
         else:
             self._deactivate_eyedropper_if_active()
             iv.set_annotation_mode("fg")
             ov.set_annotation_mode("fg")
-            self._dual_viewer.set_holdout_active(self._is_chroma_key_active())
 
     def _toggle_annotation_bg(self) -> None:
         """Hotkey 2: toggle background brush. Routes to holdout if chroma key on."""
@@ -44,18 +42,10 @@ class AnnotationMixin:
         if iv.annotation_mode == "bg":
             iv.set_annotation_mode(None)
             ov.set_annotation_mode(None)
-            self._dual_viewer.set_holdout_active(False)
         else:
             self._deactivate_eyedropper_if_active()
             iv.set_annotation_mode("bg")
             ov.set_annotation_mode("bg")
-            self._dual_viewer.set_holdout_active(self._is_chroma_key_active())
-
-    def _deactivate_eyedropper_if_active(self) -> None:
-        """Turn off the eyedropper if it's currently on."""
-        ed_btn = self._param_panel._eyedropper_btn
-        if ed_btn.isChecked():
-            ed_btn.setChecked(False)
 
     def _cycle_fg_color(self) -> None:
         """Hotkey C: cycle foreground annotation color (green/blue)."""

@@ -124,21 +124,16 @@ class DualViewerPanel(QWidget):
     # ── Eyedropper ──
 
     def set_eyedropper_mode(self, enabled: bool) -> None:
-        """Toggle eyedropper on both viewports and wipe overlay.
-
-        Always samples from the input frame so the screen color comes from
-        the original footage regardless of which viewer the click lands on.
-        """
+        """Toggle eyedropper on both viewports. Always samples from the input frame."""
         self._input_viewer.set_eyedropper_mode(enabled)
         self._output_viewer.set_eyedropper_mode(enabled)
-        self._wipe_overlay.set_eyedropper_mode(enabled)
+        # Provide the input frame as the eyedropper source for the output viewer
+        # so it samples screen color from the original footage, not the keyed result.
         if enabled:
             input_img = self._input_viewer._split_view._single_image
             self._output_viewer.set_eyedropper_source(input_img)
-            self._wipe_overlay.set_eyedropper_source(input_img)
         else:
             self._output_viewer.set_eyedropper_source(None)
-            self._wipe_overlay.set_eyedropper_source(None)
 
     # ── Both-viewport annotation ──
 
@@ -150,19 +145,6 @@ class DualViewerPanel(QWidget):
         """
         shared_model = self._input_viewer.annotation_model
         self._output_viewer._split_view.set_annotation_model(shared_model)
-        # Cross-link siblings so painting on one viewer repaints the other live
-        self._input_viewer._split_view.set_annotation_sibling(self._output_viewer._split_view)
-        self._output_viewer._split_view.set_annotation_sibling(self._input_viewer._split_view)
-
-    def setup_shared_holdout(self) -> None:
-        """Share the input viewer's holdout model with the output viewer."""
-        shared_holdout = self._input_viewer.holdout_model
-        self._output_viewer._split_view.set_holdout_model(shared_holdout)
-
-    def set_holdout_active(self, active: bool) -> None:
-        """Route painting to holdout model on both viewers."""
-        self._input_viewer.set_holdout_active(active)
-        self._output_viewer.set_holdout_active(active)
 
     def set_input_exr_is_linear(self, enabled: bool) -> None:
         """Keep both viewers aligned on INPUT-mode EXR display interpretation."""

@@ -66,52 +66,16 @@ class ShortcutsMixin:
         self._dual_viewer._output_viewer.set_view_mode("Processed")
 
     def _toggle_eyedropper(self) -> None:
-        """Hotkey E: toggle eyedropper (pick screen color) mode.
-
-        If chroma key is closed, E opens it and activates the eyedropper.
-        Second E closes the eyedropper and chroma key (if E opened it).
-        If chroma key was already open, E just toggles the eyedropper.
-        """
-        ck_btn = self._param_panel._chroma_key_btn
-        ed_btn = self._param_panel._eyedropper_btn
-
-        if not ck_btn.isEnabled():
-            return
-
-        if ed_btn.isChecked():
-            # Eyedropper is on: turn it off
-            ed_btn.setChecked(False)
-            # Close chroma key if E was what opened it
-            if getattr(self, '_eyedropper_opened_chroma', False):
-                ck_btn.setChecked(False)
-                self._eyedropper_opened_chroma = False
-        elif ck_btn.isChecked():
-            # Chroma key already open: just activate eyedropper
-            self._deactivate_annotation_if_active()
-            ed_btn.setChecked(True)
-        else:
-            # Chroma key closed: open it and activate eyedropper
-            self._deactivate_annotation_if_active()
-            self._eyedropper_opened_chroma = True
-            ck_btn.setChecked(True)
-            ed_btn.setChecked(True)
-
-    def _deactivate_annotation_if_active(self) -> None:
-        """Turn off annotation brush mode if it's currently on."""
-        iv = self._dual_viewer.input_viewer
-        if iv.annotation_mode is not None:
-            iv.set_annotation_mode(None)
-            self._dual_viewer.output_viewer.set_annotation_mode(None)
-            self._dual_viewer.set_holdout_active(False)
+        """Hotkey E: toggle eyedropper (pick screen color) mode."""
+        btn = self._param_panel._eyedropper_btn
+        if self._param_panel._chroma_key_btn.isChecked():
+            btn.setChecked(not btn.isChecked())
 
     def _on_escape(self) -> None:
         """Escape: cancel the current action — auto-detects what's running."""
         # 1a. Exit eyedropper mode
         if self._param_panel._eyedropper_btn.isChecked():
             self._param_panel._eyedropper_btn.setChecked(False)
-            if getattr(self, '_eyedropper_opened_chroma', False):
-                self._param_panel._chroma_key_btn.setChecked(False)
-                self._eyedropper_opened_chroma = False
             return
 
         # 1b. Exit annotation mode (no confirmation needed)
@@ -120,7 +84,6 @@ class ShortcutsMixin:
         if iv.annotation_mode:
             iv.set_annotation_mode(None)
             ov.set_annotation_mode(None)
-            self._dual_viewer.set_holdout_active(False)
             return
 
         # 2. Detect active process and ask to cancel

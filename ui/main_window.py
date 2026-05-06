@@ -573,13 +573,31 @@ class MainWindow(
         self._param_panel.track_masks_requested.connect(self._on_track_masks)
         self._param_panel.import_alpha_requested.connect(self._on_import_alpha)
         self._param_panel.import_vmama_mask_requested.connect(self._on_import_vmama_mask)
+        self._param_panel.chroma_key_requested.connect(self._on_run_chroma_key)
+        self._param_panel.chroma_key_preview.connect(self._on_chroma_key_param_changed)
+        self._param_panel.eyedropper_requested.connect(self._on_eyedropper_toggle)
         self._param_panel.screen_color_changed.connect(self._on_screen_color_changed)
 
+        # Eyedropper color sampling from either viewport
+        self._dual_viewer.input_viewer._split_view.color_sampled.connect(self._on_color_sampled)
+        self._dual_viewer.output_viewer._split_view.color_sampled.connect(self._on_color_sampled)
+
+        # Share annotation model between viewports so painting works on either
+        self._dual_viewer.setup_shared_annotations()
+
+        # Annotation stroke finished -> update annotation counter + auto-save
+        # Wire from both viewports (shared model, strokes from either side)
         self._dual_viewer.input_viewer._split_view.stroke_finished.connect(
             _on_stroke_finished
         )
         self._dual_viewer.output_viewer._split_view.stroke_finished.connect(
             _on_stroke_finished
+        )
+        self._dual_viewer.output_viewer._split_view.stroke_finished.connect(
+            self._update_annotation_info
+        )
+        self._dual_viewer.output_viewer._split_view.stroke_finished.connect(
+            self._auto_save_annotations
         )
 
         # Parameter panel — live reprocess (debounced, Codex: coalesce stale)

@@ -50,9 +50,7 @@ class SplitViewWidget(QWidget):
 
     zoom_changed = Signal(float)  # current zoom level
     stroke_finished = Signal()    # emitted when an annotation stroke completes
-    color_sampled = Signal(int, int, int)  # eyedropper: final averaged RGB on release
-    color_preview = Signal(int, int, int)  # eyedropper: live running-average RGB during drag
-    screen_samples_ready = Signal(object)  # eyedropper: full list of (r,g,b) samples on release
+    color_sampled = Signal(int, int, int)  # eyedropper: sampled RGB from input frame
 
     # Divider hit zone (pixels from divider line)
     _DIVIDER_HIT_ZONE = 8
@@ -116,17 +114,9 @@ class SplitViewWidget(QWidget):
         self._straight_line: bool = False    # Alt+click straight-line mode
         self._line_anchor: tuple[float, float] | None = None  # anchor in image-pixel coords
 
-        # Holdout mask state (chroma key forced regions)
-        self._holdout_model: AnnotationModel | None = None
-        self._holdout_active: bool = False
-
         # Eyedropper state
         self._eyedropper_mode: bool = False
         self._eyedropper_source: QImage | None = None  # input frame to sample from
-        self._eyedropper_sampling: bool = False  # True while drag-sampling
-        self._eyedropper_samples: list[tuple[int, int, int]] = []  # accumulated RGB samples
-        self._eyedropper_last_img_pos: tuple[int, int] | None = None  # last sampled image coord
-        self._eyedropper_preview_color: tuple[int, int, int] | None = None  # running avg for overlay
 
     # ── Public API ──
 
@@ -197,7 +187,7 @@ class SplitViewWidget(QWidget):
         """Toggle eyedropper color sampling mode."""
         self._eyedropper_mode = enabled
         if enabled:
-            self.setCursor(_eyedropper_cursor())
+            self.setCursor(Qt.CrossCursor)
         elif not self._annotation_mode:
             self.unsetCursor()
         self.update()
@@ -205,49 +195,6 @@ class SplitViewWidget(QWidget):
     def set_eyedropper_source(self, image: QImage | None) -> None:
         """Set the source image for eyedropper sampling (always the input frame)."""
         self._eyedropper_source = image
-
-    def _sample_eyedropper_at(self, display_pos: QPointF) -> None:
-        """Sample pixel(s) at display_pos, interpolating from last position."""
-        source = self._eyedropper_source or self._annotation_target_image()
-        if source is None:
-            return
-        displayed = self._single_image or self._left_image
-        if displayed is None:
-            return
-        dest = self._image_rect(displayed)
-        iw, ih = source.width(), source.height()
-        dw, dh = displayed.width(), displayed.height()
-
-        img_x = (display_pos.x() - dest.x()) * dw / dest.width()
-        img_y = (display_pos.y() - dest.y()) * dh / dest.height()
-        sx = int(min(max(img_x * iw / dw, 0), iw - 1))
-        sy = int(min(max(img_y * ih / dh, 0), ih - 1))
-
-        # Interpolate between last and current position so fast drags don't skip
-        points = [(sx, sy)]
-        if self._eyedropper_last_img_pos is not None:
-            lx, ly = self._eyedropper_last_img_pos
-            dx, dy = sx - lx, sy - ly
-            dist = max(abs(dx), abs(dy))
-            if dist > 1:
-                for i in range(1, dist):
-                    t = i / dist
-                    points.append((int(lx + dx * t), int(ly + dy * t)))
-
-        for px, py in points:
-            pixel = source.pixelColor(px, py)
-            self._eyedropper_samples.append((pixel.red(), pixel.green(), pixel.blue()))
-
-        self._eyedropper_last_img_pos = (sx, sy)
-
-        # Emit running average as preview and store for overlay painting
-        n = len(self._eyedropper_samples)
-        avg_r = sum(s[0] for s in self._eyedropper_samples) // n
-        avg_g = sum(s[1] for s in self._eyedropper_samples) // n
-        avg_b = sum(s[2] for s in self._eyedropper_samples) // n
-        self._eyedropper_preview_color = (avg_r, avg_g, avg_b)
-        self.color_preview.emit(avg_r, avg_g, avg_b)
-        self.update()
 
     # ── Annotation API ──
 
@@ -656,13 +603,24 @@ class SplitViewWidget(QWidget):
                 self._dragging_divider = True
                 return
 
-        # Eyedropper: left-click starts drag-sampling screen color from input frame
+        # Eyedropper: left-click samples screen color from input frame
         if (event.button() == Qt.LeftButton
                 and self._eyedropper_mode):
-            self._eyedropper_sampling = True
-            self._eyedropper_samples.clear()
-            self._eyedropper_last_img_pos = None
-            self._sample_eyedropper_at(event.position())
+            source = self._eyedropper_source or self._annotation_target_image()
+            if source is not None:
+                # Map display coords to image coords using whichever image is displayed
+                displayed = self._single_image or self._left_image
+                if displayed is not None:
+                    dest = self._image_rect(displayed)
+                    iw, ih = source.width(), source.height()
+                    dw, dh = displayed.width(), displayed.height()
+                    img_x = (event.position().x() - dest.x()) * dw / dest.width()
+                    img_y = (event.position().y() - dest.y()) * dh / dest.height()
+                    # Scale from displayed image coords to source image coords
+                    sx = int(min(max(img_x * iw / dw, 0), iw - 1))
+                    sy = int(min(max(img_y * ih / dh, 0), ih - 1))
+                    pixel = source.pixelColor(sx, sy)
+                    self.color_sampled.emit(pixel.red(), pixel.green(), pixel.blue())
             return
 
         # Annotation: Shift+left-click = brush resize
