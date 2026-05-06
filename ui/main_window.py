@@ -578,9 +578,10 @@ class MainWindow(
         self._param_panel.eyedropper_requested.connect(self._on_eyedropper_toggle)
         self._param_panel.screen_color_changed.connect(self._on_screen_color_changed)
 
-        # Eyedropper color sampling from either viewport
+        # Eyedropper color sampling from either viewport (including wipe overlay)
         self._dual_viewer.input_viewer._split_view.color_sampled.connect(self._on_color_sampled)
         self._dual_viewer.output_viewer._split_view.color_sampled.connect(self._on_color_sampled)
+        self._dual_viewer._wipe_overlay.color_sampled.connect(self._on_color_sampled)
 
         # Share annotation model between viewports so painting works on either
         self._dual_viewer.setup_shared_annotations()
