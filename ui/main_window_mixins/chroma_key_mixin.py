@@ -79,12 +79,32 @@ class ChromaKeyMixin:
         # which triggers _on_eyedropper_toggled(False) -> set_eyedropper_mode(False)
         # through the signal chain. No need to call set_eyedropper_mode directly.
         self._param_panel.set_sampled_screen_color(r, g, b)
-        # Trigger preview with the new color
+        # Trigger preview with the new color and persist
         self._schedule_chroma_key_preview()
+        self._save_chroma_params()
 
     def _on_chroma_key_param_changed(self) -> None:
-        """Any chroma key parameter changed - schedule a preview update."""
+        """Any chroma key parameter changed - schedule a preview update and save."""
         self._schedule_chroma_key_preview()
+        self._save_chroma_params()
+
+    def _save_chroma_params(self) -> None:
+        """Persist current chroma key params to clip.json."""
+        clip = self._current_clip
+        if clip is None:
+            return
+        from backend.project import save_chroma_params
+        params = self._param_panel.get_chroma_params()
+        save_chroma_params(clip.root_path, params)
+
+    def _load_chroma_params_for_clip(self, clip) -> None:
+        """Load saved chroma key params from clip.json and apply to UI."""
+        from backend.project import load_chroma_params
+        params = load_chroma_params(clip.root_path)
+        if params:
+            self._param_panel.set_chroma_params(params)
+        else:
+            self._param_panel.reset_chroma_params()
 
     def _schedule_chroma_key_preview(self) -> None:
         """Debounced chroma key preview on the current frame."""
