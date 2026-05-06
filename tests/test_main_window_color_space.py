@@ -17,10 +17,18 @@ from ui.main_window import (
 )
 
 
+class _DummyBgColor:
+    """Minimal mock for the BG Color dropdown (QComboBox)."""
+
+    def currentIndex(self):
+        return 0  # "Auto"
+
+
 class _DummyParamPanel:
     def __init__(self, *, input_is_linear: bool):
         self._input_is_linear = input_is_linear
         self.last_set_input_is_linear = input_is_linear
+        self._bg_color = _DummyBgColor()
 
     def get_params(self) -> InferenceParams:
         return InferenceParams(input_is_linear=self._input_is_linear)
@@ -145,6 +153,7 @@ def test_selecting_another_clip_remembers_previous_clip_color_space_override():
     window._gpu_worker = _DummyGpuWorker()
     window._status_bar = _DummyStatusBar()
     window._sync_selected_clip_view = lambda clip: None
+    window._detect_and_apply_screen_color = lambda clip: None
     window._update_annotation_info = lambda: None
     window._clip_has_videomama_ready_mask = lambda _clip: False
     window._refresh_input_thumbnail = lambda *_args, **_kwargs: None

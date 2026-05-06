@@ -610,10 +610,17 @@ class TestWriteOutputs:
 
 class TestRunInference:
     def _setup_service_with_mock_engine(self):
-        """Create a service with a mocked inference engine."""
+        """Create a service with a mocked inference engine.
+
+        Patches _resolve_screen_color to always return "green" so
+        auto-detection (which reads frames and may return "blue" for
+        random test data) doesn't trigger an engine pool reload.
+        """
         svc = CorridorKeyService()
         svc._device = "cuda"
         svc._active_model = _ActiveModel.INFERENCE
+        svc._engine_screen_color = "green"
+        svc._resolve_screen_color = lambda clip: "green"
         mock_engine = MagicMock()
         mock_engine.process_frame.return_value = {
             "fg": np.ones((4, 4, 3), dtype=np.float32) * 0.5,
@@ -895,7 +902,7 @@ class TestReprocessSingleFrame:
         }
         statuses: list[str] = []
 
-        def _fake_get_engine_pool(on_status=None):
+        def _fake_get_engine_pool(on_status=None, screen_color="green"):
             assert on_status is not None
             on_status("Loading engine 1/1...")
             return [mock_engine]

@@ -87,6 +87,10 @@ class CorridorKeyEngine:
     # Below this: tiled refiner + selective compile. Above: full-frame compile.
     _VRAM_TILE_THRESHOLD_GB = 12
 
+    # Class-level flag: only log the compile-failure warning once across all
+    # engine instances in a session (avoids spamming N warnings for N engines).
+    _compile_failure_logged = False
+
     # Optimization modes:
     #   'auto'  — detect VRAM and pick best strategy (default)
     #   'speed' — torch.compile, no tiling (12GB+ VRAM)
@@ -255,10 +259,17 @@ class CorridorKeyEngine:
         except Exception as cache_error:
             logger.debug(f"cuda cache clear skipped after compile failure: {cache_error}")
 
-        logger.warning(
-            "Compile runtime failed (%s); falling back to eager mode for this session",
-            self._compile_error,
-        )
+        if not CorridorKeyEngine._compile_failure_logged:
+            CorridorKeyEngine._compile_failure_logged = True
+            logger.warning(
+                "Compile runtime failed (%s); falling back to eager mode for this session",
+                self._compile_error,
+            )
+        else:
+            logger.debug(
+                "Compile runtime failed (same error, additional engine): %s",
+                self._compile_error,
+            )
 
     def _forward_model(self, inp_t: torch.Tensor, refiner_scale_t: torch.Tensor):
         """Run the model once, retrying eagerly only for compile-specific failures."""
@@ -409,7 +420,10 @@ class CorridorKeyEngine:
                     del os.environ['_TRITON_PATCH_BACKENDS']
             except Exception as e:
                 self._use_compile = False
-                logger.warning(f"Triton unavailable, skipping torch.compile: {type(e).__name__}: {e}")
+                if not CorridorKeyEngine._compile_failure_logged:
+                    logger.warning(f"Triton unavailable, skipping torch.compile: {type(e).__name__}: {e}")
+                else:
+                    logger.debug(f"Triton unavailable (additional engine): {type(e).__name__}: {e}")
 
             if self._use_compile and self.tile_size > 0 and hasattr(eager_model, 'refiner') and eager_model.refiner is not None:
                 try:
@@ -417,10 +431,13 @@ class CorridorKeyEngine:
                     eager_model.refiner.compile_tile_kernel()
                     logger.info(f"Refiner tile compile: {_time.monotonic() - t0:.1f}s")
                 except Exception as e:
-                    logger.warning(
-                        f"Refiner tile kernel compile failed (falling back to eager tiles): "
-                        f"{type(e).__name__}: {e}"
-                    )
+                    if not CorridorKeyEngine._compile_failure_logged:
+                        logger.warning(
+                            f"Refiner tile kernel compile failed (falling back to eager tiles): "
+                            f"{type(e).__name__}: {e}"
+                        )
+                    else:
+                        logger.debug(f"Refiner tile compile failed (additional engine): {type(e).__name__}: {e}")
 
             if self._use_compile:
                 try:
@@ -438,7 +455,11 @@ class CorridorKeyEngine:
                     logger.info(f"torch.compile complete: {_time.monotonic() - t0:.1f}s")
                 except Exception as e:
                     self._compiled_model = None
-                    logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
+                    if not CorridorKeyEngine._compile_failure_logged:
+                        CorridorKeyEngine._compile_failure_logged = True
+                        logger.warning(f"torch.compile failed (falling back to eager): {type(e).__name__}: {e}")
+                    else:
+                        logger.debug(f"torch.compile failed (additional engine): {type(e).__name__}: {e}")
 
         self._status("Model ready")
         return model
