@@ -63,12 +63,25 @@ class ShortcutsMixin:
     def _view_mode_proc(self) -> None:
         self._dual_viewer._output_viewer.set_view_mode("Processed")
 
+    def _toggle_eyedropper(self) -> None:
+        """Hotkey E: toggle eyedropper (pick screen color) mode."""
+        btn = self._param_panel._eyedropper_btn
+        if self._param_panel._chroma_key_btn.isChecked():
+            btn.setChecked(not btn.isChecked())
+
     def _on_escape(self) -> None:
         """Escape: cancel the current action — auto-detects what's running."""
-        # 1. Exit annotation mode (no confirmation needed)
+        # 1a. Exit eyedropper mode
+        if self._param_panel._eyedropper_btn.isChecked():
+            self._param_panel._eyedropper_btn.setChecked(False)
+            return
+
+        # 1b. Exit annotation mode (no confirmation needed)
         iv = self._dual_viewer.input_viewer
+        ov = self._dual_viewer.output_viewer
         if iv.annotation_mode:
             iv.set_annotation_mode(None)
+            ov.set_annotation_mode(None)
             return
 
         # 2. Detect active process and ask to cancel

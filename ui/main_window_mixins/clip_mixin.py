@@ -199,9 +199,10 @@ class ClipMixin:
             needs_extraction=needs_extraction,
         )
 
-        # Enable GVM/BiRefNet/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
+        # Enable GVM/BiRefNet/ChromaKey/VideoMaMa/MatAnyone2/Import Alpha buttons based on state
         self._param_panel.set_gvm_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
         self._param_panel.set_birefnet_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
+        self._param_panel.set_chroma_key_enabled(clip.state in (ClipState.RAW, ClipState.MASKED))
         has_mask = self._clip_has_videomama_ready_mask(clip)
         self._param_panel.set_videomama_enabled(has_mask)
         self._param_panel.set_matanyone2_enabled(has_mask)

@@ -36,6 +36,14 @@ class _DummyParamPanel:
     def set_input_is_linear(self, input_is_linear: bool) -> None:
         self.last_set_input_is_linear = input_is_linear
 
+    def set_gvm_enabled(self, enabled): pass
+    def set_birefnet_enabled(self, enabled): pass
+    def set_chroma_key_enabled(self, enabled): pass
+    def set_videomama_enabled(self, enabled): pass
+    def set_matanyone2_enabled(self, enabled): pass
+    def set_import_alpha_enabled(self, enabled): pass
+    def set_annotation_info(self, annotated, total): pass
+
 
 class _DummyDualViewer:
     def __init__(self):

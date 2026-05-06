@@ -116,6 +116,36 @@ class DualViewerPanel(QWidget):
         """Access the input (left) viewer."""
         return self._input_viewer
 
+    @property
+    def output_viewer(self) -> PreviewViewport:
+        """Access the output (right) viewer."""
+        return self._output_viewer
+
+    # ── Eyedropper ──
+
+    def set_eyedropper_mode(self, enabled: bool) -> None:
+        """Toggle eyedropper on both viewports. Always samples from the input frame."""
+        self._input_viewer.set_eyedropper_mode(enabled)
+        self._output_viewer.set_eyedropper_mode(enabled)
+        # Provide the input frame as the eyedropper source for the output viewer
+        # so it samples screen color from the original footage, not the keyed result.
+        if enabled:
+            input_img = self._input_viewer._split_view._single_image
+            self._output_viewer.set_eyedropper_source(input_img)
+        else:
+            self._output_viewer.set_eyedropper_source(None)
+
+    # ── Both-viewport annotation ──
+
+    def setup_shared_annotations(self) -> None:
+        """Share the input viewer's AnnotationModel with the output viewer.
+
+        Call once after construction so paint strokes appear on and can be
+        drawn from either viewport.
+        """
+        shared_model = self._input_viewer.annotation_model
+        self._output_viewer._split_view.set_annotation_model(shared_model)
+
     def set_input_exr_is_linear(self, enabled: bool) -> None:
         """Keep both viewers aligned on INPUT-mode EXR display interpretation."""
         self._input_viewer.set_input_exr_is_linear(enabled)

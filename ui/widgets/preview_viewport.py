@@ -149,6 +149,16 @@ class PreviewViewport(QWidget):
         if self._split_view.split_enabled:
             self._load_split_images()
 
+    # ── Eyedropper API ──
+
+    def set_eyedropper_mode(self, enabled: bool) -> None:
+        """Toggle eyedropper color sampling on this viewport."""
+        self._split_view.set_eyedropper_mode(enabled)
+
+    def set_eyedropper_source(self, image: QImage | None) -> None:
+        """Set the input frame image for eyedropper sampling."""
+        self._split_view.set_eyedropper_source(image)
+
     # ── Annotation API ──
 
     def set_annotation_mode(self, mode: str | None) -> None:

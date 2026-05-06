@@ -37,6 +37,7 @@ class SplitViewWidget(QWidget):
 
     zoom_changed = Signal(float)  # current zoom level
     stroke_finished = Signal()    # emitted when an annotation stroke completes
+    color_sampled = Signal(int, int, int)  # eyedropper: sampled RGB from input frame
 
     # Divider hit zone (pixels from divider line)
     _DIVIDER_HIT_ZONE = 8
@@ -98,6 +99,10 @@ class SplitViewWidget(QWidget):
         self._mouse_pos: QPointF = QPointF()  # last known mouse position (display)
         self._straight_line: bool = False    # Alt+click straight-line mode
         self._line_anchor: tuple[float, float] | None = None  # anchor in image-pixel coords
+
+        # Eyedropper state
+        self._eyedropper_mode: bool = False
+        self._eyedropper_source: QImage | None = None  # input frame to sample from
 
     # ── Public API ──
 
@@ -162,6 +167,21 @@ class SplitViewWidget(QWidget):
         self.zoom_changed.emit(self._zoom)
         self.update()
 
+    # ── Eyedropper API ──
+
+    def set_eyedropper_mode(self, enabled: bool) -> None:
+        """Toggle eyedropper color sampling mode."""
+        self._eyedropper_mode = enabled
+        if enabled:
+            self.setCursor(Qt.CrossCursor)
+        elif not self._annotation_mode:
+            self.unsetCursor()
+        self.update()
+
+    def set_eyedropper_source(self, image: QImage | None) -> None:
+        """Set the source image for eyedropper sampling (always the input frame)."""
+        self._eyedropper_source = image
+
     # ── Annotation API ──
 
     def set_annotation_mode(self, mode: str | None) -> None:
@@ -169,7 +189,7 @@ class SplitViewWidget(QWidget):
         self._annotation_mode = mode
         if mode:
             self.setCursor(Qt.CrossCursor)
-        else:
+        elif not self._eyedropper_mode:
             self.unsetCursor()
         self.update()
 
@@ -490,6 +510,26 @@ class SplitViewWidget(QWidget):
             if abs(event.position().x() - divider_x) < self._DIVIDER_HIT_ZONE:
                 self._dragging_divider = True
                 return
+
+        # Eyedropper: left-click samples screen color from input frame
+        if (event.button() == Qt.LeftButton
+                and self._eyedropper_mode):
+            source = self._eyedropper_source or self._annotation_target_image()
+            if source is not None:
+                # Map display coords to image coords using whichever image is displayed
+                displayed = self._single_image or self._left_image
+                if displayed is not None:
+                    dest = self._image_rect(displayed)
+                    iw, ih = source.width(), source.height()
+                    dw, dh = displayed.width(), displayed.height()
+                    img_x = (event.position().x() - dest.x()) * dw / dest.width()
+                    img_y = (event.position().y() - dest.y()) * dh / dest.height()
+                    # Scale from displayed image coords to source image coords
+                    sx = int(min(max(img_x * iw / dw, 0), iw - 1))
+                    sy = int(min(max(img_y * ih / dh, 0), ih - 1))
+                    pixel = source.pixelColor(sx, sy)
+                    self.color_sampled.emit(pixel.red(), pixel.green(), pixel.blue())
+            return
 
         # Annotation: Shift+left-click = brush resize
         if (event.button() == Qt.LeftButton

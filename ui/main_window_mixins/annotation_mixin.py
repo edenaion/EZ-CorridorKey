@@ -20,18 +20,24 @@ class AnnotationMixin:
     def _toggle_annotation_fg(self) -> None:
         """Hotkey 1: toggle green (foreground) annotation brush."""
         iv = self._dual_viewer.input_viewer
+        ov = self._dual_viewer.output_viewer
         if iv.annotation_mode == "fg":
             iv.set_annotation_mode(None)
+            ov.set_annotation_mode(None)
         else:
             iv.set_annotation_mode("fg")
+            ov.set_annotation_mode("fg")
 
     def _toggle_annotation_bg(self) -> None:
         """Hotkey 2: toggle red (background) annotation brush."""
         iv = self._dual_viewer.input_viewer
+        ov = self._dual_viewer.output_viewer
         if iv.annotation_mode == "bg":
             iv.set_annotation_mode(None)
+            ov.set_annotation_mode(None)
         else:
             iv.set_annotation_mode("bg")
+            ov.set_annotation_mode("bg")
 
     def _cycle_fg_color(self) -> None:
         """Hotkey C: cycle foreground annotation color (green/blue)."""

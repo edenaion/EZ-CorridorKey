@@ -211,3 +211,88 @@ class AutoPipelinesMixin:
             f"BiRefNet complete for '{clip.name}': "
             f"{frames_written} alpha frames in {time.monotonic() - t_start:.1f}s"
         )
+
+    def run_chroma_key(
+        self,
+        clip: ClipEntry,
+        chroma_params: dict,
+        job=None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Generate alpha hints via chroma key color-difference method.
+
+        Pure CPU — no GPU lock needed, no model loading.
+        Transitions clip: RAW -> READY (creates AlphaHint directory).
+
+        chroma_params keys:
+            screen_color: (r, g, b) tuple 0-255 or None
+            screen_type: "green" or "blue"
+            strength: float
+            clip_black: float
+            clip_white: float
+            shrink_grow: int (pixels)
+            edge_blur: int (pixels)
+        """
+        import cv2 as _cv2
+        from CorridorKeyModule.core.chroma_key import chroma_key_matte
+
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for chroma key")
+
+        t_start = time.monotonic()
+
+        selected_input_names = self._selected_sequence_files(clip)
+        if not selected_input_names:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for chroma key")
+
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        os.makedirs(alpha_dir, exist_ok=True)
+
+        num_frames = len(selected_input_names)
+        if on_progress:
+            on_progress(clip.name, 0, num_frames)
+
+        for i, fname in enumerate(selected_input_names):
+            if job and job.is_cancelled:
+                raise JobCancelledError(clip.name, i)
+
+            frame_path = os.path.join(clip.input_asset.path, fname)
+            frame_bgr = _cv2.imread(frame_path, _cv2.IMREAD_COLOR)
+            if frame_bgr is None:
+                logger.warning(f"Chroma key: could not read {frame_path}, skipping")
+                continue
+            frame_rgb = _cv2.cvtColor(frame_bgr, _cv2.COLOR_BGR2RGB)
+
+            matte = chroma_key_matte(
+                frame_rgb,
+                screen_color=chroma_params.get("screen_color"),
+                screen_type=chroma_params.get("screen_type", "green"),
+                strength=chroma_params.get("strength", 1.0),
+                clip_black=chroma_params.get("clip_black", 0.0),
+                clip_white=chroma_params.get("clip_white", 1.0),
+                shrink_grow=chroma_params.get("shrink_grow", 0),
+                edge_blur=chroma_params.get("edge_blur", 0),
+            )
+
+            stem = os.path.splitext(fname)[0]
+            out_path = os.path.join(alpha_dir, f"{stem}.png")
+            _cv2.imwrite(out_path, matte)
+
+            if on_progress:
+                elapsed = time.monotonic() - t_start
+                fps = (i + 1) / elapsed if elapsed > 0 else 0
+                on_progress(clip.name, i + 1, num_frames, fps=fps)
+
+        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+
+        try:
+            clip.transition_to(ClipState.READY)
+        except Exception as e:
+            if on_warning:
+                on_warning(f"State transition after chroma key: {e}")
+
+        logger.info(
+            f"Chroma key complete for '{clip.name}': "
+            f"{num_frames} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )

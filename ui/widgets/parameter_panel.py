@@ -78,6 +78,9 @@ class ParameterPanel(QWidget):
     track_masks_requested = Signal()  # Track annotation prompts into dense masks
     import_alpha_requested = Signal()  # Import own AlphaHint folder
     import_vmama_mask_requested = Signal()  # Import mask for VideoMaMa bypass
+    chroma_key_requested = Signal(dict)  # GENERATE chroma key, emits params dict
+    chroma_key_preview = Signal()         # any chroma key param changed (live preview)
+    eyedropper_requested = Signal(bool)   # toggle eyedropper mode on viewer
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -110,6 +113,132 @@ class ParameterPanel(QWidget):
         alpha_group = QGroupBox("ALPHA GENERATION")
         alpha_layout = QVBoxLayout(alpha_group)
         alpha_layout.setSpacing(8)
+
+        # -- Manual sub-section (Chroma Key) --
+        manual_label = QLabel("Manual")
+        manual_label.setAlignment(Qt.AlignCenter)
+        manual_label.setStyleSheet("color: #A0A090; font-size: 10px; margin: 0px 0 2px 0;")
+        alpha_layout.addWidget(manual_label)
+
+        self._chroma_key_btn = QPushButton("CHROMA KEY")
+        self._chroma_key_btn.setEnabled(False)
+        self._chroma_key_btn.setCheckable(True)
+        self._chroma_key_btn.setToolTip(
+            "Generate alpha hints using a traditional chroma keyer.\n"
+            "Best for clean green/blue screen shots.\n"
+            "No GPU or AI model required — instant processing.\n\n"
+            "Click to expand parameters, then click GENERATE."
+        )
+        self._chroma_key_btn.toggled.connect(self._on_chroma_key_toggled)
+        alpha_layout.addWidget(self._chroma_key_btn)
+
+        # Chroma key parameter container (hidden until button is toggled on)
+        self._chroma_params_widget = QWidget()
+        ck_layout = QVBoxLayout(self._chroma_params_widget)
+        ck_layout.setContentsMargins(4, 4, 4, 4)
+        ck_layout.setSpacing(4)
+
+        # Eyedropper row: button + color swatch
+        eyedropper_row = QHBoxLayout()
+        eyedropper_row.setSpacing(4)
+        self._eyedropper_btn = QPushButton("\U0001F4A7 Pick Screen Color (E)")
+        self._eyedropper_btn.setToolTip(
+            "Click on the viewer to sample the screen color.\n"
+            "Works on either the input or output viewport.\n"
+            "Hotkey: E"
+        )
+        self._eyedropper_btn.setCheckable(True)
+        self._eyedropper_btn.toggled.connect(self._on_eyedropper_toggled)
+        eyedropper_row.addWidget(self._eyedropper_btn, 1)
+
+        self._color_swatch = QLabel("")
+        self._color_swatch.setFixedSize(30, 24)
+        self._color_swatch.setStyleSheet("background: #00B140; border: 1px solid #5A5940;")
+        self._color_swatch.setToolTip("Sampled screen color")
+        eyedropper_row.addWidget(self._color_swatch)
+        ck_layout.addLayout(eyedropper_row)
+
+        # Key Strength slider (0.1 - 3.0)
+        self._ck_strength_label = QLabel("Key Strength: 1.0")
+        ck_layout.addWidget(self._ck_strength_label)
+        self._ck_strength = _no_scroll_wheel(QSlider(Qt.Horizontal))
+        self._ck_strength.setRange(1, 100)  # 0.1 to 10.0 in steps of 0.1
+        self._ck_strength.setValue(10)
+        self._ck_strength.setToolTip("How aggressively to key the screen color. Higher = more separation.")
+        self._ck_strength.valueChanged.connect(
+            lambda v: self._ck_strength_label.setText(f"Key Strength: {v / 10:.1f}")
+        )
+        self._ck_strength.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
+        ck_layout.addWidget(self._ck_strength)
+
+        # Clip Black slider (0.0 - 1.0)
+        self._ck_clip_black_label = QLabel("Clip Black: 0.0")
+        ck_layout.addWidget(self._ck_clip_black_label)
+        self._ck_clip_black = _no_scroll_wheel(QSlider(Qt.Horizontal))
+        self._ck_clip_black.setRange(0, 100)
+        self._ck_clip_black.setValue(0)
+        self._ck_clip_black.setToolTip("Push near-transparent values to fully transparent.\nCleans up noise in background areas.")
+        self._ck_clip_black.valueChanged.connect(
+            lambda v: self._ck_clip_black_label.setText(f"Clip Black: {v / 100:.2f}")
+        )
+        self._ck_clip_black.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
+        ck_layout.addWidget(self._ck_clip_black)
+
+        # Clip White slider (0.0 - 1.0)
+        self._ck_clip_white_label = QLabel("Clip White: 1.0")
+        ck_layout.addWidget(self._ck_clip_white_label)
+        self._ck_clip_white = _no_scroll_wheel(QSlider(Qt.Horizontal))
+        self._ck_clip_white.setRange(0, 100)
+        self._ck_clip_white.setValue(100)
+        self._ck_clip_white.setToolTip("Push near-opaque values to fully opaque.\nSolidifies the foreground core.")
+        self._ck_clip_white.valueChanged.connect(
+            lambda v: self._ck_clip_white_label.setText(f"Clip White: {v / 100:.2f}")
+        )
+        self._ck_clip_white.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
+        ck_layout.addWidget(self._ck_clip_white)
+
+        # Shrink/Grow spinbox
+        sg_row = QHBoxLayout()
+        sg_row.setSpacing(4)
+        sg_row.addWidget(QLabel("Shrink/Grow"))
+        self._ck_shrink_grow = _no_scroll_wheel(QSpinBox())
+        self._ck_shrink_grow.setRange(-50, 50)
+        self._ck_shrink_grow.setValue(0)
+        self._ck_shrink_grow.setSuffix("px")
+        self._ck_shrink_grow.setToolTip("Erode (negative) or dilate (positive) the matte edge.\n0 = no change.")
+        self._ck_shrink_grow.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
+        sg_row.addWidget(self._ck_shrink_grow)
+        ck_layout.addLayout(sg_row)
+
+        # Edge Blur spinbox
+        eb_row = QHBoxLayout()
+        eb_row.setSpacing(4)
+        eb_row.addWidget(QLabel("Edge Blur"))
+        self._ck_edge_blur = _no_scroll_wheel(QSpinBox())
+        self._ck_edge_blur.setRange(0, 50)
+        self._ck_edge_blur.setValue(0)
+        self._ck_edge_blur.setSuffix("px")
+        self._ck_edge_blur.setToolTip("Gaussian blur radius for softening matte edges.\n0 = no blur.")
+        self._ck_edge_blur.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
+        eb_row.addWidget(self._ck_edge_blur)
+        ck_layout.addLayout(eb_row)
+
+        # Generate button
+        self._ck_generate_btn = QPushButton("GENERATE")
+        self._ck_generate_btn.setToolTip("Generate alpha hint frames for the entire clip using these chroma key settings.")
+        self._ck_generate_btn.clicked.connect(self._on_chroma_key_generate)
+        ck_layout.addWidget(self._ck_generate_btn)
+
+        self._chroma_params_widget.hide()
+        alpha_layout.addWidget(self._chroma_params_widget)
+
+        # Sampled screen color for chroma key (RGB tuple or None)
+        self._ck_screen_color: tuple[int, int, int] | None = None
+
+        ck_or_label = QLabel("— or —")
+        ck_or_label.setAlignment(Qt.AlignCenter)
+        ck_or_label.setStyleSheet("color: #808070; font-size: 11px;")
+        alpha_layout.addWidget(ck_or_label)
 
         # -- Automatic sub-section --
         auto_label = QLabel("Automatic")
@@ -656,3 +785,50 @@ class ParameterPanel(QWidget):
         else:
             self._annotation_info.setText("")
             self._track_masks_btn.setEnabled(False)
+
+    # ── Chroma Key ──
+
+    def set_chroma_key_enabled(self, enabled: bool) -> None:
+        """Enable/disable Chroma Key button based on clip state."""
+        self._chroma_key_btn.setEnabled(enabled)
+        if not enabled:
+            self._chroma_key_btn.setChecked(False)
+
+    def _on_chroma_key_toggled(self, checked: bool) -> None:
+        """Show/hide chroma key parameter panel."""
+        self._chroma_params_widget.setVisible(checked)
+        if not checked:
+            # Deactivate eyedropper when collapsing
+            self._eyedropper_btn.setChecked(False)
+
+    def _on_eyedropper_toggled(self, checked: bool) -> None:
+        """Toggle eyedropper mode on the viewer."""
+        self.eyedropper_requested.emit(checked)
+
+    def set_sampled_screen_color(self, r: int, g: int, b: int) -> None:
+        """Update the color swatch with a sampled screen color."""
+        self._ck_screen_color = (r, g, b)
+        self._color_swatch.setStyleSheet(
+            f"background: rgb({r},{g},{b}); border: 1px solid #5A5940;"
+        )
+        # Auto-exit eyedropper after sampling
+        self._eyedropper_btn.setChecked(False)
+
+    def get_chroma_params(self) -> dict:
+        """Snapshot current chroma key parameters."""
+        bg_idx = self._bg_color.currentIndex()
+        screen_type = ["auto", "green", "blue"][bg_idx]
+        # "auto" passes through — resolved by the caller using clip's detected color
+        return {
+            "screen_color": self._ck_screen_color,
+            "screen_type": screen_type,
+            "strength": self._ck_strength.value() / 10.0,
+            "clip_black": self._ck_clip_black.value() / 100.0,
+            "clip_white": self._ck_clip_white.value() / 100.0,
+            "shrink_grow": self._ck_shrink_grow.value(),
+            "edge_blur": self._ck_edge_blur.value(),
+        }
+
+    def _on_chroma_key_generate(self) -> None:
+        """Emit chroma_key_requested with current params."""
+        self.chroma_key_requested.emit(self.get_chroma_params())
