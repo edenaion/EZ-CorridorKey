@@ -86,6 +86,7 @@ def stitch_video(
         stderr=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
         text=True,
+        encoding="utf-8", errors="replace",
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
 
