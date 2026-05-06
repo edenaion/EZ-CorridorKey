@@ -5,6 +5,8 @@ import logging
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QMessageBox, QPushButton, QWidget
 from PySide6.QtCore import Qt
 
+from . import _tr
+
 logger = logging.getLogger(__name__)
 
 
@@ -15,57 +17,57 @@ class MenuMixin:
         menu_bar = self.menuBar()
 
         # File menu
-        file_menu = menu_bar.addMenu("File")
-        import_menu = file_menu.addMenu("Import Clips")
-        import_menu.addAction("Import Folder...", self._on_import_folder)
-        import_menu.addAction("Import Video(s)...", self._on_import_videos)
-        import_menu.addAction("Import Image Sequence...", self._on_import_image_sequence)
+        file_menu = menu_bar.addMenu(_tr("File"))
+        import_menu = file_menu.addMenu(_tr("Import Clips"))
+        import_menu.addAction(_tr("Import Folder..."), self._on_import_folder)
+        import_menu.addAction(_tr("Import Video(s)..."), self._on_import_videos)
+        import_menu.addAction(_tr("Import Image Sequence..."), self._on_import_image_sequence)
         file_menu.addSeparator()
 
         # Session save/load (shortcuts managed by registry)
-        self._save_action = file_menu.addAction("Save Session", self._on_save_session)
-        self._open_action = file_menu.addAction("Open Project...", self._on_open_project)
+        self._save_action = file_menu.addAction(_tr("Save Session"), self._on_save_session)
+        self._open_action = file_menu.addAction(_tr("Open Project..."), self._on_open_project)
 
         file_menu.addSeparator()
         self._set_project_output_action = file_menu.addAction(
-            "Set Project Output Folder...", self._on_set_project_output_dir,
+            _tr("Set Project Output Folder..."), self._on_set_project_output_dir,
         )
         self._clear_project_output_action = file_menu.addAction(
-            "Clear Project Output Folder", self._on_clear_project_output_dir,
+            _tr("Clear Project Output Folder"), self._on_clear_project_output_dir,
         )
         self._set_project_output_action.setEnabled(False)
         self._clear_project_output_action.setEnabled(False)
 
         file_menu.addSeparator()
-        file_menu.addAction("Export Video...", self._on_export_video)
-        file_menu.addAction("Export All Videos", self._on_export_all_videos)
+        file_menu.addAction(_tr("Export Video..."), self._on_export_video)
+        file_menu.addAction(_tr("Export All Videos"), self._on_export_all_videos)
         file_menu.addSeparator()
-        file_menu.addAction("Return to Home", self._return_to_welcome)
-        file_menu.addAction("Exit", self.close)
+        file_menu.addAction(_tr("Return to Home"), self._return_to_welcome)
+        file_menu.addAction(_tr("Exit"), self.close)
 
         # Edit menu
-        edit_menu = menu_bar.addMenu("Edit")
-        self._prefs_action = edit_menu.addAction("Preferences...", self._show_preferences)
-        edit_menu.addAction("Hotkeys...", self._show_hotkeys)
-        edit_menu.addAction("Download Manager...", self._show_download_manager)
+        edit_menu = menu_bar.addMenu(_tr("Edit"))
+        self._prefs_action = edit_menu.addAction(_tr("Preferences..."), self._show_preferences)
+        edit_menu.addAction(_tr("Hotkeys..."), self._show_hotkeys)
+        edit_menu.addAction(_tr("Download Manager..."), self._show_download_manager)
         edit_menu.addSeparator()
-        edit_menu.addAction("Track Paint Masks", self._on_track_masks)
-        edit_menu.addAction("Clear Paint Strokes", self._on_clear_annotations)
+        edit_menu.addAction(_tr("Track Paint Masks"), self._on_track_masks)
+        edit_menu.addAction(_tr("Clear Paint Strokes"), self._on_clear_annotations)
 
         # View menu
-        view_menu = menu_bar.addMenu("View")
-        view_menu.addAction("Reset Layout", self._reset_layout)
-        view_menu.addAction("Toggle Queue Panel", self._toggle_queue_panel)
+        view_menu = menu_bar.addMenu(_tr("View"))
+        view_menu.addAction(_tr("Reset Layout"), self._reset_layout)
+        view_menu.addAction(_tr("Toggle Queue Panel"), self._toggle_queue_panel)
 
-        view_menu.addAction("Reset Zoom", self._on_reset_zoom)
+        view_menu.addAction(_tr("Reset Zoom"), self._on_reset_zoom)
 
         # Help menu
-        help_menu = menu_bar.addMenu("Help")
-        help_menu.addAction("Console", self._toggle_debug_console)
+        help_menu = menu_bar.addMenu(_tr("Help"))
+        help_menu.addAction(_tr("Console"), self._toggle_debug_console)
         help_menu.addSeparator()
-        help_menu.addAction("Report Issue...", self._show_report_issue)
+        help_menu.addAction(_tr("Report Issue..."), self._show_report_issue)
         help_menu.addSeparator()
-        help_menu.addAction("About", self._show_about)
+        help_menu.addAction(_tr("About"), self._show_about)
 
         # Click sound on any menu action
         menu_bar.triggered.connect(lambda _: self._menu_click_sound())
@@ -76,7 +78,7 @@ class MenuMixin:
         corner_layout.setContentsMargins(0, 0, 4, 0)
         corner_layout.setSpacing(8)
 
-        self._update_btn = QPushButton("Update Available")
+        self._update_btn = QPushButton(_tr("Update Available"))
         self._update_btn.setVisible(False)
         self._update_btn.setCursor(Qt.PointingHandCursor)
         self._update_btn.setStyleSheet(
@@ -115,12 +117,12 @@ class MenuMixin:
 
     def _on_set_project_output_dir(self) -> None:
         if not self._clips_dir:
-            QMessageBox.information(self, "No Project", "Open a project first.")
+            QMessageBox.information(self, _tr("No Project"), _tr("Open a project first."))
             return
         from backend.project import load_project_output_dir, save_project_output_dir
         current = load_project_output_dir(self._clips_dir)
         folder = QFileDialog.getExistingDirectory(
-            self, "Set Project Output Folder", current or self._clips_dir,
+            self, _tr("Set Project Output Folder"), current or self._clips_dir,
         )
         if not folder:
             return

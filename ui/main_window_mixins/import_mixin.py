@@ -7,6 +7,8 @@ import re
 from PySide6.QtWidgets import QMessageBox, QFileDialog, QInputDialog
 from PySide6.QtCore import Slot
 
+from . import _tr
+
 from backend.project import VIDEO_FILE_FILTER
 from ui.widgets.preferences_dialog import (
     KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE,
@@ -34,7 +36,7 @@ class ImportMixin:
         so only that project's clips appear in the browser (project isolation).
         """
         if not os.path.isdir(workspace_path):
-            QMessageBox.warning(self, "Missing", f"Workspace no longer exists:\n{workspace_path}")
+            QMessageBox.warning(self, _tr("Missing"), _tr("Workspace no longer exists:\n%s") % workspace_path)
             self._recent_store.remove(workspace_path)
             self._welcome.refresh_recents()
             return
@@ -112,8 +114,8 @@ class ImportMixin:
         display_name = None
         if len(video_paths) > 1:
             name, ok = QInputDialog.getText(
-                self, "Name Your Project",
-                "Give your project a name:",
+                self, _tr("Name Your Project"),
+                _tr("Give your project a name:"),
             )
             if not ok:
                 return  # user cancelled
@@ -137,7 +139,7 @@ class ImportMixin:
     def _on_import_folder(self) -> None:
         """File -> Import Clips -> Import Folder — context-aware."""
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Clips Directory", "",
+            self, _tr("Select Clips Directory"), "",
             QFileDialog.ShowDirsOnly,
         )
         if not dir_path:
@@ -152,7 +154,7 @@ class ImportMixin:
     def _on_import_videos(self) -> None:
         """File -> Import Clips -> Import Video(s) — context-aware."""
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select Video Files", "",
+            self, _tr("Select Video Files"), "",
             VIDEO_FILE_FILTER,
         )
         if not paths:
@@ -167,7 +169,7 @@ class ImportMixin:
     def _on_import_image_sequence(self) -> None:
         """File -> Import Clips -> Import Image Sequence — context-aware."""
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Image Sequence Folder", "",
+            self, _tr("Select Image Sequence Folder"), "",
             QFileDialog.ShowDirsOnly,
         )
         if not dir_path:
@@ -177,8 +179,8 @@ class ImportMixin:
         if not self._clips_dir:
             folder_name = os.path.basename(dir_path.rstrip("/\\"))
             name, ok = QInputDialog.getText(
-                self, "Name Your Project",
-                "Give your project a name:",
+                self, _tr("Name Your Project"),
+                _tr("Give your project a name:"),
                 text=folder_name,
             )
             if not ok:
@@ -200,8 +202,8 @@ class ImportMixin:
 
         if not videos and not is_seq:
             QMessageBox.information(
-                self, "No Media",
-                "No video files or image sequences found in that folder."
+                self, _tr("No Media"),
+                _tr("No video files or image sequences found in that folder.")
             )
             return
 
@@ -251,8 +253,8 @@ class ImportMixin:
         if skipped and not new_videos and not restored:
             names = ", ".join(f'"{s}"' for s in skipped[:3])
             QMessageBox.information(
-                self, "Already Imported",
-                f"All selected videos are already in the project ({names})."
+                self, _tr("Already Imported"),
+                _tr("All selected videos are already in the project (%s).") % names
             )
             return
 
@@ -285,9 +287,9 @@ class ImportMixin:
 
         if not folder_has_image_sequence(folder_path):
             QMessageBox.information(
-                self, "No Images",
-                "No image files found in that folder.\n\n"
-                "Supported formats: PNG, JPG, EXR, TIF, TIFF, BMP, DPX"
+                self, _tr("No Images"),
+                _tr("No image files found in that folder.\n\n"
+                    "Supported formats: PNG, JPG, EXR, TIF, TIFF, BMP, DPX")
             )
             return
 
@@ -296,8 +298,8 @@ class ImportMixin:
             existing = find_clip_by_source(self._clips_dir, folder_path)
             if existing:
                 QMessageBox.information(
-                    self, "Already Imported",
-                    f"This sequence is already in the project as \"{existing}\"."
+                    self, _tr("Already Imported"),
+                    _tr("This sequence is already in the project as \"%s\".") % existing
                 )
                 return
             # Restore if it was previously removed
@@ -316,11 +318,11 @@ class ImportMixin:
             if len(dupes) > 5:
                 sample += f" ... ({len(dupes)} total)"
             QMessageBox.warning(
-                self, "Duplicate Filenames",
-                f"Found files with the same name but different extensions:\n"
-                f"{sample}\n\n"
-                f"This would cause output file conflicts. Please use one format "
-                f"per sequence folder."
+                self, _tr("Duplicate Filenames"),
+                _tr("Found files with the same name but different extensions:\n"
+                    "%s\n\n"
+                    "This would cause output file conflicts. Please use one format "
+                    "per sequence folder.") % sample
             )
             return
 
@@ -361,8 +363,8 @@ class ImportMixin:
         if not self._clips_dir:
             folder_name = os.path.basename(parent_folder.rstrip("/\\"))
             name, ok = QInputDialog.getText(
-                self, "Name Your Project",
-                "Give your project a name:",
+                self, _tr("Name Your Project"),
+                _tr("Give your project a name:"),
                 text=folder_name,
             )
             if not ok:
@@ -375,18 +377,18 @@ class ImportMixin:
             folder_count = count_sequence_frames(parent_folder)
 
             msg = QMessageBox(self)
-            msg.setWindowTitle("Import Image Frames")
+            msg.setWindowTitle(_tr("Import Image Frames"))
             msg.setText(
-                f"You dropped {n} image file(s).\n"
-                f"The source folder contains {folder_count} image(s) total."
+                _tr("You dropped %d image file(s).\n"
+                    "The source folder contains %d image(s) total.") % (n, folder_count)
             )
-            msg.setInformativeText("How would you like to import?")
+            msg.setInformativeText(_tr("How would you like to import?"))
 
             btn_just_these = msg.addButton(
-                f"Copy Just These {n}", QMessageBox.AcceptRole,
+                _tr("Copy Just These %d") % n, QMessageBox.AcceptRole,
             )
             btn_full_seq = msg.addButton(
-                "Import Full Sequence", QMessageBox.ActionRole,
+                _tr("Import Full Sequence"), QMessageBox.ActionRole,
             )
             msg.addButton(QMessageBox.Cancel)
             msg.setDefaultButton(btn_full_seq)
@@ -473,8 +475,8 @@ class ImportMixin:
 
         if not videos and not is_seq:
             QMessageBox.information(
-                self, "No Media",
-                "No video files or image sequences found in that folder."
+                self, _tr("No Media"),
+                _tr("No video files or image sequences found in that folder.")
             )
             return
 

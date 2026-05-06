@@ -78,20 +78,20 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         input_header_row.setContentsMargins(0, 0, 4, 0)
         input_header_row.setSpacing(0)
 
-        self._input_header = QLabel("INPUT (0)")
+        self._input_header = QLabel(self.tr("INPUT (0)"))
         self._input_header.setObjectName("trayHeader")
         input_header_row.addWidget(self._input_header)
         input_header_row.addStretch()
 
-        self._reset_io_btn = QPushButton("RESET I/O")
+        self._reset_io_btn = QPushButton(self.tr("RESET I/O"))
         self._reset_io_btn.setObjectName("trayAddBtn")
-        self._reset_io_btn.setToolTip("Clear in/out markers on all clips")
+        self._reset_io_btn.setToolTip(self.tr("Clear in/out markers on all clips"))
         self._reset_io_btn.clicked.connect(self._on_reset_in_out)
         input_header_row.addWidget(self._reset_io_btn)
 
-        self._add_btn = QPushButton("+ ADD")
+        self._add_btn = QPushButton(self.tr("+ ADD"))
         self._add_btn.setObjectName("trayAddBtn")
-        self._add_btn.setToolTip("Import clips — choose a folder or video file(s)")
+        self._add_btn.setToolTip(self.tr("Import clips — choose a folder or video file(s)"))
         self._add_btn.clicked.connect(self._on_add_clicked)
         input_header_row.addWidget(self._add_btn)
 
@@ -119,7 +119,7 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         export_section.setContentsMargins(0, 0, 0, 0)
         export_section.setSpacing(0)
 
-        self._export_header = QLabel("EXPORTS (0)")
+        self._export_header = QLabel(self.tr("EXPORTS (0)"))
         self._export_header.setObjectName("trayHeader")
         export_section.addWidget(self._export_header)
 
@@ -166,9 +166,9 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
     def _on_add_clicked(self) -> None:
         """Show import menu below the +ADD button."""
         menu = QMenu(self)
-        menu.addAction("Import Folder...", self._import_folder)
-        menu.addAction("Import Video(s)...", self._import_videos)
-        menu.addAction("Import Image Sequence...", self._import_image_sequence)
+        menu.addAction(self.tr("Import Folder..."), self._import_folder)
+        menu.addAction(self.tr("Import Video(s)..."), self._import_videos)
+        menu.addAction(self.tr("Import Image Sequence..."), self._import_image_sequence)
         menu.exec(self._add_btn.mapToGlobal(self._add_btn.rect().bottomLeft()))
 
     def _on_reset_in_out(self) -> None:
@@ -177,18 +177,18 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         clips_with_range = [c for c in self._model.clips if c.in_out_range is not None]
         if not clips_with_range:
             QMessageBox.information(
-                self, "No Markers",
-                "No clips have in/out markers set.",
+                self, self.tr("No Markers"),
+                self.tr("No clips have in/out markers set."),
             )
             return
 
         n = len(clips_with_range)
         # First confirmation
         result = QMessageBox.question(
-            self, "Reset In/Out Markers",
-            f"This will clear in/out markers on {n} clip{'s' if n > 1 else ''}.\n\n"
-            "All clips will revert to full-clip processing.\n"
-            "Continue?",
+            self, self.tr("Reset In/Out Markers"),
+            self.tr("This will clear in/out markers on %d clip(s).\n\n"
+                    "All clips will revert to full-clip processing.\n"
+                    "Continue?") % n,
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if result != QMessageBox.Yes:
@@ -196,9 +196,9 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
         # Second confirmation
         result2 = QMessageBox.warning(
-            self, "Confirm Reset",
-            f"Are you sure? This cannot be undone.\n\n"
-            f"Clearing in/out markers on {n} clip{'s' if n > 1 else ''}.",
+            self, self.tr("Confirm Reset"),
+            self.tr("Are you sure? This cannot be undone.\n\n"
+                    "Clearing in/out markers on %d clip(s).") % n,
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if result2 != QMessageBox.Yes:
@@ -209,7 +209,7 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
     def _import_folder(self) -> None:
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Clips Directory", "",
+            self, self.tr("Select Clips Directory"), "",
             QFileDialog.ShowDirsOnly,
         )
         if dir_path:
@@ -217,7 +217,7 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
     def _import_videos(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select Video Files", "",
+            self, self.tr("Select Video Files"), "",
             VIDEO_FILE_FILTER,
         )
         if paths:
@@ -225,7 +225,7 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
 
     def _import_image_sequence(self) -> None:
         dir_path = QFileDialog.getExistingDirectory(
-            self, "Select Image Sequence Folder", "",
+            self, self.tr("Select Image Sequence Folder"), "",
             QFileDialog.ShowDirsOnly,
         )
         if dir_path:
@@ -356,8 +356,8 @@ class IOTrayPanel(IOTrayActionsMixin, QWidget):
         self._input_canvas.set_clips(all_clips, self._model)
         self._export_canvas.set_clips(complete_clips, self._model)
 
-        self._input_header.setText(f"INPUT ({len(all_clips)})")
-        self._export_header.setText(f"EXPORTS ({len(complete_clips)})")
+        self._input_header.setText(self.tr("INPUT (%d)") % len(all_clips))
+        self._export_header.setText(self.tr("EXPORTS (%d)") % len(complete_clips))
 
     def _on_data_changed(self, top_left, bottom_right, roles) -> None:
         """Handle model data changes — lightweight repaint for progress,

@@ -13,7 +13,7 @@ import logging
 
 from PySide6.QtWidgets import QApplication, QMessageBox, QDialogButtonBox
 from PySide6.QtGui import QFontDatabase, QFont, QIcon
-from PySide6.QtCore import Qt, QObject, QEvent
+from PySide6.QtCore import Qt, QObject, QEvent, QTranslator, QLocale
 
 from ui.theme import load_stylesheet
 
@@ -132,6 +132,38 @@ def _migrate_legacy_settings() -> None:
     logger.info("Migrated %d settings from Corridor Digital/CorridorKey", len(old_keys))
 
 
+def _install_translator(app: QApplication) -> None:
+    """Load a .qm translation file based on user preference or system locale."""
+    from PySide6.QtCore import QSettings
+
+    settings = QSettings()
+    lang = settings.value("ui/language", "", type=str)
+    if not lang:
+        lang = QLocale.system().name().split("_")[0]  # e.g. "fr" from "fr_FR"
+
+    if lang == "en":
+        return  # English is the source language, no translation needed
+
+    if getattr(sys, "frozen", False):
+        translations_dir = os.path.join(sys._MEIPASS, "ui", "translations")
+    else:
+        translations_dir = os.path.join(os.path.dirname(__file__), "translations")
+
+    qm_file = os.path.join(translations_dir, f"corridorkey_{lang}.qm")
+    if not os.path.isfile(qm_file):
+        logger.debug("No translation file for '%s' at %s", lang, qm_file)
+        return
+
+    translator = QTranslator(app)
+    if translator.load(qm_file):
+        app.installTranslator(translator)
+        # Store ref on app to prevent garbage collection
+        app._corridorkey_translator = translator
+        logger.info("Loaded translation: %s", lang)
+    else:
+        logger.warning("Failed to load translation file: %s", qm_file)
+
+
 def _prewarm_mlx() -> None:
     """Import mlx.core on the main thread so Metal initializes safely.
 
@@ -167,6 +199,9 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     app.setApplicationName("EZ-CorridorKey")
     app.setApplicationDisplayName("EZ-CorridorKey")
     app.setOrganizationName("EZSCAPE")
+
+    # ── i18n: load translation for user's language ──
+    _install_translator(app)
 
     # One-time migration from old registry path
     # (Corridor Digital\CorridorKey → EZSCAPE\EZ-CorridorKey)

@@ -213,7 +213,7 @@ class PreviewViewport(QWidget):
             self._split_view._left_image = None
             self._split_view._right_image = None
             self._split_view.set_placeholder(
-                f"Extracting frames...\n{clip.name}"
+                self.tr("Extracting frames...\n%s") % clip.name
             )
             return
 
@@ -238,7 +238,9 @@ class PreviewViewport(QWidget):
         if self._frame_index.frame_count > 0:
             self._navigate_to(0)
         else:
-            self._split_view.set_placeholder(f"Selected: {clip.name}\nState: {clip.state.value}")
+            self._split_view.set_placeholder(
+                self.tr("Selected: %s\nState: %s") % (clip.name, clip.state.value)
+            )
 
     def refresh_available_assets(self) -> None:
         """Refresh mode availability and frame coverage without resetting navigation.
@@ -377,13 +379,15 @@ class PreviewViewport(QWidget):
         btn.setFixedHeight(24)
         btn.setFixedWidth(50)
         btn.setToolTip(
-            "Toggle A/B wipe comparison (hotkey: A)\n\n"
-            "Overlays input (A) and current output (B) in one viewer\n"
-            "with a diagonal divider line.\n\n"
-            "Drag the center handle to slide the line.\n"
-            "Drag above or below the handle to rotate the angle.\n"
-            "Scroll wheel to slide the line (Shift+scroll for fine-grain).\n"
-            "Middle-click the line to reset to default."
+            self.tr(
+                "Toggle A/B wipe comparison (hotkey: A)\n\n"
+                "Overlays input (A) and current output (B) in one viewer\n"
+                "with a diagonal divider line.\n\n"
+                "Drag the center handle to slide the line.\n"
+                "Drag above or below the handle to rotate the angle.\n"
+                "Scroll wheel to slide the line (Shift+scroll for fine-grain).\n"
+                "Middle-click the line to reset to default."
+            )
         )
         btn.setStyleSheet(
             "QPushButton { background-color: #1A1900; color: #808070; "
@@ -534,7 +538,7 @@ class PreviewViewport(QWidget):
 
         # Truly nothing to show for this stem (no input either).
         self._split_view.set_placeholder(
-            f"No frame available for stem {stem_index}"
+            self.tr("No frame available for stem %d") % stem_index
         )
 
     def _load_split_images(self) -> None:

@@ -60,8 +60,8 @@ class IOTrayActionsMixin:
             or (c.input_asset and c.input_asset.asset_type == "video")
         ]
         if needs_extract:
-            label_ext = (f"Run Extraction ({len(needs_extract)} clips)"
-                         if len(needs_extract) > 1 else "Run Extraction")
+            label_ext = (self.tr("Run Extraction (%d clips)") % len(needs_extract)
+                         if len(needs_extract) > 1 else self.tr("Run Extraction"))
             extract_action = QAction(label_ext, self)
             extract_action.triggered.connect(
                 lambda: self.extract_requested.emit(needs_extract))
@@ -69,14 +69,14 @@ class IOTrayActionsMixin:
             menu.addSeparator()
 
         # Rename — single only
-        rename_action = QAction("Rename...", self)
+        rename_action = QAction(self.tr("Rename..."), self)
         rename_action.setEnabled(not multi)
         rename_action.triggered.connect(lambda: self._rename_clip(clip))
         menu.addAction(rename_action)
 
         # Open in file manager — single only
-        _fm = "Finder" if sys.platform == "darwin" else "Explorer"
-        explorer_action = QAction(f"Open in {_fm}", self)
+        _fm = self.tr("Finder") if sys.platform == "darwin" else self.tr("Explorer")
+        explorer_action = QAction(self.tr("Open in %s") % _fm, self)
         explorer_action.setEnabled(not multi)
         explorer_action.triggered.connect(lambda: self._open_in_explorer(clip))
         menu.addAction(explorer_action)
@@ -86,7 +86,7 @@ class IOTrayActionsMixin:
         # Clear Mask — only show when there's a VideoMamaMaskHint to clear
         any_mask = any(c.mask_asset is not None for c in selected)
         if any_mask:
-            label_mask = f"Clear Mask ({n} clips)" if multi else "Clear Mask"
+            label_mask = self.tr("Clear Mask (%d clips)") % n if multi else self.tr("Clear Mask")
             clear_mask_action = QAction(label_mask, self)
             clear_mask_action.triggered.connect(lambda: self._clear_mask_batch(selected))
             menu.addAction(clear_mask_action)
@@ -94,7 +94,7 @@ class IOTrayActionsMixin:
         # Clear Alpha — only show when there's an AlphaHint to clear
         any_alpha = any(c.alpha_asset is not None for c in selected)
         if any_alpha:
-            label_alpha = f"Clear Alpha ({n} clips)" if multi else "Clear Alpha"
+            label_alpha = self.tr("Clear Alpha (%d clips)") % n if multi else self.tr("Clear Alpha")
             clear_alpha_action = QAction(label_alpha, self)
             clear_alpha_action.triggered.connect(lambda: self._clear_alpha_batch(selected))
             menu.addAction(clear_alpha_action)
@@ -102,7 +102,7 @@ class IOTrayActionsMixin:
         # Clear Outputs — only show when there are outputs to clear
         any_outputs = any(c.has_outputs for c in selected)
         if any_outputs:
-            label_clear = f"Clear Outputs ({n} clips)" if multi else "Clear Outputs"
+            label_clear = self.tr("Clear Outputs (%d clips)") % n if multi else self.tr("Clear Outputs")
             clear_action = QAction(label_clear, self)
             clear_action.triggered.connect(lambda: self._clear_outputs_batch(selected))
             menu.addAction(clear_action)
@@ -110,27 +110,27 @@ class IOTrayActionsMixin:
         # Clear All — show when there's any generated data to clear
         if any_mask or any_alpha or any_outputs:
             menu.addSeparator()
-            label_all = f"Clear All ({n} clips)" if multi else "Clear All"
+            label_all = self.tr("Clear All (%d clips)") % n if multi else self.tr("Clear All")
             clear_all_action = QAction(label_all, self)
             clear_all_action.triggered.connect(lambda: self._clear_all_batch(selected))
             menu.addAction(clear_all_action)
 
         # Set Output Directory — single clip only
         menu.addSeparator()
-        output_dir_action = QAction("Set Output Directory...", self)
+        output_dir_action = QAction(self.tr("Set Output Directory..."), self)
         output_dir_action.setEnabled(not multi)
         output_dir_action.triggered.connect(lambda: self._set_output_dir(clip))
         menu.addAction(output_dir_action)
 
         if clip.custom_output_dir:
-            clear_dir_action = QAction("Clear Output Directory Override", self)
+            clear_dir_action = QAction(self.tr("Clear Output Directory Override"), self)
             clear_dir_action.setEnabled(not multi)
             clear_dir_action.triggered.connect(lambda: self._clear_output_dir(clip))
             menu.addAction(clear_dir_action)
 
         # Remove...
         menu.addSeparator()
-        label_remove = f"Remove ({n} clips)..." if multi else "Remove..."
+        label_remove = self.tr("Remove (%d clips)...") % n if multi else self.tr("Remove...")
         remove_action = QAction(label_remove, self)
         remove_action.triggered.connect(lambda: self._remove_dialog(selected))
         menu.addAction(remove_action)
@@ -154,7 +154,7 @@ class IOTrayActionsMixin:
                 if subdirs:
                     for subdir in subdirs:
                         src = os.path.join(output_dir, subdir)
-                        action = QAction(f"Export {subdir} as Video...", self)
+                        action = QAction(self.tr("Export %s as Video...") % subdir, self)
                         action.triggered.connect(
                             lambda checked=False, c=clip, s=src: self.export_video_requested.emit(c, s)
                         )
@@ -166,7 +166,7 @@ class IOTrayActionsMixin:
         if not os.path.isdir(output_dir):
             output_dir = clip.root_path
 
-        open_action = QAction("Open Containing Folder", self)
+        open_action = QAction(self.tr("Open Containing Folder"), self)
         open_action.triggered.connect(
             lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(output_dir))
         )
@@ -180,7 +180,7 @@ class IOTrayActionsMixin:
         from backend.project import save_custom_output_dir
         start = clip.custom_output_dir or clip.output_dir
         path = QFileDialog.getExistingDirectory(
-            self, f"Output Directory for '{clip.name}'", start,
+            self, self.tr("Output Directory for '%s'") % clip.name, start,
             QFileDialog.ShowDirsOnly,
         )
         if not path:
@@ -211,7 +211,7 @@ class IOTrayActionsMixin:
 
         current = clip.name
         new_name, ok = QInputDialog.getText(
-            self, "Rename Clip", "New name:", text=current,
+            self, self.tr("Rename Clip"), self.tr("New name:"), text=current,
         )
         if not ok or not new_name.strip() or new_name.strip() == current:
             return
@@ -229,9 +229,9 @@ class IOTrayActionsMixin:
         if len(clips) > 3:
             names += f" (+{len(clips) - 3} more)"
         confirm = QMessageBox.question(
-            self, "Clear Mask",
-            f"Delete tracked masks for {len(clips)} clip(s)?\n{names}\n\n"
-            "This will remove all SAM2 mask frames from disk.",
+            self, self.tr("Clear Mask"),
+            self.tr("Delete tracked masks for %d clip(s)?\n%s\n\n"
+                    "This will remove all SAM2 mask frames from disk.") % (len(clips), names),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -293,9 +293,9 @@ class IOTrayActionsMixin:
         if len(clips) > 3:
             names += f" (+{len(clips) - 3} more)"
         confirm = QMessageBox.question(
-            self, "Clear All",
-            f"Remove ALL generated data for {len(clips)} clip(s)?\n{names}\n\n"
-            "This will delete masks, alpha hints, and all output frames.",
+            self, self.tr("Clear All"),
+            self.tr("Remove ALL generated data for %d clip(s)?\n%s\n\n"
+                    "This will delete masks, alpha hints, and all output frames.") % (len(clips), names),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -338,9 +338,9 @@ class IOTrayActionsMixin:
         if len(clips) > 3:
             names += f" (+{len(clips) - 3} more)"
         confirm = QMessageBox.question(
-            self, "Clear Alpha",
-            f"Delete AlphaHint for {len(clips)} clip(s)?\n{names}\n\n"
-            "This will remove all generated alpha hint frames from disk.",
+            self, self.tr("Clear Alpha"),
+            self.tr("Delete AlphaHint for %d clip(s)?\n%s\n\n"
+                    "This will remove all generated alpha hint frames from disk.") % (len(clips), names),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -370,9 +370,9 @@ class IOTrayActionsMixin:
         if len(clips) > 3:
             names += f" (+{len(clips) - 3} more)"
         confirm = QMessageBox.question(
-            self, "Clear Outputs",
-            f"Remove all output files for {len(clips)} clip(s)?\n{names}\n\n"
-            "This will delete FG, Matte, Comp, and Processed frames.",
+            self, self.tr("Clear Outputs"),
+            self.tr("Remove all output files for %d clip(s)?\n%s\n\n"
+                    "This will delete FG, Matte, Comp, and Processed frames.") % (len(clips), names),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if confirm != QMessageBox.Yes:
@@ -397,22 +397,20 @@ class IOTrayActionsMixin:
     def _remove_dialog(self, clips: list[ClipEntry]) -> None:
         """Show remove confirmation dialog with Remove from List / Delete from Disk options."""
         n = len(clips)
-        title = f"Remove {n} clip{'s' if n > 1 else ''}?"
+        title = self.tr("Remove %d clip(s)?") % n
 
         paths_text = "\n".join(c.root_path for c in clips[:5])
         if n > 5:
-            paths_text += f"\n... and {n - 5} more"
+            paths_text += self.tr("\n... and %d more") % (n - 5)
 
         msg = QMessageBox(self)
         msg.setWindowTitle(title)
         msg.setIcon(QMessageBox.Warning)
-        msg.setText(
-            f"How would you like to remove {n} clip{'s' if n > 1 else ''}?"
-        )
+        msg.setText(self.tr("How would you like to remove %d clip(s)?") % n)
         msg.setInformativeText(paths_text)
 
-        btn_list = msg.addButton("Remove from List", QMessageBox.AcceptRole)
-        btn_disk = msg.addButton("Delete from Disk", QMessageBox.DestructiveRole)
+        btn_list = msg.addButton(self.tr("Remove from List"), QMessageBox.AcceptRole)
+        btn_disk = msg.addButton(self.tr("Delete from Disk"), QMessageBox.DestructiveRole)
         msg.addButton(QMessageBox.Cancel)
 
         msg.exec()

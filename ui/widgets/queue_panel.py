@@ -98,7 +98,7 @@ class QueuePanel(QWidget):
         self._tab.setCursor(Qt.PointingHandCursor)
         self._tab.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self._tab.setFixedWidth(_TAB_W)
-        self._tab.setToolTip("Toggle queue panel (Q)")
+        self._tab.setToolTip(self.tr("Toggle queue panel (Q)"))
         self._tab.clicked.connect(self.toggle_collapsed)
 
         tab_layout = QVBoxLayout(self._tab)
@@ -135,7 +135,7 @@ class QueuePanel(QWidget):
         header_layout.setContentsMargins(8, 2, 4, 2)
         header_layout.setSpacing(4)
 
-        title = QLabel("QUEUE")
+        title = QLabel(self.tr("QUEUE"))
         title.setStyleSheet(
             "color: #CCCCAA; font-size: 11px; font-weight: 700; "
             "letter-spacing: 1px; background: transparent; border: none;"
@@ -150,7 +150,7 @@ class QueuePanel(QWidget):
 
         header_layout.addStretch()
 
-        self._clear_btn = QPushButton("Clear")
+        self._clear_btn = QPushButton(self.tr("Clear"))
         self._clear_btn.setFixedHeight(18)
         self._clear_btn.setCursor(Qt.PointingHandCursor)
         self._clear_btn.setStyleSheet(
@@ -159,7 +159,7 @@ class QueuePanel(QWidget):
             "color: #555540; }"
             "QPushButton:hover { color: #CCCCAA; border-color: #454430; }"
         )
-        self._clear_btn.setToolTip("Clear completed and cancelled jobs")
+        self._clear_btn.setToolTip(self.tr("Clear completed and cancelled jobs"))
         self._clear_btn.clicked.connect(self._on_clear)
         header_layout.addWidget(self._clear_btn)
 
@@ -313,7 +313,7 @@ class QueuePanel(QWidget):
         top = QHBoxLayout()
         top.setSpacing(6)
 
-        type_text = _JOB_TYPE_LABELS.get(job.job_type, "???")
+        type_text = self.tr(_JOB_TYPE_LABELS.get(job.job_type, "???"))
         type_label = QLabel(type_text)
         type_label.setStyleSheet(
             "color: #999980; font-size: 9px; font-weight: 700; "
@@ -333,7 +333,7 @@ class QueuePanel(QWidget):
                 "font-size: 9px; border: none; padding: 0; }"
                 "QPushButton:hover { color: #999980; }"
             )
-            dismiss_btn.setToolTip("Dismiss")
+            dismiss_btn.setToolTip(self.tr("Dismiss"))
             job_id = job.id
             dismiss_btn.clicked.connect(
                 lambda checked, jid=job_id: self._dismiss_job(jid)
@@ -385,7 +385,7 @@ class QueuePanel(QWidget):
     def _update_row_in_place(self, cache: _JobRowCache, job: GPUJob) -> None:
         """Update a cached row's widgets to reflect current job state."""
         color = _STATUS_COLORS.get(job.status, "#808070")
-        status_text = _STATUS_TEXT.get(job.status, "?")
+        status_text = self.tr(_STATUS_TEXT.get(job.status, "?"))
 
         pb = cache.progress_bar
         fl = cache.frame_label
@@ -405,7 +405,7 @@ class QueuePanel(QWidget):
                     pb.setRange(0, 0)
                 pb.show()
                 fl.hide()
-                sl.setText("Processing...")
+                sl.setText(self.tr("Processing..."))
                 sl.setStyleSheet(
                     f"color: {color}; font-size: 9px; border: none; background: transparent;"
                 )

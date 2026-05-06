@@ -83,7 +83,7 @@ class DebugConsoleWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent, Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setWindowTitle("Console")
+        self.setWindowTitle(self.tr("Console"))
         self.setAttribute(Qt.WA_DeleteOnClose, False)
 
         self._min_level = logging.DEBUG
@@ -126,7 +126,7 @@ class DebugConsoleWidget(QWidget):
         tb_layout.setContentsMargins(10, 0, 6, 0)
         tb_layout.setSpacing(8)
 
-        title_label = QLabel("CONSOLE")
+        title_label = QLabel(self.tr("CONSOLE"))
         title_label.setStyleSheet(
             "color: #FFF203; font-size: 11px; font-weight: 700;"
             "letter-spacing: 3px; border: none;"
@@ -169,20 +169,20 @@ class DebugConsoleWidget(QWidget):
             "selection-background-color: #2A2910; border: 1px solid #2A2910; }"
         )
         self._level_combo.currentTextChanged.connect(self._on_level_changed)
-        tl.addWidget(QLabel("Level:"))
+        tl.addWidget(QLabel(self.tr("Level:")))
         tl.addWidget(self._level_combo)
 
         tl.addStretch()
 
         # Pause button
-        self._pause_btn = QPushButton("Pause")
+        self._pause_btn = QPushButton(self.tr("Pause"))
         self._pause_btn.setFixedWidth(60)
         self._pause_btn.setStyleSheet(self._toolbar_btn_style())
         self._pause_btn.clicked.connect(self._toggle_pause)
         tl.addWidget(self._pause_btn)
 
         # Clear button
-        clear_btn = QPushButton("Clear")
+        clear_btn = QPushButton(self.tr("Clear"))
         clear_btn.setFixedWidth(60)
         clear_btn.setStyleSheet(self._toolbar_btn_style())
         clear_btn.clicked.connect(self._clear)
@@ -331,7 +331,7 @@ class DebugConsoleWidget(QWidget):
 
     def _toggle_pause(self) -> None:
         self._paused = not self._paused
-        self._pause_btn.setText("Resume" if self._paused else "Pause")
+        self._pause_btn.setText(self.tr("Resume") if self._paused else self.tr("Pause"))
 
     def _clear(self) -> None:
         self._output.clear()

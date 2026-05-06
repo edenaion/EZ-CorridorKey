@@ -259,13 +259,15 @@ class MainWindow(
             return True
         reply = QMessageBox.warning(
             self,
-            f"{feature_name} — Mac Performance Warning",
-            "GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) "
-            "are very slow on Mac (Apple Silicon MPS).\n\n"
-            "This may take hours for longer clips and could freeze your system.\n\n"
-            "Recommendation: Import pre-made alpha mattes from After Effects, "
-            "DaVinci Resolve, or Nuke instead.\n\n"
-            "Continue anyway? (This warning won't appear again this session.)",
+            self.tr("%s — Mac Performance Warning") % feature_name,
+            self.tr(
+                "GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) "
+                "are very slow on Mac (Apple Silicon MPS).\n\n"
+                "This may take hours for longer clips and could freeze your system.\n\n"
+                "Recommendation: Import pre-made alpha mattes from After Effects, "
+                "DaVinci Resolve, or Nuke instead.\n\n"
+                "Continue anyway? (This warning won't appear again this session.)"
+            ),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -277,7 +279,7 @@ class MainWindow(
     def __init__(self, service: CorridorKeyService | None = None,
                  store: RecentSessionsStore | None = None):
         super().__init__()
-        self.setWindowTitle("EZ-CorridorKey")
+        self.setWindowTitle(self.tr("EZ-CorridorKey"))
         self.setMinimumSize(1100, 650)
 
         container_env = str(os.getenv("CORRIDORKEY_CONTAINER_MODE", "0")).strip().lower()
@@ -431,10 +433,10 @@ class MainWindow(
         # GPU info (right side of brand bar)
         self._gpu_label = QLabel("")
         self._gpu_label.setObjectName("gpuName")
-        self._gpu_label.setToolTip("Detected GPU used for inference")
+        self._gpu_label.setToolTip(self.tr("Detected GPU used for inference"))
         top_bar.addWidget(self._gpu_label)
 
-        self._vram_label = QLabel("VRAM")
+        self._vram_label = QLabel(self.tr("VRAM"))
         self._vram_label.setStyleSheet("color: #808070; font-size: 10px;")
         top_bar.addWidget(self._vram_label)
 
@@ -445,13 +447,13 @@ class MainWindow(
         self._vram_bar.setTextVisible(False)
         self._vram_bar.setRange(0, 100)
         self._vram_bar.setValue(0)
-        self._vram_bar.setToolTip("GPU video memory usage — updates during inference")
+        self._vram_bar.setToolTip(self.tr("GPU video memory usage — updates during inference"))
         top_bar.addWidget(self._vram_bar)
 
         self._vram_text = QLabel("")
         self._vram_text.setObjectName("vramText")
         self._vram_text.setMinimumWidth(70)
-        self._vram_text.setToolTip("Current VRAM used / total available")
+        self._vram_text.setToolTip(self.tr("Current VRAM used / total available"))
         top_bar.addWidget(self._vram_text)
 
         main_layout.addLayout(top_bar)
@@ -630,16 +632,16 @@ class MainWindow(
         """Update VRAM/Memory meter in the top bar."""
         self._last_vram_info = info  # stash for Report Issue dialog
         if not info.get("available"):
-            self._vram_text.setText("No GPU")
+            self._vram_text.setText(self.tr("No GPU"))
             self._vram_bar.setValue(0)
             return
 
         # Apple Silicon uses unified memory, not dedicated VRAM
         name = info.get("name", "")
         if name.startswith("Apple"):
-            self._vram_label.setText("Memory")
-            self._vram_bar.setToolTip("Unified memory usage — CPU and GPU share the same pool")
-            self._vram_text.setToolTip("Current unified memory used / total available")
+            self._vram_label.setText(self.tr("Memory"))
+            self._vram_bar.setToolTip(self.tr("Unified memory usage — CPU and GPU share the same pool"))
+            self._vram_text.setToolTip(self.tr("Current unified memory used / total available"))
         pct = info.get("usage_pct", 0)
         used = info.get("used_gb", 0)
         total = info.get("total_gb", 0)

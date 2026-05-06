@@ -7,6 +7,8 @@ import os
 from PySide6.QtWidgets import QMessageBox, QFileDialog
 from PySide6.QtCore import Slot, QTimer
 
+from . import _tr
+
 from backend import ClipEntry, InferenceParams, OutputConfig
 
 logger = logging.getLogger(__name__)
@@ -175,7 +177,7 @@ class SessionMixin:
         """Save session to JSON sidecar in clips directory."""
         path = self._session_path()
         if not path:
-            QMessageBox.information(self, "No Folder", "Open a clips folder first.")
+            QMessageBox.information(self, _tr("No Folder"), _tr("Open a clips folder first."))
             return
 
         data = self._build_session_data()

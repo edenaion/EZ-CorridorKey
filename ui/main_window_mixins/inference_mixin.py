@@ -8,6 +8,8 @@ from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import Slot, QThread
 from PySide6.QtGui import QImage
 
+from . import _tr
+
 from backend import (
     ClipState, JobType,
     PipelineRoute, classify_pipeline_route,
@@ -127,17 +129,17 @@ class InferenceMixin:
             fill_pct = float(result.get("fill", 0.0)) * 100.0
             reply = QMessageBox.question(
                 self,
-                "Track Mask Preview",
-                f"SAM2 preview on frame {frame_number} covers {fill_pct:.1f}% of the frame.\n\n"
-                "If this looks right, continue with full Track Mask.\n"
-                "If not, keep painting corrections on this frame and run Track Mask again.",
+                _tr("Track Mask Preview"),
+                _tr("SAM2 preview on frame %d covers %.1f%% of the frame.\n\n"
+                    "If this looks right, continue with full Track Mask.\n"
+                    "If not, keep painting corrections on this frame and run Track Mask again.") % (frame_number, fill_pct),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.Yes,
             )
             if reply == QMessageBox.Yes:
                 self._submit_sam2_track_job(clip)
             else:
-                self._status_bar.set_message("Track preview ready. Refine paint strokes and run Track Mask again.")
+                self._status_bar.set_message(_tr("Track preview ready. Refine paint strokes and run Track Mask again."))
             return
 
         if 'comp' not in result:
@@ -189,9 +191,9 @@ class InferenceMixin:
         clip = self._current_clip
         if clip.state not in (ClipState.READY, ClipState.COMPLETE):
             QMessageBox.warning(
-                self, "Not Ready",
-                f"Clip '{clip.name}' is in {clip.state.value} state.\n"
-                "Only READY or COMPLETE clips can be processed.",
+                self, _tr("Not Ready"),
+                _tr("Clip '%s' is in %s state.\n"
+                    "Only READY or COMPLETE clips can be processed.") % (clip.name, clip.state.value),
             )
             return
 
@@ -202,14 +204,14 @@ class InferenceMixin:
             if 0 < alpha_count < input_count:
                 msg = QMessageBox(self)
                 msg.setIcon(QMessageBox.Warning)
-                msg.setWindowTitle("Incomplete Alpha")
+                msg.setWindowTitle(_tr("Incomplete Alpha"))
                 msg.setText(
-                    f"Alpha hints cover {alpha_count} of {input_count} frames.\n\n"
-                    "You can process the available range, re-run GVM to\n"
-                    "regenerate all alpha frames, or cancel."
+                    _tr("Alpha hints cover %d of %d frames.\n\n"
+                        "You can process the available range, re-run GVM to\n"
+                        "regenerate all alpha frames, or cancel.") % (alpha_count, input_count)
                 )
-                btn_process = msg.addButton("Process Available", QMessageBox.AcceptRole)
-                btn_rerun = msg.addButton("Re-run GVM", QMessageBox.ActionRole)
+                btn_process = msg.addButton(_tr("Process Available"), QMessageBox.AcceptRole)
+                btn_rerun = msg.addButton(_tr("Re-run GVM"), QMessageBox.ActionRole)
                 msg.addButton(QMessageBox.Cancel)
                 msg.exec()
                 clicked = msg.clickedButton()
@@ -246,7 +248,7 @@ class InferenceMixin:
             )
 
         if not self._service.job_queue.submit(job):
-            QMessageBox.information(self, "Duplicate", f"'{clip.name}' is already queued.")
+            QMessageBox.information(self, _tr("Duplicate"), _tr("'%s' is already queued.") % clip.name)
             return
 
         self._start_worker_if_needed(job.id)
@@ -273,7 +275,7 @@ class InferenceMixin:
         # Resume always processes full clip — no in/out range
 
         if not self._service.job_queue.submit(job):
-            QMessageBox.information(self, "Duplicate", f"'{clip.name}' is already queued.")
+            QMessageBox.information(self, _tr("Duplicate"), _tr("'%s' is already queued.") % clip.name)
             return
 
         self._start_worker_if_needed(job.id)
@@ -305,7 +307,7 @@ class InferenceMixin:
         """
         ready_clips = self._clip_model.clips_by_state(ClipState.READY)
         if not ready_clips:
-            QMessageBox.information(self, "No Clips", "No READY clips to process.")
+            QMessageBox.information(self, _tr("No Clips"), _tr("No READY clips to process."))
             return
 
         params = self._param_panel.get_params()
@@ -362,8 +364,8 @@ class InferenceMixin:
         if not routes:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.information(
-                self, "Nothing to Process",
-                "No selected clips are in a processable state.",
+                self, _tr("Nothing to Process"),
+                _tr("No selected clips are in a processable state."),
             )
             return
 

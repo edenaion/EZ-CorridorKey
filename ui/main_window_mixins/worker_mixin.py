@@ -6,6 +6,8 @@ import os
 from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import Slot
 
+from . import _tr
+
 from backend import ClipState, JobType
 from ui.workers.gpu_job_worker import create_job_snapshot
 
@@ -188,7 +190,7 @@ class WorkerMixin:
         from ui.sounds.audio_manager import UIAudio
         if target_state == ClipState.MASKED:
             UIAudio.mask_done()
-            self._status_bar.set_message(f"Track Mask complete for {clip_name}")
+            self._status_bar.set_message(_tr("Track Mask complete for %s") % clip_name)
         elif target_state == ClipState.READY:
             UIAudio.mask_done()
             type_label = {
@@ -204,11 +206,11 @@ class WorkerMixin:
                     alpha_info = f" ({c.alpha_asset.frame_count}/{c.input_asset.frame_count} alpha frames)"
                     break
             self._status_bar.set_message(
-                f"{type_label} complete for {clip_name}{alpha_info} -- Ready to Run Inference"
+                _tr("%s complete for %s%s -- Ready to Run Inference") % (type_label, clip_name, alpha_info)
             )
         elif target_state == ClipState.COMPLETE:
             UIAudio.inference_done()
-            self._status_bar.set_message(f"Inference complete: {clip_name}")
+            self._status_bar.set_message(_tr("Inference complete: %s") % clip_name)
 
         # Refresh views
         self._pending_live_asset_refresh_clip = None
@@ -250,7 +252,7 @@ class WorkerMixin:
                     break
             self._status_bar.stop_job_timer()
             self._status_bar.set_running(False)
-            self._status_bar.set_message(f"Cancelled: {clip_name}")
+            self._status_bar.set_message(_tr("Cancelled: %s") % clip_name)
             self._pending_live_asset_refresh_clip = None
             self._live_asset_refresh_timer.stop()
             self._queue_panel.refresh()
@@ -299,7 +301,7 @@ class WorkerMixin:
             )
             dlg.exec()
         else:
-            QMessageBox.critical(self, "Processing Error", f"Clip: {clip_name}\n\n{error_msg}")
+            QMessageBox.critical(self, _tr("Processing Error"), _tr("Clip: %s\n\n%s") % (clip_name, error_msg))
 
     @Slot()
     def _on_queue_empty(self) -> None:

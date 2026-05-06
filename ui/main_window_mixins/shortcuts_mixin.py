@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import QMessageBox
+
+from . import _tr
 from PySide6.QtGui import QKeySequence
 
 
@@ -90,8 +92,8 @@ class ShortcutsMixin:
             return
 
         reply = QMessageBox.question(
-            self, "Cancel",
-            f"Cancel {process_name}?",
+            self, _tr("Cancel"),
+            _tr("Cancel %s?") % process_name,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )

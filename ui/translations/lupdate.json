@@ -1,0 +1,5 @@
+{
+    "_comment": "Reference config for pyside6-lupdate. Run from repo root:",
+    "_command": "pyside6-lupdate -extensions py -recursive ui/ -ts ui/translations/corridorkey_en.ts",
+    "_note": "The -project flag uses a different JSON schema. Use the command above instead."
+}

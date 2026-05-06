@@ -8,6 +8,8 @@ import sys
 from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import Slot
 
+from . import _tr
+
 from backend import ClipState, JobType
 
 logger = logging.getLogger(__name__)
@@ -75,18 +77,18 @@ class CancelMixin:
             self._status_bar.set_running(True)
             self._status_bar.set_stop_button_mode(force=True)
             self._status_bar.set_message(
-                "Stop requested — waiting for current GPU step. "
-                "Press FORCE STOP to relaunch if it stays stuck."
+                _tr("Stop requested — waiting for current GPU step. "
+                    "Press FORCE STOP to relaunch if it stays stuck.")
             )
         else:
             self._force_stop_armed = False
             self._status_bar.set_running(False)
-            self._status_bar.set_message("Cancelled queued work.")
+            self._status_bar.set_message(_tr("Cancelled queued work."))
         self._queue_panel.refresh()
         logger.info("Processing cancelled by user")
         if is_videomama:
-            _Toast(self, "GPU is finishing the current chunk.\n"
-                         "VideoMaMa will stop after it completes.",
+            _Toast(self, _tr("GPU is finishing the current chunk.\n"
+                             "VideoMaMa will stop after it completes."),
                    center=True)
 
     def _force_restart_app(self) -> None:
@@ -126,14 +128,14 @@ class CancelMixin:
             logger.exception(f"Force stop relaunch failed: {e}")
             QMessageBox.critical(
                 self,
-                "Force Stop Failed",
-                "Could not relaunch the app automatically.\n\n"
-                "Please close and reopen EZ-CorridorKey manually.",
+                _tr("Force Stop Failed"),
+                _tr("Could not relaunch the app automatically.\n\n"
+                    "Please close and reopen EZ-CorridorKey manually."),
             )
             return
 
         self._skip_shutdown_cleanup = True
-        self._status_bar.set_message("Force restarting...")
+        self._status_bar.set_message(_tr("Force restarting..."))
         QApplication.instance().quit()
 
     @Slot()
@@ -147,11 +149,11 @@ class CancelMixin:
 
         if self._force_stop_armed:
             reply = QMessageBox.question(
-                self, "Force Stop",
-                "The current GPU step has not returned to Python.\n\n"
-                "Force Stop will auto-save the session and relaunch the app "
-                "to break the stuck job immediately.\n\n"
-                "Continue?",
+                self, _tr("Force Stop"),
+                _tr("The current GPU step has not returned to Python.\n\n"
+                    "Force Stop will auto-save the session and relaunch the app "
+                    "to break the stuck job immediately.\n\n"
+                    "Continue?"),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -161,8 +163,8 @@ class CancelMixin:
             return
 
         reply = QMessageBox.question(
-            self, "Cancel",
-            "Cancel processing?",
+            self, _tr("Cancel"),
+            _tr("Cancel processing?"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )

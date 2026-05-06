@@ -9,6 +9,8 @@ import numpy as np
 from PySide6.QtWidgets import QMessageBox
 from PySide6.QtGui import QImage
 
+from . import _tr
+
 from backend import ClipEntry
 
 logger = logging.getLogger(__name__)
@@ -44,7 +46,7 @@ class AnnotationMixin:
         from ui.widgets.annotation_overlay import cycle_fg_color
         name = cycle_fg_color()
         self._dual_viewer.input_viewer.update()
-        self._show_toast(f"Foreground color: {name}")
+        self._show_toast(_tr("Foreground color: %s") % name)
 
     def _auto_save_annotations(self) -> None:
         """Auto-save annotation strokes to disk after changes."""
@@ -90,8 +92,8 @@ class AnnotationMixin:
         model = iv.annotation_model
         if not model.has_annotations():
             QMessageBox.information(
-                self, "No Paint Strokes",
-                "Paint green (1) and red (2) strokes on frames first.",
+                self, _tr("No Paint Strokes"),
+                _tr("Paint green (1) and red (2) strokes on frames first."),
             )
             return
 
@@ -113,10 +115,10 @@ class AnnotationMixin:
         alpha_dir = os.path.join(clip.root_path, "AlphaHint")
         if os.path.isdir(alpha_dir):
             reply = QMessageBox.question(
-                self, "Replace Existing Alpha?",
-                "This clip already has an AlphaHint (from GVM or a previous run).\n\n"
-                "Tracking a new mask sequence will replace that alpha hint.\n\n"
-                "Remove existing AlphaHint and proceed?",
+                self, _tr("Replace Existing Alpha?"),
+                _tr("This clip already has an AlphaHint (from GVM or a previous run).\n\n"
+                    "Tracking a new mask sequence will replace that alpha hint.\n\n"
+                    "Remove existing AlphaHint and proceed?"),
             )
             if reply != QMessageBox.Yes:
                 return False
@@ -159,10 +161,10 @@ class AnnotationMixin:
         has_frame = model.has_annotations(stem_idx)
 
         box = QMessageBox(self)
-        box.setWindowTitle("Clear Paint Strokes")
-        box.setText("What would you like to clear?")
-        frame_btn = box.addButton("This Frame", QMessageBox.AcceptRole)
-        clip_btn = box.addButton("Entire Clip", QMessageBox.DestructiveRole)
+        box.setWindowTitle(_tr("Clear Paint Strokes"))
+        box.setText(_tr("What would you like to clear?"))
+        frame_btn = box.addButton(_tr("This Frame"), QMessageBox.AcceptRole)
+        clip_btn = box.addButton(_tr("Entire Clip"), QMessageBox.DestructiveRole)
         box.addButton(QMessageBox.Cancel)
 
         # Disable "This Frame" if current frame has no annotations

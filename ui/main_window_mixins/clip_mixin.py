@@ -5,6 +5,8 @@ import os
 
 from PySide6.QtCore import Slot, QTimer
 
+from . import _tr
+
 from backend import ClipEntry, ClipState, PipelineRoute, classify_pipeline_route
 
 logger = logging.getLogger(__name__)
@@ -67,11 +69,11 @@ class ClipMixin:
 
         reply = QMessageBox.question(
             self,
-            "Blue Screen Model Required",
-            "This clip uses a blue screen background.\n\n"
-            "The blue screen keying model (401 MB) is not installed. "
-            "Without it, the green model will be used as a fallback.\n\n"
-            "Download the blue screen model now?",
+            _tr("Blue Screen Model Required"),
+            _tr("This clip uses a blue screen background.\n\n"
+                "The blue screen keying model (401 MB) is not installed. "
+                "Without it, the green model will be used as a fallback.\n\n"
+                "Download the blue screen model now?"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
@@ -118,7 +120,7 @@ class ClipMixin:
             self._on_clip_selected(remaining[pick])
         else:
             self._current_clip = None
-            self._dual_viewer.show_placeholder("No clip selected")
+            self._dual_viewer.show_placeholder(_tr("No clip selected"))
             self._refresh_button_state()
 
     @Slot(object)
@@ -319,7 +321,7 @@ class ClipMixin:
             from ui.sounds.audio_manager import UIAudio
             from PySide6.QtWidgets import QMessageBox
             UIAudio.error()
-            QMessageBox.critical(self, "Scan Error", f"Failed to scan clips directory:\n{e}")
+            QMessageBox.critical(self, _tr("Scan Error"), _tr("Failed to scan clips directory:\n%s") % e)
 
     def _switch_to_workspace(self) -> None:
         """Switch from welcome screen to the 3-panel workspace."""

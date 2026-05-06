@@ -110,24 +110,26 @@ class ParameterPanel(QWidget):
         layout.setSpacing(4)
 
         # ── ALPHA GENERATION section (Step 1) ──
-        alpha_group = QGroupBox("ALPHA GENERATION")
+        alpha_group = QGroupBox(self.tr("ALPHA GENERATION"))
         alpha_layout = QVBoxLayout(alpha_group)
         alpha_layout.setSpacing(8)
 
         # -- Manual sub-section (Chroma Key) --
-        manual_label = QLabel("Manual")
+        manual_label = QLabel(self.tr("Manual"))
         manual_label.setAlignment(Qt.AlignCenter)
         manual_label.setStyleSheet("color: #A0A090; font-size: 10px; margin: 0px 0 2px 0;")
         alpha_layout.addWidget(manual_label)
 
-        self._chroma_key_btn = QPushButton("CHROMA KEY")
+        self._chroma_key_btn = QPushButton(self.tr("CHROMA KEY"))
         self._chroma_key_btn.setEnabled(False)
         self._chroma_key_btn.setCheckable(True)
         self._chroma_key_btn.setToolTip(
-            "Generate alpha hints using a traditional chroma keyer.\n"
-            "Best for clean green/blue screen shots.\n"
-            "No GPU or AI model required — instant processing.\n\n"
-            "Click to expand parameters, then click GENERATE."
+            self.tr(
+                "Generate alpha hints using a traditional chroma keyer.\n"
+                "Best for clean green/blue screen shots.\n"
+                "No GPU or AI model required \u2014 instant processing.\n\n"
+                "Click to expand parameters, then click GENERATE."
+            )
         )
         self._chroma_key_btn.toggled.connect(self._on_chroma_key_toggled)
         alpha_layout.addWidget(self._chroma_key_btn)
@@ -141,11 +143,13 @@ class ParameterPanel(QWidget):
         # Eyedropper row: button + color swatch
         eyedropper_row = QHBoxLayout()
         eyedropper_row.setSpacing(4)
-        self._eyedropper_btn = QPushButton("\U0001F4A7 Pick Screen Color (E)")
+        self._eyedropper_btn = QPushButton(self.tr("\U0001F4A7 Pick Screen Color (E)"))
         self._eyedropper_btn.setToolTip(
-            "Click on the viewer to sample the screen color.\n"
-            "Works on either the input or output viewport.\n"
-            "Hotkey: E"
+            self.tr(
+                "Click on the viewer to sample the screen color.\n"
+                "Works on either the input or output viewport.\n"
+                "Hotkey: E"
+            )
         )
         self._eyedropper_btn.setCheckable(True)
         self._eyedropper_btn.toggled.connect(self._on_eyedropper_toggled)
@@ -154,45 +158,45 @@ class ParameterPanel(QWidget):
         self._color_swatch = QLabel("")
         self._color_swatch.setFixedSize(30, 24)
         self._color_swatch.setStyleSheet("background: #00B140; border: 1px solid #5A5940;")
-        self._color_swatch.setToolTip("Sampled screen color")
+        self._color_swatch.setToolTip(self.tr("Sampled screen color"))
         eyedropper_row.addWidget(self._color_swatch)
         ck_layout.addLayout(eyedropper_row)
 
         # Key Strength slider (0.1 - 3.0)
-        self._ck_strength_label = QLabel("Key Strength: 1.0")
+        self._ck_strength_label = QLabel(self.tr("Key Strength: 1.0"))
         ck_layout.addWidget(self._ck_strength_label)
         self._ck_strength = _no_scroll_wheel(QSlider(Qt.Horizontal))
         self._ck_strength.setRange(1, 100)  # 0.1 to 10.0 in steps of 0.1
         self._ck_strength.setValue(10)
-        self._ck_strength.setToolTip("How aggressively to key the screen color. Higher = more separation.")
+        self._ck_strength.setToolTip(self.tr("How aggressively to key the screen color. Higher = more separation."))
         self._ck_strength.valueChanged.connect(
-            lambda v: self._ck_strength_label.setText(f"Key Strength: {v / 10:.1f}")
+            lambda v: self._ck_strength_label.setText(self.tr("Key Strength: %s") % f"{v / 10:.1f}")
         )
         self._ck_strength.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
         ck_layout.addWidget(self._ck_strength)
 
         # Clip Black slider (0.0 - 1.0)
-        self._ck_clip_black_label = QLabel("Clip Black: 0.0")
+        self._ck_clip_black_label = QLabel(self.tr("Clip Black: 0.0"))
         ck_layout.addWidget(self._ck_clip_black_label)
         self._ck_clip_black = _no_scroll_wheel(QSlider(Qt.Horizontal))
         self._ck_clip_black.setRange(0, 100)
         self._ck_clip_black.setValue(0)
-        self._ck_clip_black.setToolTip("Push near-transparent values to fully transparent.\nCleans up noise in background areas.")
+        self._ck_clip_black.setToolTip(self.tr("Push near-transparent values to fully transparent.\nCleans up noise in background areas."))
         self._ck_clip_black.valueChanged.connect(
-            lambda v: self._ck_clip_black_label.setText(f"Clip Black: {v / 100:.2f}")
+            lambda v: self._ck_clip_black_label.setText(self.tr("Clip Black: %s") % f"{v / 100:.2f}")
         )
         self._ck_clip_black.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
         ck_layout.addWidget(self._ck_clip_black)
 
         # Clip White slider (0.0 - 1.0)
-        self._ck_clip_white_label = QLabel("Clip White: 1.0")
+        self._ck_clip_white_label = QLabel(self.tr("Clip White: 1.0"))
         ck_layout.addWidget(self._ck_clip_white_label)
         self._ck_clip_white = _no_scroll_wheel(QSlider(Qt.Horizontal))
         self._ck_clip_white.setRange(0, 100)
         self._ck_clip_white.setValue(100)
-        self._ck_clip_white.setToolTip("Push near-opaque values to fully opaque.\nSolidifies the foreground core.")
+        self._ck_clip_white.setToolTip(self.tr("Push near-opaque values to fully opaque.\nSolidifies the foreground core."))
         self._ck_clip_white.valueChanged.connect(
-            lambda v: self._ck_clip_white_label.setText(f"Clip White: {v / 100:.2f}")
+            lambda v: self._ck_clip_white_label.setText(self.tr("Clip White: %s") % f"{v / 100:.2f}")
         )
         self._ck_clip_white.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
         ck_layout.addWidget(self._ck_clip_white)
@@ -200,12 +204,12 @@ class ParameterPanel(QWidget):
         # Shrink/Grow spinbox
         sg_row = QHBoxLayout()
         sg_row.setSpacing(4)
-        sg_row.addWidget(QLabel("Shrink/Grow"))
+        sg_row.addWidget(QLabel(self.tr("Shrink/Grow")))
         self._ck_shrink_grow = _no_scroll_wheel(QSpinBox())
         self._ck_shrink_grow.setRange(-50, 50)
         self._ck_shrink_grow.setValue(0)
         self._ck_shrink_grow.setSuffix("px")
-        self._ck_shrink_grow.setToolTip("Erode (negative) or dilate (positive) the matte edge.\n0 = no change.")
+        self._ck_shrink_grow.setToolTip(self.tr("Erode (negative) or dilate (positive) the matte edge.\n0 = no change."))
         self._ck_shrink_grow.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
         sg_row.addWidget(self._ck_shrink_grow)
         ck_layout.addLayout(sg_row)
@@ -213,19 +217,19 @@ class ParameterPanel(QWidget):
         # Edge Blur spinbox
         eb_row = QHBoxLayout()
         eb_row.setSpacing(4)
-        eb_row.addWidget(QLabel("Edge Blur"))
+        eb_row.addWidget(QLabel(self.tr("Edge Blur")))
         self._ck_edge_blur = _no_scroll_wheel(QSpinBox())
         self._ck_edge_blur.setRange(0, 50)
         self._ck_edge_blur.setValue(0)
         self._ck_edge_blur.setSuffix("px")
-        self._ck_edge_blur.setToolTip("Gaussian blur radius for softening matte edges.\n0 = no blur.")
+        self._ck_edge_blur.setToolTip(self.tr("Gaussian blur radius for softening matte edges.\n0 = no blur."))
         self._ck_edge_blur.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
         eb_row.addWidget(self._ck_edge_blur)
         ck_layout.addLayout(eb_row)
 
         # Generate button
-        self._ck_generate_btn = QPushButton("GENERATE")
-        self._ck_generate_btn.setToolTip("Generate alpha hint frames for the entire clip using these chroma key settings.")
+        self._ck_generate_btn = QPushButton(self.tr("GENERATE"))
+        self._ck_generate_btn.setToolTip(self.tr("Generate alpha hint frames for the entire clip using these chroma key settings."))
         self._ck_generate_btn.clicked.connect(self._on_chroma_key_generate)
         ck_layout.addWidget(self._ck_generate_btn)
 
@@ -241,17 +245,19 @@ class ParameterPanel(QWidget):
         alpha_layout.addWidget(ck_or_label)
 
         # -- Automatic sub-section --
-        auto_label = QLabel("Automatic")
+        auto_label = QLabel(self.tr("Automatic"))
         auto_label.setAlignment(Qt.AlignCenter)
         auto_label.setStyleSheet("color: #A0A090; font-size: 10px; margin: 0px 0 2px 0;")
         alpha_layout.addWidget(auto_label)
 
-        self._gvm_btn = QPushButton("GVM AUTO")
+        self._gvm_btn = QPushButton(self.tr("GVM AUTO"))
         self._gvm_btn.setEnabled(False)
         self._gvm_btn.setToolTip(
-            "Auto-generate alpha hint for the entire clip.\n"
-            "Uses GVM to predict foreground/background separation.\n"
-            "Available when clip is in RAW state (frames extracted)."
+            self.tr(
+                "Auto-generate alpha hint for the entire clip.\n"
+                "Uses GVM to predict foreground/background separation.\n"
+                "Available when clip is in RAW state (frames extracted)."
+            )
         )
         self._gvm_btn.clicked.connect(self.gvm_requested.emit)
         alpha_layout.addWidget(self._gvm_btn)
@@ -259,16 +265,18 @@ class ParameterPanel(QWidget):
         # BiRefNet: button + model variant dropdown in a single row
         birefnet_row = QHBoxLayout()
         birefnet_row.setSpacing(4)
-        self._birefnet_btn = QPushButton("BIREFNET")
+        self._birefnet_btn = QPushButton(self.tr("BIREFNET"))
         self._birefnet_btn.setEnabled(False)
         self._birefnet_btn.setToolTip(
-            "Auto-generate alpha hint using BiRefNet.\n"
-            "Fully automatic — no painting or annotation needed.\n"
-            "Downloads the selected model variant on first use.\n\n"
-            "Matting: Best for hair/transparency detail (recommended).\n"
-            "Portrait: Optimized for human close-ups.\n"
-            "General: Balanced foreground/background separation.\n"
-            "HR variants: For 2K/4K footage (uses more VRAM)."
+            self.tr(
+                "Auto-generate alpha hint using BiRefNet.\n"
+                "Fully automatic \u2014 no painting or annotation needed.\n"
+                "Downloads the selected model variant on first use.\n\n"
+                "Matting: Best for hair/transparency detail (recommended).\n"
+                "Portrait: Optimized for human close-ups.\n"
+                "General: Balanced foreground/background separation.\n"
+                "HR variants: For 2K/4K footage (uses more VRAM)."
+            )
         )
         self._birefnet_btn.clicked.connect(self._on_birefnet_clicked)
         birefnet_row.addWidget(self._birefnet_btn, 1)
@@ -276,7 +284,7 @@ class ParameterPanel(QWidget):
         self._birefnet_model = QComboBox()
         self._birefnet_model.setMinimumWidth(120)
         self._birefnet_model.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        self._birefnet_model.setToolTip("BiRefNet model variant — changes take effect on next run.")
+        self._birefnet_model.setToolTip(self.tr("BiRefNet model variant \u2014 changes take effect on next run."))
         # Populate from the wrapper's model registry
         from modules.BiRefNetModule.wrapper import BIREFNET_MODELS, DEFAULT_MODEL
         for display_name in BIREFNET_MODELS:
@@ -297,28 +305,30 @@ class ParameterPanel(QWidget):
         alpha_layout.addWidget(or_label)
 
         # -- Guided sub-section --
-        guided_label = QLabel("Requires brushstrokes")
+        guided_label = QLabel(self.tr("Requires brushstrokes"))
         guided_label.setAlignment(Qt.AlignCenter)
         guided_label.setStyleSheet("color: #A0A090; font-size: 10px; margin: 0px 0 2px 0;")
         alpha_layout.addWidget(guided_label)
 
-        annotate_hint = QLabel("Paint subject with 1, background with 2")
+        annotate_hint = QLabel(self.tr("Paint subject with 1, background with 2"))
         annotate_hint.setAlignment(Qt.AlignCenter)
         annotate_hint.setWordWrap(True)
         annotate_hint.setStyleSheet("color: #A0A090; font-size: 10px; margin: 2px 0;")
         alpha_layout.addWidget(annotate_hint)
 
-        self._track_masks_btn = QPushButton("TRACK MASK")
+        self._track_masks_btn = QPushButton(self.tr("TRACK MASK"))
         self._track_masks_btn.setEnabled(False)
         self._track_masks_btn.setToolTip(
-            "Use SAM2 to turn painted prompts into a dense mask track.\n"
-            "Required before running MatAnyone2 or VideoMaMa.\n\n"
-            "HOW TO USE:\n"
-            "1. Press 1 to select the GREEN brush (foreground — subject to keep)\n"
-            "2. Press 2 to select the RED brush (background — area to remove)\n"
-            "3. Paint strokes on the left viewer over your footage\n"
-            "4. Click TRACK MASK to preview SAM2 on the painted frame\n"
-            "5. If the preview looks right, confirm to propagate across all frames"
+            self.tr(
+                "Use SAM2 to turn painted prompts into a dense mask track.\n"
+                "Required before running MatAnyone2 or VideoMaMa.\n\n"
+                "HOW TO USE:\n"
+                "1. Press 1 to select the GREEN brush (foreground \u2014 subject to keep)\n"
+                "2. Press 2 to select the RED brush (background \u2014 area to remove)\n"
+                "3. Paint strokes on the left viewer over your footage\n"
+                "4. Click TRACK MASK to preview SAM2 on the painted frame\n"
+                "5. If the preview looks right, confirm to propagate across all frames"
+            )
         )
         self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
         alpha_layout.addWidget(self._track_masks_btn)
@@ -327,32 +337,36 @@ class ParameterPanel(QWidget):
         self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
         alpha_layout.addWidget(self._annotation_info)
 
-        matanyone2_hint = QLabel("Requires paint strokes on frame 1")
+        matanyone2_hint = QLabel(self.tr("Requires paint strokes on frame 1"))
         matanyone2_hint.setAlignment(Qt.AlignCenter)
         matanyone2_hint.setWordWrap(True)
         matanyone2_hint.setStyleSheet("color: #A0A090; font-size: 10px; margin: 2px 0;")
         alpha_layout.addWidget(matanyone2_hint)
 
-        self._matanyone2_btn = QPushButton("MATANYONE2")
+        self._matanyone2_btn = QPushButton(self.tr("MATANYONE2"))
         self._matanyone2_btn.setEnabled(False)
         self._matanyone2_btn.setToolTip(
-            "Generate alpha hints using MatAnyone2 video matting.\n"
-            "Requires paint strokes on the FIRST FRAME (frame 1).\n\n"
-            "1. Navigate to frame 1 (the very first frame)\n"
-            "2. Paint foreground (hotkey 1) and background (hotkey 2)\n"
-            "3. Click Track Mask to generate dense masks with SAM2\n"
-            "4. Click MATANYONE2 to generate temporally coherent AlphaHint"
+            self.tr(
+                "Generate alpha hints using MatAnyone2 video matting.\n"
+                "Requires paint strokes on the FIRST FRAME (frame 1).\n\n"
+                "1. Navigate to frame 1 (the very first frame)\n"
+                "2. Paint foreground (hotkey 1) and background (hotkey 2)\n"
+                "3. Click Track Mask to generate dense masks with SAM2\n"
+                "4. Click MATANYONE2 to generate temporally coherent AlphaHint"
+            )
         )
         self._matanyone2_btn.clicked.connect(self.matanyone2_requested.emit)
         alpha_layout.addWidget(self._matanyone2_btn)
 
-        self._videomama_btn = QPushButton("VIDEOMAMA")
+        self._videomama_btn = QPushButton(self.tr("VIDEOMAMA"))
         self._videomama_btn.setEnabled(False)
         self._videomama_btn.setToolTip(
-            "Generate alpha hints from a dense VideoMaMa mask track.\n\n"
-            "1. Paint sparse foreground/background prompts\n"
-            "2. Click Track Mask to generate dense masks with SAM2\n"
-            "3. Click VIDEOMAMA to generate AlphaHint"
+            self.tr(
+                "Generate alpha hints from a dense VideoMaMa mask track.\n\n"
+                "1. Paint sparse foreground/background prompts\n"
+                "2. Click Track Mask to generate dense masks with SAM2\n"
+                "3. Click VIDEOMAMA to generate AlphaHint"
+            )
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
         alpha_layout.addWidget(self._videomama_btn)
@@ -362,10 +376,12 @@ class ParameterPanel(QWidget):
         self._vmama_import_btn = QPushButton("+", self._videomama_btn)
         self._vmama_import_btn.setFixedSize(26, 26)
         self._vmama_import_btn.setToolTip(
-            "Import your own mask for VideoMaMa.\n\n"
-            "Bypasses the Track Mask step. Select a folder or\n"
-            "video of grayscale masks and they will be used as\n"
-            "VideoMaMa's guidance input directly."
+            self.tr(
+                "Import your own mask for VideoMaMa.\n\n"
+                "Bypasses the Track Mask step. Select a folder or\n"
+                "video of grayscale masks and they will be used as\n"
+                "VideoMaMa's guidance input directly."
+            )
         )
         self._vmama_import_btn.setStyleSheet(
             "QPushButton { font-weight: bold; font-size: 14px; padding: 0px;"
@@ -388,14 +404,16 @@ class ParameterPanel(QWidget):
         or_label2.setStyleSheet("color: #808070; font-size: 11px;")
         alpha_layout.addWidget(or_label2)
 
-        self._import_alpha_btn = QPushButton("IMPORT ALPHA")
+        self._import_alpha_btn = QPushButton(self.tr("IMPORT ALPHA"))
         self._import_alpha_btn.setEnabled(False)
         self._import_alpha_btn.setToolTip(
-            "Import alpha hints from an image folder or video file.\n"
-            "Supports: PNG/JPG/TIF/EXR sequences, or MOV/MP4/ProRes video.\n"
-            "White = foreground, black = background.\n"
-            "Files are copied into the clip's AlphaHint/ folder\n"
-            "and the clip advances to READY state for inference."
+            self.tr(
+                "Import alpha hints from an image folder or video file.\n"
+                "Supports: PNG/JPG/TIF/EXR sequences, or MOV/MP4/ProRes video.\n"
+                "White = foreground, black = background.\n"
+                "Files are copied into the clip's AlphaHint/ folder\n"
+                "and the clip advances to READY state for inference."
+            )
         )
         self._import_alpha_btn.clicked.connect(self.import_alpha_requested.emit)
         alpha_layout.addWidget(self._import_alpha_btn)
@@ -403,25 +421,27 @@ class ParameterPanel(QWidget):
         layout.addWidget(alpha_group)
 
         # ── INFERENCE section (Step 2) ──
-        inf_group = QGroupBox("INFERENCE")
+        inf_group = QGroupBox(self.tr("INFERENCE"))
         inf_layout = QVBoxLayout(inf_group)
         inf_layout.setSpacing(8)
 
         # BG Color (screen color: auto-detect, green, or blue)
         bg_row = QHBoxLayout()
-        self._bg_color_label = QLabel("BG Color")
+        self._bg_color_label = QLabel(self.tr("BG Color"))
         self._bg_color_label.setFixedWidth(80)
         self._bg_color_label.setToolTip(
-            "Background screen color for this clip.\n\n"
-            "Auto: detected from the middle frame of the clip.\n"
-            "Green: force green screen processing.\n"
-            "Blue: force blue screen processing.\n\n"
-            "Controls which checkpoint, despill math, and spill\n"
-            "detection are used. Also changes the UI accent color."
+            self.tr(
+                "Background screen color for this clip.\n\n"
+                "Auto: detected from the middle frame of the clip.\n"
+                "Green: force green screen processing.\n"
+                "Blue: force blue screen processing.\n\n"
+                "Controls which checkpoint, despill math, and spill\n"
+                "detection are used. Also changes the UI accent color."
+            )
         )
         bg_row.addWidget(self._bg_color_label)
         self._bg_color = QComboBox()
-        self._bg_color.addItems(["Auto", "Green", "Blue"])
+        self._bg_color.addItems([self.tr("Auto"), self.tr("Green"), self.tr("Blue")])
         self._bg_color.setToolTip(self._bg_color_label.toolTip())
         self._bg_color.currentIndexChanged.connect(self._on_bg_color_changed)
         bg_row.addWidget(self._bg_color, 1)
@@ -429,39 +449,43 @@ class ParameterPanel(QWidget):
 
         # Color Space
         cs_row = QHBoxLayout()
-        self._color_space_label = QLabel("Color Space")
+        self._color_space_label = QLabel(self.tr("Color Space"))
         self._color_space_label.setFixedWidth(80)
-        self._color_space_label.setToolTip(_COLOR_SPACE_TOOLTIP)
+        self._color_space_label.setToolTip(self.tr(_COLOR_SPACE_TOOLTIP))
         cs_row.addWidget(self._color_space_label)
         self._color_space = QComboBox()
-        self._color_space.addItems(["sRGB", "Linear"])
-        self._color_space.setToolTip(_COLOR_SPACE_TOOLTIP)
+        self._color_space.addItems([self.tr("sRGB"), self.tr("Linear")])
+        self._color_space.setToolTip(self.tr(_COLOR_SPACE_TOOLTIP))
         self._color_space.currentIndexChanged.connect(self._emit_changed)
         cs_row.addWidget(self._color_space, 1)
         inf_layout.addLayout(cs_row)
 
         # Despill Strength (slider 0-10 → 0.0-1.0)
-        self._despill_label = QLabel("Despill: 0.5")
+        self._despill_label = QLabel(self.tr("Despill: 0.5"))
         inf_layout.addWidget(self._despill_label)
         self._despill_slider = _no_scroll_wheel(QSlider(Qt.Horizontal))
         self._despill_slider.setRange(0, 10)
         self._despill_slider.setValue(5)
         self._despill_slider.setToolTip(
-            "Screen spill removal strength (0.0-1.0).\n"
-            "Removes background color bleed from hair, skin, and edges.\n"
-            "1.0 = full despill, 0.0 = no despill (keep original colors)."
+            self.tr(
+                "Screen spill removal strength (0.0-1.0).\n"
+                "Removes background color bleed from hair, skin, and edges.\n"
+                "1.0 = full despill, 0.0 = no despill (keep original colors)."
+            )
         )
         self._despill_slider.valueChanged.connect(self._on_despill_changed)
         inf_layout.addWidget(self._despill_slider)
 
         # Despeckle toggle + size
         despeckle_row = QHBoxLayout()
-        self._despeckle_check = QCheckBox("Despeckle")
+        self._despeckle_check = QCheckBox(self.tr("Despeckle"))
         self._despeckle_check.setChecked(True)
         self._despeckle_check.setToolTip(
-            "Automatic garbage matte — removes small floating noise\n"
-            "and speckles from the alpha by discarding isolated regions\n"
-            "smaller than the size threshold."
+            self.tr(
+                "Automatic garbage matte \u2014 removes small floating noise\n"
+                "and speckles from the alpha by discarding isolated regions\n"
+                "smaller than the size threshold."
+            )
         )
         self._despeckle_check.stateChanged.connect(self._on_despeckle_toggled)
         despeckle_row.addWidget(self._despeckle_check)
@@ -470,133 +494,147 @@ class ParameterPanel(QWidget):
         self._despeckle_size.setValue(400)
         self._despeckle_size.setSuffix("px")
         self._despeckle_size.setToolTip(
-            "Minimum area (in pixels) for a region to survive.\n"
-            "Isolated alpha blobs smaller than this are removed.\n"
-            "Lower = keep more detail, higher = cleaner matte."
+            self.tr(
+                "Minimum area (in pixels) for a region to survive.\n"
+                "Isolated alpha blobs smaller than this are removed.\n"
+                "Lower = keep more detail, higher = cleaner matte."
+            )
         )
         self._despeckle_size.valueChanged.connect(self._emit_changed)
         despeckle_row.addWidget(self._despeckle_size, 1)
         inf_layout.addLayout(despeckle_row)
 
         # Refiner Scale (slider 0-30 → 0.0-3.0)
-        self._refiner_label = QLabel("Refiner: 1.0")
+        self._refiner_label = QLabel(self.tr("Refiner: 1.0"))
         inf_layout.addWidget(self._refiner_label)
         self._refiner_slider = _no_scroll_wheel(QSlider(Qt.Horizontal))
         self._refiner_slider.setRange(0, 30)
         self._refiner_slider.setValue(10)
         self._refiner_slider.setToolTip(
-            "Edge refinement strength (0.0–3.0).\n"
-            "Scales the CNN refiner's edge corrections.\n"
-            "1.0 = default, 0.0 = backbone only (no refinement),\n"
-            "higher = sharper edges but may introduce artifacts."
+            self.tr(
+                "Edge refinement strength (0.0\u20133.0).\n"
+                "Scales the CNN refiner's edge corrections.\n"
+                "1.0 = default, 0.0 = backbone only (no refinement),\n"
+                "higher = sharper edges but may introduce artifacts."
+            )
         )
         self._refiner_slider.valueChanged.connect(self._on_refiner_changed)
         inf_layout.addWidget(self._refiner_slider)
 
         # Live Preview toggle
-        self._live_preview = QCheckBox("Live Preview")
+        self._live_preview = QCheckBox(self.tr("Live Preview"))
         self._live_preview.setChecked(True)
-        self._live_preview.setToolTip(_LIVE_PREVIEW_TOOLTIP)
+        self._live_preview.setToolTip(self.tr(_LIVE_PREVIEW_TOOLTIP))
         inf_layout.addWidget(self._live_preview)
 
         layout.addWidget(inf_group)
 
         # ── OUTPUT FORMAT section (Step 3) ──
-        out_group = QGroupBox("OUTPUT")
+        out_group = QGroupBox(self.tr("OUTPUT"))
         out_layout = QVBoxLayout(out_group)
         out_layout.setSpacing(6)
 
         # FG
         fg_row = QHBoxLayout()
-        self._fg_check = QCheckBox("FG")
+        self._fg_check = QCheckBox(self.tr("FG"))
         self._fg_check.setChecked(True)
         self._fg_check.setToolTip(
-            "Foreground — despilled subject on black background.\n"
-            "Screen spill removed from hair and edges.\n"
-            "Straight alpha (not premultiplied)."
+            self.tr(
+                "Foreground \u2014 despilled subject on black background.\n"
+                "Screen spill removed from hair and edges.\n"
+                "Straight alpha (not premultiplied)."
+            )
         )
         fg_row.addWidget(self._fg_check, 1)
         self._fg_format = QComboBox()
         self._fg_format.addItems(["exr", "png"])
         self._fg_format.setFixedWidth(70)
-        self._fg_format.setToolTip("EXR = 32-bit float (post-production).\nPNG = 8-bit (general use).")
+        self._fg_format.setToolTip(self.tr("EXR = 32-bit float (post-production).\nPNG = 8-bit (general use)."))
         fg_row.addWidget(self._fg_format)
         out_layout.addLayout(fg_row)
 
         # Matte
         matte_row = QHBoxLayout()
-        self._matte_check = QCheckBox("Matte")
+        self._matte_check = QCheckBox(self.tr("Matte"))
         self._matte_check.setChecked(True)
         self._matte_check.setToolTip(
-            "Alpha matte — grayscale transparency map.\n"
-            "White = fully opaque, black = fully transparent.\n"
-            "Use in compositing software for manual keying control."
+            self.tr(
+                "Alpha matte \u2014 grayscale transparency map.\n"
+                "White = fully opaque, black = fully transparent.\n"
+                "Use in compositing software for manual keying control."
+            )
         )
         matte_row.addWidget(self._matte_check, 1)
         self._matte_format = QComboBox()
         self._matte_format.addItems(["exr", "png"])
         self._matte_format.setFixedWidth(70)
-        self._matte_format.setToolTip("EXR = 32-bit float (post-production).\nPNG = 8-bit (general use).")
+        self._matte_format.setToolTip(self.tr("EXR = 32-bit float (post-production).\nPNG = 8-bit (general use)."))
         matte_row.addWidget(self._matte_format)
         out_layout.addLayout(matte_row)
 
         # Comp
         comp_row = QHBoxLayout()
-        self._comp_check = QCheckBox("Comp")
+        self._comp_check = QCheckBox(self.tr("Comp"))
         self._comp_check.setChecked(True)
         self._comp_check.setToolTip(
-            "Composite — final keyed result over checkerboard.\n"
-            "Best representation of the key quality.\n"
-            "Colors match the original input faithfully."
+            self.tr(
+                "Composite \u2014 final keyed result over checkerboard.\n"
+                "Best representation of the key quality.\n"
+                "Colors match the original input faithfully."
+            )
         )
         comp_row.addWidget(self._comp_check, 1)
         self._comp_format = QComboBox()
         self._comp_format.addItems(["png", "exr"])
         self._comp_format.setFixedWidth(70)
-        self._comp_format.setToolTip("PNG = 8-bit with transparency.\nEXR = 32-bit float (post-production).")
+        self._comp_format.setToolTip(self.tr("PNG = 8-bit with transparency.\nEXR = 32-bit float (post-production)."))
         comp_row.addWidget(self._comp_format)
         out_layout.addLayout(comp_row)
 
         # Processed
         proc_row = QHBoxLayout()
-        self._proc_check = QCheckBox("Processed")
+        self._proc_check = QCheckBox(self.tr("Processed"))
         self._proc_check.setChecked(True)
         self._proc_check.setToolTip(
-            "Processed — production-ready RGBA (straight, linear).\n"
-            "Designed for import into Resolve, Premiere, and compositing tools.\n"
-            "Includes despill + garbage matte cleanup applied."
+            self.tr(
+                "Processed \u2014 production-ready RGBA (straight, linear).\n"
+                "Designed for import into Resolve, Premiere, and compositing tools.\n"
+                "Includes despill + garbage matte cleanup applied."
+            )
         )
         proc_row.addWidget(self._proc_check, 1)
         self._proc_format = QComboBox()
         self._proc_format.addItems(["exr", "png"])
         self._proc_format.setFixedWidth(70)
-        self._proc_format.setToolTip("EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for straight linear RGBA).")
+        self._proc_format.setToolTip(self.tr("EXR = 32-bit float (recommended for Processed).\nPNG = 8-bit (lossy for straight linear RGBA)."))
         proc_row.addWidget(self._proc_format)
         out_layout.addLayout(proc_row)
 
         layout.addWidget(out_group)
 
         # ── PERFORMANCE section ──
-        perf_group = QGroupBox("PERFORMANCE")
+        perf_group = QGroupBox(self.tr("PERFORMANCE"))
         perf_layout = QVBoxLayout(perf_group)
         perf_layout.setSpacing(6)
 
         parallel_row = QHBoxLayout()
-        parallel_label = QLabel("Parallel frames")
+        parallel_label = QLabel(self.tr("Parallel frames"))
         parallel_row.addWidget(parallel_label, 1)
         self._parallel_spin = QSpinBox()
         self._parallel_spin.setRange(1, 64)
         self._parallel_spin.setToolTip(
-            "Process multiple frames simultaneously using parallel engines.\n\n"
-            "Each extra engine loads a full copy of the model.\n"
-            "CUDA: ~6-8 GB VRAM per engine.\n"
-            "\n"
-            "Default: 1 (safest). Try 2 first, then increase if stable.\n\n"
-            "EXPERIMENTAL: Values above 8 are for high-memory CUDA systems\n"
-            "(e.g. RTX 6000).\n"
-            "If you run out of memory, the app will automatically scale\n"
-            "back to however many engines fit.\n\n"
-            "CUDA only right now. Not currently supported on Apple Silicon."
+            self.tr(
+                "Process multiple frames simultaneously using parallel engines.\n\n"
+                "Each extra engine loads a full copy of the model.\n"
+                "CUDA: ~6-8 GB VRAM per engine.\n"
+                "\n"
+                "Default: 1 (safest). Try 2 first, then increase if stable.\n\n"
+                "EXPERIMENTAL: Values above 8 are for high-memory CUDA systems\n"
+                "(e.g. RTX 6000).\n"
+                "If you run out of memory, the app will automatically scale\n"
+                "back to however many engines fit.\n\n"
+                "CUDA only right now. Not currently supported on Apple Silicon."
+            )
         )
         self._parallel_spin.setFixedWidth(60)
         from ui.widgets.preferences_dialog import get_setting_int, KEY_PARALLEL_CLIPS, DEFAULT_PARALLEL_CLIPS
@@ -645,12 +683,12 @@ class ParameterPanel(QWidget):
 
     def _on_despill_changed(self, value: int) -> None:
         display = value / 10.0
-        self._despill_label.setText(f"Despill: {display:.1f}")
+        self._despill_label.setText(self.tr("Despill: %s") % f"{display:.1f}")
         self._emit_changed()
 
     def _on_refiner_changed(self, value: int) -> None:
         display = value / 10.0
-        self._refiner_label.setText(f"Refiner: {display:.1f}")
+        self._refiner_label.setText(self.tr("Refiner: %s") % f"{display:.1f}")
         self._emit_changed()
 
     def _on_bg_color_changed(self, index: int) -> None:
@@ -785,7 +823,7 @@ class ParameterPanel(QWidget):
     def set_annotation_info(self, annotated: int, total: int) -> None:
         """Update annotation frame counter."""
         if annotated > 0 and total > 0:
-            self._annotation_info.setText(f"Painted: {annotated} / {total} frames")
+            self._annotation_info.setText(self.tr("Painted: %d / %d frames") % (annotated, total))
             self._track_masks_btn.setEnabled(True)
         else:
             self._annotation_info.setText("")

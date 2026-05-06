@@ -1,3 +1,16 @@
+from PySide6.QtCore import QCoreApplication
+
+
+def _tr(source: str) -> str:
+    """Translate a string with MainWindow context.
+
+    Mixin classes can't use self.tr() because lupdate extracts the mixin class
+    name as context, but at runtime the context resolves to MainWindow. This
+    helper uses the explicit context so extraction and lookup match.
+    """
+    return QCoreApplication.translate("MainWindow", source)
+
+
 from .menu_mixin import MenuMixin
 from .shortcuts_mixin import ShortcutsMixin
 from .clip_mixin import ClipMixin

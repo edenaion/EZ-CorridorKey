@@ -341,7 +341,7 @@ class SplitViewWidget(QWidget):
         # Semi-transparent background for readability
         painter.fillRect(header_rect.adjusted(-8, -2, 8, 2), QColor(0, 0, 0, 140))
         painter.setPen(QColor("#FFFFFF"))
-        painter.drawText(header_rect, Qt.AlignCenter, "Extracting frames...")
+        painter.drawText(header_rect, Qt.AlignCenter, self.tr("Extracting frames..."))
 
         # Progress bar below header
         bar_y = h // 2
@@ -368,7 +368,7 @@ class SplitViewWidget(QWidget):
         painter.setPen(QColor("#FF8C00"))
         painter.drawText(
             text_rect, Qt.AlignCenter,
-            f"{pct}%  ({current}/{self._extraction_total} frames)",
+            self.tr("%d%%  (%d/%d frames)") % (pct, current, self._extraction_total),
         )
 
     def _paint_annotations(self, painter: QPainter) -> None:

@@ -29,7 +29,7 @@ class VolumeControl(QWidget):
         self._icon.setFixedSize(22, 22)
         self._icon.setFlat(True)
         self._icon.setCursor(Qt.PointingHandCursor)
-        self._icon.setToolTip("Click to mute / unmute")
+        self._icon.setToolTip(self.tr("Click to mute / unmute"))
         self._icon.setStyleSheet(
             "QPushButton { font-size: 13px; border: none; background: transparent;"
             "padding: 0; color: #808070; }"
@@ -43,7 +43,7 @@ class VolumeControl(QWidget):
         self._slider.setObjectName("volumeSlider")
         self._slider.setRange(0, 100)
         self._slider.setFixedWidth(60)
-        self._slider.setToolTip("Volume")
+        self._slider.setToolTip(self.tr("Volume"))
         self._slider.valueChanged.connect(self._on_slider_changed)
         layout.addWidget(self._slider)
 

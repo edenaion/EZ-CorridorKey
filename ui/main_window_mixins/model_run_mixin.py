@@ -7,6 +7,8 @@ import shutil
 from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import Slot
 
+from . import _tr
+
 from backend import ClipState, JobType
 from ui.workers.gpu_job_worker import create_job_snapshot
 
@@ -32,16 +34,16 @@ class ModelRunMixin:
         total = (self._current_clip.input_asset.frame_count
                  if self._current_clip.input_asset else 0)
         msg = QMessageBox(self)
-        msg.setWindowTitle("Partial Alpha Found")
+        msg.setWindowTitle(_tr("Partial Alpha Found"))
         msg.setText(
-            f"Found {len(existing)}/{total} alpha frames from a previous run."
+            _tr("Found %d/%d alpha frames from a previous run.") % (len(existing), total)
         )
         msg.setInformativeText(
-            "Resume will skip completed frames.\n"
-            "Regenerate will redo all frames from scratch."
+            _tr("Resume will skip completed frames.\n"
+                "Regenerate will redo all frames from scratch.")
         )
-        resume_btn = msg.addButton("Resume", QMessageBox.AcceptRole)
-        regen_btn = msg.addButton("Regenerate", QMessageBox.DestructiveRole)
+        resume_btn = msg.addButton(_tr("Resume"), QMessageBox.AcceptRole)
+        regen_btn = msg.addButton(_tr("Regenerate"), QMessageBox.DestructiveRole)
         msg.addButton(QMessageBox.Cancel)
         msg.setDefaultButton(resume_btn)
         msg.exec()
@@ -101,8 +103,8 @@ class ModelRunMixin:
         if not self._clip_has_videomama_ready_mask(self._current_clip):
             QMessageBox.information(
                 self,
-                "Track Mask First",
-                "Paint prompts and run Track Mask before using VideoMaMa.",
+                _tr("Track Mask First"),
+                _tr("Paint prompts and run Track Mask before using VideoMaMa."),
             )
             return
 
@@ -124,9 +126,9 @@ class ModelRunMixin:
         if not self._clip_has_videomama_ready_mask(self._current_clip):
             QMessageBox.information(
                 self,
-                "Track Mask First",
-                "MatAnyone2 requires a tracked mask on frame 0.\n\n"
-                "Paint prompts and run Track Mask before using MatAnyone2.",
+                _tr("Track Mask First"),
+                _tr("MatAnyone2 requires a tracked mask on frame 0.\n\n"
+                    "Paint prompts and run Track Mask before using MatAnyone2."),
             )
             return
 

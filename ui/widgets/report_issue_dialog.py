@@ -115,7 +115,7 @@ class ReportIssueDialog(QDialog):
         parent=None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Report Issue")
+        self.setWindowTitle(self.tr("Report Issue"))
         self.setMinimumWidth(500)
         self.setMinimumHeight(420)
         self.setModal(True)
@@ -127,9 +127,9 @@ class ReportIssueDialog(QDialog):
         layout.setSpacing(10)
 
         # --- Title ---
-        layout.addWidget(QLabel("Issue title:"))
+        layout.addWidget(QLabel(self.tr("Issue title:")))
         self._title_edit = QLineEdit()
-        self._title_edit.setPlaceholderText("Brief summary of the problem")
+        self._title_edit.setPlaceholderText(self.tr("Brief summary of the problem"))
         self._title_edit.setStyleSheet(
             "QLineEdit { background: #1a1a1a; color: #E0E0E0; "
             "border: 1px solid #555; border-radius: 3px; padding: 4px; }"
@@ -137,11 +137,13 @@ class ReportIssueDialog(QDialog):
         layout.addWidget(self._title_edit)
 
         # --- Description ---
-        layout.addWidget(QLabel("What happened?"))
+        layout.addWidget(QLabel(self.tr("What happened?")))
         self._desc_edit = QTextEdit()
         self._desc_edit.setPlaceholderText(
-            "Describe what you were doing and what went wrong.\n"
-            "Steps to reproduce are very helpful."
+            self.tr(
+                "Describe what you were doing and what went wrong.\n"
+                "Steps to reproduce are very helpful."
+            )
         )
         self._desc_edit.setMaximumHeight(120)
         self._desc_edit.setStyleSheet(
@@ -151,7 +153,7 @@ class ReportIssueDialog(QDialog):
         layout.addWidget(self._desc_edit)
 
         # --- System info preview ---
-        info_group = QGroupBox("System info (auto-collected, included in report)")
+        info_group = QGroupBox(self.tr("System info (auto-collected, included in report)"))
         info_layout = QVBoxLayout(info_group)
         self._info_preview = QTextEdit()
         self._info_preview.setReadOnly(True)
@@ -165,9 +167,11 @@ class ReportIssueDialog(QDialog):
 
         # --- GitHub account notice ---
         notice = QLabel(
-            "This will open GitHub in your browser. A free GitHub account is "
-            "required to submit issues. Your report is also copied to the "
-            "clipboard in case you need to paste it after logging in."
+            self.tr(
+                "This will open GitHub in your browser. A free GitHub account is "
+                "required to submit issues. Your report is also copied to the "
+                "clipboard in case you need to paste it after logging in."
+            )
         )
         notice.setWordWrap(True)
         notice.setStyleSheet("QLabel { color: #888; font-size: 11px; }")
@@ -177,11 +181,11 @@ class ReportIssueDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(self.tr("Cancel"))
         cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(cancel_btn)
 
-        open_btn = QPushButton("Open GitHub")
+        open_btn = QPushButton(self.tr("Open GitHub"))
         open_btn.setDefault(True)
         open_btn.clicked.connect(self._on_open)
         btn_layout.addWidget(open_btn)
@@ -286,7 +290,7 @@ class ReportIssueDialog(QDialog):
         return "\n".join(parts)
 
     def _build_url(self, body: str) -> str:
-        title = self._title_edit.text().strip() or "Bug Report"
+        title = self._title_edit.text().strip() or self.tr("Bug Report")
         url = f"{_GITHUB_ISSUES_URL}?title={quote(title)}&body={quote(body)}"
         if len(url) > _MAX_URL_LENGTH:
             # Trim error log lines to fit; keep description + system info

@@ -580,7 +580,7 @@ class _ModelRow(QWidget):
             self.checkbox.setChecked(False)
             self.checkbox.setEnabled(False)
             self.checkbox.blockSignals(False)
-            self._desc_label.setText(self._base_desc + "  — Installed")
+            self._desc_label.setText(self._base_desc + self.tr("  \u2014 Installed"))
             self._desc_label.setStyleSheet(
                 "color: #4CAF50; background: transparent;"
             )
@@ -602,14 +602,14 @@ class _ModelRow(QWidget):
         self.checkbox.setEnabled(False)
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
-        self.progress.setFormat("Downloading...")
+        self.progress.setFormat(self.tr("Downloading..."))
         self.status_icon.setText("")
 
     def set_progress(self, downloaded_mb: int, total_mb: int):
         if total_mb > 0:
             self.progress.setRange(0, total_mb)
             self.progress.setValue(min(downloaded_mb, total_mb))
-            self.progress.setFormat(f"{downloaded_mb} / {total_mb} MB")
+            self.progress.setFormat(self.tr("%d / %d MB") % (downloaded_mb, total_mb))
 
     def set_finished(self, ok: bool):
         self.progress.setVisible(False)
@@ -629,13 +629,14 @@ class SetupWizard(QDialog):
     def __init__(self, parent=None, preselected: list[str] | None = None):
         super().__init__(parent)
         self._preselected = preselected
-        self.setWindowTitle("EZ-CorridorKey Setup")
+        self.setWindowTitle(self.tr("EZ-CorridorKey Setup"))
         self.setMinimumSize(700, 500)
         self.setModal(True)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
 
         self._worker: _DownloadWorker | None = None
         self._downloading = False
+        self._cancelling = False
         self._rows: dict[str, _ModelRow] = {}
 
         layout = QVBoxLayout(self)
@@ -649,8 +650,10 @@ class SetupWizard(QDialog):
         layout.addWidget(title)
 
         subtitle = QLabel(
-            "Select which models to download. The core CorridorKey model is required.\n"
-            "Optional models can be downloaded later from Edit \u2192 Download Manager."
+            self.tr(
+                "Select which models to download. The core CorridorKey model is required.\n"
+                "Optional models can be downloaded later from Edit \u2192 Download Manager."
+            )
         )
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setWordWrap(True)
@@ -660,7 +663,7 @@ class SetupWizard(QDialog):
         layout.addSpacing(8)
 
         # Install path picker
-        loc_label = QLabel("Install path:")
+        loc_label = QLabel(self.tr("Install path:"))
         loc_label.setStyleSheet("color: #CCCCCC;")
         layout.addWidget(loc_label)
 
@@ -678,7 +681,7 @@ class SetupWizard(QDialog):
         self._loc_edit.textChanged.connect(self._refresh_installed_state)
         loc_row.addWidget(self._loc_edit, 1)
 
-        browse_btn = QPushButton("Browse...")
+        browse_btn = QPushButton(self.tr("Browse..."))
         browse_btn.setStyleSheet(
             "QPushButton { color: #ccc; border: 1px solid #555; padding: 6px 14px; "
             "border-radius: 4px; }"
@@ -687,10 +690,12 @@ class SetupWizard(QDialog):
         browse_btn.clicked.connect(self._on_browse_location)
         loc_row.addWidget(browse_btn)
 
-        default_btn = QPushButton("Default Location")
+        default_btn = QPushButton(self.tr("Default Location"))
         default_btn.setToolTip(
-            "Reset the install path to the platform default "
-            "(in case you changed it and want to return)."
+            self.tr(
+                "Reset the install path to the platform default "
+                "(in case you changed it and want to return)."
+            )
         )
         default_btn.setStyleSheet(
             "QPushButton { color: #ccc; border: 1px solid #555; padding: 6px 14px; "
@@ -729,7 +734,7 @@ class SetupWizard(QDialog):
         divider.setStyleSheet("color: #333;")
         layout.addWidget(divider)
 
-        self._shortcut_check = QCheckBox("Create Desktop shortcut")
+        self._shortcut_check = QCheckBox(self.tr("Create Desktop shortcut"))
         self._shortcut_check.setChecked(True)
         self._shortcut_check.setStyleSheet(
             "QCheckBox { color: #4CAF50; }"
@@ -747,7 +752,7 @@ class SetupWizard(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        self._cancel_btn = QPushButton("Cancel && Exit")
+        self._cancel_btn = QPushButton(self.tr("Cancel && Exit"))
         self._cancel_btn.setStyleSheet(
             "QPushButton { color: #F44336; border: 1px solid #F44336; padding: 8px 16px; "
             "border-radius: 4px; }"
@@ -758,7 +763,7 @@ class SetupWizard(QDialog):
 
         btn_layout.addSpacing(12)
 
-        self._install_btn = QPushButton("Download && Install")
+        self._install_btn = QPushButton(self.tr("Download && Install"))
         self._install_btn.setStyleSheet(
             "QPushButton { background: #FFF203; color: #000; font-weight: bold; "
             "padding: 8px 24px; border-radius: 4px; }"
@@ -804,7 +809,7 @@ class SetupWizard(QDialog):
 
     def _on_browse_location(self):
         path = QFileDialog.getExistingDirectory(
-            self, "Choose Install Location", self._loc_edit.text()
+            self, self.tr("Choose Install Location"), self._loc_edit.text()
         )
         if path:
             self._loc_edit.setText(path)
@@ -816,8 +821,9 @@ class SetupWizard(QDialog):
     def _on_cancel(self):
         if self._downloading:
             # Signal cancel but let thread finish gracefully
+            self._cancelling = True
             self._cancel_btn.setEnabled(False)
-            self._cancel_btn.setText("Cancelling...")
+            self._cancel_btn.setText(self.tr("Cancelling..."))
             if self._worker:
                 self._worker.cancel()
             # Don't reject yet — wait for all_finished signal
@@ -843,7 +849,7 @@ class SetupWizard(QDialog):
 
         self._completed_count = 0
         self._total_count = len(selected)
-        self._overall_label.setText(f"Preparing downloads (0/{self._total_count})...")
+        self._overall_label.setText(self.tr("Preparing downloads (0/%d)...") % self._total_count)
         self._overall_label.setStyleSheet("color: #FFF203;")
 
         # Create worker as child of this dialog so it stays alive
@@ -858,7 +864,7 @@ class SetupWizard(QDialog):
         if key in self._rows:
             self._rows[key].set_downloading()
         self._overall_label.setText(
-            f"Downloading {self._completed_count + 1}/{self._total_count}: {label}..."
+            self.tr("Downloading %d/%d: %s...") % (self._completed_count + 1, self._total_count, label)
         )
 
     def _on_model_progress(self, key: str, downloaded_mb: int, total_mb: int):
@@ -879,16 +885,16 @@ class SetupWizard(QDialog):
         self._downloading = False
 
         # If user pressed cancel, reject now that thread is safely done
-        if not self._cancel_btn.isEnabled() and self._cancel_btn.text() == "Cancelling...":
+        if self._cancelling:
             self.reject()
             return
 
         if success:
-            self._overall_label.setText(f"All {self._total_count} downloads complete!")
+            self._overall_label.setText(self.tr("All %d downloads complete!") % self._total_count)
             self._overall_label.setStyleSheet("color: #4CAF50;")
         else:
             self._overall_label.setText(
-                "Some downloads failed. You can retry from Edit \u2192 Download Manager."
+                self.tr("Some downloads failed. You can retry from Edit \u2192 Download Manager.")
             )
             self._overall_label.setStyleSheet("color: #F44336;")
 
@@ -896,7 +902,7 @@ class SetupWizard(QDialog):
         if self._shortcut_check.isChecked():
             self._create_desktop_shortcut()
 
-        self._install_btn.setText("Continue")
+        self._install_btn.setText(self.tr("Continue"))
         self._install_btn.setEnabled(True)
         try:
             self._install_btn.clicked.disconnect()
