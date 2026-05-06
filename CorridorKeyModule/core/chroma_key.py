@@ -42,12 +42,15 @@ def chroma_key_matte(
     Returns:
         Grayscale matte as uint8 (H, W). 0 = background, 255 = foreground.
     """
-    assert frame_rgb.dtype == np.uint8, f"Expected uint8, got {frame_rgb.dtype}"
     assert frame_rgb.ndim == 3 and frame_rgb.shape[2] == 3, (
         f"Expected (H, W, 3) RGB, got {frame_rgb.shape}"
     )
 
-    img = frame_rgb.astype(np.float32) / 255.0
+    # Accept both uint8 (0-255) and float32 (0-1) input
+    if frame_rgb.dtype == np.uint8:
+        img = frame_rgb.astype(np.float32) / 255.0
+    else:
+        img = np.clip(frame_rgb.astype(np.float32), 0.0, 1.0)
 
     # ── Resolve screen type ──
     # "auto" detects from the frame: whichever channel (G or B) has more
