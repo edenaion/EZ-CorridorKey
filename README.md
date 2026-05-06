@@ -25,6 +25,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 - [Inference Controls](#inference-controls) — Parameters and output formats
 - [Hardware Requirements](#hardware-requirements) — VRAM, GPU, and platform info
 - [Security](#security) — Verified downloads, signed updates, checksums
+- [Localization](#localization) — Translate EZ-CorridorKey into your language
 - [Contributing](#contributing--support) — How to help and get help
 
 [![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
@@ -494,6 +495,23 @@ Independent scans:
 - [**1-install.bat** (v1.6.0) — 0 detections](https://www.virustotal.com/gui/file/c88b68b2fdc429de8bd70a5dde182486c788fcdc34eb508a4a137373d1ddb1bc)
 
 > **Third-party models:** The core CorridorKey checkpoint (`CorridorKey.pth`) is the only model we can vouch for. Optional models (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) are downloaded from their respective authors' repositories -- use them at your own discretion.
+
+---
+
+## Localization
+
+EZ-CorridorKey supports translation into any language. All UI strings are extracted into standard Qt `.ts` files that translators can edit with [Qt Linguist](https://doc.qt.io/qt-6/linguist-translators.html) (free) or any text editor.
+
+**How to add your language:**
+
+1. Copy `ui/translations/corridorkey_en.ts` to your language code (e.g. `corridorkey_fr.ts` for French)
+2. Open the new file in Qt Linguist and fill in translations
+3. Compile it: `pyside6-lrelease ui/translations/corridorkey_fr.ts`
+4. Submit a pull request with both the `.ts` and `.qm` files
+
+Full instructions with examples are in [`ui/translations/TRANSLATING.md`](ui/translations/TRANSLATING.md).
+
+**Current languages:** English (built-in). Want to see your language here? PRs welcome.
 
 ---
 
