@@ -63,7 +63,7 @@ class InferenceMixin:
         # Resolve "auto" to detected color for the current clip
         effective = color
         if color == "auto" and self._current_clip is not None:
-            effective = getattr(self._current_clip, 'screen_color', 'green')
+            effective = getattr(self._current_clip, '_screen_color_cache', 'green')
         if effective not in ("green", "blue"):
             effective = "green"
 
@@ -316,7 +316,7 @@ class InferenceMixin:
         # Sort by screen_color to minimize model reloads
         ready_clips = sorted(
             ready_clips,
-            key=lambda c: getattr(c, 'screen_color', 'green'),
+            key=lambda c: getattr(c, '_screen_color_cache', 'green'),
         )
 
         queued = 0
