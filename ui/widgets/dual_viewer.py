@@ -196,6 +196,8 @@ class DualViewerPanel(QWidget):
     def show_reprocess_preview(self, qimage: QImage) -> None:
         """Show a live reprocess result on the output viewer."""
         self._output_viewer.show_reprocess_preview(qimage)
+        if self._wipe_active:
+            self._load_wipe_images()
 
     def reset_zoom(self) -> None:
         """Reset zoom on both viewers."""
