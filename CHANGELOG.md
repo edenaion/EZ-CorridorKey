@@ -6,7 +6,38 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [Unreleased]
 
-_Nothing yet — see 1.10.0 below._
+_Nothing yet — see 1.11.0 below._
+
+---
+
+## [1.11.0] - 2026-05-05 — Blue screen keying, VideoMaMa mask import, FFmpeg overhaul
+
+### Added
+
+☼ **Blue screen auto-detect** — CorridorKey now keys blue screens with the same quality as green. A new `CorridorKeyBlue_1.0.pth` checkpoint (401 MB) handles blue-screen footage natively. Detection runs automatically on clip selection: the middle frame is downsampled and analyzed in HSV to determine whether the dominant chroma is green or blue. The correct checkpoint loads transparently.
+☼ **BG Color dropdown** — new Auto / Green / Blue selector above Color Space in the inference panel. Auto uses the detector; manual override forces a specific model regardless of frame content.
+☼ **UI accent follows screen color** — when a blue clip is active, brand accent shifts from green (#2CC350) to blue (#0082CF) across the KEY text, slider knobs, and welcome button.
+☼ **VideoMaMa mask import** — small + button next to the VIDEOMAMA button opens a file picker for importing pre-made alpha masks (video or image sequence). Grayscale values are crushed to binary (threshold at 127). Clip transitions to MASKED state, ready for VideoMaMa inference without SAM2 tracking.
+☼ **Despeckle uncap** — spinbox range expanded from (50, 2000) to (0, 999999). Zero keeps everything; high values remove larger blobs. Requested by Nico (upstream).
+☼ **FFmpeg Browse button** — Preferences gains a manual file picker for FFmpeg with bin/ auto-detection and path validation. Custom path persists in QSettings.
+☼ **Blue checkpoint in Download Manager** — CorridorKey Blue appears in the setup wizard model list (after Green, before SAM2). Default checked for new installs. CLI: `python scripts/setup_models.py --corridorkey-blue`.
+☼ **On-demand blue download** — when a blue clip is detected and the blue checkpoint is missing (skinny update / git clone users), a dialog offers to download it via the setup wizard.
+
+### Fixed
+
+☼ **SAM2 checkpoint validation** ([#116](https://github.com/edenaion/EZ-CorridorKey/issues/116)) — `torch.load()` crashed with `[Errno 22] Invalid argument` on Windows when the HuggingFace cached checkpoint was a pointer file or incomplete download. Added pre-load validation: checks file size (>10 MB) and ZIP magic bytes before passing to the model builder. Clear error message tells users to delete the cache folder and restart.
+☼ **Triton compile warning spam** ([#127](https://github.com/edenaion/EZ-CorridorKey/issues/127)) — when torch.compile fails at runtime (e.g. Triton cache race on Windows), the warning now logs once at WARNING level instead of repeating for every engine in the pool. Subsequent engines log at DEBUG. Fallback to eager mode still works correctly.
+☼ **FFmpeg SSL certificate failure on repair download** ([#117](https://github.com/edenaion/EZ-CorridorKey/issues/117)) — SSL verification now falls back through certifi, system default, then unverified, so corporate proxies and missing root CAs no longer block the FFmpeg auto-repair.
+☼ **FFmpeg discovery on Windows** — extended search paths cover Scoop, Chocolatey, Downloads, and Desktop glob patterns.
+☼ **Triton runtime hook** — catches `sysconfig.KeyError` in frozen PyInstaller builds that lack the sysconfig data module.
+☼ **Despill parameterized for blue** — `despill()` swaps the suppression channel (green ch1 vs blue ch2) based on screen color. `_restore_opaque_source_detail()` spill detection likewise adapts.
+☼ **All "green spill" tooltips** now read "screen spill" for neutrality.
+
+### Distribution
+
+☼ Full installers (Windows .exe, macOS .pkg) and portable zip now bundle both green and blue checkpoints.
+☼ Skinny update zip remains code-only; blue checkpoint downloads on first use if missing.
+☼ Git cloners: `python scripts/setup_models.py --corridorkey-blue` or `--all`.
 
 ---
 
