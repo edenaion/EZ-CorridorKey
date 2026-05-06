@@ -617,6 +617,11 @@ class ParameterPanel(QWidget):
             self._despill_slider: (self._despill_slider.setValue, 5),       # 0.5
             self._refiner_slider: (self._refiner_slider.setValue, 10),      # 1.0
             self._despeckle_size: (self._despeckle_size.setValue, 400),      # 400px
+            self._ck_strength: (self._ck_strength.setValue, 10),            # 1.0
+            self._ck_clip_black: (self._ck_clip_black.setValue, 0),         # 0.0
+            self._ck_clip_white: (self._ck_clip_white.setValue, 100),       # 1.0
+            self._ck_shrink_grow: (self._ck_shrink_grow.setValue, 0),       # 0px
+            self._ck_edge_blur: (self._ck_edge_blur.setValue, 0),           # 0px
         }
         for widget in self._middle_click_defaults:
             widget.installEventFilter(self)
