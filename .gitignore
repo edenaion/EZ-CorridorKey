@@ -110,6 +110,9 @@ scripts/windows/build_update_zip.py
 scripts/azure/
 scripts/build-release.sh
 
+# Graphify output (knowledge graph cache)
+graphify-out/
+
 # VS Code port forwarding
 .port
 

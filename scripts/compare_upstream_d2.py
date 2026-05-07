@@ -53,7 +53,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 UPSTREAM_ROOT = os.path.join(os.path.dirname(PROJECT_ROOT), "CorridorKey-upstream")
 
-VERSION = "1.5.0"
+VERSION = "2.0.0"
 
 DEFAULT_IMG_SIZE = 2048
 DEFAULT_SUBJECT_ALPHA = 0.50
