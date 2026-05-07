@@ -8,7 +8,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Added
 
-- **Blue screen auto-detect** — CorridorKey now keys blue screens with the same quality as green. A new `CorridorKeyBlue_1.0.pth` checkpoint (401 MB) handles blue-screen footage natively. Detection runs automatically on clip selection: the middle frame is downsampled and analyzed in HSV to determine whether the dominant chroma is green or blue. The correct checkpoint loads transparently.
+- **Blue screen auto-detect** — EZ-CorridorKey now keys blue screens with the same quality as green. A new `CorridorKeyBlue_1.0.pth` checkpoint (401 MB) handles blue-screen footage natively. Detection runs automatically on clip selection. The correct checkpoint loads transparently on next inference.
 - **BG Color dropdown** — new Auto / Green / Blue selector above Color Space in the inference panel. Auto uses the detector; manual override forces a specific model regardless of frame content.
 - **UI accent follows screen color** — when a blue clip is active, brand accent shifts from green (#2CC350) to blue (#0082CF) across the KEY text, slider knobs, and welcome button.
 - **VideoMaMa mask import** — small + button next to the VIDEOMAMA button opens a file picker for importing pre-made alpha masks (video or image sequence). Grayscale values are crushed to binary (threshold at 127). Clip transitions to MASKED state, ready for VideoMaMa inference without SAM2 tracking.
