@@ -582,6 +582,14 @@ class MainWindow(
         self._dual_viewer.input_viewer._split_view.color_sampled.connect(self._on_color_sampled)
         self._dual_viewer.output_viewer._split_view.color_sampled.connect(self._on_color_sampled)
         self._dual_viewer._wipe_overlay.color_sampled.connect(self._on_color_sampled)
+        # Live preview during eyedropper drag
+        self._dual_viewer.input_viewer._split_view.color_preview.connect(self._on_color_preview)
+        self._dual_viewer.output_viewer._split_view.color_preview.connect(self._on_color_preview)
+        self._dual_viewer._wipe_overlay.color_preview.connect(self._on_color_preview)
+        # Full sample list for multi-reference keying
+        self._dual_viewer.input_viewer._split_view.screen_samples_ready.connect(self._on_screen_samples)
+        self._dual_viewer.output_viewer._split_view.screen_samples_ready.connect(self._on_screen_samples)
+        self._dual_viewer._wipe_overlay.screen_samples_ready.connect(self._on_screen_samples)
 
         # Share annotation model between viewports so painting works on either
         self._dual_viewer.setup_shared_annotations()
