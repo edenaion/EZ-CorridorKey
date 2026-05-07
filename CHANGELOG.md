@@ -38,6 +38,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 - Full installers (Windows .exe, macOS .pkg) and portable zip now bundle both green and blue checkpoints.
 - Skinny update zip remains code-only; blue checkpoint downloads on first use if missing.
+- macOS skinny update zip now strips model checkpoints before re-signing and re-notarizing (324 MB instead of 2.4 GB). Mac users can receive in-app updates for the first time.
 - Git cloners: `python scripts/setup_models.py --corridorkey-blue` or `--all`.
 
 ---
