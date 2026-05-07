@@ -87,12 +87,21 @@ class ShortcutsMixin:
                 self._eyedropper_opened_chroma = False
         elif ck_btn.isChecked():
             # Chroma key already open: just activate eyedropper
+            self._deactivate_annotation_if_active()
             ed_btn.setChecked(True)
         else:
             # Chroma key closed: open it and activate eyedropper
+            self._deactivate_annotation_if_active()
             self._eyedropper_opened_chroma = True
             ck_btn.setChecked(True)
             ed_btn.setChecked(True)
+
+    def _deactivate_annotation_if_active(self) -> None:
+        """Turn off annotation brush mode if it's currently on."""
+        iv = self._dual_viewer.input_viewer
+        if iv.annotation_mode is not None:
+            iv.set_annotation_mode(None)
+            self._dual_viewer.output_viewer.set_annotation_mode(None)
 
     def _on_escape(self) -> None:
         """Escape: cancel the current action — auto-detects what's running."""

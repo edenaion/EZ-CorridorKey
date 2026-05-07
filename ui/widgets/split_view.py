@@ -106,6 +106,7 @@ class SplitViewWidget(QWidget):
         # Annotation state
         self._annotation_mode: str | None = None  # "fg", "bg", or None
         self._annotation_model: AnnotationModel | None = None
+        self._annotation_sibling: SplitViewWidget | None = None
         self._annotation_stem_idx: int = -1
         self._brush_radius: float = 15.0  # image pixels
         self._drawing: bool = False
@@ -258,6 +259,10 @@ class SplitViewWidget(QWidget):
 
     def set_annotation_model(self, model: AnnotationModel | None) -> None:
         self._annotation_model = model
+
+    def set_annotation_sibling(self, sibling: "SplitViewWidget | None") -> None:
+        """Set the sibling viewer so annotation strokes repaint both sides live."""
+        self._annotation_sibling = sibling
 
     def set_annotation_stem_index(self, idx: int) -> None:
         self._annotation_stem_idx = idx
@@ -744,6 +749,8 @@ class SplitViewWidget(QWidget):
                 if stroke is not None:
                     stroke.points = [self._line_anchor, pos]
                 self.update()
+                if self._annotation_sibling is not None:
+                    self._annotation_sibling.update()
             return
 
         # Annotation: freehand drawing stroke
@@ -752,6 +759,8 @@ class SplitViewWidget(QWidget):
             if pos is not None:
                 self._annotation_model.add_point(pos[0], pos[1])
                 self.update()
+                if self._annotation_sibling is not None:
+                    self._annotation_sibling.update()
             return
 
         if self._panning:
@@ -821,6 +830,8 @@ class SplitViewWidget(QWidget):
             self._drawing = False
             self.stroke_finished.emit()
             self.update()
+            if self._annotation_sibling is not None:
+                self._annotation_sibling.update()
             return
 
         if self._panning:
