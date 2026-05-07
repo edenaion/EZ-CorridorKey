@@ -39,9 +39,8 @@ from PySide6.QtGui import QPixmap as _QPixmap
 @_lru_cache(maxsize=1)
 def _eyedropper_cursor() -> QCursor:
     """Build a QCursor from the eyedropper PNG. Hotspot at tip (1, 29)."""
-    png_path = _os.path.join(
-        _os.path.dirname(__file__), '..', 'theme', 'icons', 'eyedropper.png',
-    )
+    from ui.theme import THEME_DIR
+    png_path = _os.path.join(THEME_DIR, 'icons', 'eyedropper.png')
     pix = _QPixmap(png_path)
     return QCursor(pix, 1, 29)
 
