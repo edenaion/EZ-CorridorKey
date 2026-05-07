@@ -50,6 +50,7 @@ class InferenceParams:
     edge_erode_px: int = _D["edge_erode_px"]
     edge_blur_px: int = _D["edge_blur_px"]
     screen_color: str = _D["screen_color"]
+    garbage_matte_px: int = _D["garbage_matte_px"]
 
     def to_dict(self) -> dict:
         return asdict(self)
