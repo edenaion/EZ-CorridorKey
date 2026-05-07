@@ -4,7 +4,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [2.0.0] - 2026-05-06 — Blue screen keying, chroma key eyedropper, i18n, VideoMaMa mask import
+## [2.0.0] - 2026-05-07 — Blue screen keying, chroma key holdout mask, eyedropper, i18n
 
 ### Added
 
@@ -16,8 +16,12 @@ All notable changes to EZ-CorridorKey are documented here.
 - **FFmpeg Browse button** — Preferences gains a manual file picker for FFmpeg with bin/ auto-detection and path validation. Custom path persists in QSettings.
 - **Blue checkpoint in Download Manager** — CorridorKey Blue appears in the setup wizard model list (after Green, before SAM2). Default checked for new installs. CLI: `python scripts/setup_models.py --corridorkey-blue`.
 - **On-demand blue download** — when a blue clip is detected and the blue checkpoint is missing (skinny update / git clone users), a dialog offers to download it via the setup wizard.
+- **Chroma key holdout mask** — paint foreground (1) and background (2) strokes directly on the chroma key preview to force regions. Background strokes force alpha to 0 (transparent), foreground strokes force alpha to 1 (opaque). The mask is static per-clip, applied to every frame. Strokes render as outlines so the matte preview shows through. Persists to `holdout_strokes.json`. Ctrl+Z undoes strokes, Ctrl+C clears all holdout strokes. Hotkeys 1/2 automatically route to holdout painting when chroma key mode is active, and to SAM2 annotation painting when it is not.
 - **Chroma key eyedropper drag-sampling** — the eyedropper (E) now samples a range of colors via click-drag instead of a single pixel click. A floating color chip shows the running average near the cursor. The keyer uses the 10th percentile screen excess across all samples for normalization, so dragging across shadows and hotspots produces a cleaner key than a single click.
+- **Chroma key hotkey** — tilde (`` ` ``) toggles chroma key mode on/off.
 - **Localization / i18n support** ([#109](https://github.com/edenaion/EZ-CorridorKey/issues/109)) — all 329 user-visible strings are marked for translation via Qt i18n. Language picker in Preferences. Translators can contribute by editing `.ts` files with Qt Linguist. See `ui/translations/TRANSLATING.md`.
+- **Paint brush HUD overlay** — yellow text above the viewport shows current brush mode, size, and controls (Shift+drag to resize, Alt+drag for straight lines). Same overlay appears for both holdout and SAM2 paint modes.
+- **Eyedropper HUD overlay** — yellow text above the viewport reminds users to click and drag across varied background tones for the best key.
 - **Single-step slider scrolling** — all parameter panel sliders now move exactly one tick per scroll notch instead of Qt's default 3x multiplier.
 
 ### Fixed
