@@ -51,7 +51,7 @@ def _get_torch_device():
 
 
 def _chroma_key_gpu(
-    img_t, ref_sc: float, ref_c1: float, ref_c2: float,
+    img_t, ref_excess: float,
     sc: int, c1: int, c2: int,
     strength: float, clip_black: float, clip_white: float,
     torch_mod,
@@ -62,8 +62,7 @@ def _chroma_key_gpu(
     other_max = torch_mod.maximum(img_t[:, :, c1], img_t[:, :, c2])
     excess = torch_mod.clamp(screen_ch - other_max, min=0.0)
 
-    # Normalize
-    ref_excess = max(ref_sc - max(ref_c1, ref_c2), 0.01)
+    # Normalize against reference excess (from samples or single color)
     key = torch_mod.clamp(excess / ref_excess * strength, 0.0, 1.0)
 
     # Saturation gate
@@ -88,9 +87,46 @@ def _chroma_key_gpu(
     return (alpha * 255.0).to(torch_mod.uint8).cpu().numpy()
 
 
+def _compute_ref_excess(
+    screen_color: tuple[int, int, int] | None,
+    screen_samples: list[tuple[int, int, int]] | None,
+    sc: int, c1: int, c2: int,
+    screen_type: str,
+) -> float:
+    """Compute the reference excess for normalization.
+
+    With multiple samples, uses the minimum excess across all samples.
+    This ensures even the darkest/least-saturated screen area the user
+    sampled gets fully keyed.
+    """
+    if screen_samples and len(screen_samples) > 1:
+        # Compute excess for each sample, use minimum (most conservative green)
+        excesses = []
+        for s in screen_samples:
+            sf = np.array(s, dtype=np.float32) / 255.0
+            exc = sf[sc] - max(sf[c1], sf[c2])
+            if exc > 0.0:
+                excesses.append(exc)
+        if excesses:
+            # Use 10th percentile to avoid outliers from accidental foreground samples
+            excesses.sort()
+            idx = max(0, int(len(excesses) * 0.1))
+            return max(excesses[idx], 0.01)
+
+    # Fallback: single reference color
+    if screen_color is not None:
+        ref = np.array(screen_color, dtype=np.float32) / 255.0
+    elif screen_type == "blue":
+        ref = np.array([0.0, 0.0, 0.9], dtype=np.float32)
+    else:
+        ref = np.array([0.0, 0.9, 0.0], dtype=np.float32)
+    return max(ref[sc] - max(ref[c1], ref[c2]), 0.01)
+
+
 def chroma_key_matte(
     frame_rgb: np.ndarray,
     screen_color: tuple[int, int, int] | None = None,
+    screen_samples: list[tuple[int, int, int]] | None = None,
     screen_type: str = "green",
     strength: float = 1.0,
     clip_black: float = 0.0,
@@ -105,7 +141,10 @@ def chroma_key_matte(
 
     Args:
         frame_rgb: Input frame as RGB uint8 (H, W, 3) or float32 (H, W, 3).
-        screen_color: Sampled screen RGB (r, g, b) 0-255.
+        screen_color: Sampled screen RGB (r, g, b) 0-255 (mean of samples).
+        screen_samples: Full list of sampled (r, g, b) values from eyedropper
+            drag. When provided, normalization uses the minimum excess across
+            samples so even shadow areas of the screen get fully keyed.
         screen_type: "green", "blue", or "auto" (detects from frame).
         strength: Key gain. Higher = more aggressive. Range: 0.1 - 10.0.
         clip_black: Alpha values below this become fully transparent (0-1).
@@ -132,7 +171,13 @@ def chroma_key_matte(
         b_excess = np.clip(img_f32[:, :, 2] - np.maximum(img_f32[:, :, 0], img_f32[:, :, 1]), 0, None).mean()
         screen_type = "blue" if b_excess > g_excess else "green"
 
-    # ── Reference color ──
+    # ── Channel assignment ──
+    if screen_type == "blue":
+        sc, c1, c2 = 2, 0, 1
+    else:
+        sc, c1, c2 = 1, 0, 2
+
+    # ── Reference color (for display/fallback) ──
     if screen_color is not None:
         ref = np.array(screen_color, dtype=np.float32) / 255.0
     elif screen_type == "blue":
@@ -140,23 +185,20 @@ def chroma_key_matte(
     else:
         ref = np.array([0.0, 0.9, 0.0], dtype=np.float32)
 
-    # ── Channel assignment ──
-    if screen_type == "blue":
-        sc, c1, c2 = 2, 0, 1
-    else:
-        sc, c1, c2 = 1, 0, 2
+    # ── Compute ref_excess from samples or single color ──
+    ref_excess = _compute_ref_excess(screen_color, screen_samples, sc, c1, c2, screen_type)
 
     # ── Try GPU path ──
     torch_mod, device = _get_torch_device()
     if torch_mod is not None:
         img_t = torch_mod.from_numpy(img_f32).to(device)
         matte = _chroma_key_gpu(
-            img_t, ref[sc], ref[c1], ref[c2],
+            img_t, ref_excess,
             sc, c1, c2, strength, clip_black, clip_white, torch_mod,
         )
     else:
         matte = _chroma_key_cpu(
-            img_f32, ref, sc, c1, c2, strength, clip_black, clip_white,
+            img_f32, ref_excess, sc, c1, c2, strength, clip_black, clip_white,
         )
 
     # ── Morphological cleanup (CPU, fast on uint8) ──
@@ -185,7 +227,7 @@ def chroma_key_matte(
 
 
 def _chroma_key_cpu(
-    img: np.ndarray, ref: np.ndarray,
+    img: np.ndarray, ref_excess: float,
     sc: int, c1: int, c2: int,
     strength: float, clip_black: float, clip_white: float,
 ) -> np.ndarray:
@@ -195,9 +237,7 @@ def _chroma_key_cpu(
     other_max = np.maximum(img[:, :, c1], img[:, :, c2])
     excess = np.clip(screen_ch - other_max, 0.0, None)
 
-    # Normalize
-    ref_excess = ref[sc] - max(ref[c1], ref[c2])
-    ref_excess = max(ref_excess, 0.01)
+    # Normalize against reference excess (from samples or single color)
     key = np.clip(excess / ref_excess * strength, 0.0, 1.0)
 
     # Saturation gate

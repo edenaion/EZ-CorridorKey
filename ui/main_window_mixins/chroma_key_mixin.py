@@ -74,6 +74,14 @@ class ChromaKeyMixin:
         logger.debug(f"Eyedropper mode: {enabled}")
         self._dual_viewer.set_eyedropper_mode(enabled)
 
+    def _on_screen_samples(self, samples: list) -> None:
+        """Store the full list of sampled colors for multi-reference keying."""
+        self._param_panel.set_screen_samples(samples)
+
+    def _on_color_preview(self, r: int, g: int, b: int) -> None:
+        """Live swatch update during eyedropper drag (no commit, no persist)."""
+        self._param_panel.preview_screen_color(r, g, b)
+
     def _on_color_sampled(self, r: int, g: int, b: int) -> None:
         """Handle a sampled screen color from the eyedropper."""
         logger.info(f"Eyedropper sampled color: ({r}, {g}, {b})")
@@ -173,6 +181,7 @@ class ChromaKeyMixin:
         matte = chroma_key_matte(
             frame_rgb,
             screen_color=params.get("screen_color"),
+            screen_samples=params.get("screen_samples"),
             screen_type=screen_type,
             strength=params.get("strength", 1.0),
             clip_black=params.get("clip_black", 0.0),

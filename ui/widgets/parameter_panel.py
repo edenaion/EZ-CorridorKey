@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QSlider,
     QComboBox, QCheckBox, QSpinBox, QPushButton, QGroupBox,
     QScrollArea,
 )
@@ -20,8 +20,10 @@ def _no_scroll_wheel(widget: QWidget) -> QWidget:
     return widget
 
 
+
+
 class _WheelGuard(QWidget):
-    """Event filter that ignores wheel events on unfocused widgets."""
+    """Event filter: ignores wheel on unfocused widgets, enforces single-step on focused sliders."""
 
     _singleton = None
 
@@ -32,9 +34,18 @@ class _WheelGuard(QWidget):
         return cls._singleton
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Wheel and not obj.hasFocus():
-            event.ignore()
-            return True
+        if event.type() == QEvent.Wheel:
+            if not obj.hasFocus():
+                event.ignore()
+                return True
+            # Force exactly 1 singleStep per scroll notch on sliders
+            if isinstance(obj, QSlider):
+                delta = event.angleDelta().y()
+                if delta > 0:
+                    obj.setValue(obj.value() + obj.singleStep())
+                elif delta < 0:
+                    obj.setValue(obj.value() - obj.singleStep())
+                return True
         return False
 
 from backend import InferenceParams, OutputConfig
@@ -137,7 +148,7 @@ class ParameterPanel(QWidget):
         # Chroma key parameter container (hidden until button is toggled on)
         self._chroma_params_widget = QWidget()
         ck_layout = QVBoxLayout(self._chroma_params_widget)
-        ck_layout.setContentsMargins(4, 4, 4, 4)
+        ck_layout.setContentsMargins(0, 4, 0, 4)
         ck_layout.setSpacing(4)
 
         # Eyedropper row: button + color swatch
@@ -201,30 +212,30 @@ class ParameterPanel(QWidget):
         self._ck_clip_white.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
         ck_layout.addWidget(self._ck_clip_white)
 
-        # Shrink/Grow spinbox
+        # Shrink/Grow row (stretch 1:1 to match BIREFNET / General HR split)
         sg_row = QHBoxLayout()
         sg_row.setSpacing(4)
-        sg_row.addWidget(QLabel(self.tr("Shrink/Grow")))
+        sg_row.addWidget(QLabel(self.tr("Shrink/Grow")), 1)
         self._ck_shrink_grow = _no_scroll_wheel(QSpinBox())
-        self._ck_shrink_grow.setRange(-50, 50)
+        self._ck_shrink_grow.setRange(-250, 250)
         self._ck_shrink_grow.setValue(0)
         self._ck_shrink_grow.setSuffix("px")
         self._ck_shrink_grow.setToolTip(self.tr("Erode (negative) or dilate (positive) the matte edge.\n0 = no change."))
         self._ck_shrink_grow.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
-        sg_row.addWidget(self._ck_shrink_grow)
+        sg_row.addWidget(self._ck_shrink_grow, 1)
         ck_layout.addLayout(sg_row)
 
-        # Edge Blur spinbox
+        # Edge Blur row (stretch 1:1 to match BIREFNET / General HR split)
         eb_row = QHBoxLayout()
         eb_row.setSpacing(4)
-        eb_row.addWidget(QLabel(self.tr("Edge Blur")))
+        eb_row.addWidget(QLabel(self.tr("Edge Blur")), 1)
         self._ck_edge_blur = _no_scroll_wheel(QSpinBox())
         self._ck_edge_blur.setRange(0, 50)
         self._ck_edge_blur.setValue(0)
         self._ck_edge_blur.setSuffix("px")
         self._ck_edge_blur.setToolTip(self.tr("Gaussian blur radius for softening matte edges.\n0 = no blur."))
         self._ck_edge_blur.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
-        eb_row.addWidget(self._ck_edge_blur)
+        eb_row.addWidget(self._ck_edge_blur, 1)
         ck_layout.addLayout(eb_row)
 
         # Generate button
@@ -238,6 +249,8 @@ class ParameterPanel(QWidget):
 
         # Sampled screen color for chroma key (RGB tuple or None)
         self._ck_screen_color: tuple[int, int, int] | None = None
+        # Full list of eyedropper samples for multi-reference keying
+        self._ck_screen_samples: list[tuple[int, int, int]] = []
 
         ck_or_label = QLabel("— or —")
         ck_or_label.setAlignment(Qt.AlignCenter)
@@ -296,7 +309,7 @@ class ParameterPanel(QWidget):
         if idx >= 0:
             self._birefnet_model.setCurrentIndex(idx)
         self._birefnet_model.currentTextChanged.connect(self._on_birefnet_model_changed)
-        birefnet_row.addWidget(self._birefnet_model)
+        birefnet_row.addWidget(self._birefnet_model, 1)
         alpha_layout.addLayout(birefnet_row)
 
         or_label = QLabel("— or —")
@@ -848,8 +861,22 @@ class ParameterPanel(QWidget):
         """Toggle eyedropper mode on the viewer."""
         self.eyedropper_requested.emit(checked)
 
+    def preview_screen_color(self, r: int, g: int, b: int) -> None:
+        """Live swatch update during eyedropper drag (visual only, no commit)."""
+        self._color_swatch.setStyleSheet(
+            f"background: rgb({r},{g},{b}); border: 2px solid #FFF203;"
+        )
+
+    def set_screen_samples(self, samples: list[tuple[int, int, int]]) -> None:
+        """Store eyedropper samples for multi-reference keying (capped at 200)."""
+        if len(samples) > 200:
+            # Evenly subsample to avoid bloating clip.json
+            step = len(samples) / 200
+            samples = [samples[int(i * step)] for i in range(200)]
+        self._ck_screen_samples = samples
+
     def set_sampled_screen_color(self, r: int, g: int, b: int) -> None:
-        """Update the color swatch with a sampled screen color."""
+        """Commit the sampled screen color (on release)."""
         self._ck_screen_color = (r, g, b)
         self._color_swatch.setStyleSheet(
             f"background: rgb({r},{g},{b}); border: 1px solid #5A5940;"
@@ -864,6 +891,7 @@ class ParameterPanel(QWidget):
         # "auto" passes through — resolved by the caller using clip's detected color
         return {
             "screen_color": self._ck_screen_color,
+            "screen_samples": self._ck_screen_samples or None,
             "screen_type": screen_type,
             "strength": self._ck_strength.value() / 10.0,
             "clip_black": self._ck_clip_black.value() / 100.0,
@@ -884,6 +912,9 @@ class ParameterPanel(QWidget):
                 self._color_swatch.setStyleSheet(
                     "background: #333; border: 1px solid #5A5940;"
                 )
+            # Restore multi-reference samples
+            samples = params.get("screen_samples")
+            self._ck_screen_samples = [tuple(s) for s in samples] if samples else []
             self._ck_strength.setValue(int(params.get("strength", 1.0) * 10))
             self._ck_clip_black.setValue(int(params.get("clip_black", 0.0) * 100))
             self._ck_clip_white.setValue(int(params.get("clip_white", 1.0) * 100))
@@ -897,6 +928,7 @@ class ParameterPanel(QWidget):
         self._suppress_signals = True
         try:
             self._ck_screen_color = None
+            self._ck_screen_samples = []
             self._color_swatch.setStyleSheet(
                 "background: #333; border: 1px solid #5A5940;"
             )
