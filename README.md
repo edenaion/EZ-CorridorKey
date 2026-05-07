@@ -537,8 +537,8 @@ All commits to `main` are signed with an Ed25519 SSH key. Branch protection enfo
 
 Independent scans:
 
-- [**EZ-CorridorKey.exe** (v2.0.0, signed inner executable) — VirusTotal scan](https://www.virustotal.com/gui/file/627129e270cfced9174866cc434cc5e295fae6e315d614d2f1de99cf27ff3820?nocache=1)
-- [**EZ-CorridorKey.exe** (v1.10.0, signed inner executable) — VirusTotal scan](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
+- [**EZ-CorridorKey-2.0.0-Windows-x64-Setup.exe** (v2.0.0, Azure signed) — VirusTotal scan](https://www.virustotal.com/gui/file/627129e270cfced9174866cc434cc5e295fae6e315d614d2f1de99cf27ff3820?nocache=1)
+- [**EZ-CorridorKey.exe** (v1.10.0, signed inner exe) — VirusTotal scan](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
 
 > **Third-party models:** The core CorridorKey checkpoint (`CorridorKey.pth`) is the only model we can vouch for. Optional models (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) are downloaded from their respective authors' repositories -- use them at your own discretion.
 
