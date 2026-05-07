@@ -42,7 +42,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Keyboard shortcuts  | None                        | 20+ hotkeys                                          |
 | Sound feedback      | None                        | 7 context-aware sound effects                        |
 | Session persistence | None                        | Recent projects, auto-save                           |
-| Paint / masking     | Manual external tool        | Built-in brush for masks + chroma key holdout        |
+| Paint / masking     | Manual external tool        | Built-in brush tool for VideoMaMa / MatAnyone2 masks |
 | Alpha generators    | None                        | GVM, BiRefNet, VideoMaMa, MatAnyone2, Chroma Key     |
 | Apple Silicon       | MPS only                    | MLX acceleration (auto-detected)                     |
 
@@ -305,7 +305,6 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 | **2**                    | Background paint brush (red). In chroma key mode, paints holdout mask (force transparent) |
 | **C**                    | Cycle foreground brush color (green / blue) |
 | **E**                    | Eyedropper (pick screen color for chroma key) |
-| **`**                    | Toggle chroma key mode                      |
 | **Shift + drag up/down** | Resize brush                                |
 | **Alt + left-drag**      | Draw straight line                          |
 | **Ctrl+Z**               | Undo last stroke on current frame           |
