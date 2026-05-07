@@ -126,3 +126,4 @@ graphify-out/
 # Release signing keys (NEVER commit the private key)
 ezck_signing_private.pem
 ezck_signing_public.pem
+tests/test_torch_arch_list.py.disabled
