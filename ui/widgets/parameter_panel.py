@@ -146,7 +146,8 @@ class ParameterPanel(QWidget):
                 "Generate alpha hints using a traditional chroma keyer.\n"
                 "Best for clean green/blue screen shots.\n"
                 "No GPU or AI model required \u2014 instant processing.\n\n"
-                "Click to expand parameters, then click GENERATE."
+                "Click to expand parameters, then click GENERATE.\n"
+                "Hotkey: `"
             )
         )
         self._chroma_key_btn.toggled.connect(self._on_chroma_key_toggled)
@@ -161,7 +162,7 @@ class ParameterPanel(QWidget):
         # Eyedropper row: button + color swatch
         eyedropper_row = QHBoxLayout()
         eyedropper_row.setSpacing(4)
-        self._eyedropper_btn = QPushButton(self.tr("\U0001F4A7 Pick Screen Color (E)"))
+        self._eyedropper_btn = QPushButton(self.tr("\U0001F4A7 Pick Screen Color"))
         self._eyedropper_btn.setToolTip(
             self.tr(
                 "Click on the viewer to sample the screen color.\n"

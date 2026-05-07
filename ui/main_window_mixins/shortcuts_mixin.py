@@ -102,6 +102,7 @@ class ShortcutsMixin:
         if iv.annotation_mode is not None:
             iv.set_annotation_mode(None)
             self._dual_viewer.output_viewer.set_annotation_mode(None)
+            self._dual_viewer.set_holdout_active(False)
 
     def _on_escape(self) -> None:
         """Escape: cancel the current action — auto-detects what's running."""
@@ -119,6 +120,7 @@ class ShortcutsMixin:
         if iv.annotation_mode:
             iv.set_annotation_mode(None)
             ov.set_annotation_mode(None)
+            self._dual_viewer.set_holdout_active(False)
             return
 
         # 2. Detect active process and ask to cancel

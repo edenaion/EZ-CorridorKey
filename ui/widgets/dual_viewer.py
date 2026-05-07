@@ -154,6 +154,16 @@ class DualViewerPanel(QWidget):
         self._input_viewer._split_view.set_annotation_sibling(self._output_viewer._split_view)
         self._output_viewer._split_view.set_annotation_sibling(self._input_viewer._split_view)
 
+    def setup_shared_holdout(self) -> None:
+        """Share the input viewer's holdout model with the output viewer."""
+        shared_holdout = self._input_viewer.holdout_model
+        self._output_viewer._split_view.set_holdout_model(shared_holdout)
+
+    def set_holdout_active(self, active: bool) -> None:
+        """Route painting to holdout model on both viewers."""
+        self._input_viewer.set_holdout_active(active)
+        self._output_viewer.set_holdout_active(active)
+
     def set_input_exr_is_linear(self, enabled: bool) -> None:
         """Keep both viewers aligned on INPUT-mode EXR display interpretation."""
         self._input_viewer.set_input_exr_is_linear(enabled)

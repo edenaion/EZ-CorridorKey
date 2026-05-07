@@ -89,11 +89,14 @@ class PreviewViewport(QWidget):
 
         # Annotation model (shared across frames, persists during scrubbing)
         self._annotation_model = AnnotationModel()
+        # Holdout model (chroma key forced regions, frame-independent)
+        self._holdout_model = AnnotationModel(filename="holdout_strokes.json")
 
         # Split view widget (center, fills space)
         self._split_view = SplitViewWidget()
         self._split_view.zoom_changed.connect(self._on_zoom_changed)
         self._split_view.set_annotation_model(self._annotation_model)
+        self._split_view.set_holdout_model(self._holdout_model)
         layout.addWidget(self._split_view, 1)
 
         # Bottom bar: scrubber + zoom indicator (optional)
@@ -173,6 +176,20 @@ class PreviewViewport(QWidget):
     def annotation_model(self) -> AnnotationModel:
         return self._annotation_model
 
+    @property
+    def holdout_model(self) -> AnnotationModel:
+        return self._holdout_model
+
+    def set_holdout_active(self, active: bool) -> None:
+        self._split_view.set_holdout_active(active)
+
+    def clear_holdout(self) -> None:
+        """Clear all holdout strokes for the current clip."""
+        self._holdout_model.clear()
+        if self._clip is not None:
+            self._holdout_model.save(self._clip.root_path)
+        self._split_view.update()
+
     def clear_annotations(self) -> None:
         """Clear all annotations for the current clip."""
         self._annotation_model.clear()
@@ -189,9 +206,10 @@ class PreviewViewport(QWidget):
         """
         from backend import ClipState
 
-        # Save annotations for previous clip before switching
+        # Save annotations and holdout for previous clip before switching
         if self._clip is not None:
             self._annotation_model.save(self._clip.root_path)
+            self._holdout_model.save(self._clip.root_path)
         self._clip = clip
         self._clip_name = clip.name
         # Preserve the caller-managed input interpretation when reloading a clip.
@@ -200,6 +218,7 @@ class PreviewViewport(QWidget):
         # auto-detected default before the user asked for it.
         clear_cache()
         self._annotation_model.load(clip.root_path)
+        self._holdout_model.load(clip.root_path)
 
         # EXTRACTING clips: show placeholder, no frame index
         if clip.state == ClipState.EXTRACTING:
