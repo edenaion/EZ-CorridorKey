@@ -254,6 +254,7 @@ class InferenceMixin(ParallelInferenceMixin):
                             edge_erode_px=params.edge_erode_px,
                             edge_blur_px=params.edge_blur_px,
                             screen_color=params.screen_color,
+                            garbage_matte_px=params.garbage_matte_px,
                         )
                     dt = time.monotonic() - t_frame
                     frame_times.append(dt)
@@ -432,6 +433,7 @@ class InferenceMixin(ParallelInferenceMixin):
                 edge_erode_px=params.edge_erode_px,
                 edge_blur_px=params.edge_blur_px,
                 screen_color=params.screen_color,
+                garbage_matte_px=params.garbage_matte_px,
             )
         logger.debug(f"Clip '{clip.name}' frame {frame_index}: reprocess {time.monotonic() - t_start:.3f}s")
         return res

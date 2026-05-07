@@ -28,6 +28,7 @@ INFERENCE_DEFAULTS = {
     "edge_erode_px": None,
     "edge_blur_px": None,
     "screen_color": "auto",
+    "garbage_matte_px": 0,
 }
 
 def _patch_hiera_global_attention(hiera_model: nn.Module) -> int:
@@ -467,7 +468,7 @@ class CorridorKeyEngine:
     _D = INFERENCE_DEFAULTS
 
     @torch.no_grad()
-    def process_frame(self, image, mask_linear, refiner_scale=_D["refiner_scale"], input_is_linear=False, fg_is_straight=True, despill_strength=_D["despill_strength"], auto_despeckle=_D["auto_despeckle"], despeckle_size=_D["despeckle_size"], despeckle_dilation=_D["despeckle_dilation"], despeckle_blur=_D["despeckle_blur"], source_passthrough=_D["source_passthrough"], edge_erode_px=_D["edge_erode_px"], edge_blur_px=_D["edge_blur_px"], screen_color=_D["screen_color"]):
+    def process_frame(self, image, mask_linear, refiner_scale=_D["refiner_scale"], input_is_linear=False, fg_is_straight=True, despill_strength=_D["despill_strength"], auto_despeckle=_D["auto_despeckle"], despeckle_size=_D["despeckle_size"], despeckle_dilation=_D["despeckle_dilation"], despeckle_blur=_D["despeckle_blur"], source_passthrough=_D["source_passthrough"], edge_erode_px=_D["edge_erode_px"], edge_blur_px=_D["edge_blur_px"], screen_color=_D["screen_color"], garbage_matte_px=_D["garbage_matte_px"]):
         """
         Process a single frame.
         Args:

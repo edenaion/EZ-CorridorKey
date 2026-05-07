@@ -177,6 +177,8 @@ def _wrap_mlx_output(
     despeckle_dilation: int = _D["despeckle_dilation"],
     despeckle_blur: int = _D["despeckle_blur"],
     screen_color: str = _D["screen_color"],
+    garbage_matte_px: int = _D["garbage_matte_px"],
+    mask_linear: np.ndarray | None = None,
 ) -> dict:
     """Normalize MLX uint8 output to match Torch float32 contract.
 
@@ -286,6 +288,8 @@ def _assemble_mlx_output(
     despeckle_dilation: int = _D["despeckle_dilation"],
     despeckle_blur: int = _D["despeckle_blur"],
     screen_color: str = _D["screen_color"],
+    garbage_matte_px: int = _D["garbage_matte_px"],
+    mask_linear: np.ndarray | None = None,
 ) -> dict:
     """Assemble the shared Torch-style contract from MLX float outputs."""
     from CorridorKeyModule.core import color_utils as cu
@@ -303,6 +307,15 @@ def _assemble_mlx_output(
         )
     else:
         processed_alpha = alpha
+
+    if garbage_matte_px > 0 and mask_linear is not None:
+        k = 2 * garbage_matte_px + 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+        hint_2d = mask_linear[:, :, 0] if mask_linear.ndim == 3 else mask_linear
+        expanded_hint = cv2.dilate(hint_2d, kernel)
+        if expanded_hint.ndim == 2:
+            expanded_hint = expanded_hint[:, :, np.newaxis]
+        processed_alpha = processed_alpha * expanded_hint
 
     fg_despilled = cu.despill(fg, green_limit_mode="average", strength=despill_strength,
                               screen_color=screen_color)
@@ -582,6 +595,7 @@ class _MLXEngineAdapter:
         edge_erode_px=_D["edge_erode_px"],
         edge_blur_px=_D["edge_blur_px"],
         screen_color=_D["screen_color"],
+        garbage_matte_px=_D["garbage_matte_px"],
     ):
         """Delegate to MLX engine, then normalize output to Torch contract."""
         # corridorkey-mlx expects sRGB uint8 input even when input_is_linear=True.
@@ -609,6 +623,8 @@ class _MLXEngineAdapter:
                 despeckle_dilation=despeckle_dilation,
                 despeckle_blur=despeckle_blur,
                 screen_color=screen_color,
+                garbage_matte_px=garbage_matte_px,
+                mask_linear=mask_linear,
             )
 
         raw = self._engine.process_frame(
@@ -626,6 +642,8 @@ class _MLXEngineAdapter:
             raw, image, input_is_linear, despill_strength, auto_despeckle,
             despeckle_size, despeckle_dilation, despeckle_blur,
             screen_color=screen_color,
+            garbage_matte_px=garbage_matte_px,
+            mask_linear=mask_linear,
         )
 
 
