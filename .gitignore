@@ -127,4 +127,3 @@ graphify-out/
 ezck_signing_private.pem
 ezck_signing_public.pem
 tests/test_torch_arch_list.py.disabled
-.github/workflows/
