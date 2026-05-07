@@ -23,6 +23,12 @@ class ChromaKeyMixin:
 
     _ck_preview_timer: QTimer | None = None
 
+    def _toggle_chroma_key(self) -> None:
+        """Hotkey `: toggle chroma key mode on/off."""
+        btn = self._param_panel._chroma_key_btn
+        if btn.isEnabled():
+            btn.setChecked(not btn.isChecked())
+
     def _ensure_ck_preview_timer(self) -> QTimer:
         """Lazy-init the chroma key preview debounce timer."""
         if self._ck_preview_timer is None:
@@ -177,6 +183,16 @@ class ChromaKeyMixin:
                      f"screen_color={params.get('screen_color')}, "
                      f"strength={params.get('strength')}")
 
+        # Rasterize holdout mask if strokes exist
+        holdout_mask = None
+        holdout_model = iv.holdout_model
+        if holdout_model.has_annotations(0):
+            from ui.widgets.annotation_overlay import AnnotationModel
+            h_frame, w_frame = frame_rgb.shape[:2]
+            holdout_mask = AnnotationModel.rasterize_holdout_mask(
+                holdout_model.get_strokes(0), w_frame, h_frame
+            )
+
         # Run chroma key with current params
         matte = chroma_key_matte(
             frame_rgb,
@@ -188,6 +204,7 @@ class ChromaKeyMixin:
             clip_white=params.get("clip_white", 1.0),
             shrink_grow=params.get("shrink_grow", 0),
             edge_blur=params.get("edge_blur", 0),
+            holdout_mask=holdout_mask,
         )
 
         logger.debug(f"Chroma key preview: matte shape={matte.shape}, "

@@ -133,6 +133,7 @@ def chroma_key_matte(
     clip_white: float = 1.0,
     shrink_grow: int = 0,
     edge_blur: int = 0,
+    holdout_mask: np.ndarray | None = None,
 ) -> np.ndarray:
     """Generate a grayscale alpha matte via color-difference keying.
 
@@ -222,6 +223,11 @@ def chroma_key_matte(
     if edge_blur > 0:
         k = edge_blur * 2 + 1
         matte = cv2.GaussianBlur(matte, (k, k), 0)
+
+    # ── Holdout mask override ──
+    # 128 = neutral (keep computed matte), 0 = force bg, 255 = force fg
+    if holdout_mask is not None:
+        matte = np.where(holdout_mask == 128, matte, holdout_mask)
 
     return matte
 

@@ -268,6 +268,13 @@ class AutoPipelinesMixin:
             "edge_blur": chroma_params.get("edge_blur", 0),
         }
 
+        # Load holdout mask (static per-clip, rasterized once we know dimensions)
+        from ui.widgets.annotation_overlay import AnnotationModel
+        _holdout_model = AnnotationModel(filename="holdout_strokes.json")
+        _holdout_model.load(clip.root_path)
+        _holdout_needs_raster = _holdout_model.has_annotations(0)
+        _holdout_mask = None
+
         # ── Read helper (runs in read ThreadPool, releases GIL via cv2) ──
         def _read_frame(fname: str) -> tuple[str, _np.ndarray | None]:
             fpath = os.path.join(input_dir, fname)
@@ -319,8 +326,16 @@ class AutoPipelinesMixin:
                 if frame_rgb is None:
                     continue
 
+                # Rasterize holdout mask on first frame (need dimensions)
+                if _holdout_needs_raster and _holdout_mask is None:
+                    h, w = frame_rgb.shape[:2]
+                    _holdout_mask = AnnotationModel.rasterize_holdout_mask(
+                        _holdout_model.get_strokes(0), w, h
+                    )
+                    _holdout_needs_raster = False
+
                 # GPU chroma key
-                matte = chroma_key_matte(frame_rgb, **ck_params)
+                matte = chroma_key_matte(frame_rgb, holdout_mask=_holdout_mask, **ck_params)
 
                 # Submit async write
                 stem = os.path.splitext(fname)[0]

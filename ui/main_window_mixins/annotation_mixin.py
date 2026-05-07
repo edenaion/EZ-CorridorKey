@@ -19,31 +19,37 @@ logger = logging.getLogger(__name__)
 class AnnotationMixin:
     """Annotation painting, SAM2 tracking, and mask management for MainWindow."""
 
+    def _is_chroma_key_active(self) -> bool:
+        """True when the Chroma Key section is expanded (button checked)."""
+        return self._param_panel._chroma_key_btn.isChecked()
+
     def _toggle_annotation_fg(self) -> None:
-        """Hotkey 1: toggle green (foreground) annotation brush."""
+        """Hotkey 1: toggle foreground brush. Routes to holdout if chroma key on."""
         iv = self._dual_viewer.input_viewer
         ov = self._dual_viewer.output_viewer
         if iv.annotation_mode == "fg":
             iv.set_annotation_mode(None)
             ov.set_annotation_mode(None)
+            self._dual_viewer.set_holdout_active(False)
         else:
-            # Deactivate eyedropper if active (mutually exclusive)
             self._deactivate_eyedropper_if_active()
             iv.set_annotation_mode("fg")
             ov.set_annotation_mode("fg")
+            self._dual_viewer.set_holdout_active(self._is_chroma_key_active())
 
     def _toggle_annotation_bg(self) -> None:
-        """Hotkey 2: toggle red (background) annotation brush."""
+        """Hotkey 2: toggle background brush. Routes to holdout if chroma key on."""
         iv = self._dual_viewer.input_viewer
         ov = self._dual_viewer.output_viewer
         if iv.annotation_mode == "bg":
             iv.set_annotation_mode(None)
             ov.set_annotation_mode(None)
+            self._dual_viewer.set_holdout_active(False)
         else:
-            # Deactivate eyedropper if active (mutually exclusive)
             self._deactivate_eyedropper_if_active()
             iv.set_annotation_mode("bg")
             ov.set_annotation_mode("bg")
+            self._dual_viewer.set_holdout_active(self._is_chroma_key_active())
 
     def _deactivate_eyedropper_if_active(self) -> None:
         """Turn off the eyedropper if it's currently on."""
@@ -73,6 +79,12 @@ class AnnotationMixin:
             self._param_panel.set_videomama_enabled(_has_mask)
             self._param_panel.set_matanyone2_enabled(_has_mask)
 
+    def _auto_save_holdout(self) -> None:
+        """Auto-save holdout strokes to disk after changes."""
+        if self._current_clip is not None:
+            iv = self._dual_viewer.input_viewer
+            iv.holdout_model.save(self._current_clip.root_path)
+
     def _clip_has_videomama_ready_mask(self, clip: ClipEntry | None) -> bool:
         """True when the clip has a dense mask track that alpha generators can consume."""
         if clip is None or clip.mask_asset is None:
@@ -82,9 +94,16 @@ class AnnotationMixin:
         return True
 
     def _undo_annotation(self) -> None:
-        """Ctrl+Z: undo last annotation stroke on current frame."""
+        """Ctrl+Z: undo last stroke. Routes by chroma key mode."""
         iv = self._dual_viewer.input_viewer
-        if iv.annotation_mode and iv.current_stem_index >= 0:
+        if not iv.annotation_mode:
+            return
+        if self._is_chroma_key_active():
+            if iv.holdout_model.undo(0):
+                iv._split_view.update()
+                self._auto_save_holdout()
+                self._schedule_chroma_key_preview()
+        elif iv.current_stem_index >= 0:
             if iv.annotation_model.undo(iv.current_stem_index):
                 iv._split_view.update()
                 self._auto_save_annotations()
@@ -161,7 +180,31 @@ class AnnotationMixin:
         return QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888).copy()
 
     def _confirm_clear_annotations(self) -> None:
-        """Ctrl+C: choose to clear annotations on this frame, entire clip, or cancel."""
+        """Ctrl+C: clear strokes. Routes to holdout or SAM2 by chroma key mode."""
+        if self._is_chroma_key_active():
+            self._confirm_clear_holdout()
+        else:
+            self._confirm_clear_sam2_annotations()
+
+    def _confirm_clear_holdout(self) -> None:
+        """Clear all holdout mask strokes for this clip."""
+        iv = self._dual_viewer.input_viewer
+        model = iv.holdout_model
+        if not model.has_annotations():
+            return
+        reply = QMessageBox.question(
+            self, _tr("Clear Holdout Strokes"),
+            _tr("Clear all holdout mask strokes for this clip?"),
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            model.clear()
+            self._auto_save_holdout()
+            iv._split_view.update()
+            self._schedule_chroma_key_preview()
+
+    def _confirm_clear_sam2_annotations(self) -> None:
+        """Ctrl+C: choose to clear SAM2 annotations on this frame, entire clip, or cancel."""
         iv = self._dual_viewer.input_viewer
         model = iv.annotation_model
         if not model or not model.has_annotations():
@@ -177,7 +220,6 @@ class AnnotationMixin:
         clip_btn = box.addButton(_tr("Entire Clip"), QMessageBox.DestructiveRole)
         box.addButton(QMessageBox.Cancel)
 
-        # Disable "This Frame" if current frame has no annotations
         if not has_frame:
             frame_btn.setEnabled(False)
 

@@ -116,6 +116,10 @@ class SplitViewWidget(QWidget):
         self._straight_line: bool = False    # Alt+click straight-line mode
         self._line_anchor: tuple[float, float] | None = None  # anchor in image-pixel coords
 
+        # Holdout mask state (chroma key forced regions)
+        self._holdout_model: AnnotationModel | None = None
+        self._holdout_active: bool = False
+
         # Eyedropper state
         self._eyedropper_mode: bool = False
         self._eyedropper_source: QImage | None = None  # input frame to sample from
@@ -271,6 +275,27 @@ class SplitViewWidget(QWidget):
     def annotation_mode(self) -> str | None:
         return self._annotation_mode
 
+    def set_holdout_model(self, model: AnnotationModel | None) -> None:
+        self._holdout_model = model
+
+    def set_holdout_active(self, active: bool) -> None:
+        self._holdout_active = active
+        self.update()
+
+    @property
+    def _active_annotation_model(self) -> AnnotationModel | None:
+        """The model that should receive mouse strokes right now."""
+        if self._holdout_active and self._holdout_model is not None:
+            return self._holdout_model
+        return self._annotation_model
+
+    @property
+    def _active_stem_idx(self) -> int:
+        """Stem index for the active model. Holdout uses 0 (frame-independent)."""
+        if self._holdout_active:
+            return 0
+        return self._annotation_stem_idx
+
     # ── Paint ──
 
     def paintEvent(self, event) -> None:
@@ -290,14 +315,16 @@ class SplitViewWidget(QWidget):
             self._paint_placeholder(painter)
 
         # Annotation overlay (after image, before extraction)
-        if self._annotation_model is not None and self._annotation_mode:
+        if self._active_annotation_model is not None and self._annotation_mode:
             self._paint_annotations(painter)
 
         # Extraction progress overlay (replaces placeholder during extraction)
         if self._extraction_total > 0:
             self._paint_extraction_overlay(painter)
 
-        # Eyedropper drag: floating color chip near cursor
+        # Eyedropper HUD + floating color chip
+        if self._eyedropper_mode:
+            self._paint_eyedropper_hud(painter)
         if self._eyedropper_sampling and self._eyedropper_preview_color:
             self._paint_eyedropper_chip(painter)
 
@@ -394,6 +421,19 @@ class SplitViewWidget(QWidget):
         painter.setFont(font)
         painter.drawText(self.rect(), Qt.AlignCenter, self._placeholder)
 
+    def _paint_eyedropper_hud(self, painter: QPainter) -> None:
+        """Draw a HUD overlay when eyedropper mode is active."""
+        painter.save()
+        font = painter.font()
+        font.setPointSize(10)
+        painter.setFont(font)
+        text = "Click + drag across varied background tones for best key"
+        hud_rect = QRectF(12, 12, 420, 24)
+        painter.fillRect(hud_rect, QColor(0, 0, 0, 150))
+        painter.setPen(QColor(255, 242, 3, 220))
+        painter.drawText(hud_rect, Qt.AlignCenter, text)
+        painter.restore()
+
     def _paint_eyedropper_chip(self, painter: QPainter) -> None:
         """Draw a floating color chip near the cursor during eyedropper drag."""
         r, g, b = self._eyedropper_preview_color
@@ -475,7 +515,8 @@ class SplitViewWidget(QWidget):
     def _paint_annotations(self, painter: QPainter) -> None:
         """Draw annotation strokes and brush cursor on the viewport."""
         img = self._annotation_target_image()
-        if img is None or self._annotation_model is None:
+        active_model = self._active_annotation_model
+        if img is None or active_model is None:
             return
 
         dest = self._image_rect(img, viewport=self._annotation_viewport())
@@ -485,17 +526,20 @@ class SplitViewWidget(QWidget):
         iw, ih = img.width(), img.height()
 
         # Draw existing strokes + in-progress stroke
-        strokes = self._annotation_model.get_strokes(self._annotation_stem_idx)
-        current = self._annotation_model.current_stroke
+        strokes = active_model.get_strokes(self._active_stem_idx)
+        current = active_model.current_stroke
         painter.save()
         painter.setClipRect(paintable_rect)
-        paint_annotations(painter, strokes, current, dest, iw, ih)
+        paint_annotations(painter, strokes, current, dest, iw, ih,
+                          outline_only=self._holdout_active)
         painter.restore()
+        hud_label = "Holdout mask" if self._holdout_active else "SAM prompt: sparse points + box"
         paint_annotation_hud(
             painter,
             image_rect=paintable_rect,
             brush_type=self._annotation_mode,
             radius_image=self._brush_radius,
+            label_suffix=hud_label,
         )
 
         # Brush cursor at mouse position
@@ -634,15 +678,15 @@ class SplitViewWidget(QWidget):
         # Annotation: Alt+left-click = straight line
         if (event.button() == Qt.LeftButton
                 and self._annotation_mode
-                and self._annotation_model is not None
+                and self._active_annotation_model is not None
                 and event.modifiers() & Qt.AltModifier):
             pos = self._display_to_image(event.position())
             if pos is not None:
                 self._drawing = True
                 self._straight_line = True
                 self._line_anchor = pos
-                self._annotation_model.start_stroke(
-                    self._annotation_stem_idx,
+                self._active_annotation_model.start_stroke(
+                    self._active_stem_idx,
                     pos[0], pos[1],
                     self._annotation_mode,
                     self._brush_radius,
@@ -653,13 +697,13 @@ class SplitViewWidget(QWidget):
         # Annotation: left-click = start freehand drawing
         if (event.button() == Qt.LeftButton
                 and self._annotation_mode
-                and self._annotation_model is not None):
+                and self._active_annotation_model is not None):
             pos = self._display_to_image(event.position())
             if pos is not None:
                 self._drawing = True
                 self._straight_line = False
-                self._annotation_model.start_stroke(
-                    self._annotation_stem_idx,
+                self._active_annotation_model.start_stroke(
+                    self._active_stem_idx,
                     pos[0], pos[1],
                     self._annotation_mode,
                     self._brush_radius,
@@ -740,11 +784,11 @@ class SplitViewWidget(QWidget):
             return
 
         # Annotation: straight-line preview (Alt+drag)
-        if self._drawing and self._straight_line and self._annotation_model is not None:
+        if self._drawing and self._straight_line and self._active_annotation_model is not None:
             pos = self._display_to_image(event.position())
             if pos is not None and self._line_anchor is not None:
                 # Replace stroke points with anchor + current endpoint for live preview
-                stroke = self._annotation_model.current_stroke
+                stroke = self._active_annotation_model.current_stroke
                 if stroke is not None:
                     stroke.points = [self._line_anchor, pos]
                 self.update()
@@ -753,10 +797,10 @@ class SplitViewWidget(QWidget):
             return
 
         # Annotation: freehand drawing stroke
-        if self._drawing and self._annotation_model is not None:
+        if self._drawing and self._active_annotation_model is not None:
             pos = self._display_to_image(event.position())
             if pos is not None:
-                self._annotation_model.add_point(pos[0], pos[1])
+                self._active_annotation_model.add_point(pos[0], pos[1])
                 self.update()
                 if self._annotation_sibling is not None:
                     self._annotation_sibling.update()
@@ -815,17 +859,17 @@ class SplitViewWidget(QWidget):
             self.update()
             return
 
-        if self._drawing and self._annotation_model is not None:
+        if self._drawing and self._active_annotation_model is not None:
             # Straight-line: finalize with anchor + release point
             if self._straight_line and self._line_anchor is not None:
                 pos = self._display_to_image(event.position())
                 if pos is not None:
-                    stroke = self._annotation_model.current_stroke
+                    stroke = self._active_annotation_model.current_stroke
                     if stroke is not None:
                         stroke.points = [self._line_anchor, pos]
                 self._straight_line = False
                 self._line_anchor = None
-            self._annotation_model.finish_stroke()
+            self._active_annotation_model.finish_stroke()
             self._drawing = False
             self.stroke_finished.emit()
             self.update()
