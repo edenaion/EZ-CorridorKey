@@ -69,10 +69,17 @@ patches/
 _BACKUPS/
 AGENTS.md
 CLAUDE.md
+HANDOFF.md
 *.lnk
 research-tests.md
+scan_all.sh
 scripts/utils/
 scripts/make_zip.py
+scripts/dev/
+scripts/windows/_list_distinfos.py
+scripts/windows/_verify_pil.py
+scripts/windows/_verify_zip_leaks.py
+scripts/windows/_wizard-large-preview.png
 bench_vram.py
 bench_vram_report.json
 .tmp/
