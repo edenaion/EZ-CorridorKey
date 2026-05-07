@@ -591,22 +591,24 @@ class MainWindow(
         self._dual_viewer.output_viewer._split_view.screen_samples_ready.connect(self._on_screen_samples)
         self._dual_viewer._wipe_overlay.screen_samples_ready.connect(self._on_screen_samples)
 
-        # Share annotation model between viewports so painting works on either
+        # Share annotation and holdout models between viewports
         self._dual_viewer.setup_shared_annotations()
+        self._dual_viewer.setup_shared_holdout()
 
-        # Annotation stroke finished -> update annotation counter + auto-save
-        # Wire from both viewports (shared model, strokes from either side)
+        # Stroke finished -> context-aware save (holdout vs SAM2)
+        def _on_stroke_finished():
+            if self._is_chroma_key_active():
+                self._auto_save_holdout()
+                self._schedule_chroma_key_preview()
+            else:
+                self._auto_save_annotations()
+                self._update_annotation_info()
+
         self._dual_viewer.input_viewer._split_view.stroke_finished.connect(
             _on_stroke_finished
         )
         self._dual_viewer.output_viewer._split_view.stroke_finished.connect(
             _on_stroke_finished
-        )
-        self._dual_viewer.output_viewer._split_view.stroke_finished.connect(
-            self._update_annotation_info
-        )
-        self._dual_viewer.output_viewer._split_view.stroke_finished.connect(
-            self._auto_save_annotations
         )
 
         # Parameter panel — live reprocess (debounced, Codex: coalesce stale)

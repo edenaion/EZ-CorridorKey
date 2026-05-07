@@ -116,6 +116,10 @@ class SplitViewWidget(QWidget):
         self._straight_line: bool = False    # Alt+click straight-line mode
         self._line_anchor: tuple[float, float] | None = None  # anchor in image-pixel coords
 
+        # Holdout mask state (chroma key forced regions)
+        self._holdout_model: AnnotationModel | None = None
+        self._holdout_active: bool = False
+
         # Eyedropper state
         self._eyedropper_mode: bool = False
         self._eyedropper_source: QImage | None = None  # input frame to sample from
@@ -318,7 +322,9 @@ class SplitViewWidget(QWidget):
         if self._extraction_total > 0:
             self._paint_extraction_overlay(painter)
 
-        # Eyedropper drag: floating color chip near cursor
+        # Eyedropper HUD + floating color chip
+        if self._eyedropper_mode:
+            self._paint_eyedropper_hud(painter)
         if self._eyedropper_sampling and self._eyedropper_preview_color:
             self._paint_eyedropper_chip(painter)
 
@@ -414,6 +420,19 @@ class SplitViewWidget(QWidget):
         font.setPointSize(16)
         painter.setFont(font)
         painter.drawText(self.rect(), Qt.AlignCenter, self._placeholder)
+
+    def _paint_eyedropper_hud(self, painter: QPainter) -> None:
+        """Draw a HUD overlay when eyedropper mode is active."""
+        painter.save()
+        font = painter.font()
+        font.setPointSize(10)
+        painter.setFont(font)
+        text = "Click + drag across varied background tones for best key"
+        hud_rect = QRectF(12, 12, 420, 24)
+        painter.fillRect(hud_rect, QColor(0, 0, 0, 150))
+        painter.setPen(QColor(255, 242, 3, 220))
+        painter.drawText(hud_rect, Qt.AlignCenter, text)
+        painter.restore()
 
     def _paint_eyedropper_chip(self, painter: QPainter) -> None:
         """Draw a floating color chip near the cursor during eyedropper drag."""
