@@ -1,4 +1,4 @@
-# EZ-CorridorKey **v1.10.0**
+# EZ-CorridorKey **v2.0.0**
 
 [![Release](https://img.shields.io/github/v/release/edenaion/EZ-CorridorKey?style=flat-square&label=Release&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![Stars](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
@@ -7,7 +7,7 @@
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
-> **Latest release: [v1.10.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.10.0)** — Project output dirs, wizard overhaul, signed updates, frozen build fixes. See the [full changelog](CHANGELOG.md).
+> **Latest release: [v2.0.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.0.0)** — Blue screen keying, chroma key eyedropper, VideoMaMa mask import, i18n support. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI chroma keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 

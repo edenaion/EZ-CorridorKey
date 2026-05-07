@@ -4,15 +4,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [Unreleased]
-
-### Added
-
-☼ **Localization / i18n support** ([#109](https://github.com/edenaion/EZ-CorridorKey/issues/109)) — all 329 user-visible strings are now marked for translation using Qt's built-in i18n system. A language picker in Preferences lets users select their display language. Translators can contribute new languages by editing standard `.ts` files with Qt Linguist. See `ui/translations/TRANSLATING.md` for step-by-step instructions: copy `corridorkey_en.ts` to your language code, translate in Qt Linguist, compile with `pyside6-lrelease`, and submit a PR.
-
----
-
-## [1.11.0] - 2026-05-05 — Blue screen keying, VideoMaMa mask import, FFmpeg overhaul
+## [2.0.0] - 2026-05-06 — Blue screen keying, chroma key eyedropper, i18n, VideoMaMa mask import
 
 ### Added
 
@@ -24,6 +16,9 @@ All notable changes to EZ-CorridorKey are documented here.
 ☼ **FFmpeg Browse button** — Preferences gains a manual file picker for FFmpeg with bin/ auto-detection and path validation. Custom path persists in QSettings.
 ☼ **Blue checkpoint in Download Manager** — CorridorKey Blue appears in the setup wizard model list (after Green, before SAM2). Default checked for new installs. CLI: `python scripts/setup_models.py --corridorkey-blue`.
 ☼ **On-demand blue download** — when a blue clip is detected and the blue checkpoint is missing (skinny update / git clone users), a dialog offers to download it via the setup wizard.
+☼ **Chroma key eyedropper drag-sampling** — the eyedropper (E) now samples a range of colors via click-drag instead of a single pixel click. A floating color chip shows the running average near the cursor. The keyer uses the 10th percentile screen excess across all samples for normalization, so dragging across shadows and hotspots produces a cleaner key than a single click.
+☼ **Localization / i18n support** ([#109](https://github.com/edenaion/EZ-CorridorKey/issues/109)) — all 329 user-visible strings are marked for translation via Qt i18n. Language picker in Preferences. Translators can contribute by editing `.ts` files with Qt Linguist. See `ui/translations/TRANSLATING.md`.
+☼ **Single-step slider scrolling** — all parameter panel sliders now move exactly one tick per scroll notch instead of Qt's default 3x multiplier.
 
 ### Fixed
 
