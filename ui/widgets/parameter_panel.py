@@ -7,6 +7,13 @@ from PySide6.QtWidgets import (
     QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtWidgets import QSizePolicy
+
+
+def _stretch_ignore(widget: QWidget) -> QWidget:
+    """Force Qt to ignore size hint so stretch factor alone controls width."""
+    widget.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+    return widget
 
 
 def _no_scroll_wheel(widget: QWidget) -> QWidget:
@@ -212,31 +219,32 @@ class ParameterPanel(QWidget):
         self._ck_clip_white.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
         ck_layout.addWidget(self._ck_clip_white)
 
-        # Shrink/Grow row (stretch 1:1 to match BIREFNET / General HR split)
-        sg_row = QHBoxLayout()
-        sg_row.setSpacing(4)
-        sg_row.addWidget(QLabel(self.tr("Shrink/Grow")), 1)
+        # Grid for label+spinbox pairs — single column boundary for alignment
+        ck_grid = QGridLayout()
+        ck_grid.setColumnStretch(0, 1)
+        ck_grid.setColumnStretch(1, 1)
+        ck_grid.setHorizontalSpacing(4)
+        ck_grid.setVerticalSpacing(6)
+
+        ck_grid.addWidget(QLabel(self.tr("Shrink/Grow")), 0, 0)
         self._ck_shrink_grow = _no_scroll_wheel(QSpinBox())
         self._ck_shrink_grow.setRange(-250, 250)
         self._ck_shrink_grow.setValue(0)
         self._ck_shrink_grow.setSuffix("px")
         self._ck_shrink_grow.setToolTip(self.tr("Erode (negative) or dilate (positive) the matte edge.\n0 = no change."))
         self._ck_shrink_grow.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
-        sg_row.addWidget(self._ck_shrink_grow, 1)
-        ck_layout.addLayout(sg_row)
+        ck_grid.addWidget(self._ck_shrink_grow, 0, 1)
 
-        # Edge Blur row (stretch 1:1 to match BIREFNET / General HR split)
-        eb_row = QHBoxLayout()
-        eb_row.setSpacing(4)
-        eb_row.addWidget(QLabel(self.tr("Edge Blur")), 1)
+        ck_grid.addWidget(QLabel(self.tr("Edge Blur")), 1, 0)
         self._ck_edge_blur = _no_scroll_wheel(QSpinBox())
         self._ck_edge_blur.setRange(0, 50)
         self._ck_edge_blur.setValue(0)
         self._ck_edge_blur.setSuffix("px")
         self._ck_edge_blur.setToolTip(self.tr("Gaussian blur radius for softening matte edges.\n0 = no blur."))
         self._ck_edge_blur.valueChanged.connect(lambda _: self.chroma_key_preview.emit())
-        eb_row.addWidget(self._ck_edge_blur, 1)
-        ck_layout.addLayout(eb_row)
+        ck_grid.addWidget(self._ck_edge_blur, 1, 1)
+
+        ck_layout.addLayout(ck_grid)
 
         # Generate button
         self._ck_generate_btn = QPushButton(self.tr("GENERATE"))
@@ -340,7 +348,11 @@ class ParameterPanel(QWidget):
                 "2. Press 2 to select the RED brush (background \u2014 area to remove)\n"
                 "3. Paint strokes on the left viewer over your footage\n"
                 "4. Click TRACK MASK to preview SAM2 on the painted frame\n"
-                "5. If the preview looks right, confirm to propagate across all frames"
+                "5. If the preview looks right, confirm to propagate across all frames\n\n"
+                "TIPS:\n"
+                "Shift + Left-drag up/down: change brush size\n"
+                "Alt + Left-drag: draw a straight line between two points\n"
+                "Ctrl+Z: undo last stroke"
             )
         )
         self._track_masks_btn.clicked.connect(self.track_masks_requested.emit)
@@ -349,12 +361,6 @@ class ParameterPanel(QWidget):
         self._annotation_info = QLabel("")
         self._annotation_info.setStyleSheet("color: #808070; font-size: 10px;")
         alpha_layout.addWidget(self._annotation_info)
-
-        matanyone2_hint = QLabel(self.tr("Requires paint strokes on frame 1"))
-        matanyone2_hint.setAlignment(Qt.AlignCenter)
-        matanyone2_hint.setWordWrap(True)
-        matanyone2_hint.setStyleSheet("color: #A0A090; font-size: 10px; margin: 2px 0;")
-        alpha_layout.addWidget(matanyone2_hint)
 
         self._matanyone2_btn = QPushButton(self.tr("MATANYONE2"))
         self._matanyone2_btn.setEnabled(False)
@@ -382,11 +388,19 @@ class ParameterPanel(QWidget):
             )
         )
         self._videomama_btn.clicked.connect(self.videomama_requested.emit)
+
+        # Pad left so the visible "VIDEOMAMA" text stays centered despite
+        # the + overlay occupying the left 26 px.
+        self._videomama_btn.setStyleSheet(
+            self._videomama_btn.styleSheet() + "QPushButton { padding-left: 26px; }"
+            if self._videomama_btn.styleSheet()
+            else "QPushButton { padding-left: 26px; }"
+        )
         alpha_layout.addWidget(self._videomama_btn)
 
-        # + overlay: child of VIDEOMAMA button for automatic positioning.
-        # We override setEnabled on the + button to ignore parent disable.
-        self._vmama_import_btn = QPushButton("+", self._videomama_btn)
+        # + overlay: parented to the alpha group (not videomama_btn) so it
+        # is never disabled when videomama_btn is disabled.
+        self._vmama_import_btn = QPushButton("+", alpha_group)
         self._vmama_import_btn.setFixedSize(26, 26)
         self._vmama_import_btn.setToolTip(
             self.tr(
@@ -403,13 +417,15 @@ class ParameterPanel(QWidget):
         )
         self._vmama_import_btn.clicked.connect(self.import_vmama_mask_requested.emit)
         self._vmama_import_btn.raise_()
-        # Position: left edge, vertically centered inside the button
+        # Reposition over videomama_btn whenever it moves/resizes
         orig_resize = self._videomama_btn.resizeEvent
         def _on_vmama_resize(e):
             if orig_resize:
                 orig_resize(e)
+            pos = self._videomama_btn.mapTo(alpha_group, self._videomama_btn.rect().topLeft())
             h = self._videomama_btn.height()
-            self._vmama_import_btn.move(3, (h - 26) // 2)
+            self._vmama_import_btn.move(pos.x() + 3, pos.y() + (h - 26) // 2)
+            self._vmama_import_btn.raise_()
         self._videomama_btn.resizeEvent = _on_vmama_resize
 
         or_label2 = QLabel("— or —")
@@ -438,10 +454,16 @@ class ParameterPanel(QWidget):
         inf_layout = QVBoxLayout(inf_group)
         inf_layout.setSpacing(8)
 
-        # BG Color (screen color: auto-detect, green, or blue)
-        bg_row = QHBoxLayout()
+        # Grid layout for label+control pairs — single column boundary
+        # guarantees pixel-perfect alignment across all rows.
+        inf_grid = QGridLayout()
+        inf_grid.setColumnStretch(0, 1)
+        inf_grid.setColumnStretch(1, 1)
+        inf_grid.setHorizontalSpacing(4)
+        inf_grid.setVerticalSpacing(6)
+
+        # Row 0: BG Color
         self._bg_color_label = QLabel(self.tr("BG Color"))
-        self._bg_color_label.setFixedWidth(80)
         self._bg_color_label.setToolTip(
             self.tr(
                 "Background screen color for this clip.\n\n"
@@ -452,28 +474,80 @@ class ParameterPanel(QWidget):
                 "detection are used. Also changes the UI accent color."
             )
         )
-        bg_row.addWidget(self._bg_color_label)
+        inf_grid.addWidget(self._bg_color_label, 0, 0)
         self._bg_color = QComboBox()
         self._bg_color.addItems([self.tr("Auto"), self.tr("Green"), self.tr("Blue")])
         self._bg_color.setToolTip(self._bg_color_label.toolTip())
         self._bg_color.currentIndexChanged.connect(self._on_bg_color_changed)
-        bg_row.addWidget(self._bg_color, 1)
-        inf_layout.addLayout(bg_row)
+        inf_grid.addWidget(self._bg_color, 0, 1)
 
-        # Color Space
-        cs_row = QHBoxLayout()
+        # Row 1: Color Space
         self._color_space_label = QLabel(self.tr("Color Space"))
-        self._color_space_label.setFixedWidth(80)
         self._color_space_label.setToolTip(self.tr(_COLOR_SPACE_TOOLTIP))
-        cs_row.addWidget(self._color_space_label)
+        inf_grid.addWidget(self._color_space_label, 1, 0)
         self._color_space = QComboBox()
         self._color_space.addItems([self.tr("sRGB"), self.tr("Linear")])
         self._color_space.setToolTip(self.tr(_COLOR_SPACE_TOOLTIP))
         self._color_space.currentIndexChanged.connect(self._emit_changed)
-        cs_row.addWidget(self._color_space, 1)
-        inf_layout.addLayout(cs_row)
+        inf_grid.addWidget(self._color_space, 1, 1)
 
-        # Despill Strength (slider 0-10 → 0.0-1.0)
+        # Row 2: Despeckle
+        self._despeckle_check = QCheckBox(self.tr("Despeckle"))
+        self._despeckle_check.setChecked(True)
+        self._despeckle_check.setToolTip(
+            self.tr(
+                "Removes small floating noise and speckles from the\n"
+                "alpha by discarding isolated regions smaller than the\n"
+                "size threshold."
+            )
+        )
+        self._despeckle_check.stateChanged.connect(self._on_despeckle_toggled)
+        inf_grid.addWidget(self._despeckle_check, 2, 0)
+        self._despeckle_size = _no_scroll_wheel(QSpinBox())
+        self._despeckle_size.setRange(0, 999999)
+        self._despeckle_size.setValue(400)
+        self._despeckle_size.setSuffix("px")
+        self._despeckle_size.setToolTip(
+            self.tr(
+                "Minimum area (in pixels) for a region to survive.\n"
+                "Isolated alpha blobs smaller than this are removed.\n"
+                "Lower = keep more detail, higher = cleaner matte."
+            )
+        )
+        self._despeckle_size.valueChanged.connect(self._emit_changed)
+        inf_grid.addWidget(self._despeckle_size, 2, 1)
+
+        # Row 3: Garbage Matte
+        self._garbage_matte_check = QCheckBox(self.tr("Garbage Matte"))
+        self._garbage_matte_check.setChecked(False)
+        self._garbage_matte_check.setToolTip(
+            self.tr(
+                "Expands the alpha hint by N pixels, then zeros out\n"
+                "anything in the predicted matte that falls outside\n"
+                "that expanded region. Removes edge-of-frame artifacts\n"
+                "and background gunk that inference leaves behind."
+            )
+        )
+        self._garbage_matte_check.stateChanged.connect(self._on_garbage_matte_toggled)
+        inf_grid.addWidget(self._garbage_matte_check, 3, 0)
+        self._garbage_matte_px = _no_scroll_wheel(QSpinBox())
+        self._garbage_matte_px.setRange(1, 500)
+        self._garbage_matte_px.setValue(20)
+        self._garbage_matte_px.setSuffix("px")
+        self._garbage_matte_px.setToolTip(
+            self.tr(
+                "Pixel expansion around the alpha hint.\n"
+                "Higher = more breathing room around subject edges.\n"
+                "Lower = tighter crop to the hint boundary."
+            )
+        )
+        self._garbage_matte_px.setEnabled(False)
+        self._garbage_matte_px.valueChanged.connect(self._emit_changed)
+        inf_grid.addWidget(self._garbage_matte_px, 3, 1)
+
+        inf_layout.addLayout(inf_grid)
+
+        # Despill Strength (slider 0-10 -> 0.0-1.0)
         self._despill_label = QLabel(self.tr("Despill: 0.5"))
         inf_layout.addWidget(self._despill_label)
         self._despill_slider = _no_scroll_wheel(QSlider(Qt.Horizontal))
@@ -489,35 +563,7 @@ class ParameterPanel(QWidget):
         self._despill_slider.valueChanged.connect(self._on_despill_changed)
         inf_layout.addWidget(self._despill_slider)
 
-        # Despeckle toggle + size
-        despeckle_row = QHBoxLayout()
-        self._despeckle_check = QCheckBox(self.tr("Despeckle"))
-        self._despeckle_check.setChecked(True)
-        self._despeckle_check.setToolTip(
-            self.tr(
-                "Automatic garbage matte \u2014 removes small floating noise\n"
-                "and speckles from the alpha by discarding isolated regions\n"
-                "smaller than the size threshold."
-            )
-        )
-        self._despeckle_check.stateChanged.connect(self._on_despeckle_toggled)
-        despeckle_row.addWidget(self._despeckle_check)
-        self._despeckle_size = _no_scroll_wheel(QSpinBox())
-        self._despeckle_size.setRange(0, 999999)
-        self._despeckle_size.setValue(400)
-        self._despeckle_size.setSuffix("px")
-        self._despeckle_size.setToolTip(
-            self.tr(
-                "Minimum area (in pixels) for a region to survive.\n"
-                "Isolated alpha blobs smaller than this are removed.\n"
-                "Lower = keep more detail, higher = cleaner matte."
-            )
-        )
-        self._despeckle_size.valueChanged.connect(self._emit_changed)
-        despeckle_row.addWidget(self._despeckle_size, 1)
-        inf_layout.addLayout(despeckle_row)
-
-        # Refiner Scale (slider 0-30 → 0.0-3.0)
+        # Refiner Scale (slider 0-30 -> 0.0-3.0)
         self._refiner_label = QLabel(self.tr("Refiner: 1.0"))
         inf_layout.addWidget(self._refiner_label)
         self._refiner_slider = _no_scroll_wheel(QSlider(Qt.Horizontal))
@@ -525,7 +571,7 @@ class ParameterPanel(QWidget):
         self._refiner_slider.setValue(10)
         self._refiner_slider.setToolTip(
             self.tr(
-                "Edge refinement strength (0.0\u20133.0).\n"
+                "Edge refinement strength (0.0-3.0).\n"
                 "Scales the CNN refiner's edge corrections.\n"
                 "1.0 = default, 0.0 = backbone only (no refinement),\n"
                 "higher = sharper edges but may introduce artifacts."
@@ -665,23 +711,37 @@ class ParameterPanel(QWidget):
 
         # Middle-click reset: map widget → (setter_callable, default_value)
         self._middle_click_defaults: dict[QWidget, tuple] = {
+            self._bg_color: (self._bg_color.setCurrentIndex, 0),            # Auto
+            self._color_space: (self._color_space.setCurrentIndex, 0),      # sRGB
             self._despill_slider: (self._despill_slider.setValue, 5),       # 0.5
             self._refiner_slider: (self._refiner_slider.setValue, 10),      # 1.0
             self._despeckle_size: (self._despeckle_size.setValue, 400),      # 400px
+            self._garbage_matte_px: (self._garbage_matte_px.setValue, 20),  # 20px
+            self._parallel_spin: (self._parallel_spin.setValue, 1),         # 1
             self._ck_strength: (self._ck_strength.setValue, 10),            # 1.0
             self._ck_clip_black: (self._ck_clip_black.setValue, 0),         # 0.0
             self._ck_clip_white: (self._ck_clip_white.setValue, 100),       # 1.0
             self._ck_shrink_grow: (self._ck_shrink_grow.setValue, 0),       # 0px
             self._ck_edge_blur: (self._ck_edge_blur.setValue, 0),           # 0px
         }
+        # Map internal child widgets (QSpinBox line edits, QComboBox) back
+        # to their parent so middle-click works when clicking the text area.
+        self._middle_click_child_map: dict[QWidget, QWidget] = {}
         for widget in self._middle_click_defaults:
             widget.installEventFilter(self)
+            # QSpinBox/QComboBox: also install on the internal QLineEdit
+            line_edit = getattr(widget, 'lineEdit', lambda: None)()
+            if line_edit is not None:
+                line_edit.installEventFilter(self)
+                self._middle_click_child_map[line_edit] = widget
 
     def eventFilter(self, obj, event) -> bool:
         """Middle-click resets a control to its default value."""
         if event.type() == QEvent.MouseButtonPress and event.button() == Qt.MiddleButton:
-            if obj in self._middle_click_defaults:
-                setter, default = self._middle_click_defaults[obj]
+            # Resolve child widgets (e.g. QSpinBox line edit) to their parent
+            target = self._middle_click_child_map.get(obj, obj)
+            if target in self._middle_click_defaults:
+                setter, default = self._middle_click_defaults[target]
                 setter(default)
                 return True
         return super().eventFilter(obj, event)
@@ -692,6 +752,10 @@ class ParameterPanel(QWidget):
             self.params_changed.emit()
 
     def _on_despeckle_toggled(self, state: int) -> None:
+        self._emit_changed()
+
+    def _on_garbage_matte_toggled(self, state: int) -> None:
+        self._garbage_matte_px.setEnabled(state == Qt.Checked.value)
         self._emit_changed()
 
     def _on_despill_changed(self, value: int) -> None:
@@ -742,6 +806,7 @@ class ParameterPanel(QWidget):
             despeckle_blur=5,       # fixed default
             refiner_scale=self._refiner_slider.value() / 10.0,
             screen_color=screen_color,
+            garbage_matte_px=self._garbage_matte_px.value() if self._garbage_matte_check.isChecked() else 0,
         )
 
     def get_output_config(self) -> OutputConfig:
@@ -820,10 +885,6 @@ class ParameterPanel(QWidget):
     def set_videomama_enabled(self, enabled: bool) -> None:
         """Enable/disable VideoMaMa button based on clip state."""
         self._videomama_btn.setEnabled(enabled)
-        # Qt disables children when parent is disabled. Force + back on
-        # after a 0ms timer so it runs after Qt propagates the disable.
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._vmama_import_btn.setEnabled(True))
 
     def set_matanyone2_enabled(self, enabled: bool) -> None:
         """Enable/disable MatAnyone2 button based on clip state."""
