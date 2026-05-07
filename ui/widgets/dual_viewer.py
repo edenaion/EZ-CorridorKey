@@ -150,6 +150,9 @@ class DualViewerPanel(QWidget):
         """
         shared_model = self._input_viewer.annotation_model
         self._output_viewer._split_view.set_annotation_model(shared_model)
+        # Cross-link siblings so painting on one viewer repaints the other live
+        self._input_viewer._split_view.set_annotation_sibling(self._output_viewer._split_view)
+        self._output_viewer._split_view.set_annotation_sibling(self._input_viewer._split_view)
 
     def set_input_exr_is_linear(self, enabled: bool) -> None:
         """Keep both viewers aligned on INPUT-mode EXR display interpretation."""

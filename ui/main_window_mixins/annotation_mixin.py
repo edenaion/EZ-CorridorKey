@@ -31,6 +31,7 @@ class AnnotationMixin:
             iv.set_annotation_mode(None)
             ov.set_annotation_mode(None)
         else:
+            # Deactivate eyedropper if active (mutually exclusive)
             self._deactivate_eyedropper_if_active()
             iv.set_annotation_mode("fg")
             ov.set_annotation_mode("fg")
@@ -43,9 +44,16 @@ class AnnotationMixin:
             iv.set_annotation_mode(None)
             ov.set_annotation_mode(None)
         else:
+            # Deactivate eyedropper if active (mutually exclusive)
             self._deactivate_eyedropper_if_active()
             iv.set_annotation_mode("bg")
             ov.set_annotation_mode("bg")
+
+    def _deactivate_eyedropper_if_active(self) -> None:
+        """Turn off the eyedropper if it's currently on."""
+        ed_btn = self._param_panel._eyedropper_btn
+        if ed_btn.isChecked():
+            ed_btn.setChecked(False)
 
     def _cycle_fg_color(self) -> None:
         """Hotkey C: cycle foreground annotation color (green/blue)."""
