@@ -8,6 +8,8 @@ import shutil
 import cv2
 from PySide6.QtWidgets import QMessageBox, QFileDialog
 
+from . import _tr
+
 from backend import ClipAsset, ClipState
 from backend.project import VIDEO_FILE_FILTER, is_video_file
 
@@ -16,6 +18,16 @@ logger = logging.getLogger(__name__)
 
 class AlphaImportMixin:
     """Alpha import dialog and validation pipeline for MainWindow."""
+
+    def _on_import_vmama_mask(self) -> None:
+        """Import masks directly into VideoMamaMaskHint/, bypassing SAM2 tracking.
+
+        Sets a flag so the shared import flow writes to VideoMamaMaskHint/
+        instead of AlphaHint/. The clip transitions to MASKED, ready for
+        VideoMaMa to refine.
+        """
+        self._import_as_vmama_mask = True
+        self._on_import_alpha()
 
     def _on_import_alpha(self) -> None:
         """Import user-provided alpha hints into AlphaHint/*.png.
@@ -44,19 +56,19 @@ class AlphaImportMixin:
         )
         if has_existing_alpha:
             result = QMessageBox.question(
-                self, "Replace Alpha Hints?",
-                f"Clip '{clip.name}' already has alpha hint images.\n\n"
-                "Do you want to replace them with new ones?",
+                self, _tr("Replace Alpha Hints?"),
+                _tr("Clip '%s' already has alpha hint images.\n\n"
+                    "Do you want to replace them with new ones?") % clip.name,
                 QMessageBox.Yes | QMessageBox.No,
             )
             if result != QMessageBox.Yes:
                 return
 
         picker = QMessageBox(self)
-        picker.setWindowTitle("Import Alpha")
-        picker.setText("Import alpha from an image folder or a video file?")
-        folder_btn = picker.addButton("Image Folder", QMessageBox.AcceptRole)
-        video_btn = picker.addButton("Video File", QMessageBox.ActionRole)
+        picker.setWindowTitle(_tr("Import Alpha"))
+        picker.setText(_tr("Import alpha from an image folder or a video file?"))
+        folder_btn = picker.addButton(_tr("Image Folder"), QMessageBox.AcceptRole)
+        video_btn = picker.addButton(_tr("Video File"), QMessageBox.ActionRole)
         picker.addButton(QMessageBox.Cancel)
         picker.setDefaultButton(folder_btn)
         picker.exec()
@@ -66,7 +78,7 @@ class AlphaImportMixin:
         clicked = picker.clickedButton()
         if clicked == folder_btn:
             source_path = QFileDialog.getExistingDirectory(
-                self, "Select Alpha Hint Folder",
+                self, _tr("Select Alpha Hint Folder"),
                 "",
                 QFileDialog.ShowDirsOnly,
             )
@@ -75,7 +87,7 @@ class AlphaImportMixin:
         elif clicked == video_btn:
             source_path, _ = QFileDialog.getOpenFileName(
                 self,
-                "Select Alpha Hint Video",
+                _tr("Select Alpha Hint Video"),
                 "",
                 VIDEO_FILE_FILTER,
             )
@@ -96,9 +108,9 @@ class AlphaImportMixin:
 
             if not src_files:
                 QMessageBox.warning(
-                    self, "No Images",
-                    "No image files found in the selected folder.\n"
-                    "Expected grayscale images (white=foreground, black=background).",
+                    self, _tr("No Images"),
+                    _tr("No image files found in the selected folder.\n"
+                        "Expected grayscale images (white=foreground, black=background)."),
                 )
                 return
 
@@ -108,8 +120,8 @@ class AlphaImportMixin:
             n_src = alpha_video.frame_count
             if n_src <= 0:
                 QMessageBox.warning(
-                    self, "Unreadable Video",
-                    "Could not read frame count from the selected alpha video.",
+                    self, _tr("Unreadable Video"),
+                    _tr("Could not read frame count from the selected alpha video."),
                 )
                 return
 
@@ -129,34 +141,46 @@ class AlphaImportMixin:
 
         if n_src != n_input:
             result = QMessageBox.warning(
-                self, "Frame Count Mismatch",
-                f"Clip '{clip.name}' has {n_input} input frames but you "
-                f"selected {n_src} alpha hints.\n\n"
-                f"Each input frame needs a matching alpha hint.\n"
-                f"Only {min(n_src, n_input)} frames will be paired.",
+                self, _tr("Frame Count Mismatch"),
+                _tr("Clip '%s' has %d input frames but you "
+                    "selected %d alpha hints.\n\n"
+                    "Each input frame needs a matching alpha hint.\n"
+                    "Only %d frames will be paired.") % (clip.name, n_input, n_src, min(n_src, n_input)),
                 QMessageBox.Ok | QMessageBox.Cancel,
             )
             if result == QMessageBox.Cancel:
                 return
 
+        import_as_vmama_mask = getattr(self, '_import_as_vmama_mask', False)
+        self._import_as_vmama_mask = False  # reset flag
+
         # Confirm import
         n_paired = min(n_src, n_input)
+        target_name = "VideoMamaMaskHint" if import_as_vmama_mask else "AlphaHint"
         if source_kind == "video":
             msg = (
                 f"Import alpha video ({n_src} frames) into '{clip.name}'?\n\n"
-                "The video will be converted to 8-bit PNG alpha frames in AlphaHint/."
+                f"The video will be converted to 8-bit PNG frames in {target_name}/."
             )
         else:
-            msg = f"Import {n_paired} alpha hint images into '{clip.name}'?"
+            msg = f"Import {n_paired} alpha images into '{clip.name}' as {target_name}?"
         if n_src != n_input:
-            msg += f"\n({abs(n_src - n_input)} frames will have no alpha hint)"
-        if QMessageBox.question(self, "Import Alpha", msg) != QMessageBox.Yes:
+            msg += f"\n({abs(n_src - n_input)} frames will have no alpha)"
+        if QMessageBox.question(self, _tr("Import Alpha"), msg) != QMessageBox.Yes:
             return
 
         imported_count = 0
         try:
-            _remove_alpha_hint_assets(clip.root_path)
-            alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+            if import_as_vmama_mask:
+                # Clean existing mask hint directory
+                mask_dir = os.path.join(clip.root_path, "VideoMamaMaskHint")
+                if os.path.isdir(mask_dir):
+                    for f in os.listdir(mask_dir):
+                        if f.lower().endswith(('.png', '.jpg', '.jpeg')):
+                            os.remove(os.path.join(mask_dir, f))
+            else:
+                _remove_alpha_hint_assets(clip.root_path)
+            alpha_dir = os.path.join(clip.root_path, target_name)
 
             if source_kind == "video":
                 imported_count = _import_alpha_video_as_sequence(
@@ -179,16 +203,27 @@ class AlphaImportMixin:
                     dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
 
                     src_ext = os.path.splitext(src_path)[1].lower()
-                    if src_ext == ".png":
+
+                    if not import_as_vmama_mask and src_ext == ".png":
+                        # Fast path: copy PNG as-is for final alpha
                         shutil.copy2(src_path, dst_path)
                         imported_count += 1
                         continue
 
                     img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
-                    if img is not None and cv2.imwrite(dst_path, img):
+                    if img is None:
+                        logger.warning("Failed to import alpha image: %s", src_path)
+                        continue
+
+                    # VideoMaMa needs binary masks (0 or 255).
+                    # Crush any grayscale values to pure black/white.
+                    if import_as_vmama_mask:
+                        _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+
+                    if cv2.imwrite(dst_path, img):
                         imported_count += 1
                     else:
-                        logger.warning("Failed to import alpha image: %s", src_path)
+                        logger.warning("Failed to write alpha image: %s", dst_path)
 
                 if imported_count == 0:
                     shutil.rmtree(alpha_dir, ignore_errors=True)
@@ -199,8 +234,8 @@ class AlphaImportMixin:
         except OSError as exc:
             QMessageBox.critical(
                 self,
-                "Import Alpha Failed",
-                f"Failed to import alpha hints:\n{exc}",
+                _tr("Import Alpha Failed"),
+                _tr("Failed to import alpha hints:\n%s") % exc,
             )
             return
 
@@ -216,14 +251,15 @@ class AlphaImportMixin:
                 clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
 
+        label = "VideoMaMa masks" if import_as_vmama_mask else "alpha hints"
         if source_kind == "video":
             toast_msg = (
-                f"Imported {imported_count}/{n_paired} alpha frames from video.\n"
+                f"Imported {imported_count}/{n_paired} {label} from video.\n"
                 f"Clip is now {clip.state.value}."
             )
         else:
             toast_msg = (
-                f"Imported {imported_count}/{n_paired} alpha hints.\n"
+                f"Imported {imported_count}/{n_paired} {label}.\n"
                 f"Clip is now {clip.state.value}."
             )
         _Toast(self, toast_msg)

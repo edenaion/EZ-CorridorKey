@@ -85,7 +85,7 @@ class StatusBar(QWidget):
         self._progress.setTextVisible(False)
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
-        self._progress.setToolTip("Inference progress for the current job")
+        self._progress.setToolTip(self.tr("Inference progress for the current job"))
         layout.addWidget(self._progress)
 
         # Frame counter + timer
@@ -111,15 +111,17 @@ class StatusBar(QWidget):
         layout.addStretch(1)
 
         # Run button (primary CTA)
-        self._run_btn = QPushButton("RUN INFERENCE")
+        self._run_btn = QPushButton(self.tr("RUN INFERENCE"))
         self._run_btn.setObjectName("runButton")
         self._run_btn.setFixedWidth(160)
         self._run_btn.setFixedHeight(32)
         self._run_btn.setEnabled(False)
         self._run_btn.setToolTip(
-            "Run AI keying on the selected clip (Ctrl+R).\n"
-            "Requires a READY or COMPLETE clip with alpha hints.\n"
-            "Respects in/out range if set (I/O hotkeys)."
+            self.tr(
+                "Run AI keying on the selected clip (Ctrl+R).\n"
+                "Requires a READY or COMPLETE clip with alpha hints.\n"
+                "Respects in/out range if set (I/O hotkeys)."
+            )
         )
         self._run_mode = "inference"  # "inference" or "extraction"
         self._run_btn.clicked.connect(self._on_run_clicked)
@@ -134,24 +136,26 @@ class StatusBar(QWidget):
         layout.addWidget(self._btn_divider)
 
         # Resume button (secondary — only shown when partial outputs exist)
-        self._resume_btn = QPushButton("RESUME")
+        self._resume_btn = QPushButton(self.tr("RESUME"))
         self._resume_btn.setObjectName("resumeButton")
         self._resume_btn.setFixedWidth(100)
         self._resume_btn.setFixedHeight(32)
         self._resume_btn.setToolTip(
-            "Resume inference — skip already-processed frames,\n"
-            "fill in remaining gaps across the full clip."
+            self.tr(
+                "Resume inference — skip already-processed frames,\n"
+                "fill in remaining gaps across the full clip."
+            )
         )
         self._resume_btn.clicked.connect(self.resume_clicked.emit)
         self._resume_btn.hide()
         layout.addWidget(self._resume_btn)
 
         # Stop button (replaces run+resume during jobs)
-        self._stop_btn = QPushButton("STOP")
+        self._stop_btn = QPushButton(self.tr("STOP"))
         self._stop_btn.setObjectName("stopButton")
         self._stop_btn.setFixedWidth(80)
         self._stop_btn.setFixedHeight(32)
-        self._stop_btn.setToolTip("Stop the current job (Escape).\nAlready-processed frames are kept on disk.")
+        self._stop_btn.setToolTip(self.tr("Stop the current job (Escape).\nAlready-processed frames are kept on disk."))
         self._stop_btn.clicked.connect(self.stop_clicked.emit)
         self._stop_btn.hide()
         layout.addWidget(self._stop_btn)
@@ -187,18 +191,22 @@ class StatusBar(QWidget):
     def set_stop_button_mode(self, force: bool) -> None:
         """Switch STOP between cooperative cancel and hard-stop wording."""
         if force:
-            self._stop_btn.setText("FORCE STOP")
+            self._stop_btn.setText(self.tr("FORCE STOP"))
             self._stop_btn.setFixedWidth(120)
             self._stop_btn.setToolTip(
-                "The current GPU step is blocked.\n"
-                "Force Stop will relaunch the app to break the stuck job."
+                self.tr(
+                    "The current GPU step is blocked.\n"
+                    "Force Stop will relaunch the app to break the stuck job."
+                )
             )
         else:
-            self._stop_btn.setText("STOP")
+            self._stop_btn.setText(self.tr("STOP"))
             self._stop_btn.setFixedWidth(80)
             self._stop_btn.setToolTip(
-                "Stop the current job (Escape).\n"
-                "Already-processed frames are kept on disk."
+                self.tr(
+                    "Stop the current job (Escape).\n"
+                    "Already-processed frames are kept on disk."
+                )
             )
 
     def _on_run_clicked(self) -> None:
@@ -224,23 +232,23 @@ class StatusBar(QWidget):
             needs_pipeline: At least one selected clip needs alpha generation.
         """
         if needs_extraction:
-            self._run_btn.setText("RUN EXTRACTION")
+            self._run_btn.setText(self.tr("RUN EXTRACTION"))
             self._run_btn.setEnabled(True)
             self._run_mode = "extraction"
         elif batch_count > 1 and needs_pipeline:
-            self._run_btn.setText("RUN PIPELINE")
+            self._run_btn.setText(self.tr("RUN PIPELINE"))
             self._run_btn.setEnabled(True)
             self._run_mode = "inference"
         elif batch_count > 1:
-            self._run_btn.setText(f"RUN {batch_count} CLIPS")
+            self._run_btn.setText(self.tr("RUN %d CLIPS") % batch_count)
             self._run_btn.setEnabled(True)
             self._run_mode = "inference"
         elif has_in_out:
-            self._run_btn.setText("RUN SELECTED")
+            self._run_btn.setText(self.tr("RUN SELECTED"))
             self._run_btn.setEnabled(can_run)
             self._run_mode = "inference"
         else:
-            self._run_btn.setText("RUN INFERENCE")
+            self._run_btn.setText(self.tr("RUN INFERENCE"))
             self._run_btn.setEnabled(can_run)
             self._run_mode = "inference"
 
@@ -333,12 +341,17 @@ class StatusBar(QWidget):
         self._warning_count += 1
         if message:
             self._warnings.append(message)
-        label = f"{self._warning_count} warning{'s' if self._warning_count != 1 else ''}"
+        if self._warning_count == 1:
+            label = self.tr("1 warning")
+        else:
+            label = self.tr("%d warnings") % self._warning_count
         self._warn_btn.setText(label)
         self._warn_btn.show()
         if self._warnings:
             latest = _wrap_tooltip_text(self._warnings[-1])
-            self._warn_btn.setToolTip(f"Latest:\n{latest}\n\nClick for all warnings")
+            self._warn_btn.setToolTip(
+                self.tr("Latest:\n%s\n\nClick for all warnings") % latest
+            )
 
     def set_message(self, text: str) -> None:
         """Show a status message in the frame label area."""
@@ -390,7 +403,7 @@ class StatusBar(QWidget):
     def _build_warnings_dialog(self) -> QDialog:
         """Build the warnings dialog."""
         dlg = QDialog(self._dialog_parent())
-        dlg.setWindowTitle(f"Warnings ({self._warning_count})")
+        dlg.setWindowTitle(self.tr("Warnings (%d)") % self._warning_count)
         dlg.setModal(True)
         dlg.setWindowModality(Qt.WindowModal)
         dlg.setMinimumSize(500, 300)

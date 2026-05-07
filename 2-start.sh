@@ -3,8 +3,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 if [ ! -d ".venv" ]; then
-    echo "[ERROR] .venv not found. Run 1-install.sh first!"
-    exit 1
+    echo "[INFO] .venv not found. Running installer..."
+    chmod +x "$SCRIPT_DIR/1-install.sh"
+    "$SCRIPT_DIR/1-install.sh"
+    if [ ! -d ".venv" ]; then
+        echo "[ERROR] Installation failed. Please run 1-install.sh manually and check for errors."
+        exit 1
+    fi
 fi
 
 source .venv/bin/activate

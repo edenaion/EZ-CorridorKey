@@ -36,6 +36,7 @@ def probe_video(path: str) -> dict:
 
     result = subprocess.run(
         cmd, capture_output=True, text=True, timeout=30,
+        encoding="utf-8", errors="replace",
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     if result.returncode != 0:

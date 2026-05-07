@@ -3,9 +3,13 @@ TITLE EZ-CorridorKey
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\activate.bat" (
-    echo [ERROR] .venv not found. Run 1-install.bat first!
-    pause
-    exit /b 1
+    echo [INFO] .venv not found. Running installer...
+    call 1-install.bat
+    if not exist ".venv\Scripts\activate.bat" (
+        echo [ERROR] Installation failed. Please run 1-install.bat manually and check for errors.
+        pause
+        exit /b 1
+    )
 )
 
 REM Add local ffmpeg to PATH if present

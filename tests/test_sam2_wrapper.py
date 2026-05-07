@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 import numpy as np
 import pytest
 import torch
@@ -132,3 +135,58 @@ def test_track_video_refines_sparse_point_batches(monkeypatch):
         assert call["box"] is None
         assert call["points"].shape == (8, 2)
         assert call["labels"].tolist() == [1, 1, 1, 1, 1, 1, 0, 0]
+
+
+# ── Checkpoint validation tests ──────────────────────────────────────────
+
+
+class TestValidateCheckpoint:
+    """Tests for SAM2Tracker._validate_checkpoint (issue #116)."""
+
+    def _make_valid_pt(self, path: str) -> None:
+        """Write a fake .pt file with valid ZIP header and sufficient size."""
+        import zipfile
+        with zipfile.ZipFile(path, 'w') as zf:
+            # Write enough padding to exceed the 10 MB minimum
+            zf.writestr("archive/data.pkl", b"\x00" * (11 * 1024 * 1024))
+
+    def test_accepts_valid_checkpoint(self, tmp_path):
+        ckpt = str(tmp_path / "model.pt")
+        self._make_valid_pt(ckpt)
+        # Should not raise
+        SAM2Tracker._validate_checkpoint(ckpt)
+
+    def test_rejects_empty_file(self, tmp_path):
+        ckpt = str(tmp_path / "model.pt")
+        with open(ckpt, 'wb') as f:
+            pass
+        with pytest.raises(RuntimeError, match="corrupt or incomplete"):
+            SAM2Tracker._validate_checkpoint(ckpt)
+
+    def test_rejects_pointer_file(self, tmp_path):
+        ckpt = str(tmp_path / "model.pt")
+        with open(ckpt, 'w') as f:
+            f.write("version https://git-lfs.github.com/spec/v1\n"
+                    "oid sha256:abc123def456\nsize 184416285\n")
+        with pytest.raises(RuntimeError, match="corrupt or incomplete"):
+            SAM2Tracker._validate_checkpoint(ckpt)
+
+    def test_rejects_large_file_with_bad_header(self, tmp_path):
+        ckpt = str(tmp_path / "model.pt")
+        with open(ckpt, 'wb') as f:
+            f.write(b"\x00" * (11 * 1024 * 1024))
+        with pytest.raises(RuntimeError, match="not a valid torch file"):
+            SAM2Tracker._validate_checkpoint(ckpt)
+
+    def test_rejects_nonexistent_file(self, tmp_path):
+        ckpt = str(tmp_path / "missing.pt")
+        with pytest.raises(RuntimeError, match="not accessible"):
+            SAM2Tracker._validate_checkpoint(ckpt)
+
+    def test_error_message_includes_delete_path(self, tmp_path):
+        ckpt = str(tmp_path / "snapshots" / "abc123" / "model.pt")
+        os.makedirs(os.path.dirname(ckpt))
+        with open(ckpt, 'wb') as f:
+            f.write(b"\x00" * 50)
+        with pytest.raises(RuntimeError, match="Delete this folder"):
+            SAM2Tracker._validate_checkpoint(ckpt)

@@ -87,6 +87,20 @@ def _auto_detect_backend() -> str:
         logger.info("No %s checkpoint found — using torch backend", MLX_EXT)
         return "torch"
 
+    # MLX's Metal backend must be initialized on the main thread.  If the
+    # main-thread prewarm (pyi_rth_mlx.py / app.py) failed silently and
+    # mlx.core was never imported, attempting the first import here on a
+    # worker thread will cause Metal to abort() the process.  Fall back to
+    # Torch/MPS instead of crashing.
+    import threading
+    if "mlx.core" not in sys.modules and threading.current_thread() is not threading.main_thread():
+        logger.warning(
+            "mlx.core not initialized on main thread — falling back to "
+            "torch/MPS to avoid Metal abort().  This usually means the MLX "
+            "prewarm failed at startup; check earlier log messages."
+        )
+        return "torch"
+
     logger.info("Apple Silicon + MLX available — using mlx backend")
     return "mlx"
 
@@ -105,15 +119,21 @@ def _validate_mlx_available() -> None:
         ) from err
 
 
-def _discover_checkpoint(ext: str) -> Path:
-    """Find exactly one checkpoint with the given extension.
+def _discover_checkpoint(ext: str, screen_color: str = "green") -> Path:
+    """Find the checkpoint for the given extension and screen color.
 
-    Raises FileNotFoundError (0 found) or ValueError (>1 found).
-    Includes cross-reference hints when wrong extension files exist.
+    For Torch (.pth):
+      green -> CorridorKey.pth (or any .pth not containing "Blue")
+      blue  -> CorridorKeyBlue*.pth
+
+    Falls back to any available checkpoint if the requested variant
+    is missing, so single-checkpoint installs keep working.
+
+    Raises FileNotFoundError if no checkpoint exists at all.
     """
-    matches = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{ext}"))
+    all_matches = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{ext}"))
 
-    if len(matches) == 0:
+    if not all_matches:
         other_ext = MLX_EXT if ext == TORCH_EXT else TORCH_EXT
         other_files = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{other_ext}"))
         hint = ""
@@ -122,11 +142,29 @@ def _discover_checkpoint(ext: str) -> Path:
             hint = f" (Found {other_ext} files — did you mean CORRIDORKEY_BACKEND={other_backend}?)"
         raise FileNotFoundError(f"No {ext} checkpoint found in {CHECKPOINT_DIR}.{hint}")
 
-    if len(matches) > 1:
-        names = [os.path.basename(f) for f in matches]
-        raise ValueError(f"Multiple {ext} checkpoints in {CHECKPOINT_DIR}: {names}. Keep exactly one.")
+    # Split into blue and green (non-blue) variants
+    blue_matches = [m for m in all_matches if "blue" in os.path.basename(m).lower()]
+    green_matches = [m for m in all_matches if "blue" not in os.path.basename(m).lower()]
 
-    return Path(matches[0])
+    if screen_color == "blue":
+        if blue_matches:
+            return Path(blue_matches[0])
+        logger.warning("Blue checkpoint not found, falling back to green")
+        return Path(all_matches[0])
+    else:
+        if green_matches:
+            return Path(green_matches[0])
+        logger.warning("Green checkpoint not found, falling back to blue")
+        return Path(all_matches[0])
+
+
+def has_blue_checkpoint() -> bool:
+    """Check if a blue-screen checkpoint is available."""
+    for ext in (TORCH_EXT, MLX_EXT):
+        matches = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{ext}"))
+        if any("blue" in os.path.basename(m).lower() for m in matches):
+            return True
+    return False
 
 
 def _wrap_mlx_output(
@@ -138,6 +176,9 @@ def _wrap_mlx_output(
     despeckle_size: int,
     despeckle_dilation: int = _D["despeckle_dilation"],
     despeckle_blur: int = _D["despeckle_blur"],
+    screen_color: str = _D["screen_color"],
+    garbage_matte_px: int = _D["garbage_matte_px"],
+    mask_linear: np.ndarray | None = None,
 ) -> dict:
     """Normalize MLX uint8 output to match Torch float32 contract.
 
@@ -167,8 +208,19 @@ def _wrap_mlx_output(
     else:
         processed_alpha = alpha
 
+    # Apply garbage matte
+    if garbage_matte_px > 0 and mask_linear is not None:
+        k = 2 * garbage_matte_px + 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+        hint_2d = mask_linear[:, :, 0] if mask_linear.ndim == 3 else mask_linear
+        expanded_hint = cv2.dilate(hint_2d, kernel)
+        if expanded_hint.ndim == 2:
+            expanded_hint = expanded_hint[:, :, np.newaxis]
+        processed_alpha = processed_alpha * expanded_hint
+
     # Apply despill (MLX stubs this)
-    fg_despilled = cu.despill(fg, green_limit_mode="average", strength=despill_strength)
+    fg_despilled = cu.despill(fg, green_limit_mode="average", strength=despill_strength,
+                              screen_color=screen_color)
 
     if source_image.dtype != np.float32:
         source_rgb = source_image.astype(np.float32)
@@ -183,7 +235,8 @@ def _wrap_mlx_output(
     # Despill the source too — _restore_opaque_source_detail blends source
     # pixels back in, and they must already be despilled or they undo the
     # despill we just applied to the model fg.
-    source_srgb_despilled = cu.despill(source_srgb, green_limit_mode="average", strength=despill_strength)
+    source_srgb_despilled = cu.despill(source_srgb, green_limit_mode="average",
+                                       strength=despill_strength, screen_color=screen_color)
     source_lin_despilled = cu.srgb_to_linear(source_srgb_despilled)
 
     # Composite over checkerboard for comp output
@@ -196,6 +249,7 @@ def _wrap_mlx_output(
         source_srgb_despilled,
         fg_despilled_lin,
         processed_alpha,
+        screen_color=screen_color,
     )
     comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha)
     comp_srgb = cu.linear_to_srgb(comp_lin)
@@ -210,6 +264,7 @@ def _wrap_mlx_output(
     fg_lin = cu.srgb_to_linear(fg)
     fg_restored_lin = _restore_opaque_source_detail(
         source_lin_despilled, source_srgb_despilled, fg_lin, processed_alpha,
+        screen_color=screen_color,
     )
     fg_restored = cu.linear_to_srgb(fg_restored_lin)
 
@@ -232,6 +287,9 @@ def _assemble_mlx_output(
     despeckle_size: int,
     despeckle_dilation: int = _D["despeckle_dilation"],
     despeckle_blur: int = _D["despeckle_blur"],
+    screen_color: str = _D["screen_color"],
+    garbage_matte_px: int = _D["garbage_matte_px"],
+    mask_linear: np.ndarray | None = None,
 ) -> dict:
     """Assemble the shared Torch-style contract from MLX float outputs."""
     from CorridorKeyModule.core import color_utils as cu
@@ -250,7 +308,17 @@ def _assemble_mlx_output(
     else:
         processed_alpha = alpha
 
-    fg_despilled = cu.despill(fg, green_limit_mode="average", strength=despill_strength)
+    if garbage_matte_px > 0 and mask_linear is not None:
+        k = 2 * garbage_matte_px + 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+        hint_2d = mask_linear[:, :, 0] if mask_linear.ndim == 3 else mask_linear
+        expanded_hint = cv2.dilate(hint_2d, kernel)
+        if expanded_hint.ndim == 2:
+            expanded_hint = expanded_hint[:, :, np.newaxis]
+        processed_alpha = processed_alpha * expanded_hint
+
+    fg_despilled = cu.despill(fg, green_limit_mode="average", strength=despill_strength,
+                              screen_color=screen_color)
 
     if source_image.dtype != np.float32:
         source_rgb = source_image.astype(np.float32)
@@ -265,7 +333,8 @@ def _assemble_mlx_output(
     # Despill the source too — _restore_opaque_source_detail blends source
     # pixels back in, and they must already be despilled or they undo the
     # despill we just applied to the model fg.
-    source_srgb_despilled = cu.despill(source_srgb, green_limit_mode="average", strength=despill_strength)
+    source_srgb_despilled = cu.despill(source_srgb, green_limit_mode="average",
+                                       strength=despill_strength, screen_color=screen_color)
     source_lin_despilled = cu.srgb_to_linear(source_srgb_despilled)
 
     h, w = fg.shape[:2]
@@ -277,6 +346,7 @@ def _assemble_mlx_output(
         source_srgb_despilled,
         fg_despilled_lin,
         processed_alpha,
+        screen_color=screen_color,
     )
     comp_lin = cu.composite_straight(fg_despilled_lin, bg_lin, processed_alpha)
     comp_srgb = cu.linear_to_srgb(comp_lin)
@@ -290,6 +360,7 @@ def _assemble_mlx_output(
     fg_lin = cu.srgb_to_linear(fg)
     fg_restored_lin = _restore_opaque_source_detail(
         source_lin_despilled, source_srgb_despilled, fg_lin, processed_alpha,
+        screen_color=screen_color,
     )
     fg_restored = cu.linear_to_srgb(fg_restored_lin)
 
@@ -369,13 +440,14 @@ def _restore_opaque_source_detail(
     edge_source_alpha_softness: float = 0.18,
     green_spill_threshold: float = 0.03,
     green_spill_softness: float = 0.08,
+    screen_color: str = "green",
 ) -> np.ndarray:
     """Prefer source detail away from the alpha edge band.
 
     Near the edge, source color is only preserved when the pixel is still
-    reasonably opaque *and* the source does not look green-contaminated.
-    This keeps opaque clothing edges from drifting orange/red while still
-    letting MLX own real green-spill zones like wispy hair.
+    reasonably opaque *and* the source does not look screen-contaminated.
+    This keeps opaque clothing edges from drifting while still letting
+    the model own real spill zones like wispy hair.
     """
     alpha_plane = alpha if alpha.ndim == 3 else alpha[:, :, np.newaxis]
     alpha_plane = np.clip(alpha_plane.astype(np.float32, copy=False), 0.0, 1.0)
@@ -407,12 +479,18 @@ def _restore_opaque_source_detail(
     )
 
     source_srgb = np.clip(source_srgb.astype(np.float32, copy=False), 0.0, 1.0)
-    green_excess = (
-        source_srgb[..., 1:2]
-        - np.maximum(source_srgb[..., 0:1], source_srgb[..., 2:3])
+    # Detect spill channel: green=1, blue=2
+    if screen_color == "blue":
+        spill_ch, other_a, other_b = 2, 0, 1
+    else:
+        spill_ch, other_a, other_b = 1, 0, 2
+    spill_excess = (
+        source_srgb[..., spill_ch:spill_ch + 1]
+        - np.maximum(source_srgb[..., other_a:other_a + 1],
+                      source_srgb[..., other_b:other_b + 1])
     )
     green_spill_weight = np.clip(
-        (green_excess - green_spill_threshold) / max(green_spill_softness, 1e-6),
+        (spill_excess - green_spill_threshold) / max(green_spill_softness, 1e-6),
         0.0,
         1.0,
     )
@@ -516,6 +594,8 @@ class _MLXEngineAdapter:
         source_passthrough=_D["source_passthrough"],
         edge_erode_px=_D["edge_erode_px"],
         edge_blur_px=_D["edge_blur_px"],
+        screen_color=_D["screen_color"],
+        garbage_matte_px=_D["garbage_matte_px"],
     ):
         """Delegate to MLX engine, then normalize output to Torch contract."""
         # corridorkey-mlx expects sRGB uint8 input even when input_is_linear=True.
@@ -542,6 +622,9 @@ class _MLXEngineAdapter:
                 despeckle_size=despeckle_size,
                 despeckle_dilation=despeckle_dilation,
                 despeckle_blur=despeckle_blur,
+                screen_color=screen_color,
+                garbage_matte_px=garbage_matte_px,
+                mask_linear=mask_linear,
             )
 
         raw = self._engine.process_frame(
@@ -558,6 +641,9 @@ class _MLXEngineAdapter:
         return _wrap_mlx_output(
             raw, image, input_is_linear, despill_strength, auto_despeckle,
             despeckle_size, despeckle_dilation, despeckle_blur,
+            screen_color=screen_color,
+            garbage_matte_px=garbage_matte_px,
+            mask_linear=mask_linear,
         )
 
 
@@ -573,6 +659,7 @@ def create_engine(
     tile_size: int | None = DEFAULT_MLX_TILE_SIZE,
     overlap: int = DEFAULT_MLX_TILE_OVERLAP,
     on_status=None,
+    screen_color: str = "green",
 ):
     """Factory: returns an engine with process_frame() matching the Torch contract.
 
@@ -585,11 +672,20 @@ def create_engine(
             Set to None to disable tiling and use full-frame inference.
         overlap: MLX only — overlap pixels between tiles (default 64).
         on_status: Optional status callback for UI.
+        screen_color: 'green' or 'blue' — selects the matching checkpoint.
     """
     backend = resolve_backend(backend)
 
+    # No blue MLX checkpoint exists yet. Force Torch/MPS on Apple Silicon
+    # when blue screen is active so we use the .pth blue checkpoint.
+    if backend == "mlx" and screen_color == "blue":
+        logger.info("Blue screen active — no MLX checkpoint available, switching to Torch/MPS")
+        backend = "torch"
+        if device is None:
+            device = "mps"
+
     if backend == "mlx":
-        ckpt = _discover_checkpoint(MLX_EXT)
+        ckpt = _discover_checkpoint(MLX_EXT, screen_color=screen_color)
         from corridorkey_mlx import CorridorKeyMLXEngine  # type: ignore[import-not-found]
 
         try:
@@ -604,10 +700,10 @@ def create_engine(
         logger.info("MLX engine loaded: %s [%s]", ckpt.name, mode)
         return _MLXEngineAdapter(raw_engine)
     else:
-        ckpt = _discover_checkpoint(TORCH_EXT)
+        ckpt = _discover_checkpoint(TORCH_EXT, screen_color=screen_color)
         from CorridorKeyModule.inference_engine import CorridorKeyEngine
 
-        logger.info("Torch engine loaded: %s (device=%s)", ckpt.name, device)
+        logger.info("Torch engine loaded: %s (device=%s, screen=%s)", ckpt.name, device, screen_color)
         return CorridorKeyEngine(
             checkpoint_path=str(ckpt),
             device=device or "cpu",

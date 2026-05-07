@@ -55,6 +55,8 @@ SHORTCUT_DEFAULTS: list[ShortcutDef] = [
     ShortcutDef("cycle_fg_color",     "Cycle Foreground Color",       "Paint",      "C",            "_cycle_fg_color"),
     ShortcutDef("undo_annotation",    "Undo Paint Stroke",            "Paint",      "Ctrl+Z",       "_undo_annotation"),
     ShortcutDef("clear_annotations",  "Clear Paint Strokes",          "Paint",      "Ctrl+C",       "_confirm_clear_annotations"),
+    ShortcutDef("eyedropper",         "Eyedropper (Pick Color)",      "Paint",      "E",            "_toggle_eyedropper"),
+    ShortcutDef("chroma_key",         "Toggle Chroma Key",            "Paint",      "`",            "_toggle_chroma_key"),
     # Viewer
     ShortcutDef("toggle_ab_wipe",     "Toggle A/B Wipe",              "Viewer",     "A",            "_toggle_ab_wipe"),
     ShortcutDef("view_input",         "View: INPUT",                  "Viewer",     "F1",           "_view_mode_input"),

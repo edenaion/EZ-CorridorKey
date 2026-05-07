@@ -8,6 +8,8 @@ import sys
 from PySide6.QtWidgets import QMessageBox, QFileDialog, QProgressDialog
 from PySide6.QtCore import Slot, QThread, Qt
 
+from . import _tr
+
 from backend import ClipEntry, ClipState
 from backend.clip_state import ClipAsset
 from backend import InOutRange
@@ -200,14 +202,14 @@ class ExportMixin:
         """
         if clip is None:
             if self._current_clip is None:
-                QMessageBox.information(self, "No Clip", "Select a clip first.")
+                QMessageBox.information(self, _tr("No Clip"), _tr("Select a clip first."))
                 return
             clip = self._current_clip
 
         if clip.state != ClipState.COMPLETE:
             QMessageBox.warning(
-                self, "Not Complete",
-                f"Clip '{clip.name}' must be COMPLETE to export video.",
+                self, _tr("Not Complete"),
+                _tr("Clip '%s' must be COMPLETE to export video.") % clip.name,
             )
             return
 
@@ -222,7 +224,7 @@ class ExportMixin:
             elif os.path.isdir(fg_dir) and os.listdir(fg_dir):
                 source_dir = fg_dir
             else:
-                QMessageBox.warning(self, "No Output", "No output frames found to export.")
+                QMessageBox.warning(self, _tr("No Output"), _tr("No output frames found to export."))
                 return
 
         # Read video metadata for fps
@@ -231,7 +233,7 @@ class ExportMixin:
             require_ffmpeg_install(require_probe=True)
         except RuntimeError as exc:
             QMessageBox.critical(
-                self, "FFmpeg Unavailable",
+                self, _tr("FFmpeg Unavailable"),
                 str(exc),
             )
             return
@@ -260,7 +262,7 @@ class ExportMixin:
 
         default_path = os.path.join(exports_dir, default_name)
         out_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Video", default_path,
+            self, _tr("Export Video"), default_path,
             file_filter,
         )
         if not out_path:
@@ -271,7 +273,7 @@ class ExportMixin:
                          if os.path.splitext(f)[1].lower()
                          in ('.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff')])
         if not frames:
-            QMessageBox.warning(self, "No Frames", "No image frames found in output directory.")
+            QMessageBox.warning(self, _tr("No Frames"), _tr("No image frames found in output directory."))
             return
 
         # Detect pattern from first filename (e.g. frame_000000.png -> frame_%06d.png)
@@ -288,7 +290,7 @@ class ExportMixin:
             pattern = f"frame_%06d{ext}"
             start_number = 0
 
-        self._status_bar.set_message(f"Exporting {clip.name}...")
+        self._status_bar.set_message(_tr("Exporting %s...") % clip.name)
 
         try:
             stitch_video(
@@ -300,16 +302,16 @@ class ExportMixin:
             )
             self._status_bar.set_message("")
             QMessageBox.information(
-                self, "Export Complete",
-                f"Video exported:\n{out_path}",
+                self, _tr("Export Complete"),
+                _tr("Video exported:\n%s") % out_path,
             )
         except Exception as e:
             self._status_bar.set_message("")
             from ui.sounds.audio_manager import UIAudio
             UIAudio.error()
             QMessageBox.critical(
-                self, "Export Failed",
-                f"Failed to export video:\n{e}",
+                self, _tr("Export Failed"),
+                _tr("Failed to export video:\n%s") % e,
             )
 
     # ── Batch Export Video ──
@@ -327,12 +329,12 @@ class ExportMixin:
         try:
             require_ffmpeg_install(require_probe=True)
         except RuntimeError as exc:
-            QMessageBox.critical(self, "FFmpeg Unavailable", str(exc))
+            QMessageBox.critical(self, _tr("FFmpeg Unavailable"), str(exc))
             return
 
         complete_clips = [c for c in self._clip_model.clips if c.state == ClipState.COMPLETE]
         if not complete_clips:
-            QMessageBox.information(self, "Nothing to Export", "No COMPLETE clips to export.")
+            QMessageBox.information(self, _tr("Nothing to Export"), _tr("No COMPLETE clips to export."))
             return
 
         # Gather all available exports
@@ -347,19 +349,19 @@ class ExportMixin:
                     available.append((clip, src, subdir))
 
         if not available:
-            QMessageBox.information(self, "Nothing to Export", "No output frames found.")
+            QMessageBox.information(self, _tr("Nothing to Export"), _tr("No output frames found."))
             return
 
         # ── Selection Dialog ──
         dlg = QDialog(self)
-        dlg.setWindowTitle("Export All Videos")
+        dlg.setWindowTitle(_tr("Export All Videos"))
         dlg.setMinimumWidth(450)
         layout = QVBoxLayout(dlg)
 
-        layout.addWidget(QLabel("Select which outputs to export as video:"))
+        layout.addWidget(QLabel(_tr("Select which outputs to export as video:")))
 
         tree = QTreeWidget()
-        tree.setHeaderLabels(["Clip / Output", "Format", "Frames"])
+        tree.setHeaderLabels([_tr("Clip / Output"), _tr("Format"), _tr("Frames")])
         tree.setRootIsDecorated(True)
         tree.setColumnWidth(0, 260)
         tree.setColumnWidth(1, 120)
@@ -426,9 +428,9 @@ class ExportMixin:
 
         # ── Export with progress ──
         progress = QProgressDialog(
-            "Exporting videos...", "Cancel", 0, len(selected), self,
+            _tr("Exporting videos..."), _tr("Cancel"), 0, len(selected), self,
         )
-        progress.setWindowTitle("Batch Export")
+        progress.setWindowTitle(_tr("Batch Export"))
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
 
@@ -437,7 +439,7 @@ class ExportMixin:
         for i, (clip, src, out_path, subdir) in enumerate(selected):
             if progress.wasCanceled():
                 break
-            progress.setLabelText(f"Exporting {clip.name} / {subdir}...")
+            progress.setLabelText(_tr("Exporting %s / %s...") % (clip.name, subdir))
             progress.setValue(i)
 
             metadata = read_video_metadata(clip.root_path)
@@ -480,11 +482,11 @@ class ExportMixin:
         if exported:
             from ui.sounds.audio_manager import UIAudio
             UIAudio.frame_extract_done()
-            QMessageBox.information(self, "Batch Export Complete", summary)
+            QMessageBox.information(self, _tr("Batch Export Complete"), summary)
         elif failed:
             from ui.sounds.audio_manager import UIAudio
             UIAudio.error()
-            QMessageBox.warning(self, "Batch Export", summary)
+            QMessageBox.warning(self, _tr("Batch Export"), summary)
 
     # ── View Controls ──
 

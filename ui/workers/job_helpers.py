@@ -18,6 +18,7 @@ def create_job_snapshot(
     resume: bool = False,
     chunk_size: int = 16,
     birefnet_usage: str = "Matting",
+    chroma_params: dict | None = None,
 ) -> GPUJob:
     """Create a frozen job snapshot for the queue.
 
@@ -50,6 +51,8 @@ def create_job_snapshot(
         job_params["_chunk_size"] = chunk_size
     elif job_type == JobType.BIREFNET_ALPHA:
         job_params["_birefnet_usage"] = birefnet_usage
+    elif job_type == JobType.CHROMA_KEY_ALPHA:
+        job_params["_chroma_params"] = chroma_params or {}
     elif job_type == JobType.PREVIEW_REPROCESS:
         if params is None:
             params = InferenceParams()

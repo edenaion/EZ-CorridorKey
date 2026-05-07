@@ -5,6 +5,7 @@ progress bars, and idempotent behavior (skips existing files).
 
 Usage:
     python scripts/setup_models.py --corridorkey       # Required (383MB)
+    python scripts/setup_models.py --corridorkey-blue  # Blue screen variant (401MB)
     python scripts/setup_models.py --corridorkey-mlx   # Apple Silicon MLX weights (380MB)
     python scripts/setup_models.py --sam2             # SAM2 Base+ (324MB)
     python scripts/setup_models.py --sam2 large       # SAM2 Large (898MB)
@@ -82,6 +83,15 @@ MODELS = {
         "size_human": "383 MB",
         "size_bytes": 400_000_000,
         "required": True,
+    },
+    "corridorkey-blue": {
+        "repo_id": "nikopueringer/CorridorKeyBlue_1.0",
+        "filename": "CorridorKeyBlue_1.0.pth",
+        "local_dir": PROJECT_ROOT / "CorridorKeyModule" / "checkpoints",
+        "check_file": "CorridorKeyBlue_1.0.pth",
+        "size_human": "401 MB",
+        "size_bytes": 420_000_000,
+        "required": False,
     },
     "gvm": {
         "repo_id": "geyongtao/gvm",
@@ -222,6 +232,29 @@ def download_corridorkey() -> bool:
         )
         # huggingface_hub downloads to local_dir/filename
         # The backend globs for *.pth, so the exact name doesn't matter
+        print(f"  Saved to: {downloaded}")
+        return True
+    except Exception as e:
+        print(f"  [ERROR] Download failed: {e}")
+        print(f"  Manual download: https://huggingface.co/{cfg['repo_id']}")
+        return False
+
+
+def download_corridorkey_blue() -> bool:
+    """Download the CorridorKey Blue checkpoint (single file)."""
+    from huggingface_hub import hf_hub_download
+
+    cfg = MODELS["corridorkey-blue"]
+    local_dir = cfg["local_dir"]
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"  Downloading CorridorKey Blue checkpoint ({cfg['size_human']})...")
+    try:
+        downloaded = hf_hub_download(
+            repo_id=cfg["repo_id"],
+            filename=cfg["filename"],
+            local_dir=str(local_dir),
+        )
         print(f"  Saved to: {downloaded}")
         return True
     except Exception as e:
@@ -388,6 +421,8 @@ def download_model(name: str) -> bool:
 
     if name == "corridorkey":
         return download_corridorkey()
+    elif name == "corridorkey-blue":
+        return download_corridorkey_blue()
     else:
         return download_repo(name)
 
@@ -569,6 +604,7 @@ def check_all():
 def main():
     parser = argparse.ArgumentParser(description="Download model weights for EZ-CorridorKey")
     parser.add_argument("--corridorkey", action="store_true", help="Download CorridorKey checkpoint (383MB, required)")
+    parser.add_argument("--corridorkey-blue", action="store_true", help="Download CorridorKey Blue checkpoint (401MB, optional)")
     parser.add_argument("--corridorkey-mlx", action="store_true", help="Download MLX checkpoint for Apple Silicon (380MB)")
     parser.add_argument(
         "--sam2",
@@ -586,14 +622,15 @@ def main():
     args = parser.parse_args()
 
     mlx_flag = getattr(args, 'corridorkey_mlx', False)
+    blue_flag = getattr(args, 'corridorkey_blue', False)
 
     # Default to --check if no flags
-    if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.birefnet, args.all, args.check]):
+    if not any([args.corridorkey, blue_flag, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.birefnet, args.all, args.check]):
         args.check = True
 
     if args.check:
         check_all()
-        if not any([args.corridorkey, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.birefnet, args.all]):
+        if not any([args.corridorkey, blue_flag, mlx_flag, args.sam2, args.gvm, args.videomama, args.matanyone2, args.birefnet, args.all]):
             return
 
     targets = []
@@ -612,6 +649,8 @@ def main():
     else:
         if args.corridorkey:
             targets.append("corridorkey")
+        if blue_flag:
+            targets.append("corridorkey-blue")
         if mlx_flag:
             download_mlx = True
         if args.matanyone2:

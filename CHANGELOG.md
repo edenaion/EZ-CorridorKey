@@ -4,15 +4,46 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [Unreleased]
+## [2.0.0] - 2026-05-07 — Blue screen keying, chroma key holdout mask, eyedropper, i18n
 
-_Nothing yet — see 1.10.0 below._
+### Added
+
+- **Blue screen auto-detect** — CorridorKey now keys blue screens with the same quality as green. A new `CorridorKeyBlue_1.0.pth` checkpoint (401 MB) handles blue-screen footage natively. Detection runs automatically on clip selection: the middle frame is downsampled and analyzed in HSV to determine whether the dominant chroma is green or blue. The correct checkpoint loads transparently.
+- **BG Color dropdown** — new Auto / Green / Blue selector above Color Space in the inference panel. Auto uses the detector; manual override forces a specific model regardless of frame content.
+- **UI accent follows screen color** — when a blue clip is active, brand accent shifts from green (#2CC350) to blue (#0082CF) across the KEY text, slider knobs, and welcome button.
+- **VideoMaMa mask import** — small + button next to the VIDEOMAMA button opens a file picker for importing pre-made alpha masks (video or image sequence). Grayscale values are crushed to binary (threshold at 127). Clip transitions to MASKED state, ready for VideoMaMa inference without SAM2 tracking.
+- **Despeckle uncap** — spinbox range expanded from (50, 2000) to (0, 999999). Zero keeps everything; high values remove larger blobs. Requested by Nico (upstream).
+- **FFmpeg Browse button** — Preferences gains a manual file picker for FFmpeg with bin/ auto-detection and path validation. Custom path persists in QSettings.
+- **Blue checkpoint in Download Manager** — CorridorKey Blue appears in the setup wizard model list (after Green, before SAM2). Default checked for new installs. CLI: `python scripts/setup_models.py --corridorkey-blue`.
+- **On-demand blue download** — when a blue clip is detected and the blue checkpoint is missing (skinny update / git clone users), a dialog offers to download it via the setup wizard.
+- **Chroma key holdout mask** — paint foreground (1) and background (2) strokes directly on the chroma key preview to force regions. Background strokes force alpha to 0 (transparent), foreground strokes force alpha to 1 (opaque). The mask is static per-clip, applied to every frame. Strokes render as outlines so the matte preview shows through. Persists to `holdout_strokes.json`. Ctrl+Z undoes strokes, Ctrl+C clears all holdout strokes. Hotkeys 1/2 automatically route to holdout painting when chroma key mode is active, and to SAM2 annotation painting when it is not.
+- **Chroma key eyedropper drag-sampling** — the eyedropper (E) now samples a range of colors via click-drag instead of a single pixel click. A floating color chip shows the running average near the cursor. The keyer uses the 10th percentile screen excess across all samples for normalization, so dragging across shadows and hotspots produces a cleaner key than a single click.
+- **Chroma key hotkey** — tilde (`` ` ``) toggles chroma key mode on/off.
+- **Localization / i18n support** ([#109](https://github.com/edenaion/EZ-CorridorKey/issues/109)) — all 329 user-visible strings are marked for translation via Qt i18n. Language picker in Preferences. Translators can contribute by editing `.ts` files with Qt Linguist. See `ui/translations/TRANSLATING.md`.
+- **Paint brush HUD overlay** — yellow text above the viewport shows current brush mode, size, and controls (Shift+drag to resize, Alt+drag for straight lines). Same overlay appears for both holdout and SAM2 paint modes.
+- **Eyedropper HUD overlay** — yellow text above the viewport reminds users to click and drag across varied background tones for the best key.
+- **Single-step slider scrolling** — all parameter panel sliders now move exactly one tick per scroll notch instead of Qt's default 3x multiplier.
+
+### Fixed
+
+- **SAM2 checkpoint validation** ([#116](https://github.com/edenaion/EZ-CorridorKey/issues/116)) — `torch.load()` crashed with `[Errno 22] Invalid argument` on Windows when the HuggingFace cached checkpoint was a pointer file or incomplete download. Added pre-load validation: checks file size (>10 MB) and ZIP magic bytes before passing to the model builder. Clear error message tells users to delete the cache folder and restart.
+- **Triton compile warning spam** ([#127](https://github.com/edenaion/EZ-CorridorKey/issues/127)) — when torch.compile fails at runtime (e.g. Triton cache race on Windows), the warning now logs once at WARNING level instead of repeating for every engine in the pool. Subsequent engines log at DEBUG. Fallback to eager mode still works correctly.
+- **FFmpeg SSL certificate failure on repair download** ([#117](https://github.com/edenaion/EZ-CorridorKey/issues/117)) — SSL verification now falls back through certifi, system default, then unverified, so corporate proxies and missing root CAs no longer block the FFmpeg auto-repair.
+- **FFmpeg discovery on Windows** — extended search paths cover Scoop, Chocolatey, Downloads, and Desktop glob patterns.
+- **Triton runtime hook** — catches `sysconfig.KeyError` in frozen PyInstaller builds that lack the sysconfig data module.
+- **Despill parameterized for blue** — `despill()` swaps the suppression channel (green ch1 vs blue ch2) based on screen color. `_restore_opaque_source_detail()` spill detection likewise adapts.
+- **All "green spill" tooltips** now read "screen spill" for neutrality.
+
+### Distribution
+
+- Full installers (Windows .exe, macOS .pkg) and portable zip now bundle both green and blue checkpoints.
+- Skinny update zip remains code-only; blue checkpoint downloads on first use if missing.
+- macOS skinny update zip now strips model checkpoints before re-signing and re-notarizing (324 MB instead of 2.4 GB). Mac users can receive in-app updates for the first time.
+- Git cloners: `python scripts/setup_models.py --corridorkey-blue` or `--all`.
 
 ---
 
 ## [1.10.0] - 2026-04-16 — Project output dirs, wizard overhaul, frozen build fixes
-
-1.10.0 closes out a long-running dev cycle. Expect less frequent updates as I work on my other projects gearing up to release.
 
 > **Pascal (GTX 10-series) users**: 1.10.0 ships the same PyTorch build as 1.9.1 (torch 2.9.1 + cu130), which does **not** include Pascal GPU kernels. If you are running on a GTX 10-series card you will need to perform a one-time manual PyTorch swap inside the app's `_internal` folder -- see [docs/PASCAL-MANUAL-INSTALL.md](docs/PASCAL-MANUAL-INSTALL.md) for step-by-step instructions. The startup diagnostic will detect your card and link you to the guide automatically. All RTX 20-series and newer users are unaffected and can update normally via Help > Check for Updates.
 
@@ -23,7 +54,7 @@ _Nothing yet — see 1.10.0 below._
 - **Startup Diagnostic told installed-exe users to activate a `.venv` that doesn't exist** ([#89](https://github.com/edenaion/EZ-CorridorKey/issues/89)) — the fix-step list was hardcoded with developer instructions (`.venv\Scripts\activate`, `pip install ...`) that can't work on the frozen installer build and can't help users without an NVIDIA GPU at all. Diagnostic steps are now context-aware: frozen users get "reinstall the full installer" guidance, users without an NVIDIA card get honest "this app requires an NVIDIA GPU" messaging instead of a pip-install goose chase, and developer guidance is preserved only for source checkouts.
 - **VideoMaMa and GVM couldn't find their checkpoints on installed builds** — `VideoMaMaInferenceModule` and `gvm_core` resolved checkpoint paths against their own `__file__` location, which in PyInstaller onedir builds lands under `_internal/`. Meanwhile the setup wizard downloaded weights to `backend.project.get_data_dir()`. The installer's download destination and the module's lookup path disagreed, so installed users hit FileNotFoundError on VideoMaMa base model load. Both modules now check the data dir first and fall back to the bundled directory.
 - **BiRefNet and MatAnyone2 crashed on installed macOS builds with "Permission denied"** — both modules lazy-downloaded their checkpoints via `os.path.dirname(__file__) + "checkpoints"`, which on installed macOS builds resolves inside `/Applications/EZ-CorridorKey.app/Contents/Frameworks/modules/.../checkpoints` — a read-only path for non-admin users. Mac users clicking BiRefNet or MatAnyone2 for the first time hit `[Errno 13] Permission denied`. Both wrappers now use the same `_candidate_checkpoint_dirs()` data-dir-first pattern as VideoMaMa/GVM: lookups prefer the writable `<data_dir>/modules/<Name>/checkpoints` path and lazy downloads always target there. The bundled path stays as a read-only fallback for dev and manual installs.
-- **BiRefNet OOMed on very large image sequences** ([#95](https://github.com/edenaion/EZ-CorridorKey/issues/95)) — a user running BiRefNet on a 109,192-frame 4K UHD EXR sequence hit a numpy `ArrayMemoryError` because `_load_named_sequence_frames` eagerly materialized every frame into a Python list before handing the batch to BiRefNet (~2.6 TiB of uint8 pixel data for that workload). The BiRefNet pipeline now streams frames through a new `_iter_named_sequence_frames` generator — exactly one frame lives in RAM at a time, regardless of clip length, so the upper bound is disk scan speed rather than system memory. No speed or quality impact for normal-sized clips. The guided-mode pipelines ( VideoMaMa / MatAnyone2) still use the eager loader for now because their inner loops retain temporal context across frames; porting them to the streaming loader will come in a follow-up.
+- **BiRefNet OOMed on very large image sequences** ([#95](https://github.com/edenaion/EZ-CorridorKey/issues/95)) — a user running BiRefNet on a 109,192-frame 4K UHD EXR sequence hit a numpy `ArrayMemoryError` because `_load_named_sequence_frames` eagerly materialized every frame into a Python list before handing the batch to BiRefNet (~2.6 TiB of uint8 pixel data for that workload). The BiRefNet pipeline now streams frames through a new `_iter_named_sequence_frames` generator — exactly one frame lives in RAM at a time, regardless of clip length, so the upper bound is disk scan speed rather than system memory. No speed or quality impact for normal-sized clips. The guided-mode pipelines (GVM / VideoMaMa / MatAnyone2) still use the eager loader for now because their inner loops retain temporal context across frames; porting them to the streaming loader will come in a follow-up.
 - **Hair strands lost in clean_matte despeckle** -- the despeckle pass treated thin hair strands as noise and erased them. Adjusted the morphological filter to preserve fine edge detail while still removing genuine speckle artifacts.
 - **Refiner eroded input guide confidence** -- the refiner output was overwriting high-confidence regions from the input alpha guide with its own lower-confidence predictions. The refiner now only contributes where its confidence exceeds the input guide, preserving sharp edges on hair and fabric.
 - **GVM rejected square input images** -- GVM auto alpha crashed on clips where width equals height because the aspect-ratio guard assumed landscape or portrait orientation. Square inputs are now accepted.

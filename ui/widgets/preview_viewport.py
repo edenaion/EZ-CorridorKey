@@ -89,11 +89,14 @@ class PreviewViewport(QWidget):
 
         # Annotation model (shared across frames, persists during scrubbing)
         self._annotation_model = AnnotationModel()
+        # Holdout model (chroma key forced regions, frame-independent)
+        self._holdout_model = AnnotationModel(filename="holdout_strokes.json")
 
         # Split view widget (center, fills space)
         self._split_view = SplitViewWidget()
         self._split_view.zoom_changed.connect(self._on_zoom_changed)
         self._split_view.set_annotation_model(self._annotation_model)
+        self._split_view.set_holdout_model(self._holdout_model)
         layout.addWidget(self._split_view, 1)
 
         # Bottom bar: scrubber + zoom indicator (optional)
@@ -149,6 +152,16 @@ class PreviewViewport(QWidget):
         if self._split_view.split_enabled:
             self._load_split_images()
 
+    # ── Eyedropper API ──
+
+    def set_eyedropper_mode(self, enabled: bool) -> None:
+        """Toggle eyedropper color sampling on this viewport."""
+        self._split_view.set_eyedropper_mode(enabled)
+
+    def set_eyedropper_source(self, image: QImage | None) -> None:
+        """Set the input frame image for eyedropper sampling."""
+        self._split_view.set_eyedropper_source(image)
+
     # ── Annotation API ──
 
     def set_annotation_mode(self, mode: str | None) -> None:
@@ -162,6 +175,20 @@ class PreviewViewport(QWidget):
     @property
     def annotation_model(self) -> AnnotationModel:
         return self._annotation_model
+
+    @property
+    def holdout_model(self) -> AnnotationModel:
+        return self._holdout_model
+
+    def set_holdout_active(self, active: bool) -> None:
+        self._split_view.set_holdout_active(active)
+
+    def clear_holdout(self) -> None:
+        """Clear all holdout strokes for the current clip."""
+        self._holdout_model.clear()
+        if self._clip is not None:
+            self._holdout_model.save(self._clip.root_path)
+        self._split_view.update()
 
     def clear_annotations(self) -> None:
         """Clear all annotations for the current clip."""
@@ -179,9 +206,10 @@ class PreviewViewport(QWidget):
         """
         from backend import ClipState
 
-        # Save annotations for previous clip before switching
+        # Save annotations and holdout for previous clip before switching
         if self._clip is not None:
             self._annotation_model.save(self._clip.root_path)
+            self._holdout_model.save(self._clip.root_path)
         self._clip = clip
         self._clip_name = clip.name
         # Preserve the caller-managed input interpretation when reloading a clip.
@@ -190,6 +218,7 @@ class PreviewViewport(QWidget):
         # auto-detected default before the user asked for it.
         clear_cache()
         self._annotation_model.load(clip.root_path)
+        self._holdout_model.load(clip.root_path)
 
         # EXTRACTING clips: show placeholder, no frame index
         if clip.state == ClipState.EXTRACTING:
@@ -203,7 +232,7 @@ class PreviewViewport(QWidget):
             self._split_view._left_image = None
             self._split_view._right_image = None
             self._split_view.set_placeholder(
-                f"Extracting frames...\n{clip.name}"
+                self.tr("Extracting frames...\n%s") % clip.name
             )
             return
 
@@ -228,7 +257,9 @@ class PreviewViewport(QWidget):
         if self._frame_index.frame_count > 0:
             self._navigate_to(0)
         else:
-            self._split_view.set_placeholder(f"Selected: {clip.name}\nState: {clip.state.value}")
+            self._split_view.set_placeholder(
+                self.tr("Selected: %s\nState: %s") % (clip.name, clip.state.value)
+            )
 
     def refresh_available_assets(self) -> None:
         """Refresh mode availability and frame coverage without resetting navigation.
@@ -367,13 +398,15 @@ class PreviewViewport(QWidget):
         btn.setFixedHeight(24)
         btn.setFixedWidth(50)
         btn.setToolTip(
-            "Toggle A/B wipe comparison (hotkey: A)\n\n"
-            "Overlays input (A) and current output (B) in one viewer\n"
-            "with a diagonal divider line.\n\n"
-            "Drag the center handle to slide the line.\n"
-            "Drag above or below the handle to rotate the angle.\n"
-            "Scroll wheel to slide the line (Shift+scroll for fine-grain).\n"
-            "Middle-click the line to reset to default."
+            self.tr(
+                "Toggle A/B wipe comparison (hotkey: A)\n\n"
+                "Overlays input (A) and current output (B) in one viewer\n"
+                "with a diagonal divider line.\n\n"
+                "Drag the center handle to slide the line.\n"
+                "Drag above or below the handle to rotate the angle.\n"
+                "Scroll wheel to slide the line (Shift+scroll for fine-grain).\n"
+                "Middle-click the line to reset to default."
+            )
         )
         btn.setStyleSheet(
             "QPushButton { background-color: #1A1900; color: #808070; "
@@ -524,7 +557,7 @@ class PreviewViewport(QWidget):
 
         # Truly nothing to show for this stem (no input either).
         self._split_view.set_placeholder(
-            f"No frame available for stem {stem_index}"
+            self.tr("No frame available for stem %d") % stem_index
         )
 
     def _load_split_images(self) -> None:

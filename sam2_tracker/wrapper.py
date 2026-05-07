@@ -101,6 +101,57 @@ class SAM2Tracker:
         """Ensure the predictor is loaded and the checkpoint is present locally."""
         self._get_predictor(on_progress=on_progress, on_status=on_status)
 
+    @staticmethod
+    def _validate_checkpoint(ckpt_path: str) -> None:
+        """Verify the downloaded checkpoint is a real torch file, not a stub.
+
+        On Windows without Developer Mode, HuggingFace Hub cannot create
+        symlinks and may produce pointer files or incomplete downloads.
+        torch.load() on such files raises OSError [Errno 22] Invalid argument.
+        """
+        min_size = 10 * 1024 * 1024  # 10 MB minimum for any SAM2 checkpoint
+        try:
+            size = os.path.getsize(ckpt_path)
+        except OSError as e:
+            raise RuntimeError(
+                f"SAM2 checkpoint not accessible: {ckpt_path}\n{e}"
+            ) from e
+
+        if size < min_size:
+            cache_dir = os.path.dirname(os.path.dirname(ckpt_path))
+            raise RuntimeError(
+                f"SAM2 checkpoint appears corrupt or incomplete ({size:,} bytes): "
+                f"{ckpt_path}\n\n"
+                f"This can happen if a download was interrupted or the cached file "
+                f"is a stub rather than the real weights.\n\n"
+                f"Fix: delete the cached model folder and restart the app so it "
+                f"re-downloads the checkpoint:\n"
+                f"  1. Delete this folder: {cache_dir}\n"
+                f"  2. Restart the app"
+            )
+
+        # Verify ZIP magic bytes (torch .pt files are ZIP archives)
+        try:
+            with open(ckpt_path, 'rb') as f:
+                magic = f.read(2)
+            if magic != b'PK':
+                cache_dir = os.path.dirname(os.path.dirname(ckpt_path))
+                raise RuntimeError(
+                    f"SAM2 checkpoint is not a valid torch file (bad header): "
+                    f"{ckpt_path}\n\n"
+                    f"The cached file may be corrupted or incomplete.\n\n"
+                    f"Fix: delete the cached model folder and restart the app so it "
+                    f"re-downloads the checkpoint:\n"
+                    f"  1. Delete this folder: {cache_dir}\n"
+                    f"  2. Restart the app"
+                )
+        except RuntimeError:
+            raise
+        except OSError as e:
+            raise RuntimeError(
+                f"Cannot read SAM2 checkpoint: {ckpt_path}\n{e}"
+            ) from e
+
     def _make_download_progress_class(
         self,
         *,
@@ -193,6 +244,7 @@ class SAM2Tracker:
                 on_status=on_status,
             ),
         )
+        self._validate_checkpoint(ckpt_path)
         self._predictor = build_sam2_video_predictor(
             config_file=config_name,
             ckpt_path=ckpt_path,

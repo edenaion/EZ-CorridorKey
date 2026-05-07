@@ -66,6 +66,7 @@ def test_set_clip_preserves_existing_input_color_space_override():
     viewport._clip_name = None
     viewport._input_exr_is_linear = True
     viewport._annotation_model = _DummyAnnotationModel()
+    viewport._holdout_model = _DummyAnnotationModel()
     viewport._locked_mode = None
     viewport._mode_bar = _DummyModeBar()
     viewport._scrubber = None

@@ -13,7 +13,7 @@ import logging
 
 from PySide6.QtWidgets import QApplication, QMessageBox, QDialogButtonBox
 from PySide6.QtGui import QFontDatabase, QFont, QIcon
-from PySide6.QtCore import Qt, QObject, QEvent
+from PySide6.QtCore import Qt, QObject, QEvent, QTranslator, QLocale
 
 from ui.theme import load_stylesheet
 
@@ -132,6 +132,58 @@ def _migrate_legacy_settings() -> None:
     logger.info("Migrated %d settings from Corridor Digital/CorridorKey", len(old_keys))
 
 
+def _install_translator(app: QApplication) -> None:
+    """Load a .qm translation file based on user preference or system locale."""
+    from PySide6.QtCore import QSettings
+
+    settings = QSettings()
+    lang = settings.value("ui/language", "", type=str)
+    if not lang:
+        lang = QLocale.system().name().split("_")[0]  # e.g. "fr" from "fr_FR"
+
+    if lang == "en":
+        return  # English is the source language, no translation needed
+
+    if getattr(sys, "frozen", False):
+        translations_dir = os.path.join(sys._MEIPASS, "ui", "translations")
+    else:
+        translations_dir = os.path.join(os.path.dirname(__file__), "translations")
+
+    qm_file = os.path.join(translations_dir, f"corridorkey_{lang}.qm")
+    if not os.path.isfile(qm_file):
+        logger.debug("No translation file for '%s' at %s", lang, qm_file)
+        return
+
+    translator = QTranslator(app)
+    if translator.load(qm_file):
+        app.installTranslator(translator)
+        # Store ref on app to prevent garbage collection
+        app._corridorkey_translator = translator
+        logger.info("Loaded translation: %s", lang)
+    else:
+        logger.warning("Failed to load translation file: %s", qm_file)
+
+
+def _prewarm_mlx() -> None:
+    """Import mlx.core on the main thread so Metal initializes safely.
+
+    The PyInstaller runtime hook (pyi_rth_mlx.py) does this too, but its
+    failure is silent.  This second attempt runs after paths are fully set
+    up and logs any failure so we can diagnose crash reports where Metal
+    abort()s because mlx.core first loaded on a worker thread.
+    """
+    if sys.platform != "darwin":
+        return
+    if "mlx.core" in sys.modules:
+        return  # Already initialized (runtime hook succeeded)
+    try:
+        import mlx.core as mx
+        mx.eval(mx.zeros(1))
+        logger.info("MLX Metal prewarm succeeded on main thread")
+    except Exception as exc:
+        logger.warning("MLX prewarm failed (will fall back to MPS): %s", exc)
+
+
 def create_app(argv: list[str] | None = None) -> QApplication:
     """Create and configure the QApplication with brand theming.
 
@@ -141,11 +193,15 @@ def create_app(argv: list[str] | None = None) -> QApplication:
         argv = sys.argv
 
     _configure_runtime_backends()
+    _prewarm_mlx()
 
     app = QApplication(argv)
     app.setApplicationName("EZ-CorridorKey")
     app.setApplicationDisplayName("EZ-CorridorKey")
     app.setOrganizationName("EZSCAPE")
+
+    # ── i18n: load translation for user's language ──
+    _install_translator(app)
 
     # One-time migration from old registry path
     # (Corridor Digital\CorridorKey → EZSCAPE\EZ-CorridorKey)

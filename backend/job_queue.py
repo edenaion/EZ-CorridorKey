@@ -37,6 +37,7 @@ class JobType(Enum):
     VIDEOMAMA_ALPHA = "videomama_alpha"
     MATANYONE2_ALPHA = "matanyone2_alpha"
     BIREFNET_ALPHA = "birefnet_alpha"
+    CHROMA_KEY_ALPHA = "chroma_key_alpha"
     PREVIEW_REPROCESS = "preview_reprocess"
     VIDEO_EXTRACT = "video_extract"
     VIDEO_STITCH = "video_stitch"

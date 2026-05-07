@@ -26,7 +26,7 @@ sys.path.insert(0, PROJECT_ROOT)
 # Upstream repo root (cloned separately)
 UPSTREAM_ROOT = os.path.join(os.path.dirname(PROJECT_ROOT), "CorridorKey-upstream")
 
-VERSION = "1.5.0"
+VERSION = "2.0.0"
 
 
 def find_test_frame():

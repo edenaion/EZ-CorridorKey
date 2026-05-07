@@ -82,7 +82,7 @@ class _DropZone(QWidget):
         layout.addSpacing(20)
 
         # Prompt text
-        prompt = QLabel("Drop Videos, Image Sequences, or Click to Import")
+        prompt = QLabel(self.tr("Drop Videos, Image Sequences, or Click to Import"))
         prompt.setAlignment(Qt.AlignCenter)
         prompt.setObjectName("welcomePrompt")
         layout.addWidget(prompt)
@@ -90,7 +90,7 @@ class _DropZone(QWidget):
         layout.addSpacing(12)
 
         # Browse button
-        browse_btn = QPushButton("Browse...")
+        browse_btn = QPushButton(self.tr("Browse..."))
         browse_btn.setObjectName("welcomeBrowse")
         browse_btn.setFixedWidth(200)
         browse_btn.setCursor(Qt.PointingHandCursor)
@@ -172,7 +172,7 @@ class WelcomeScreen(QWidget):
             "All Files (*)"
         )
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select Media Files", "",
+            self, self.tr("Select Media Files"), "",
             media_filter,
         )
         if paths:

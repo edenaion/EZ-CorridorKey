@@ -17,16 +17,33 @@ from ui.main_window import (
 )
 
 
+class _DummyBgColor:
+    """Minimal mock for the BG Color dropdown (QComboBox)."""
+
+    def currentIndex(self):
+        return 0  # "Auto"
+
+
 class _DummyParamPanel:
     def __init__(self, *, input_is_linear: bool):
         self._input_is_linear = input_is_linear
         self.last_set_input_is_linear = input_is_linear
+        self._bg_color = _DummyBgColor()
 
     def get_params(self) -> InferenceParams:
         return InferenceParams(input_is_linear=self._input_is_linear)
 
     def set_input_is_linear(self, input_is_linear: bool) -> None:
         self.last_set_input_is_linear = input_is_linear
+
+    def set_gvm_enabled(self, enabled): pass
+    def set_birefnet_enabled(self, enabled): pass
+    def set_chroma_key_enabled(self, enabled): pass
+    def set_videomama_enabled(self, enabled): pass
+    def set_matanyone2_enabled(self, enabled): pass
+    def set_import_alpha_enabled(self, enabled): pass
+    def set_annotation_info(self, annotated, total): pass
+    def reset_chroma_params(self): pass
 
 
 class _DummyDualViewer:
@@ -145,6 +162,7 @@ def test_selecting_another_clip_remembers_previous_clip_color_space_override():
     window._gpu_worker = _DummyGpuWorker()
     window._status_bar = _DummyStatusBar()
     window._sync_selected_clip_view = lambda clip: None
+    window._detect_and_apply_screen_color = lambda clip: None
     window._update_annotation_info = lambda: None
     window._clip_has_videomama_ready_mask = lambda _clip: False
     window._refresh_input_thumbnail = lambda *_args, **_kwargs: None

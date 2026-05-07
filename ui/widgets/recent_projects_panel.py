@@ -54,7 +54,7 @@ class RecentProjectCard(QFrame):
         folder_btn = QPushButton("\uD83D\uDCC2")  # open folder icon
         folder_btn.setObjectName("projectFolderBtn")
         folder_btn.setFixedSize(16, 16)
-        folder_btn.setToolTip("Open in Finder" if sys.platform == "darwin" else "Open in Explorer")
+        folder_btn.setToolTip(self.tr("Open in Finder") if sys.platform == "darwin" else self.tr("Open in Explorer"))
         folder_btn.clicked.connect(self._on_open_folder)
         btn_layout.addWidget(folder_btn, 0, Qt.AlignHCenter)
 
@@ -63,7 +63,7 @@ class RecentProjectCard(QFrame):
         delete_btn = QPushButton("\u00D7")  # ×
         delete_btn.setObjectName("projectDeleteBtn")
         delete_btn.setFixedSize(16, 16)
-        delete_btn.setToolTip("Remove project")
+        delete_btn.setToolTip(self.tr("Remove project"))
         delete_btn.clicked.connect(self._on_delete)
         btn_layout.addWidget(delete_btn, 0, Qt.AlignHCenter)
 
@@ -107,13 +107,13 @@ class RecentProjectCard(QFrame):
 
     def _show_context_menu(self, pos):
         menu = QMenu(self)
-        rename_action = QAction("Rename Project", self)
+        rename_action = QAction(self.tr("Rename Project"), self)
         rename_action.triggered.connect(lambda: self.rename_clicked.emit(self._workspace_path))
         menu.addAction(rename_action)
 
         menu.addSeparator()
 
-        delete_action = QAction("Delete Project", self)
+        delete_action = QAction(self.tr("Delete Project"), self)
         delete_action.triggered.connect(lambda: self.delete_clicked.emit(self._workspace_path))
         menu.addAction(delete_action)
 
@@ -136,7 +136,7 @@ class RecentProjectsPanel(QWidget):
         layout.setSpacing(0)
 
         # Header
-        header = QLabel("RECENT PROJECTS")
+        header = QLabel(self.tr("RECENT PROJECTS"))
         header.setObjectName("recentProjectsHeader")
         layout.addWidget(header)
 
@@ -158,7 +158,7 @@ class RecentProjectsPanel(QWidget):
         self._scroll.setWidget(self._container)
 
         # Empty hint
-        self._empty_label = QLabel("No recent projects")
+        self._empty_label = QLabel(self.tr("No recent projects"))
         self._empty_label.setObjectName("recentProjectsEmpty")
         self._empty_label.setAlignment(Qt.AlignCenter)
 
@@ -208,7 +208,7 @@ class RecentProjectsPanel(QWidget):
 
         current_name = get_display_name(workspace_path)
         new_name, ok = QInputDialog.getText(
-            self, "Rename Project", "Project name:", text=current_name,
+            self, self.tr("Rename Project"), self.tr("Project name:"), text=current_name,
         )
         if ok and new_name.strip() and new_name.strip() != current_name:
             new_name = new_name.strip()
@@ -235,15 +235,15 @@ class RecentProjectsPanel(QWidget):
             return
 
         msg = QMessageBox(self)
-        msg.setWindowTitle("Remove Project")
-        msg.setText(f"Remove \"{name}\" from recent projects?")
+        msg.setWindowTitle(self.tr("Remove Project"))
+        msg.setText(self.tr("Remove \"%s\" from recent projects?") % name)
         msg.setInformativeText(
-            "Remove from List: hides it from recents (files stay on disk).\n"
-            "Delete from Disk: permanently deletes the project folder."
+            self.tr("Remove from List: hides it from recents (files stay on disk).\n"
+                    "Delete from Disk: permanently deletes the project folder.")
         )
 
-        remove_btn = msg.addButton("Remove from List", QMessageBox.AcceptRole)
-        delete_btn = msg.addButton("Delete from Disk", QMessageBox.DestructiveRole)
+        remove_btn = msg.addButton(self.tr("Remove from List"), QMessageBox.AcceptRole)
+        delete_btn = msg.addButton(self.tr("Delete from Disk"), QMessageBox.DestructiveRole)
         msg.addButton(QMessageBox.Cancel)
         msg.setDefaultButton(remove_btn)
 
@@ -257,8 +257,8 @@ class RecentProjectsPanel(QWidget):
         elif clicked == delete_btn:
             # Second confirmation with path shown
             confirm = QMessageBox.warning(
-                self, "Confirm Delete",
-                f"Permanently delete this project folder?\n\n{workspace_path}",
+                self, self.tr("Confirm Delete"),
+                self.tr("Permanently delete this project folder?\n\n%s") % workspace_path,
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -280,8 +280,8 @@ class RecentProjectsPanel(QWidget):
                 except OSError as e:
                     logger.error(f"Failed to delete project: {e}")
                     QMessageBox.warning(
-                        self, "Delete Failed",
-                        f"Could not delete project:\n{e}",
+                        self, self.tr("Delete Failed"),
+                        self.tr("Could not delete project:\n%s") % e,
                     )
                 self.project_deleted.emit(workspace_path)
                 self.refresh()

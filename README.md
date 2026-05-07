@@ -1,15 +1,15 @@
-# EZ-CorridorKey **v1.10.0**
+# EZ-CorridorKey **v2.0.0**
 
 [![Release](https://img.shields.io/github/v/release/edenaion/EZ-CorridorKey?style=flat-square&label=Release&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![Stars](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
 [![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
-[![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins/Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
-> **Latest release: [v1.10.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v1.10.0)** — Project output dirs, wizard overhaul, signed updates, frozen build fixes. See the [full changelog](CHANGELOG.md).
+> **Latest release: [v2.0.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.0.0)** — Blue screen keying, chroma key eyedropper, VideoMaMa mask import, i18n support. See the [full changelog](CHANGELOG.md).
 
-A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI green screen keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
+A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI chroma keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
 This GUI replaces the CLI drag-and-drop workflow with a complete desktop application while preserving 100% backward compatibility (`python main.py --cli` still runs the original wizard).
 
@@ -18,6 +18,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 ### Contents
 
 - [Installation](#installation) — Desktop installer, CLI setup, Docker
+- [Uninstalling](#uninstalling) — Remove the app cleanly
 - [Application Layout](#application-layout) — UI overview
 - [Quick Start](#quick-start) — Import, generate alpha, run inference
 - [Keyboard Shortcuts](#keyboard-shortcuts) — Full hotkey reference
@@ -25,6 +26,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 - [Inference Controls](#inference-controls) — Parameters and output formats
 - [Hardware Requirements](#hardware-requirements) — VRAM, GPU, and platform info
 - [Security](#security) — Verified downloads, signed updates, checksums
+- [Localization](#localization) — Translate EZ-CorridorKey into your language
 - [Contributing](#contributing--support) — How to help and get help
 
 [![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
@@ -40,15 +42,13 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Keyboard shortcuts  | None                        | 20+ hotkeys                                          |
 | Sound feedback      | None                        | 7 context-aware sound effects                        |
 | Session persistence | None                        | Recent projects, auto-save                           |
-| Paint / masking     | Manual external tool        | Built-in brush tool for VideoMaMa / MatAnyone2 masks |
-| Alpha generators    | None                        | GVM, BiRefNet, VideoMaMa, MatAnyone2 (one-click)     |
+| Paint / masking     | Manual external tool        | Built-in brush for masks + chroma key holdout        |
+| Alpha generators    | None                        | GVM, BiRefNet, VideoMaMa, MatAnyone2, Chroma Key     |
 | Apple Silicon       | MPS only                    | MLX acceleration (auto-detected)                     |
 
 ---
 
 ## Installation
-
-*Do NOT download the GitHub Zip, this is not a viable installation method. You will have issues. Do not rename the installation path to anything other than EZ-CorridorKey
 
 ### Desktop App Installer (recommended)
 
@@ -60,8 +60,7 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 
 ### Terminal (CLI) Install (Windows / macOS / Linux)
 
-1. Git Clone this repository:
-`git clone https://github.com/edenaion/EZ-CorridorKey`
+1. Clone or download this repository.
 2. The one-click path provisions and uses managed Python 3.11 automatically, so you do not need to pre-install Python just to use `1-install`.
 3. Run the installer for your platform:
    - **Windows:** Double-click `1-install.bat`
@@ -99,6 +98,37 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 ### Alternate Installation: Docker
 
 For Linux users or remote/cloud setups, EZ-CorridorKey can run inside Docker with browser-based access via noVNC. See [docker/README.md](docker/README.md) for setup instructions. The native install above is recommended for Windows and macOS.
+
+---
+
+## Uninstalling
+
+### Desktop app installer
+
+**Windows:**
+☼ Open Settings > Apps > Installed Apps
+☼ Find **EZ-CorridorKey** and click Uninstall
+☼ This removes the application and Start Menu shortcut
+☼ Your projects and downloaded models are stored in `%APPDATA%\EZ-CorridorKey\`. Delete that folder to remove all user data.
+
+**macOS:**
+☼ Drag `/Applications/EZ-CorridorKey.app` to the Trash
+☼ Your projects, preferences, and downloaded models are stored in `~/Library/Application Support/EZ-CorridorKey/`. Delete that folder to remove all user data.
+
+### CLI install (git clone)
+
+☼ Delete the cloned repository folder (e.g. `EZ-CorridorKey/`). This includes the `.venv` virtual environment, downloaded models, and all project data inside `Projects/`.
+☼ If you created a desktop shortcut during install, delete it manually.
+☼ No system-level files are modified by the CLI install. Nothing else to clean up.
+
+### Hugging Face model cache
+
+Some optional models (BiRefNet, SAM2) are downloaded via Hugging Face Hub and cached outside the project folder. To reclaim that disk space:
+
+☼ **Windows:** `%USERPROFILE%\.cache\huggingface\hub\`
+☼ **macOS / Linux:** `~/.cache/huggingface/hub/`
+
+This cache is shared across all applications that use Hugging Face. If you use other AI tools, only delete the specific model folders (e.g. `models--ZhengPeng7--BiRefNet`, `models--facebook--sam2.1-hiera-base-plus`) rather than the entire `hub/` directory.
 
 ---
 
@@ -163,13 +193,18 @@ The recompression runs in a separate process so the UI stays fully responsive du
 
 Your clip starts in **RAW** state (gray badge). You need an alpha hint before running inference.
 
-**Option A — One-click alpha generators:**
-- **BiRefNet** (recommended) — click **BIREFNET** in the parameter panel. Fast, accurate, and works well on a wide range of footage.
+**Option A — Chroma Key (manual, no AI model):**
+Click **CHROMA KEY** in the parameter panel. Color-difference keyer for green or blue screen footage. Press **E** to activate the eyedropper, then drag across the screen to sample a range of colors. Adjust Key Strength, Clip Black, and Clip White to refine the matte. Click **GENERATE** to produce the alpha hint.
+
+**Option B — One-click alpha generators:**
 - **GVM Auto** — click **GVM AUTO** in the parameter panel. Works great for most green screen footage with people.
+- **BiRefNet** (recommended) — click **BIREFNET** in the parameter panel. Fast, accurate, and works well on a wide range of footage.
 
-**Option B — Track Mask + MatAnyone2 / VideoMaMa:**
-For difficult shots, use the paint brush as a prompt tool:
 
+**Option C — MatAnyone2 / VideoMaMa:**
+These models need a mask hint. Two ways to provide one:
+
+*C1. Paint + Track (from scratch):*
 1. Press **1** to activate foreground mode (green)
 2. Paint over the subject on a few key frames
 3. Press **2** to switch to background mode (red)
@@ -177,7 +212,11 @@ For difficult shots, use the paint brush as a prompt tool:
 5. Click **TRACK MASK** to generate a dense SAM2 mask track
 6. Click **MATANYONE2** or **VIDEOMAMA** in the parameter panel
 
-**Option C — Import Alpha (bring your own):**
+*C2. Import mask (bring your own):*
+1. Click the **+** button next to **VIDEOMAMA** to import a pre-made mask sequence or video
+2. Click **MATANYONE2** or **VIDEOMAMA** to run the model
+
+**Option D — Import Alpha (bring your own):**
 If you already have alpha mattes from another tool (Rotobrush, Silhouette, Resolve, Nuke, etc.), click **IMPORT ALPHA** in the parameter panel and choose either an image folder or a matte video file.
 
 - Supported image formats: **PNG, JPG, JPEG, TIF, TIFF, EXR**
@@ -209,9 +248,9 @@ The entire pipeline is cancellable (Esc) and checkpointable — if interrupted, 
 
 Switch between view modes to inspect results:
 
+- **COMP** — key over checkerboard
 - **FG** — check for green fringing
 - **MATTE** — inspect alpha quality
-- **COMP** — key over checkerboard
 - **PROCESSED** — production RGBA
 
 Outputs are written to the project's `Output/` subdirectories during inference (configurable — see [Custom Output Directory](#custom-output-directory)).
@@ -260,15 +299,17 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 
 ### Paint
 
-| Shortcut                  | Action                                      |
-| --------------------------| ------------------------------------------- |
-| **1**                     | Foreground paint brush (green)              |
-| **2**                     | Background paint brush (red)                |
-| **C**                     | Cycle foreground brush color (green / blue) |
-| **Shift+LMB+drag up/down**| Resize brush                                |
-| **Alt+LMB+drag**          | Draw straight line                          |
-| **Ctrl+Z**                | Undo last stroke on current frame           |
-| **Ctrl+C**                | Clear all paint strokes                     |
+| Shortcut                 | Action                                      |
+| ------------------------ | ------------------------------------------- |
+| **1**                    | Foreground paint brush (green). In chroma key mode, paints holdout mask (force opaque) |
+| **2**                    | Background paint brush (red). In chroma key mode, paints holdout mask (force transparent) |
+| **C**                    | Cycle foreground brush color (green / blue) |
+| **E**                    | Eyedropper (pick screen color for chroma key) |
+| **`**                    | Toggle chroma key mode                      |
+| **Shift + drag up/down** | Resize brush                                |
+| **Alt + left-drag**      | Draw straight line                          |
+| **Ctrl+Z**               | Undo last stroke on current frame           |
+| **Ctrl+C**               | Clear all paint strokes                     |
 
 ---
 
@@ -292,9 +333,10 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 
 | Control              | Range        | Default    | Description                                           |
 | -------------------- | ------------ | ---------- | ----------------------------------------------------- |
+| **BG Color**         | Auto, Green, Blue | Auto  | Screen type for inference. Auto detects from the frame |
 | **Color Space**      | sRGB, Linear | sRGB       | How CorridorKey interprets the input before inference |
 | **Despill Strength** | 0.0 – 1.0    | 1.0        | Green spill removal intensity                         |
-| **Despeckle**        | 50 – 2000 px | ON, 400 px | Removes isolated artifacts smaller than threshold     |
+| **Despeckle**        | 0 – 999999 px | ON, 400 px | Removes isolated artifacts smaller than threshold     |
 | **Refiner Scale**    | 0.0 – 3.0    | 1.0        | Edge refinement. 0 = disabled                         |
 | **Live Preview**     | —            | ON         | Reprocess current frame when parameters change        |
 
@@ -376,6 +418,7 @@ Access via Edit > Preferences.
 | **Copy source videos**       | ON                 | Copy imports into project folder (OFF = reference in place) |
 | **Loop playback**            | ON                 | Loop within in/out range during playback                    |
 | **Default output directory** | (inside project)   | Global output location — outputs go to `<dir>/<Project>/<Clip>/` |
+| **FFmpeg path**              | (auto-detected)    | Browse for a custom FFmpeg binary if auto-detection fails       |
 
 ### Custom Output Directory
 
@@ -482,7 +525,8 @@ Each release includes a `SHA256SUMS.txt` file listing the SHA-256 hash of every 
 sha256sum -c SHA256SUMS.txt
 
 # Windows PowerShell
-(Get-FileHash EZ-CorridorKey-1.10.0-Windows-x64-Setup.exe -Algorithm SHA256).Hash
+(Get-FileHash EZ-CorridorKey-2.0.0-Windows-x64-Setup.exe -Algorithm SHA256).Hash
+# Compare the output against the matching line in SHA256SUMS.txt
 ```
 
 ### Git integrity
@@ -493,10 +537,27 @@ All commits to `main` are signed with an Ed25519 SSH key. Branch protection enfo
 
 Independent scans:
 
-- [**EZ-CorridorKey.exe** (v1.10.0, signed inner exe) — VirusTotal scan](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
-- [**1-install.bat** (v1.6.0) — 0 detections](https://www.virustotal.com/gui/file/c88b68b2fdc429de8bd70a5dde182486c788fcdc34eb508a4a137373d1ddb1bc)
+- [**EZ-CorridorKey.exe** (v2.0.0, signed inner executable) — VirusTotal scan](https://www.virustotal.com/gui/file/627129e270cfced9174866cc434cc5e295fae6e315d614d2f1de99cf27ff3820?nocache=1)
+- [**EZ-CorridorKey.exe** (v1.10.0, signed inner executable) — VirusTotal scan](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
 
 > **Third-party models:** The core CorridorKey checkpoint (`CorridorKey.pth`) is the only model we can vouch for. Optional models (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) are downloaded from their respective authors' repositories -- use them at your own discretion.
+
+---
+
+## Localization
+
+EZ-CorridorKey supports translation into any language. All UI strings are extracted into standard Qt `.ts` files that translators can edit with [Qt Linguist](https://doc.qt.io/qt-6/linguist-translators.html) (free) or any text editor.
+
+**How to add your language:**
+
+1. Copy `ui/translations/corridorkey_en.ts` to your language code (e.g. `corridorkey_fr.ts` for French)
+2. Open the new file in Qt Linguist and fill in translations
+3. Compile it: `pyside6-lrelease ui/translations/corridorkey_fr.ts`
+4. Submit a pull request with both the `.ts` and `.qm` files
+
+Full instructions with examples are in [`ui/translations/TRANSLATING.md`](ui/translations/TRANSLATING.md).
+
+**Current languages:** English (built-in). Want to see your language here? PRs welcome.
 
 ---
 
@@ -504,6 +565,7 @@ Independent scans:
 
 EZ-CorridorKey is a labor of love — built and maintained by one man from Brooklyn for the VFX community. If this tool saves you time on a project, consider paying it forward:
 
+[![Sponsor](https://img.shields.io/badge/GitHub-Sponsor-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/edenaion)
 [![Ko-Fi](https://img.shields.io/badge/Ko--fi-Support%20Development-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/edenaion)
 [![EZSCAPE Plugins](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=for-the-badge&labelColor=000000)](https://www.ezscape.space)
 [![RunPod](https://img.shields.io/badge/RunPod-Cloud%20GPU-673AB7?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNS0xMC01LTEwIDV6TTIgMTJsMTAgNSAxMC01LTEwLTUtMTAgNXoiLz48L3N2Zz4=&logoColor=white)](https://runpod.io?ref=2k18fmnh)

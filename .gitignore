@@ -69,10 +69,17 @@ patches/
 _BACKUPS/
 AGENTS.md
 CLAUDE.md
+HANDOFF.md
 *.lnk
 research-tests.md
+scan_all.sh
 scripts/utils/
 scripts/make_zip.py
+scripts/dev/
+scripts/windows/_list_distinfos.py
+scripts/windows/_verify_pil.py
+scripts/windows/_verify_zip_leaks.py
+scripts/windows/_wizard-large-preview.png
 bench_vram.py
 bench_vram_report.json
 .tmp/
@@ -110,9 +117,14 @@ scripts/windows/build_update_zip.py
 scripts/azure/
 scripts/build-release.sh
 
+# Graphify output (knowledge graph cache)
+graphify-out/
+
 # VS Code port forwarding
 .port
 
 # Release signing keys (NEVER commit the private key)
 ezck_signing_private.pem
 ezck_signing_public.pem
+tests/test_torch_arch_list.py.disabled
+.github/workflows/

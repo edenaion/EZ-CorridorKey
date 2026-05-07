@@ -116,6 +116,54 @@ class DualViewerPanel(QWidget):
         """Access the input (left) viewer."""
         return self._input_viewer
 
+    @property
+    def output_viewer(self) -> PreviewViewport:
+        """Access the output (right) viewer."""
+        return self._output_viewer
+
+    # ── Eyedropper ──
+
+    def set_eyedropper_mode(self, enabled: bool) -> None:
+        """Toggle eyedropper on both viewports and wipe overlay.
+
+        Always samples from the input frame so the screen color comes from
+        the original footage regardless of which viewer the click lands on.
+        """
+        self._input_viewer.set_eyedropper_mode(enabled)
+        self._output_viewer.set_eyedropper_mode(enabled)
+        self._wipe_overlay.set_eyedropper_mode(enabled)
+        if enabled:
+            input_img = self._input_viewer._split_view._single_image
+            self._output_viewer.set_eyedropper_source(input_img)
+            self._wipe_overlay.set_eyedropper_source(input_img)
+        else:
+            self._output_viewer.set_eyedropper_source(None)
+            self._wipe_overlay.set_eyedropper_source(None)
+
+    # ── Both-viewport annotation ──
+
+    def setup_shared_annotations(self) -> None:
+        """Share the input viewer's AnnotationModel with the output viewer.
+
+        Call once after construction so paint strokes appear on and can be
+        drawn from either viewport.
+        """
+        shared_model = self._input_viewer.annotation_model
+        self._output_viewer._split_view.set_annotation_model(shared_model)
+        # Cross-link siblings so painting on one viewer repaints the other live
+        self._input_viewer._split_view.set_annotation_sibling(self._output_viewer._split_view)
+        self._output_viewer._split_view.set_annotation_sibling(self._input_viewer._split_view)
+
+    def setup_shared_holdout(self) -> None:
+        """Share the input viewer's holdout model with the output viewer."""
+        shared_holdout = self._input_viewer.holdout_model
+        self._output_viewer._split_view.set_holdout_model(shared_holdout)
+
+    def set_holdout_active(self, active: bool) -> None:
+        """Route painting to holdout model on both viewers."""
+        self._input_viewer.set_holdout_active(active)
+        self._output_viewer.set_holdout_active(active)
+
     def set_input_exr_is_linear(self, enabled: bool) -> None:
         """Keep both viewers aligned on INPUT-mode EXR display interpretation."""
         self._input_viewer.set_input_exr_is_linear(enabled)
@@ -184,6 +232,7 @@ class DualViewerPanel(QWidget):
             self._scrubber.set_frame(clamped_frame)
             if self._input_viewer.current_stem_index != clamped_frame:
                 self._input_viewer.navigate_to_frame(clamped_frame)
+            self._output_viewer.navigate_to_frame(clamped_frame)
         self._update_coverage(self._clip, fi)
 
     def show_placeholder(self, text: str = "No clip selected") -> None:
@@ -196,6 +245,8 @@ class DualViewerPanel(QWidget):
     def show_reprocess_preview(self, qimage: QImage) -> None:
         """Show a live reprocess result on the output viewer."""
         self._output_viewer.show_reprocess_preview(qimage)
+        if self._wipe_active:
+            self._load_wipe_images()
 
     def reset_zoom(self) -> None:
         """Reset zoom on both viewers."""

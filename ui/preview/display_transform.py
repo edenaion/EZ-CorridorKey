@@ -188,9 +188,9 @@ def _transform_linear_rgb(
         display = np.clip(clamped, 0.0, 1.0)
     else:
         # Linear EXR input and inference outputs both need gamma for display.
-        max_val = clamped.max()
-        if max_val > 1.0:
-            clamped = clamped / (1.0 + clamped)  # Reinhard tone map
+        # Clamp to [0,1] — stray super-whites from float rounding should not
+        # trigger Reinhard tone mapping on the entire image.
+        clamped = np.clip(clamped, 0.0, 1.0)
         display = _linear_to_srgb(clamped)
 
     # BGR → RGB

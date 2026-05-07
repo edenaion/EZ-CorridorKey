@@ -49,6 +49,8 @@ class InferenceParams:
     source_passthrough: bool = _D["source_passthrough"]
     edge_erode_px: int = _D["edge_erode_px"]
     edge_blur_px: int = _D["edge_blur_px"]
+    screen_color: str = _D["screen_color"]
+    garbage_matte_px: int = _D["garbage_matte_px"]
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -129,6 +131,7 @@ class CorridorKeyService(
     def __init__(self):
         self._engine_pool: list = []
         self._pool_size: int = 1
+        self._engine_screen_color: str = "green"  # which checkpoint variant is loaded
         self._model_resolution: int = 2048  # default: full quality
         self._inference_backend: str = "auto"  # auto | mlx | torch (macOS only)
         self._gvm_processor = None

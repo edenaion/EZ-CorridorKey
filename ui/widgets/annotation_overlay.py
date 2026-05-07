@@ -42,12 +42,13 @@ class AnnotationStroke:
 class AnnotationModel:
     """Per-frame stroke storage with optional raster export."""
 
-    def __init__(self) -> None:
+    def __init__(self, filename: str = "annotations.json") -> None:
         # stem_index -> list of completed strokes
         self._strokes: dict[int, list[AnnotationStroke]] = {}
         # In-progress stroke (not yet finished)
         self._current_stroke: AnnotationStroke | None = None
         self._current_frame: int = -1
+        self._FILENAME = filename
 
     def start_stroke(self, stem_idx: int, x: float, y: float,
                      brush_type: str, radius: float) -> None:
@@ -108,8 +109,6 @@ class AnnotationModel:
         return len(self._strokes)
 
     # ── Persistence ────────────────────────────────────────────────────────
-
-    _FILENAME = "annotations.json"
 
     def save(self, clip_root: str) -> None:
         """Persist all strokes to {clip_root}/annotations.json."""
@@ -228,6 +227,34 @@ class AnnotationModel:
 
         return mask
 
+    @staticmethod
+    def rasterize_holdout_mask(strokes: list[AnnotationStroke],
+                               width: int, height: int) -> np.ndarray:
+        """Render holdout strokes into a 3-state mask.
+
+        128 = neutral (no effect), 255 = force foreground, 0 = force background.
+        Strokes applied in order so later strokes override earlier ones.
+        """
+        mask = np.full((height, width), 128, dtype=np.uint8)
+
+        for stroke in strokes:
+            color = 255 if stroke.brush_type == "fg" else 0
+            radius = max(1, int(round(stroke.radius)))
+
+            for px, py in stroke.points:
+                cx, cy = int(round(px)), int(round(py))
+                cv2.circle(mask, (cx, cy), radius, color, -1)
+
+            if len(stroke.points) >= 2:
+                for i in range(len(stroke.points) - 1):
+                    p1 = (int(round(stroke.points[i][0])),
+                           int(round(stroke.points[i][1])))
+                    p2 = (int(round(stroke.points[i + 1][0])),
+                           int(round(stroke.points[i + 1][1])))
+                    cv2.line(mask, p1, p2, color, radius * 2)
+
+        return mask
+
 
 # ── Colors ──────────────────────────────────────────────────────────────────
 
@@ -262,10 +289,12 @@ _RESIZE_TEXT = QColor(255, 242, 3, 220)   # brand yellow for size text
 
 def paint_annotations(painter: QPainter, strokes: list[AnnotationStroke],
                       current_stroke: AnnotationStroke | None,
-                      image_rect: QRectF, img_w: int, img_h: int) -> None:
+                      image_rect: QRectF, img_w: int, img_h: int,
+                      outline_only: bool = False) -> None:
     """Paint annotation strokes onto the viewport.
 
     Converts image-pixel coords to display coords via image_rect.
+    When outline_only is True, draws unfilled outlines (for holdout mask).
     """
     all_strokes = list(strokes)
     if current_stroke is not None:
@@ -279,8 +308,6 @@ def paint_annotations(painter: QPainter, strokes: list[AnnotationStroke],
 
     for stroke in all_strokes:
         color = get_fg_color() if stroke.brush_type == "fg" else _BG_COLOR
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(color)
 
         # Scale radius from image pixels to display pixels
         display_radius = stroke.radius * image_rect.width() / img_w
@@ -290,16 +317,31 @@ def paint_annotations(painter: QPainter, strokes: list[AnnotationStroke],
             dx = image_rect.x() + (px / img_w) * image_rect.width()
             dy = image_rect.y() + (py / img_h) * image_rect.height()
             display_pts.append(QPointF(dx, dy))
-            painter.drawEllipse(QPointF(dx, dy), display_radius, display_radius)
 
-        # Connect consecutive points with thick lines for smooth coverage
-        if len(display_pts) >= 2:
-            pen = QPen(color, display_radius * 2)
+        if outline_only:
+            # Outline mode: unfilled circles + thin connecting lines
+            pen = QPen(color, 2.0)
             pen.setCapStyle(Qt.RoundCap)
             painter.setPen(pen)
-            for i in range(len(display_pts) - 1):
-                painter.drawLine(display_pts[i], display_pts[i + 1])
+            painter.setBrush(Qt.NoBrush)
+            for pt in display_pts:
+                painter.drawEllipse(pt, display_radius, display_radius)
+            if len(display_pts) >= 2:
+                for i in range(len(display_pts) - 1):
+                    painter.drawLine(display_pts[i], display_pts[i + 1])
+        else:
+            # Filled mode: solid circles + thick connecting lines
             painter.setPen(Qt.NoPen)
+            painter.setBrush(color)
+            for pt in display_pts:
+                painter.drawEllipse(pt, display_radius, display_radius)
+            if len(display_pts) >= 2:
+                pen = QPen(color, display_radius * 2)
+                pen.setCapStyle(Qt.RoundCap)
+                painter.setPen(pen)
+                for i in range(len(display_pts) - 1):
+                    painter.drawLine(display_pts[i], display_pts[i + 1])
+                painter.setPen(Qt.NoPen)
 
     painter.restore()
 
@@ -344,16 +386,20 @@ def paint_annotation_hud(
     image_rect: QRectF,
     brush_type: str,
     radius_image: float,
+    label_suffix: str = "SAM prompt: sparse points + box",
 ) -> None:
-    """Draw a persistent HUD describing the exact SAM prompt semantics."""
+    """Draw a persistent HUD describing the current brush context."""
     painter.save()
     font = painter.font()
     font.setPointSize(10)
     painter.setFont(font)
 
     brush_label = "FG" if brush_type == "fg" else "BG"
-    text = f"{brush_label} brush {int(round(radius_image))}px | SAM prompt: sparse points + box"
-    hud_rect = QRectF(image_rect.x() + 12, image_rect.y() + 12, 380, 24)
+    size_px = int(round(radius_image))
+    line1 = f"{brush_label} brush {size_px}px | {label_suffix}"
+    line2 = "Shift+drag: resize | Alt+drag: straight line"
+    text = f"{line1}\n{line2}"
+    hud_rect = QRectF(12, 12, 380, 40)
     painter.fillRect(hud_rect, QColor(0, 0, 0, 150))
     painter.setPen(_RESIZE_TEXT)
     painter.drawText(hud_rect, Qt.AlignCenter, text)

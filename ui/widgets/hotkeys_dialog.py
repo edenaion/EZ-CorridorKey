@@ -53,13 +53,13 @@ class KeyBindButton(QPushButton):
 
     def display_key(self, key_str: str) -> None:
         """Show the key sequence, highlighting non-default bindings."""
-        self.setText(key_str if key_str else "(none)")
+        self.setText(key_str if key_str else self.tr("(none)"))
         is_default = self._registry.is_default(self.action_id)
         self.setStyleSheet(self._STYLE_DEFAULT if is_default else self._STYLE_CUSTOM)
 
     def _start_recording(self) -> None:
         self._recording = True
-        self.setText("Press a key...")
+        self.setText(self.tr("Press a key..."))
         self.setStyleSheet(self._STYLE_RECORDING)
         self.grabKeyboard()
 
@@ -91,9 +91,8 @@ class KeyBindButton(QPushButton):
                 if d.action_id in conflicts
             )
             reply = QMessageBox.warning(
-                self, "Shortcut Conflict",
-                f'"{key_str}" is already assigned to:\n{conflict_names}\n\n'
-                "Reassign anyway? The conflicting binding will be cleared.",
+                self, self.tr("Shortcut Conflict"),
+                self.tr('"%s" is already assigned to:\n%s\n\nReassign anyway? The conflicting binding will be cleared.') % (key_str, conflict_names),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -131,7 +130,7 @@ class HotkeysDialog(QDialog):
         # Snapshot for cancel/revert
         self._original_overrides = registry.snapshot_overrides()
 
-        self.setWindowTitle("Hotkeys")
+        self.setWindowTitle(self.tr("Hotkeys"))
         self.setMinimumSize(540, 480)
         self.setModal(True)
         self._build_ui()
@@ -143,7 +142,7 @@ class HotkeysDialog(QDialog):
 
         # Filter bar
         self._filter = QLineEdit()
-        self._filter.setPlaceholderText("Filter shortcuts...")
+        self._filter.setPlaceholderText(self.tr("Filter shortcuts..."))
         self._filter.setStyleSheet(
             "QLineEdit { background: #1A1900; border: 1px solid #2A2910; "
             "color: #CCCCAA; padding: 6px 8px; font-size: 12px; }"
@@ -210,7 +209,7 @@ class HotkeysDialog(QDialog):
                 self._buttons[defn.action_id] = btn
                 row_layout.addWidget(btn)
 
-                reset_btn = QPushButton("Reset")
+                reset_btn = QPushButton(self.tr("Reset"))
                 reset_btn.setFixedWidth(50)
                 reset_btn.setFixedHeight(24)
                 reset_btn.setStyleSheet(
@@ -218,7 +217,7 @@ class HotkeysDialog(QDialog):
                     "border: 1px solid #2A2910; font-size: 10px; padding: 2px 6px; }"
                     "QPushButton:hover { color: #CCCCAA; border-color: #454430; }"
                 )
-                reset_btn.setToolTip(f"Reset to default: {defn.default_key}")
+                reset_btn.setToolTip(self.tr("Reset to default: %s") % defn.default_key)
                 reset_btn.setCursor(Qt.PointingHandCursor)
                 aid = defn.action_id
                 reset_btn.clicked.connect(
@@ -238,7 +237,7 @@ class HotkeysDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(8)
 
-        reset_all_btn = QPushButton("Reset All to Defaults")
+        reset_all_btn = QPushButton(self.tr("Reset All to Defaults"))
         reset_all_btn.setStyleSheet(
             "QPushButton { background: #1A1900; color: #999980; "
             "border: 1px solid #2A2910; padding: 6px 14px; font-size: 11px; }"
@@ -250,7 +249,7 @@ class HotkeysDialog(QDialog):
 
         btn_layout.addStretch()
 
-        cancel_btn = QPushButton("Cancel")
+        cancel_btn = QPushButton(self.tr("Cancel"))
         cancel_btn.setFixedWidth(80)
         cancel_btn.setStyleSheet(
             "QPushButton { background: #1A1900; color: #999980; "
@@ -261,7 +260,7 @@ class HotkeysDialog(QDialog):
         cancel_btn.clicked.connect(self._on_cancel)
         btn_layout.addWidget(cancel_btn)
 
-        ok_btn = QPushButton("OK")
+        ok_btn = QPushButton(self.tr("OK"))
         ok_btn.setFixedWidth(80)
         ok_btn.setDefault(True)
         ok_btn.setStyleSheet(
@@ -307,8 +306,8 @@ class HotkeysDialog(QDialog):
 
     def _reset_all(self) -> None:
         reply = QMessageBox.question(
-            self, "Reset All Shortcuts",
-            "Reset all shortcuts to their default values?",
+            self, self.tr("Reset All Shortcuts"),
+            self.tr("Reset all shortcuts to their default values?"),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )

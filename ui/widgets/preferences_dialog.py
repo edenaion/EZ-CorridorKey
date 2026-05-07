@@ -52,6 +52,7 @@ KEY_PARALLEL_CLIPS = "gpu/parallel_clips"
 KEY_MODEL_RESOLUTION = "inference/model_resolution"
 KEY_INFERENCE_BACKEND = "inference/backend"
 KEY_OUTPUT_DIRECTORY = "output/default_directory"
+KEY_UI_LANGUAGE = "ui/language"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
@@ -148,7 +149,7 @@ class PreferencesDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Preferences")
+        self.setWindowTitle(self.tr("Preferences"))
         self.setMinimumWidth(520)
         self.setModal(True)
         # Ctrl+, closes the dialog (toggle behavior matching F12 pattern)
@@ -181,44 +182,61 @@ class PreferencesDialog(QDialog):
         layout.setSpacing(12)
 
         # UI section
-        ui_group = QGroupBox("User Interface")
+        ui_group = QGroupBox(self.tr("User Interface"))
         ui_layout = QVBoxLayout(ui_group)
 
-        self._tooltips_cb = QCheckBox("Show tooltips on controls")
+        self._tooltips_cb = QCheckBox(self.tr("Show tooltips on controls"))
         self._tooltips_cb.setChecked(
             get_setting_bool(KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS)
         )
         ui_layout.addWidget(self._tooltips_cb)
 
-        self._sounds_cb = QCheckBox("UI sounds")
+        self._sounds_cb = QCheckBox(self.tr("UI sounds"))
         self._sounds_cb.setChecked(
             get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS)
         )
         ui_layout.addWidget(self._sounds_cb)
 
+        lang_label = QLabel(self.tr("Language"))
+        ui_layout.addWidget(lang_label)
+        self._language_combo = _no_scroll_wheel(QComboBox())
+        self._language_combo.addItem(self.tr("English"), "en")
+        self._populate_available_languages()
+        saved_lang = get_setting_str(KEY_UI_LANGUAGE, "en")
+        idx = self._language_combo.findData(saved_lang)
+        self._language_combo.setCurrentIndex(max(0, idx))
+        self._language_combo.setToolTip(
+            self.tr("Select display language. Restart required to apply.")
+        )
+        ui_layout.addWidget(self._language_combo)
+
         # (added to layout below in display order)
 
         # Project section
-        proj_group = QGroupBox("Project")
+        proj_group = QGroupBox(self.tr("Project"))
         proj_layout = QVBoxLayout(proj_group)
 
-        self._copy_source_cb = QCheckBox("Copy source videos into project folder")
+        self._copy_source_cb = QCheckBox(self.tr("Copy source videos into project folder"))
         self._copy_source_cb.setToolTip(
-            "When enabled, imported videos are copied into the project folder.\n"
-            "When disabled, the project references the original file in place.\n\n"
-            "Note: Deleting a project never touches the original source file."
+            self.tr(
+                "When enabled, imported videos are copied into the project folder.\n"
+                "When disabled, the project references the original file in place.\n\n"
+                "Note: Deleting a project never touches the original source file."
+            )
         )
         self._copy_source_cb.setChecked(
             get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
         )
         proj_layout.addWidget(self._copy_source_cb)
 
-        self._copy_sequences_cb = QCheckBox("Copy imported image sequences into project folder")
+        self._copy_sequences_cb = QCheckBox(self.tr("Copy imported image sequences into project folder"))
         self._copy_sequences_cb.setToolTip(
-            "When enabled, imported image sequence files are copied into the project.\n"
-            "When disabled (default), the project references the original files in place.\n\n"
-            "Referencing saves disk space for large EXR/TIF sequences.\n"
-            "Original files are never modified regardless of this setting."
+            self.tr(
+                "When enabled, imported image sequence files are copied into the project.\n"
+                "When disabled (default), the project references the original files in place.\n\n"
+                "Referencing saves disk space for large EXR/TIF sequences.\n"
+                "Original files are never modified regardless of this setting."
+            )
         )
         self._copy_sequences_cb.setChecked(
             get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES)
@@ -228,53 +246,57 @@ class PreferencesDialog(QDialog):
         # (added to layout below in display order)
 
         # Output section
-        output_group = QGroupBox("Output")
+        output_group = QGroupBox(self.tr("Output"))
         output_layout = QVBoxLayout(output_group)
 
-        exr_label = QLabel("EXR compression")
+        exr_label = QLabel(self.tr("EXR compression"))
         output_layout.addWidget(exr_label)
 
         self._exr_compression_combo = _no_scroll_wheel(QComboBox())
         saved_compression = get_setting_str(KEY_EXR_COMPRESSION, DEFAULT_EXR_COMPRESSION)
         for label, value in EXR_COMPRESSION_OPTIONS:
-            self._exr_compression_combo.addItem(label, value)
+            self._exr_compression_combo.addItem(self.tr(label), value)
         idx = self._exr_compression_combo.findData(saved_compression)
         self._exr_compression_combo.setCurrentIndex(max(0, idx))
         self._exr_compression_combo.setToolTip(
-            "Compression used when writing EXR output files.\n\n"
-            "DWAB: Lossy wavelet, smallest files. Default.\n"
-            "PIZ: Lossless wavelet, preferred by compositors.\n"
-            "ZIP: Lossless deflate, good for clean renders.\n"
-            "None: No compression, fastest write, largest files."
+            self.tr(
+                "Compression used when writing EXR output files.\n\n"
+                "DWAB: Lossy wavelet, smallest files. Default.\n"
+                "PIZ: Lossless wavelet, preferred by compositors.\n"
+                "ZIP: Lossless deflate, good for clean renders.\n"
+                "None: No compression, fastest write, largest files."
+            )
         )
         output_layout.addWidget(self._exr_compression_combo)
 
         # Default output directory
-        dir_label = QLabel("Default output directory")
+        dir_label = QLabel(self.tr("Default output directory"))
         output_layout.addWidget(dir_label)
 
         dir_row = QHBoxLayout()
         self._output_dir_edit = QLineEdit()
         self._output_dir_edit.setReadOnly(True)
-        self._output_dir_edit.setPlaceholderText("Default (inside project)")
+        self._output_dir_edit.setPlaceholderText(self.tr("Default (inside project)"))
         saved_dir = get_setting_str(KEY_OUTPUT_DIRECTORY, "")
         if saved_dir:
             self._output_dir_edit.setText(saved_dir)
         self._output_dir_edit.setToolTip(
-            "Global default directory for inference output.\n\n"
-            "When set, outputs go to:\n"
-            "  <this folder>/<ProjectName>/<ClipName>/FG, Matte, etc.\n\n"
-            "Leave empty to use the default (Output/ inside each clip).\n"
-            "Per-clip overrides (right-click → Set Output Directory) take priority."
+            self.tr(
+                "Global default directory for inference output.\n\n"
+                "When set, outputs go to:\n"
+                "  <this folder>/<ProjectName>/<ClipName>/FG, Matte, etc.\n\n"
+                "Leave empty to use the default (Output/ inside each clip).\n"
+                "Per-clip overrides (right-click \u2192 Set Output Directory) take priority."
+            )
         )
         dir_row.addWidget(self._output_dir_edit, 1)
 
-        browse_btn = QPushButton("Browse...")
+        browse_btn = QPushButton(self.tr("Browse..."))
         browse_btn.setMinimumWidth(80)
         browse_btn.clicked.connect(self._browse_output_dir)
         dir_row.addWidget(browse_btn)
 
-        clear_btn = QPushButton("Clear")
+        clear_btn = QPushButton(self.tr("Clear"))
         clear_btn.setMinimumWidth(60)
         clear_btn.clicked.connect(lambda: self._output_dir_edit.clear())
         dir_row.addWidget(clear_btn)
@@ -284,62 +306,68 @@ class PreferencesDialog(QDialog):
         # (added to layout below in display order)
 
         # Inference section
-        inference_group = QGroupBox("Inference")
+        inference_group = QGroupBox(self.tr("Inference"))
         inference_layout = QVBoxLayout(inference_group)
 
-        res_label = QLabel("Model resolution")
+        res_label = QLabel(self.tr("Model resolution"))
         inference_layout.addWidget(res_label)
 
         self._model_resolution_combo = _no_scroll_wheel(QComboBox())
-        self._model_resolution_combo.addItem("2048 — Full Quality", 2048)
-        self._model_resolution_combo.addItem("1024 — Faster, Less Detail", 1024)
+        self._model_resolution_combo.addItem(self.tr("2048 \u2014 Full Quality"), 2048)
+        self._model_resolution_combo.addItem(self.tr("1024 \u2014 Faster, Less Detail"), 1024)
         saved_res = get_setting_int(KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION)
         idx = self._model_resolution_combo.findData(saved_res)
         self._model_resolution_combo.setCurrentIndex(max(0, idx))
         self._model_resolution_combo.setToolTip(
-            "Resolution the model processes internally before upscaling to your frame size.\n"
-            "Applies to all backends (CUDA, MPS, MLX, CPU).\n\n"
-            "2048: Full quality — captures fine hair strands and edge detail.\n"
-            "Matches the original CorridorKey quality. Recommended for CUDA with 8GB+ VRAM.\n"
-            "WARNING: Very slow on Apple Silicon (needs 20GB+ memory).\n\n"
-            "1024: Faster inference with lower memory usage.\n"
-            "Fine hair detail may be lost. Recommended for Apple Silicon / low-VRAM GPUs.\n\n"
-            "Changing this requires an engine reload (happens automatically)."
+            self.tr(
+                "Resolution the model processes internally before upscaling to your frame size.\n"
+                "Applies to all backends (CUDA, MPS, MLX, CPU).\n\n"
+                "2048: Full quality \u2014 captures fine hair strands and edge detail.\n"
+                "Matches the original CorridorKey quality. Recommended for CUDA with 8GB+ VRAM.\n"
+                "WARNING: Very slow on Apple Silicon (needs 20GB+ memory).\n\n"
+                "1024: Faster inference with lower memory usage.\n"
+                "Fine hair detail may be lost. Recommended for Apple Silicon / low-VRAM GPUs.\n\n"
+                "Changing this requires an engine reload (happens automatically)."
+            )
         )
         inference_layout.addWidget(self._model_resolution_combo)
 
         # Backend selector (macOS only — choose MLX or PyTorch MPS)
         self._backend_combo = None
         if _is_apple_silicon:
-            backend_label = QLabel("Processing backend")
+            backend_label = QLabel(self.tr("Processing backend"))
             inference_layout.addWidget(backend_label)
 
             self._backend_combo = _no_scroll_wheel(QComboBox())
-            self._backend_combo.addItem("Auto — MLX if available, otherwise MPS", "auto")
-            self._backend_combo.addItem("MLX — Apple Metal acceleration (recommended)", "mlx")
-            self._backend_combo.addItem("MPS — PyTorch Metal Performance Shaders", "torch")
+            self._backend_combo.addItem(self.tr("Auto \u2014 MLX if available, otherwise MPS"), "auto")
+            self._backend_combo.addItem(self.tr("MLX \u2014 Apple Metal acceleration (recommended)"), "mlx")
+            self._backend_combo.addItem(self.tr("MPS \u2014 PyTorch Metal Performance Shaders"), "torch")
             saved_backend = get_setting_str(KEY_INFERENCE_BACKEND, "auto")
             idx = self._backend_combo.findData(saved_backend)
             self._backend_combo.setCurrentIndex(max(0, idx))
             self._backend_combo.setToolTip(
-                "Choose the inference backend for Apple Silicon.\n\n"
-                "MLX: Native Apple Metal — fastest on M1/M2/M3/M4.\n"
-                "MPS: PyTorch Metal Performance Shaders — compatible fallback.\n"
-                "Auto: Uses MLX if installed, otherwise falls back to MPS.\n\n"
-                "Changing this requires an engine reload (happens automatically)."
+                self.tr(
+                    "Choose the inference backend for Apple Silicon.\n\n"
+                    "MLX: Native Apple Metal \u2014 fastest on M1/M2/M3/M4.\n"
+                    "MPS: PyTorch Metal Performance Shaders \u2014 compatible fallback.\n"
+                    "Auto: Uses MLX if installed, otherwise falls back to MPS.\n\n"
+                    "Changing this requires an engine reload (happens automatically)."
+                )
             )
             inference_layout.addWidget(self._backend_combo)
 
         # (added to layout below in display order)
 
         # Playback section
-        play_group = QGroupBox("Playback")
+        play_group = QGroupBox(self.tr("Playback"))
         play_layout = QVBoxLayout(play_group)
 
-        self._loop_cb = QCheckBox("Loop playback within in/out range")
+        self._loop_cb = QCheckBox(self.tr("Loop playback within in/out range"))
         self._loop_cb.setToolTip(
-            "When enabled, playback loops back to the in-point\n"
-            "after reaching the out-point (or start/end if no range)."
+            self.tr(
+                "When enabled, playback loops back to the in-point\n"
+                "after reaching the out-point (or start/end if no range)."
+            )
         )
         self._loop_cb.setChecked(
             get_setting_bool(KEY_LOOP_PLAYBACK, DEFAULT_LOOP_PLAYBACK)
@@ -349,34 +377,38 @@ class PreferencesDialog(QDialog):
         # (added to layout below in display order)
 
         # Tracking section
-        tracking_group = QGroupBox("Tracking")
+        tracking_group = QGroupBox(self.tr("Tracking"))
         tracking_layout = QVBoxLayout(tracking_group)
 
-        tracking_label = QLabel("SAM2 model")
+        tracking_label = QLabel(self.tr("SAM2 model"))
         tracking_layout.addWidget(tracking_label)
 
         self._tracker_model_combo = _no_scroll_wheel(QComboBox())
         saved_model = get_setting_str(KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL)
         for label, size, model_id in TRACKER_MODEL_OPTIONS:
-            self._tracker_model_combo.addItem(f"{label}  ({size})", model_id)
+            self._tracker_model_combo.addItem(self.tr("%s  (%s)") % (self.tr(label), size), model_id)
         idx = self._tracker_model_combo.findData(saved_model)
         self._tracker_model_combo.setCurrentIndex(max(0, idx))
         self._tracker_model_combo.setToolTip(
-            "Fast: lower VRAM, lower quality.\n"
-            "Base+: best default tradeoff for this app.\n"
-            "Highest Quality: slowest, heaviest tracker."
+            self.tr(
+                "Fast: lower VRAM, lower quality.\n"
+                "Base+: best default tradeoff for this app.\n"
+                "Highest Quality: slowest, heaviest tracker."
+            )
         )
         tracking_layout.addWidget(self._tracker_model_combo)
 
         tracking_info = QLabel(
-            "Models download automatically on first use. "
-            "Download progress appears in the status bar."
+            self.tr(
+                "Models download automatically on first use. "
+                "Download progress appears in the status bar."
+            )
         )
         tracking_info.setWordWrap(True)
         tracking_info.setStyleSheet("color: #999980; font-size: 11px;")
         tracking_layout.addWidget(tracking_info)
 
-        manage_label = QLabel("Manage models")
+        manage_label = QLabel(self.tr("Manage models"))
         tracking_layout.addWidget(manage_label)
 
         self._tracker_cache_dir = get_tracker_model_cache_dir()
@@ -388,7 +420,7 @@ class PreferencesDialog(QDialog):
         self._cache_path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         cache_row.addWidget(self._cache_path_label, 1)
 
-        open_cache_btn = QPushButton("Open Cache Folder")
+        open_cache_btn = QPushButton(self.tr("Open Cache Folder"))
         open_cache_btn.clicked.connect(self._open_tracker_cache_dir)
         cache_row.addWidget(open_cache_btn)
         tracking_layout.addLayout(cache_row)
@@ -397,10 +429,10 @@ class PreferencesDialog(QDialog):
 
         # Model downloads now live in Edit > Download Manager (not Preferences).
 
-        ffmpeg_group = QGroupBox("Video Tools")
+        ffmpeg_group = QGroupBox(self.tr("Video Tools"))
         ffmpeg_layout = QVBoxLayout(ffmpeg_group)
 
-        ffmpeg_label = QLabel("FFmpeg status")
+        ffmpeg_label = QLabel(self.tr("FFmpeg status"))
         ffmpeg_layout.addWidget(ffmpeg_label)
 
         self._ffmpeg_status_label = QLabel("")
@@ -410,10 +442,12 @@ class PreferencesDialog(QDialog):
         ffmpeg_layout.addWidget(self._ffmpeg_status_label)
 
         ffmpeg_info = QLabel(
-            "Windows: Repair downloads a bundled full FFmpeg build into tools/ffmpeg "
-            "without changing your system install.\n"
-            "macOS: Repair installs FFmpeg via Homebrew.\n"
-            "Linux: Repair copies the install command to your clipboard."
+            self.tr(
+                "Windows: Repair downloads a bundled full FFmpeg build into tools/ffmpeg "
+                "without changing your system install.\n"
+                "macOS: Repair installs FFmpeg via Homebrew.\n"
+                "Linux: Repair copies the install command to your clipboard."
+            )
         )
         ffmpeg_info.setWordWrap(True)
         ffmpeg_info.setStyleSheet("color: #999980; font-size: 11px;")
@@ -427,23 +461,37 @@ class PreferencesDialog(QDialog):
         ffmpeg_btn_row = QHBoxLayout()
         ffmpeg_btn_row.setSpacing(8)
 
-        self._repair_ffmpeg_btn = QPushButton("Repair FFmpeg")
+        self._repair_ffmpeg_btn = QPushButton(self.tr("Repair FFmpeg"))
         self._repair_ffmpeg_btn.setToolTip(
-            "Windows: download and install a full bundled FFmpeg build into "
-            "tools/ffmpeg, validate ffmpeg + ffprobe 7+, and switch CorridorKey "
-            "to that local copy immediately.\n\n"
-            "macOS: install FFmpeg via Homebrew and validate ffmpeg + ffprobe 7+.\n\n"
-            "Linux: do not change system packages. CorridorKey shows the exact "
-            "install commands and copies them to your clipboard instead."
+            self.tr(
+                "Windows: download and install a full bundled FFmpeg build into "
+                "tools/ffmpeg, validate ffmpeg + ffprobe 7+, and switch CorridorKey "
+                "to that local copy immediately.\n\n"
+                "macOS: install FFmpeg via Homebrew and validate ffmpeg + ffprobe 7+.\n\n"
+                "Linux: do not change system packages. CorridorKey shows the exact "
+                "install commands and copies them to your clipboard instead."
+            )
         )
         self._repair_ffmpeg_btn.clicked.connect(self._on_repair_ffmpeg)
         ffmpeg_btn_row.addWidget(self._repair_ffmpeg_btn)
 
-        self._open_ffmpeg_btn = QPushButton("Open FFmpeg Folder")
+        self._browse_ffmpeg_btn = QPushButton(self.tr("Browse..."))
+        self._browse_ffmpeg_btn.setToolTip(
+            self.tr(
+                "Point CorridorKey at your own FFmpeg installation.\n"
+                "Select the folder containing ffmpeg.exe and ffprobe.exe."
+            )
+        )
+        self._browse_ffmpeg_btn.clicked.connect(self._on_browse_ffmpeg)
+        ffmpeg_btn_row.addWidget(self._browse_ffmpeg_btn)
+
+        self._open_ffmpeg_btn = QPushButton(self.tr("Open FFmpeg Folder"))
         self._open_ffmpeg_btn.setToolTip(
-            "Open CorridorKey's bundled FFmpeg folder.\n"
-            "If Repair FFmpeg has been run on Windows, this is where the local "
-            "full build is stored."
+            self.tr(
+                "Open CorridorKey's bundled FFmpeg folder.\n"
+                "If Repair FFmpeg has been run on Windows, this is where the local "
+                "full build is stored."
+            )
         )
         self._open_ffmpeg_btn.clicked.connect(self._open_local_ffmpeg_dir)
         ffmpeg_btn_row.addWidget(self._open_ffmpeg_btn)
@@ -469,11 +517,11 @@ class PreferencesDialog(QDialog):
         btn_layout.setContentsMargins(12, 0, 12, 0)
         btn_layout.addStretch(1)
 
-        self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn = QPushButton(self.tr("Cancel"))
         self._cancel_btn.clicked.connect(self.reject)
         btn_layout.addWidget(self._cancel_btn)
 
-        self._ok_btn = QPushButton("OK")
+        self._ok_btn = QPushButton(self.tr("OK"))
         self._ok_btn.setDefault(True)
         self._ok_btn.clicked.connect(self._save_and_accept)
         btn_layout.addWidget(self._ok_btn)
@@ -488,11 +536,44 @@ class PreferencesDialog(QDialog):
             return
         super().closeEvent(event)
 
+    def _populate_available_languages(self) -> None:
+        """Scan ui/translations/ for .qm files and add them to the combo."""
+        import os
+        if getattr(_sys, "frozen", False):
+            translations_dir = os.path.join(_sys._MEIPASS, "ui", "translations")
+        else:
+            translations_dir = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)), "translations"
+            )
+        if not os.path.isdir(translations_dir):
+            return
+        # Map of language codes to display names
+        _LANG_NAMES = {
+            "fr": "Fran\u00e7ais",
+            "de": "Deutsch",
+            "es": "Espa\u00f1ol",
+            "it": "Italiano",
+            "pt": "Portugu\u00eas",
+            "ja": "\u65e5\u672c\u8a9e",
+            "ko": "\ud55c\uad6d\uc5b4",
+            "zh": "\u4e2d\u6587",
+            "ru": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
+        }
+        for fname in sorted(os.listdir(translations_dir)):
+            if not fname.startswith("corridorkey_") or not fname.endswith(".qm"):
+                continue
+            code = fname[len("corridorkey_"):-len(".qm")]
+            if code == "en":
+                continue  # Already added as default
+            display = _LANG_NAMES.get(code, code)
+            self._language_combo.addItem(display, code)
+
     def _save_and_accept(self) -> None:
         """Persist settings and close."""
         s = QSettings()
         s.setValue(KEY_SHOW_TOOLTIPS, self._tooltips_cb.isChecked())
         s.setValue(KEY_UI_SOUNDS, self._sounds_cb.isChecked())
+        s.setValue(KEY_UI_LANGUAGE, self._language_combo.currentData())
         s.setValue(KEY_COPY_SOURCE, self._copy_source_cb.isChecked())
         s.setValue(KEY_COPY_SEQUENCES, self._copy_sequences_cb.isChecked())
         s.setValue(KEY_LOOP_PLAYBACK, self._loop_cb.isChecked())
@@ -511,7 +592,7 @@ class PreferencesDialog(QDialog):
         """Open folder picker for default output directory."""
         start = self._output_dir_edit.text() or ""
         path = QFileDialog.getExistingDirectory(
-            self, "Select Default Output Directory", start,
+            self, self.tr("Select Default Output Directory"), start,
             QFileDialog.ShowDirsOnly,
         )
         if path:
@@ -521,6 +602,64 @@ class PreferencesDialog(QDialog):
         """Open the local cache folder where SAM2 checkpoints are stored."""
         self._tracker_cache_dir.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._tracker_cache_dir)))
+
+    def _on_browse_ffmpeg(self) -> None:
+        """Let the user point CorridorKey at their own FFmpeg folder."""
+        path = QFileDialog.getExistingDirectory(
+            self,
+            self.tr("Select FFmpeg Folder (containing ffmpeg.exe and ffprobe.exe)"),
+            "",
+        )
+        if not path:
+            return
+
+        # Check that the folder actually contains ffmpeg
+        import os
+        ext = ".exe" if _sys.platform == "win32" else ""
+        has_ffmpeg = os.path.isfile(os.path.join(path, f"ffmpeg{ext}"))
+        has_ffprobe = os.path.isfile(os.path.join(path, f"ffprobe{ext}"))
+
+        if not has_ffmpeg:
+            # Maybe they selected the parent folder that contains a bin/ subfolder
+            bin_path = os.path.join(path, "bin")
+            if os.path.isfile(os.path.join(bin_path, f"ffmpeg{ext}")):
+                path = bin_path
+                has_ffmpeg = True
+                has_ffprobe = os.path.isfile(os.path.join(bin_path, f"ffprobe{ext}"))
+
+        if not has_ffmpeg:
+            QMessageBox.warning(
+                self,
+                self.tr("FFmpeg Not Found"),
+                self.tr("Could not find ffmpeg%s in:\n\n%s\n\n"
+                        "Select the folder that contains ffmpeg.exe and ffprobe.exe "
+                        "(usually the 'bin' folder inside the FFmpeg download).") % (ext, path),
+            )
+            return
+
+        if not has_ffprobe:
+            QMessageBox.warning(
+                self,
+                self.tr("FFprobe Missing"),
+                self.tr("Found ffmpeg%s but ffprobe%s is missing from:\n\n%s\n\n"
+                        "CorridorKey requires both. Download a full FFmpeg build.") % (ext, ext, path),
+            )
+            return
+
+        from backend.ffmpeg_tools.discovery import set_custom_ffmpeg_dir
+        set_custom_ffmpeg_dir(path)
+        self._refresh_ffmpeg_status()
+
+        from backend.ffmpeg_tools import validate_ffmpeg_install
+        result = validate_ffmpeg_install(require_probe=True)
+        if result.ok:
+            QMessageBox.information(
+                self, self.tr("FFmpeg Found"), result.message,
+            )
+        else:
+            QMessageBox.warning(
+                self, self.tr("FFmpeg Issue"), result.message,
+            )
 
     def _open_local_ffmpeg_dir(self) -> None:
         """Open the bundled FFmpeg folder if it exists."""
@@ -561,8 +700,8 @@ class PreferencesDialog(QDialog):
         if current.ok:
             QMessageBox.information(
                 self,
-                "FFmpeg OK",
-                f"{current.message}\n\nNo repair is needed.",
+                self.tr("FFmpeg OK"),
+                self.tr("%s\n\nNo repair is needed.") % current.message,
             )
             return
 
@@ -572,20 +711,22 @@ class PreferencesDialog(QDialog):
             QApplication.clipboard().setText(help_text)
             QMessageBox.information(
                 self,
-                "Repair FFmpeg",
-                help_text + "\n\nThe install command has been copied to your clipboard.\n"
-                "Paste it into a terminal to install.",
+                self.tr("Repair FFmpeg"),
+                help_text + self.tr(
+                    "\n\nThe install command has been copied to your clipboard.\n"
+                    "Paste it into a terminal to install."
+                ),
             )
             return
 
         if _sys.platform == "win32":
-            confirm_msg = (
+            confirm_msg = self.tr(
                 "CorridorKey will download and install a full bundled FFmpeg build into:\n\n"
-                f"{self._local_ffmpeg_dir}\n\n"
+                "%s\n\n"
                 "This does not modify your system-wide FFmpeg.\n\nContinue?"
-            )
+            ) % str(self._local_ffmpeg_dir)
         else:
-            confirm_msg = (
+            confirm_msg = self.tr(
                 "CorridorKey will install FFmpeg via Homebrew:\n\n"
                 "    brew install ffmpeg\n\n"
                 "Continue?"
@@ -593,17 +734,17 @@ class PreferencesDialog(QDialog):
 
         reply = QMessageBox.question(
             self,
-            "Repair FFmpeg",
+            self.tr("Repair FFmpeg"),
             confirm_msg,
         )
         if reply != QMessageBox.Yes:
             return
 
         self._ffmpeg_progress.setRange(0, 0)
-        self._ffmpeg_progress.setFormat("Preparing repair...")
+        self._ffmpeg_progress.setFormat(self.tr("Preparing repair..."))
         self._ffmpeg_progress.show()
         self._set_ffmpeg_repair_busy(True)
-        self._set_parent_status_message("Repairing FFmpeg...")
+        self._set_parent_status_message(self.tr("Repairing FFmpeg..."))
 
         self._ffmpeg_repair_worker = _FFmpegRepairWorker(self)
         self._ffmpeg_repair_worker.progress.connect(self._on_ffmpeg_repair_progress)
@@ -637,15 +778,15 @@ class PreferencesDialog(QDialog):
         self._refresh_ffmpeg_status()
         QMessageBox.information(
             self,
-            "FFmpeg Repaired",
-            message + "\n\nCorridorKey will use FFmpeg immediately.",
+            self.tr("FFmpeg Repaired"),
+            self.tr("%s\n\nCorridorKey will use FFmpeg immediately.") % message,
         )
 
     def _on_ffmpeg_repair_failed(self, message: str) -> None:
         """Handle a failed FFmpeg repair."""
         self._finish_ffmpeg_repair()
         self._refresh_ffmpeg_status()
-        QMessageBox.critical(self, "FFmpeg Repair Failed", message)
+        QMessageBox.critical(self, self.tr("FFmpeg Repair Failed"), message)
 
     @property
     def show_tooltips(self) -> bool:

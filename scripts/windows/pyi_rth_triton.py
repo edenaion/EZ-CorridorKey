@@ -69,7 +69,17 @@ if getattr(sys, 'frozen', False):
         _orig_get_paths = _sysconfig.get_paths
 
         def _frozen_get_paths(scheme=None, vars=None, expand=True):
-            paths = _orig_get_paths(scheme, vars, expand)
+            try:
+                paths = _orig_get_paths(scheme, vars, expand)
+            except (KeyError, TypeError):
+                # Frozen builds can strip sysconfig's scheme data, causing
+                # KeyError: None when get_default_scheme() returns None.
+                # Return a minimal dict -- only 'include' matters for Triton.
+                _log.warning("sysconfig.get_paths() failed in frozen build, using fallback paths")
+                paths = {k: _meipass for k in (
+                    'stdlib', 'platstdlib', 'purelib', 'platlib',
+                    'include', 'platinclude', 'scripts', 'data',
+                )}
             paths['include'] = _py_inc
             return paths
 

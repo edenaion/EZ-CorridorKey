@@ -11,10 +11,16 @@ import os
 import sys
 from unittest.mock import patch
 
+import pytest
+
 from ui.widgets.report_issue_dialog import _detect_install_method
 
 
 class TestInstallMethodDetection:
+    @pytest.mark.skipif(
+        sys.prefix == sys.base_prefix,
+        reason="Only valid when running inside a virtual environment",
+    )
     def test_dev_git_clone_in_venv(self):
         """The dev environment running this test suite should report a git
         clone in a venv — this is the ground-truth case."""

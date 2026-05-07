@@ -8,6 +8,8 @@ import sys
 from PySide6.QtWidgets import QWidget, QLabel, QMessageBox
 from PySide6.QtCore import Qt, Slot, QSettings
 
+from . import _tr
+
 from ui.widgets.preferences_dialog import (
     PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
     KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
@@ -82,7 +84,7 @@ class SettingsMixin:
         """
         from ui.widgets.setup_wizard import SetupWizard
         dlg = SetupWizard(parent=self)
-        dlg.setWindowTitle("Download Manager")
+        dlg.setWindowTitle(_tr("Download Manager"))
         dlg.exec()
 
     def _apply_tooltip_setting(self) -> None:
@@ -165,14 +167,14 @@ class SettingsMixin:
     def _show_about(self) -> None:
         app_version = self._get_local_version()
         box = QMessageBox(self)
-        box.setWindowTitle("About EZ-CorridorKey")
+        box.setWindowTitle(_tr("About EZ-CorridorKey"))
         box.setTextFormat(Qt.RichText)
         box.setText(
             f"<h2>EZ-CorridorKey v{app_version}</h2>"
-            "<p>AI Green Screen Keyer<br>"
+            "<p>" + _tr("AI Green Screen Keyer") + "<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"
-            "<p><b>Special Thanks</b></p>"
+            "<p><b>" + _tr("Special Thanks") + "</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
             '<a href="https://www.edzisk.com">Ed Zisk</a> — Maintainer, GUI, workflow, SFX, QA<br>'
@@ -248,10 +250,10 @@ class SettingsMixin:
 
     @Slot(str)
     def _on_update_available(self, remote_version: str) -> None:
-        self._update_btn.setText(f"Update Available (v{remote_version})")
+        self._update_btn.setText(_tr("Update Available (v%s)") % remote_version)
         self._update_btn.setToolTip(
-            f"A new version (v{remote_version}) is available.\n"
-            "Click to save your session and run the updater."
+            _tr("A new version (v%s) is available.\n"
+                "Click to save your session and run the updater.") % remote_version
         )
         # Set minimum width from text metrics to prevent Qt corner widget squish
         self._update_btn.setMinimumWidth(self._update_btn.sizeHint().width())
@@ -267,10 +269,10 @@ class SettingsMixin:
     def _run_script_update(self) -> None:
         """Update via 3-update.sh / 3-update.bat (CLI/dev installs)."""
         reply = QMessageBox.question(
-            self, "Update EZ-CorridorKey",
-            "This will save your session, close the app, and run the updater.\n"
-            "The app will relaunch automatically after updating.\n\n"
-            "Continue?",
+            self, _tr("Update EZ-CorridorKey"),
+            _tr("This will save your session, close the app, and run the updater.\n"
+                "The app will relaunch automatically after updating.\n\n"
+                "Continue?"),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
         )
         if reply != QMessageBox.Yes:
@@ -297,10 +299,10 @@ class SettingsMixin:
         """Update a frozen .app/.exe by downloading from GitHub Releases."""
         import sys as _sys
         reply = QMessageBox.question(
-            self, "Update EZ-CorridorKey",
-            "This will download the latest version, replace the current app,\n"
-            "and relaunch automatically.\n\n"
-            "Your session will be saved. Continue?",
+            self, _tr("Update EZ-CorridorKey"),
+            _tr("This will download the latest version, replace the current app,\n"
+                "and relaunch automatically.\n\n"
+                "Your session will be saved. Continue?"),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
         )
         if reply != QMessageBox.Yes:
@@ -309,9 +311,9 @@ class SettingsMixin:
 
         from PySide6.QtWidgets import QProgressDialog
         progress = QProgressDialog(
-            "Downloading update...", "Cancel", 0, 100, self
+            _tr("Downloading update..."), _tr("Cancel"), 0, 100, self
         )
-        progress.setWindowTitle("Updating EZ-CorridorKey")
+        progress.setWindowTitle(_tr("Updating EZ-CorridorKey"))
         progress.setMinimumWidth(400)
         progress.setModal(True)
         progress.show()
@@ -334,9 +336,9 @@ class SettingsMixin:
                 asset_ext = "zip"
             else:
                 QMessageBox.warning(
-                    self, "Update",
-                    "Automatic updates are not supported on this platform.\n"
-                    "Please download the latest release from GitHub."
+                    self, _tr("Update"),
+                    _tr("Automatic updates are not supported on this platform.\n"
+                        "Please download the latest release from GitHub.")
                 )
                 progress.close()
                 return
@@ -366,10 +368,10 @@ class SettingsMixin:
 
             if not download_url:
                 QMessageBox.warning(
-                    self, "Update",
-                    f"No {asset_name} found in the latest release.\n"
-                    f"Release: {tag or 'unknown'}\n\n"
-                    "Please download manually from GitHub."
+                    self, _tr("Update"),
+                    _tr("No %s found in the latest release.\n"
+                        "Release: %s\n\n"
+                        "Please download manually from GitHub.") % (asset_name, tag or "unknown")
                 )
                 progress.close()
                 return
@@ -406,7 +408,7 @@ class SettingsMixin:
 
             verified = False
             if is_signing_key_configured():
-                progress.setLabelText("Verifying update signature...")
+                progress.setLabelText(_tr("Verifying update signature..."))
                 progress.setValue(92)
                 QApplication.processEvents()
 
@@ -436,11 +438,11 @@ class SettingsMixin:
                     except UpdateVerificationError as e:
                         progress.close()
                         QMessageBox.critical(
-                            self, "Update Verification Failed",
-                            f"The update could not be verified and was NOT installed.\n\n"
-                            f"{e}\n\n"
-                            "This may indicate a security issue. Please download "
-                            "the latest release manually from GitHub or Gumroad."
+                            self, _tr("Update Verification Failed"),
+                            _tr("The update could not be verified and was NOT installed.\n\n"
+                                "%s\n\n"
+                                "This may indicate a security issue. Please download "
+                                "the latest release manually from GitHub or Gumroad.") % e
                         )
                         shutil.rmtree(tmp_dir, ignore_errors=True)
                         return
@@ -452,7 +454,7 @@ class SettingsMixin:
                         "Skipping signature verification.", tag
                     )
 
-            progress.setLabelText("Installing update...")
+            progress.setLabelText(_tr("Installing update..."))
             progress.setValue(95)
             QApplication.processEvents()
 
@@ -605,7 +607,7 @@ class SettingsMixin:
         except Exception as e:
             progress.close()
             QMessageBox.critical(
-                self, "Update Failed",
-                f"Could not update automatically:\n\n{e}\n\n"
-                "Please download the latest release manually from GitHub."
+                self, _tr("Update Failed"),
+                _tr("Could not update automatically:\n\n%s\n\n"
+                    "Please download the latest release manually from GitHub.") % e
             )
