@@ -34,6 +34,11 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Despill parameterized for blue** — `despill()` swaps the suppression channel (green ch1 vs blue ch2) based on screen color. `_restore_opaque_source_detail()` spill detection likewise adapts.
 - **All "green spill" tooltips** now read "screen spill" for neutrality.
 
+### Hotfix (2026-05-08)
+
+☼ GVM auto alpha no longer produces all-black frames on macOS (Apple Silicon). The float16 pipeline triggered NaN in MPS GroupNorm and a Metal matmul assertion in SDPA attention. Fixed by running the full GVM pipeline in float32 with vanilla attention on MPS.
+☼ EXR alpha import no longer reads as all-black on macOS. OpenCV was truncating float32 EXR data to uint8 zeros.
+
 ### Distribution
 
 - Full installers (Windows .exe, macOS .pkg) and portable zip now bundle both green and blue checkpoints.
