@@ -44,7 +44,7 @@ class TestGPULockSerialization:
         engine, call_log = _make_slow_engine(0.05)
         svc._engine_pool = [engine]
         svc._active_model = _ActiveModel.INFERENCE
-        params = InferenceParams()
+        params = InferenceParams(screen_color="green")
 
         results = [None, None]
         errors = [None, None]
