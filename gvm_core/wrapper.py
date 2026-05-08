@@ -87,7 +87,9 @@ class GVMProcessor:
                  device="cuda",
                  seed=None):
         self.device = torch.device(device)
-        
+        # MPS float16 GroupNorm / attention produce NaN; run full pipeline in float32
+        self._dtype = torch.float32 if self.device.type == 'mps' else torch.float16
+
         # Resolve default weights path from installed data dir first, then the
         # bundled module dir, finally falling back to the HuggingFace repo ID.
         if model_base is None:
@@ -106,7 +108,7 @@ class GVMProcessor:
         seed_all(seed)
         
         logger.info(f"Loading GVM models from {model_base}...")
-        self.vae = AutoencoderKLTemporalDecoder.from_pretrained(model_base, subfolder="vae", torch_dtype=torch.float16)
+        self.vae = AutoencoderKLTemporalDecoder.from_pretrained(model_base, subfolder="vae", torch_dtype=self._dtype)
         self.scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(model_base, subfolder="scheduler")
         
         unet_folder = unet_base if unet_base is not None else model_base
@@ -114,7 +116,7 @@ class GVMProcessor:
             unet_folder, 
             subfolder="unet", 
             class_embed_type=None,
-            torch_dtype=torch.float16
+            torch_dtype=self._dtype
         )
 
         self.pipe = GVMPipeline(vae=self.vae, unet=self.unet, scheduler=self.scheduler)
@@ -126,20 +128,29 @@ class GVMProcessor:
             elif lora_base:
                 self.pipe.load_lora_weights(lora_base)
                 
-        self.pipe = self.pipe.to(self.device, dtype=torch.float16)
+        self.pipe = self.pipe.to(self.device, dtype=self._dtype)
+
+        # MPS SDPA triggers Metal matmul assertion at non-trivial resolutions;
+        # fall back to vanilla attention (AttnProcessor) on Apple Silicon.
+        if self.device.type == 'mps':
+            from diffusers.models.attention_processor import AttnProcessor
+            self.unet.set_attn_processor(AttnProcessor())
+            self.vae.set_attn_processor(AttnProcessor())
+
         logger.info("Models loaded.")
 
     def to(self, device, **kwargs):
         """Move all internal models to *device* (enables VRAM offloading)."""
         device = torch.device(device)
         self.device = device
+        self._dtype = torch.float32 if device.type == 'mps' else torch.float16
         if self.pipe is not None:
-            self.pipe = self.pipe.to(device, **kwargs)
+            self.pipe = self.pipe.to(device, dtype=self._dtype, **kwargs)
         # vae/unet are owned by pipe, but move explicitly in case of ref drift
         if self.vae is not None:
-            self.vae = self.vae.to(device)
+            self.vae = self.vae.to(device, dtype=self._dtype)
         if self.unet is not None:
-            self.unet = self.unet.to(device)
+            self.unet = self.unet.to(device, dtype=self._dtype)
         return self
 
     def process_sequence(self, input_path, output_dir,
@@ -313,7 +324,7 @@ class GVMProcessor:
             # Inference
             with torch.no_grad():
                 pipe_out = self.pipe(
-                    batch.to(self.device, dtype=torch.float16),
+                    batch.to(self.device, dtype=self._dtype),
                     num_frames=num_frames_per_batch,
                     num_overlap_frames=num_overlap_frames,
                     num_interp_frames=num_interp_frames,

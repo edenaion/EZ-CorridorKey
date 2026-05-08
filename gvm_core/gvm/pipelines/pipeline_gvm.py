@@ -147,7 +147,6 @@ class GVMPipeline(DiffusionPipeline, GVMLoraLoader):
     ):
 
         assert ensemble_size >= 1
-        self.vae.to(dtype=torch.float16)
         class_embedding = None
         
         # (1, N, 3, H, W)
