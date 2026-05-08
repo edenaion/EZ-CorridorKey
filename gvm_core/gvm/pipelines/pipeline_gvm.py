@@ -147,7 +147,9 @@ class GVMPipeline(DiffusionPipeline, GVMLoraLoader):
     ):
 
         assert ensemble_size >= 1
-        self.vae.to(dtype=torch.float16)
+        # MPS float16 GroupNorm produces NaN; use float32 for VAE on Apple Silicon
+        vae_dtype = torch.float32 if image.device.type == 'mps' else torch.float16
+        self.vae.to(dtype=vae_dtype)
         class_embedding = None
         
         # (1, N, 3, H, W)

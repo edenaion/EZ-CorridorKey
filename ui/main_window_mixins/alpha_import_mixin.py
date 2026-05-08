@@ -6,6 +6,7 @@ import os
 import shutil
 
 import cv2
+import numpy as np
 from PySide6.QtWidgets import QMessageBox, QFileDialog
 
 from . import _tr
@@ -210,7 +211,21 @@ class AlphaImportMixin:
                         imported_count += 1
                         continue
 
-                    img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+                    if src_ext == ".exr":
+                        img = cv2.imread(
+                            src_path,
+                            cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED,
+                        )
+                        if img is not None:
+                            if img.ndim == 3:
+                                img = img[:, :, 0]
+                            if img.dtype != np.uint8:
+                                img = np.clip(
+                                    img.astype(np.float32), 0.0, 1.0,
+                                )
+                                img = (img * 255.0).astype(np.uint8)
+                    else:
+                        img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
                     if img is None:
                         logger.warning("Failed to import alpha image: %s", src_path)
                         continue
