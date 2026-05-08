@@ -12,7 +12,7 @@ All notable changes to EZ-CorridorKey are documented here.
 - **BG Color dropdown** — new Auto / Green / Blue selector above Color Space in the inference panel. Auto uses the detector; manual override forces a specific model regardless of frame content.
 - **UI accent follows screen color** — when a blue clip is active, brand accent shifts from green (#2CC350) to blue (#0082CF) across the KEY text, slider knobs, and welcome button.
 - **VideoMaMa mask import** — small + button next to the VIDEOMAMA button opens a file picker for importing pre-made alpha masks (video or image sequence). Grayscale values are crushed to binary (threshold at 127). Clip transitions to MASKED state, ready for VideoMaMa inference without SAM2 tracking.
-- **Despeckle uncap** — spinbox range expanded from (50, 2000) to (0, 999999). Zero keeps everything; high values remove larger blobs. Requested by Nico (upstream).
+- **Despeckle uncap** — spinbox range expanded from (50, 2000) to (0, 999999). Zero keeps everything; high values remove larger blobs. Requested by Niko (upstream).
 - **FFmpeg Browse button** — Preferences gains a manual file picker for FFmpeg with bin/ auto-detection and path validation. Custom path persists in QSettings.
 - **Blue checkpoint in Download Manager** — CorridorKey Blue appears in the setup wizard model list (after Green, before SAM2). Default checked for new installs. CLI: `python scripts/setup_models.py --corridorkey-blue`.
 - **On-demand blue download** — when a blue clip is detected and the blue checkpoint is missing (skinny update / git clone users), a dialog offers to download it via the setup wizard.
