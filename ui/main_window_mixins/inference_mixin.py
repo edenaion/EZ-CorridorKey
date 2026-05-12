@@ -288,6 +288,8 @@ class InferenceMixin:
             self._status_bar.update_button_state(
                 can_run=False, has_partial=False, has_in_out=False,
             )
+            # Show export button if any clips are COMPLETE
+            self._refresh_export_button_visibility()
             return
         can_run = clip.state in (ClipState.READY, ClipState.COMPLETE)
         self._status_bar.update_button_state(
@@ -296,6 +298,15 @@ class InferenceMixin:
             has_in_out=clip.in_out_range is not None,
             batch_count=batch_count if batch_count > 1 else 0,
         )
+        self._refresh_export_button_visibility()
+
+    def _refresh_export_button_visibility(self) -> None:
+        """Show EXPORT button when any clips are COMPLETE."""
+        complete_clips = [
+            c for c in self._clip_model.clips
+            if c.state == ClipState.COMPLETE
+        ]
+        self._status_bar.set_export_visible(len(complete_clips) > 0)
 
     @Slot()
     def _on_run_all_ready(self) -> None:

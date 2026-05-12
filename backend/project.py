@@ -111,6 +111,7 @@ def create_project(
     *,
     copy_source: bool = True,
     display_name: str | None = None,
+    base_dir: str | None = None,
 ) -> str:
     """Create a new project folder for one or more source videos.
 
@@ -121,7 +122,7 @@ def create_project(
     each clip's ``Source/`` directory.  When False, the clip stores a
     reference to the original file path.
 
-    Creates: Projects/YYMMDD_HHMMSS_{stem}/clips/{clip_stem}/Source/...
+    Creates: {base_dir || Projects}/YYMMDD_HHMMSS_{stem}/clips/{clip_stem}/Source/...
 
     Args:
         source_video_paths: Single video path (str) or list of paths.
@@ -129,6 +130,8 @@ def create_project(
         display_name: Optional project name. If provided, used for both
             the folder name stem and display_name in project.json.
             If None, derived from the first video filename.
+        base_dir: Optional custom base directory for the project.
+            If None, defaults to ``projects_root()``.
 
     Returns:
         Absolute path to the new project folder.
@@ -139,7 +142,7 @@ def create_project(
     if not source_video_paths:
         raise ValueError("At least one source video path is required")
 
-    root = projects_root()
+    root = base_dir if base_dir else projects_root()
 
     if display_name and display_name.strip():
         clean = display_name.strip()

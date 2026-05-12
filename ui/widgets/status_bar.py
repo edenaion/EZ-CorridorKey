@@ -3,10 +3,11 @@
 Layout (left to right):
 - Progress bar (compact) + frame counter + elapsed/ETA timer
 - Stretch (pushes buttons right)
-- [RUN INFERENCE] or [RUN SELECTED] / [RESUME] / [STOP] buttons
+- [EXPORT] / [RUN INFERENCE] or [RUN SELECTED] / [RESUME] / [STOP] buttons
 
 RESUME button appears only when partial outputs exist.
 RUN text changes to "RUN SELECTED" when in/out range is set.
+EXPORT button appears when clips are COMPLETE.
 
 GPU/VRAM info is displayed in the top brand bar (see main_window.py).
 """
@@ -68,6 +69,7 @@ class StatusBar(QWidget):
     extract_clicked = Signal()
     resume_clicked = Signal()
     stop_clicked = Signal()
+    export_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -160,6 +162,34 @@ class StatusBar(QWidget):
         self._stop_btn.hide()
         layout.addWidget(self._stop_btn)
 
+        # Export button (always visible, disabled when no COMPLETE clips)
+        self._export_btn = QPushButton(self.tr("EXPORT"))
+        self._export_btn.setObjectName("exportButton")
+        self._export_btn.setFixedWidth(100)
+        self._export_btn.setFixedHeight(32)
+        self._export_btn.setToolTip(
+            self.tr("Export rendered output to a folder of your choice.\n"
+                    "Copies Comp/FG/Matte/Processed files.")
+        )
+        self._export_btn.setCursor(Qt.PointingHandCursor)
+        self._export_btn.setStyleSheet(
+            "QPushButton#exportButton {"
+            "  background-color: #1E5128; color: #4ADE80;"
+            "  border: 1px solid #2D7A3F; border-radius: 4px;"
+            "  font-weight: bold; font-size: 12px;"
+            "}"
+            "QPushButton#exportButton:hover {"
+            "  background-color: #2D7A3F; color: #6EE7A8;"
+            "}"
+            "QPushButton#exportButton:disabled {"
+            "  background-color: #1A1A1A; color: #555;"
+            "  border: 1px solid #333;"
+            "}"
+        )
+        self._export_btn.clicked.connect(self.export_clicked.emit)
+        self._export_btn.setEnabled(False)
+        layout.addWidget(self._export_btn)
+
         self._warning_count = 0
         self._warnings: list[str] = []
 
@@ -208,6 +238,10 @@ class StatusBar(QWidget):
                     "Already-processed frames are kept on disk."
                 )
             )
+
+    def set_export_visible(self, visible: bool) -> None:
+        """Enable or disable the EXPORT button based on whether clips are COMPLETE."""
+        self._export_btn.setEnabled(visible)
 
     def _on_run_clicked(self) -> None:
         """Route run button click to the appropriate signal."""

@@ -110,24 +110,47 @@ class ImportMixin:
 
         copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
 
-        # Multi-video: ask user to name the project
-        display_name = None
-        if len(video_paths) > 1:
-            name, ok = QInputDialog.getText(
-                self, _tr("Name Your Project"),
-                _tr("Give your project a name:"),
-            )
-            if not ok:
-                return  # user cancelled
-            display_name = name.strip() or None
+        # Step 1: Ask user to name the project
+        default_name = ""
+        if len(video_paths) == 1:
+            default_name = os.path.splitext(os.path.basename(video_paths[0]))[0]
+        name, ok = QInputDialog.getText(
+            self, _tr("Name Your Project"),
+            _tr("Give your project a name:"),
+            text=default_name,
+        )
+        if not ok:
+            return  # user cancelled
+        display_name = name.strip() or default_name
+
+        # Step 2: Ask user to choose project storage location
+        from PySide6.QtWidgets import QMessageBox as _QMB
+        choose_msg = _tr(
+            "Choose where to save the project folder.\n"
+            "A new subfolder will be created inside your chosen directory."
+        )
+        _QMB.information(self, _tr("Choose Project Location"), choose_msg)
+
+        # Default to user's Movies folder or Desktop
+        default_project_dir = os.path.expanduser("~/Movies")
+        if not os.path.isdir(default_project_dir):
+            default_project_dir = os.path.expanduser("~/Desktop")
+
+        base_dir = QFileDialog.getExistingDirectory(
+            self, _tr("Select Project Location"), default_project_dir,
+            QFileDialog.ShowDirsOnly,
+        )
+        if not base_dir:
+            return  # user cancelled
 
         # Create ONE project with all videos as clips
         project_dir = create_project(
             video_paths, copy_source=copy_source, display_name=display_name,
+            base_dir=base_dir,
         )
         logger.info(
             f"Created project with {len(video_paths)} clip(s): "
-            f"{os.path.basename(project_dir)} (copy={copy_source})"
+            f"{os.path.basename(project_dir)} (copy={copy_source}, base={base_dir})"
         )
 
         # Open the new project (not the Projects root — each project is isolated)

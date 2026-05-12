@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 
-from PySide6.QtWidgets import QMessageBox
-from PySide6.QtCore import Slot
+from PySide6.QtWidgets import QMessageBox, QFileDialog, QProgressDialog
+from PySide6.QtCore import Slot, Qt
 
 from . import _tr
 
@@ -327,3 +328,116 @@ class WorkerMixin:
         # engine that live preview depends on.  Model switching is already
         # handled by _ensure_model() when a different model type is needed.
         logger.info("All jobs completed, queue idle")
+
+        # Refresh export button visibility
+        self._refresh_export_button_visibility()
+
+    def _offer_export_after_render(self) -> None:
+        """Show a dialog offering to export completed clips after rendering."""
+        # Find all COMPLETE clips
+        complete_clips = [
+            c for c in self._clip_model.clips
+            if c.state == ClipState.COMPLETE
+        ]
+        if not complete_clips:
+            return
+
+        clip_names = ", ".join(c.name for c in complete_clips)
+        msg = QMessageBox(self)
+        msg.setWindowTitle(_tr("Render Complete"))
+        msg.setText(
+            _tr("Inference finished for: %s") % clip_names
+        )
+        msg.setInformativeText(
+            _tr("Would you like to export the rendered results now?\n\n"
+                "This will copy output folders (Comp/FG/Matte/Processed)\n"
+                "to a location of your choice.")
+        )
+        btn_export = msg.addButton(_tr("Choose Export Folder"), QMessageBox.AcceptRole)
+        btn_later = msg.addButton(_tr("Later"), QMessageBox.RejectRole)
+        msg.setDefaultButton(btn_export)
+        msg.exec()
+
+        if msg.clickedButton() == btn_export:
+            self._export_completed_clips_to(complete_clips)
+
+    def _export_completed_clips_to(self, clips: list) -> None:
+        """Export completed clips to a user-chosen directory."""
+        # Choose export destination
+        export_dir = QFileDialog.getExistingDirectory(
+            self, _tr("Select Export Destination"),
+            os.path.expanduser("~/Desktop"),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not export_dir:
+            return
+
+        # Count total files to show progress
+        total_files = 0
+        for clip in clips:
+            output_dir = getattr(clip, 'output_dir', None) or clip.root_path
+            if not os.path.isdir(output_dir):
+                continue
+            for subdir in os.listdir(output_dir):
+                src = os.path.join(output_dir, subdir)
+                if os.path.isdir(src):
+                    total_files += len(os.listdir(src))
+
+        if total_files == 0:
+            QMessageBox.information(
+                self, _tr("No Output"),
+                _tr("No output files found to export.")
+            )
+            return
+
+        # Create export folder per clip
+        progress = QProgressDialog(
+            _tr("Exporting rendered results..."),
+            _tr("Cancel"), 0, total_files, self,
+        )
+        progress.setWindowTitle(_tr("Exporting"))
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+
+        copied = 0
+        for clip in clips:
+            output_dir = getattr(clip, 'output_dir', None) or clip.root_path
+            if not os.path.isdir(output_dir):
+                continue
+
+            clip_export_dir = os.path.join(export_dir, clip.name)
+            os.makedirs(clip_export_dir, exist_ok=True)
+
+            for subdir in sorted(os.listdir(output_dir)):
+                src = os.path.join(output_dir, subdir)
+                if not os.path.isdir(src):
+                    continue
+                dst = os.path.join(clip_export_dir, subdir)
+                try:
+                    if os.path.exists(dst):
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst)
+                    copied += len(os.listdir(src))
+                    progress.setValue(copied)
+                except Exception as e:
+                    logger.warning(f"Export copy failed: {src} -> {dst}: {e}")
+
+                if progress.wasCanceled():
+                    logger.info(f"Export cancelled by user after {copied} files")
+                    return
+
+        progress.setValue(total_files)
+        logger.info(f"Exported {copied} files from {len(clips)} clip(s) to {export_dir}")
+
+        # Offer to open the export folder
+        result = QMessageBox.question(
+            self, _tr("Export Complete"),
+            _tr("Exported %d file(s) to:\n%s\n\nOpen folder?")
+            % (copied, export_dir),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if result == QMessageBox.Yes:
+            from PySide6.QtGui import QDesktopServices
+            from PySide6.QtCore import QUrl
+            QDesktopServices.openUrl(QUrl.fromLocalFile(export_dir))

@@ -540,6 +540,7 @@ class MainWindow(
         self._io_tray.image_files_dropped.connect(self._on_image_files_dropped)
         self._io_tray.extract_requested.connect(self._on_extract_requested)
         self._io_tray.export_video_requested.connect(self._on_export_video)
+        self._status_bar.export_clicked.connect(self._on_export_clicked)
         self._io_tray.reset_in_out_requested.connect(self._on_reset_all_in_out)
 
         # Status bar buttons
@@ -701,6 +702,20 @@ class MainWindow(
             kind="export",
             export_mode=self._dual_viewer.current_output_mode,
         )
+
+    def _on_export_clicked(self) -> None:
+        """Handle EXPORT button click — open destination picker and copy outputs."""
+        from backend import ClipState
+        complete_clips = [
+            c for c in self._clip_model.clips
+            if c.state == ClipState.COMPLETE
+        ]
+        if not complete_clips:
+            from PySide6.QtWidgets import QMessageBox
+            from .main_window_mixins import _tr
+            QMessageBox.information(self, _tr("No Output"), _tr("No COMPLETE clips to export."))
+            return
+        self._export_completed_clips_to(complete_clips)
 
     def paintEvent(self, event) -> None:
         """Paint dithered diagonal gradient background.
