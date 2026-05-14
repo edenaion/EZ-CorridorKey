@@ -255,9 +255,20 @@ class SettingsMixin:
             _tr("A new version (v%s) is available.\n"
                 "Click to save your session and run the updater.") % remote_version
         )
-        # Set minimum width from text metrics to prevent Qt corner widget squish
-        self._update_btn.setMinimumWidth(self._update_btn.sizeHint().width())
+        self._update_btn.adjustSize()
         self._update_btn.setVisible(True)
+        self._position_update_btn()
+
+    def _position_update_btn(self) -> None:
+        """Keep the floating update button pinned to top-right, below the menu bar."""
+        if not hasattr(self, '_update_btn') or not self._update_btn.isVisible():
+            return
+        btn = self._update_btn
+        margin = 8
+        x = self.width() - btn.width() - margin
+        y = self.menuBar().height() + margin
+        btn.move(x, y)
+        btn.raise_()
 
     def _run_update(self) -> None:
         import sys as _sys
@@ -298,6 +309,7 @@ class SettingsMixin:
     def _run_frozen_update(self) -> None:
         """Update a frozen .app/.exe by downloading from GitHub Releases."""
         import sys as _sys
+        from PySide6.QtWidgets import QApplication
         reply = QMessageBox.question(
             self, _tr("Update EZ-CorridorKey"),
             _tr("This will download the latest version, replace the current app,\n"
@@ -391,7 +403,6 @@ class SettingsMixin:
                         f"{block_num * block_size // (1024*1024)}/"
                         f"{total_size // (1024*1024)} MB"
                     )
-                from PySide6.QtWidgets import QApplication
                 QApplication.processEvents()
 
             urllib.request.urlretrieve(

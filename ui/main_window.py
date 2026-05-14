@@ -758,6 +758,7 @@ class MainWindow(
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._position_queue_panel()
+        self._position_update_btn()
 
     def _position_queue_panel(self) -> None:
         """Keep the floating queue panel sized to the viewer area height."""
