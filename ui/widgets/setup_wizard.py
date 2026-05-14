@@ -662,8 +662,8 @@ class SetupWizard(QDialog):
 
         layout.addSpacing(8)
 
-        # Install path picker
-        loc_label = QLabel(self.tr("Install path:"))
+        # Data directory picker (models, projects, frame cache)
+        loc_label = QLabel(self.tr("Data directory (models, projects, frame cache):"))
         loc_label.setStyleSheet("color: #CCCCCC;")
         layout.addWidget(loc_label)
 
@@ -693,7 +693,7 @@ class SetupWizard(QDialog):
         default_btn = QPushButton(self.tr("Default Location"))
         default_btn.setToolTip(
             self.tr(
-                "Reset the install path to the platform default "
+                "Reset the data directory to the platform default "
                 "(in case you changed it and want to return)."
             )
         )
