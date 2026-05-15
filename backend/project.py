@@ -229,16 +229,18 @@ def add_clips_to_project(
 def _copy_companion_hints(video_path: str, clip_dir: str) -> None:
     """Copy companion hint videos into the clip folder if found.
 
-    Scans the same directory as *video_path* for sibling files whose name
-    contains "alphahint" or "maskhint" (case insensitive):
-    ☼ ``*alphahint*.*`` -> ``AlphaHint.{ext}`` at clip root
-    ☼ ``*maskhint*.*``  -> ``VideoMamaMaskHint.{ext}`` at clip root
+    Scans the same directory as *video_path* for sibling files named
+    ``{source_stem}_{keyword}.{ext}`` (case insensitive), where keyword
+    is "alphahint" or "maskhint":
+    ☼ ``MyClip_AlphaHint.mov`` -> ``AlphaHint.mov`` at clip root
+    ☼ ``MyClip_MaskHint.mov``  -> ``VideoMamaMaskHint.mov`` at clip root
 
-    AlphaHint is model-agnostic (GVM, BiRefNet, VideoMaMa, SAM2, external tools).
-    MaskHint is specifically for VideoMaMa / SAM2 mask-guided refinement.
+    The hint file must contain both the keyword and the source video's stem
+    so that ``Shot01_AlphaHint.mp4`` matches ``Shot01.mp4`` but not ``Shot02.mp4``.
     """
     parent = os.path.dirname(video_path)
     video_basename = os.path.basename(video_path).lower()
+    source_stem = os.path.splitext(video_basename)[0]
 
     _KEYWORD_MAP = {
         "alphahint": "AlphaHint",
@@ -248,7 +250,6 @@ def _copy_companion_hints(video_path: str, clip_dir: str) -> None:
     found: dict[str, bool] = {}
     for f in os.listdir(parent):
         f_lower = f.lower()
-        # Skip the source video itself
         if f_lower == video_basename:
             continue
         f_stem, f_ext = os.path.splitext(f_lower)
@@ -257,7 +258,8 @@ def _copy_companion_hints(video_path: str, clip_dir: str) -> None:
         for keyword, dest_name in _KEYWORD_MAP.items():
             if keyword in found:
                 continue
-            if keyword in f_stem:
+            # Hint must contain both the keyword AND the source stem
+            if keyword in f_stem and source_stem in f_stem:
                 _, real_ext = os.path.splitext(f)
                 dst = os.path.join(clip_dir, f"{dest_name}{real_ext}")
                 src = os.path.join(parent, f)

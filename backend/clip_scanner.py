@@ -14,7 +14,7 @@ from .clip_state import (
     ClipState,
 )
 from .errors import ClipScanError
-from .project import is_video_file as _is_video_file
+from .project import _HINT_KEYWORDS, is_video_file as _is_video_file
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +133,9 @@ def scan_clips_dir(
             stem = os.path.splitext(item)[0]
             if stem in seen_names:
                 continue  # folder clip already exists with this name
+            # Skip companion hint files (alphahint/maskhint in stem)
+            if any(kw in stem.lower() for kw in _HINT_KEYWORDS):
+                continue
             clip = ClipEntry(name=stem, root_path=clips_dir)
             clip.input_asset = ClipAsset(item_path, 'video')
             clip.state = ClipState.EXTRACTING
