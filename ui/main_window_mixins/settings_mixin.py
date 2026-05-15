@@ -290,7 +290,7 @@ class SettingsMixin:
             return
         self._auto_save_session()
         import subprocess
-        root = os.path.dirname(os.path.dirname(__file__))
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         if os.name == "nt":
             bat = os.path.join(root, "3-update.bat")
             subprocess.Popen(
