@@ -8,6 +8,8 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Added
 
+- **Built-in MLX inference engine** — EZ-CorridorKey now ships its own MLX model port for Apple Silicon, replacing the external `corridorkey_mlx` package that had quality complaints. Both green and blue checkpoints are converted to `.mlx.safetensors` format (380 MB each). The built-in engine produces pixel-perfect output verified at 52-67 dB PSNR on real 4K footage. Auto-detection routes green/blue clips to the correct MLX checkpoint on Apple Silicon; falls back to Torch/MPS elsewhere.
+- **Apple Vision foreground hint** — new APPLE VISION button in the Alpha Generation panel (macOS 14+ only). Uses Apple's Neural Engine via `VNGenerateForegroundInstanceMaskRequest` to generate a foreground segmentation hint without any painting or annotation. Auto-hidden on non-macOS platforms.
 - **Batch Pipeline** — File > Batch Pipeline opens a dialog for batch-processing an entire folder of clips. Select a folder, configure which alpha generation model to use (GVM, BiRefNet, VideoMaMa, MatAnyone2), and run everything autonomously. Per-clip overrides let you mix models in the same batch. Live progress bars and checkmarks track each clip's status.
 - **Companion hint auto-detection** — when importing a video, files containing "alphahint" or "maskhint" anywhere in the filename (case insensitive) are automatically paired as hints instead of being imported as separate clips. AlphaHint files route to `AlphaHint.{ext}` at clip root; MaskHint files route to `VideoMamaMaskHint.{ext}`.
 - **Frame sequence companion detection** — sibling folders or video files with "alphahint" or "maskhint" in their name are detected when importing frame sequences, same as video imports.
@@ -15,10 +17,16 @@ All notable changes to EZ-CorridorKey are documented here.
 ### Fixed
 
 - **Companion hint copied to wrong location** — `_copy_companion_alphahint` was copying hint files into `Source/` where they could be mistaken for the input video. Now correctly placed at the clip root where `find_assets()` discovers them.
+- **MLX FG output blocky artifacts** — the external `corridorkey_mlx` package produced lower-quality foreground output. The built-in MLX engine eliminates this by using our own verified model port with proper `model.eval()`, correct weight transposition, and `pytorch_compatible=True` GroupNorm.
 
 ### Changed
 
 - **QComboBox disabled state** — added `QComboBox:disabled` style to the global theme so disabled dropdowns are visually distinct (darker background, dim text).
+
+### Distribution
+
+- macOS .pkg installer now bundles both `.mlx.safetensors` checkpoints (green + blue) alongside the Torch `.pth` files. Mac users have everything they need out of the box without downloading models on first launch.
+- Skinny update zip continues to strip all model weights (users get models via setup wizard or from the original .pkg install).
 
 ---
 
