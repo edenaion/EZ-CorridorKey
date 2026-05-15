@@ -4,6 +4,24 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Batch Pipeline** — File > Batch Pipeline opens a dialog for batch-processing an entire folder of clips. Select a folder, configure which alpha generation model to use (GVM, BiRefNet, VideoMaMa, MatAnyone2), and run everything autonomously. Per-clip overrides let you mix models in the same batch. Live progress bars and checkmarks track each clip's status.
+- **Companion hint auto-detection** — when importing a video, files containing "alphahint" or "maskhint" anywhere in the filename (case insensitive) are automatically paired as hints instead of being imported as separate clips. AlphaHint files route to `AlphaHint.{ext}` at clip root; MaskHint files route to `VideoMamaMaskHint.{ext}`.
+- **Frame sequence companion detection** — sibling folders or video files with "alphahint" or "maskhint" in their name are detected when importing frame sequences, same as video imports.
+
+### Fixed
+
+- **Companion hint copied to wrong location** — `_copy_companion_alphahint` was copying hint files into `Source/` where they could be mistaken for the input video. Now correctly placed at the clip root where `find_assets()` discovers them.
+
+### Changed
+
+- **QComboBox disabled state** — added `QComboBox:disabled` style to the global theme so disabled dropdowns are visually distinct (darker background, dim text).
+
+---
+
 ## [2.0.0] - 2026-05-07 — Blue screen keying, chroma key holdout mask, eyedropper, i18n
 
 ### Added

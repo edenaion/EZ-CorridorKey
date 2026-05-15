@@ -29,6 +29,9 @@ class MenuMixin:
         self._open_action = file_menu.addAction(_tr("Open Project..."), self._on_open_project)
 
         file_menu.addSeparator()
+        file_menu.addAction(_tr("Batch Pipeline..."), self._on_batch_pipeline)
+
+        file_menu.addSeparator()
         self._set_project_output_action = file_menu.addAction(
             _tr("Set Project Output Folder..."), self._on_set_project_output_dir,
         )

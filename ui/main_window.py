@@ -72,6 +72,7 @@ from ui.main_window_mixins import (
     WorkerMixin, AnnotationMixin,
     ExportMixin, SessionMixin, SettingsMixin,
 )
+from ui.main_window_mixins.batch_pipeline_mixin import BatchPipelineMixin
 from ui.main_window_mixins.chroma_key_mixin import ChromaKeyMixin
 
 logger = logging.getLogger(__name__)
@@ -244,7 +245,7 @@ class MainWindow(
     QMainWindow,
     MenuMixin, ShortcutsMixin, ClipMixin, ImportMixin,
     InferenceMixin, AlphaImportMixin, ModelRunMixin, CancelMixin,
-    WorkerMixin, AnnotationMixin, ChromaKeyMixin,
+    WorkerMixin, AnnotationMixin, ChromaKeyMixin, BatchPipelineMixin,
     ExportMixin, SessionMixin, SettingsMixin,
 ):
     """CorridorKey main application window."""
@@ -314,6 +315,8 @@ class MainWindow(
         self._bg_cache: QImage | None = None
         # Batch pipeline: clip_name -> remaining queued steps after the current one.
         self._pipeline_steps: dict[str, list[JobType]] = {}
+        # Batch Pipeline dialog state
+        self._init_batch_pipeline()
         # Debug console — created eagerly so log handler captures from startup
         from ui.widgets.debug_console import DebugConsoleWidget
         self._debug_console = DebugConsoleWidget()
