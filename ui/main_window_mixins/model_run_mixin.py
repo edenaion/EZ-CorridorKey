@@ -55,6 +55,22 @@ class ModelRunMixin:
             return True
         return False  # cancelled
 
+    def _on_run_applevision(self) -> None:
+        """Run Apple Vision foreground alpha generation on the selected clip."""
+        if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):
+            return
+
+        result = self._confirm_partial_alpha()
+        if result is False:
+            return
+
+        job = create_job_snapshot(self._current_clip, job_type=JobType.APPLEVISION_ALPHA)
+        if not self._service.job_queue.submit(job):
+            return
+
+        self._current_clip.set_processing(True)
+        self._start_worker_if_needed(job.id, job_label="Apple Vision")
+
     def _on_run_gvm(self) -> None:
         """Run GVM alpha generation on the selected clip."""
         if self._current_clip is None or self._current_clip.state not in (ClipState.RAW, ClipState.MASKED):

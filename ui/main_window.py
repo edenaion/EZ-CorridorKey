@@ -568,7 +568,8 @@ class MainWindow(
         # Queue panel cancel signals
         self._queue_panel.cancel_job_requested.connect(self._on_cancel_job)
 
-        # Parameter panel — wire GVM / BiRefNet / Track Mask / VideoMaMa
+        # Parameter panel — wire Apple Vision / GVM / BiRefNet / Track Mask / VideoMaMa
+        self._param_panel.applevision_requested.connect(self._on_run_applevision)
         self._param_panel.gvm_requested.connect(self._on_run_gvm)
         self._param_panel.birefnet_requested.connect(self._on_run_birefnet)
         self._param_panel.videomama_requested.connect(self._on_run_videomama)

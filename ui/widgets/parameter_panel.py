@@ -96,6 +96,7 @@ class ParameterPanel(QWidget):
     track_masks_requested = Signal()  # Track annotation prompts into dense masks
     import_alpha_requested = Signal()  # Import own AlphaHint folder
     import_vmama_mask_requested = Signal()  # Import mask for VideoMaMa bypass
+    applevision_requested = Signal()     # Apple Vision foreground hint
     chroma_key_requested = Signal(dict)  # GENERATE chroma key, emits params dict
     chroma_key_preview = Signal()         # any chroma key param changed (live preview)
     eyedropper_requested = Signal(bool)   # toggle eyedropper mode on viewer
@@ -271,6 +272,30 @@ class ParameterPanel(QWidget):
         auto_label.setAlignment(Qt.AlignCenter)
         auto_label.setStyleSheet("color: #A0A090; font-size: 10px; margin: 0px 0 2px 0;")
         alpha_layout.addWidget(auto_label)
+
+        # Apple Vision (macOS only, sits above GVM in automatic section)
+        import sys as _sys
+        self._applevision_btn = QPushButton(self.tr("APPLE VISION"))
+        self._applevision_btn.setEnabled(False)
+        self._applevision_btn.setToolTip(
+            self.tr(
+                "Auto-generate alpha hint using Apple Vision (Neural Engine).\n"
+                "Detects foreground subjects automatically.\n"
+                "macOS 14+ only. Runs on Apple Neural Engine (fast, no GPU needed)."
+            )
+        )
+        self._applevision_btn.clicked.connect(self.applevision_requested.emit)
+        alpha_layout.addWidget(self._applevision_btn)
+        # Hide on non-macOS platforms or macOS < 14
+        self._applevision_available = False
+        if _sys.platform == "darwin":
+            try:
+                from backend.service.apple_vision import is_available
+                self._applevision_available = is_available()
+            except ImportError:
+                pass
+        if not self._applevision_available:
+            self._applevision_btn.setVisible(False)
 
         self._gvm_btn = QPushButton(self.tr("GVM AUTO"))
         self._gvm_btn.setEnabled(False)
@@ -874,6 +899,11 @@ class ParameterPanel(QWidget):
             self._proc_format.setCurrentText(config.processed_format)
         finally:
             self._suppress_signals = False
+
+    def set_applevision_enabled(self, enabled: bool) -> None:
+        """Enable/disable Apple Vision button based on clip state and platform."""
+        if self._applevision_available:
+            self._applevision_btn.setEnabled(enabled)
 
     def set_gvm_enabled(self, enabled: bool) -> None:
         """Enable/disable GVM button based on clip state."""

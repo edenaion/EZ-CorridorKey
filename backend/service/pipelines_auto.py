@@ -1,4 +1,4 @@
-"""Auto-alpha pipelines — GVM and BiRefNet (no annotations required)."""
+"""Auto-alpha pipelines — GVM, BiRefNet, Apple Vision (no annotations required)."""
 from __future__ import annotations
 
 import logging
@@ -365,5 +365,135 @@ class AutoPipelinesMixin:
 
         logger.info(
             f"Chroma key complete for '{clip.name}': "
+            f"{num_frames} alpha frames in {time.monotonic() - t_start:.1f}s"
+        )
+
+    def run_applevision(
+        self,
+        clip: ClipEntry,
+        job=None,
+        on_progress: Optional[Callable[[str, int, int], None]] = None,
+        on_warning: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Run Apple Vision foreground subject lifting for alpha hint generation.
+
+        Uses VNGenerateForegroundInstanceMaskRequest on macOS 14+ to detect
+        foreground subjects via the Neural Engine. Produces per-frame alpha
+        hints written to AlphaHint/ directory.
+
+        macOS-only. Raises CorridorKeyError on non-macOS platforms.
+        """
+        import sys as _sys
+        if _sys.platform != "darwin":
+            raise CorridorKeyError("Apple Vision hint requires macOS")
+
+        import cv2 as _cv2
+        import numpy as _np
+        from concurrent.futures import ThreadPoolExecutor, Future
+
+        if clip.input_asset is None:
+            raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for Apple Vision")
+
+        t_start = time.monotonic()
+
+        selected_input_names = self._selected_sequence_files(clip)
+        if not selected_input_names:
+            raise CorridorKeyError(f"Clip '{clip.name}' has no input frames for Apple Vision")
+
+        alpha_dir = os.path.join(clip.root_path, "AlphaHint")
+        os.makedirs(alpha_dir, exist_ok=True)
+
+        num_frames = len(selected_input_names)
+        if on_progress:
+            on_progress(clip.name, 0, num_frames)
+
+        input_dir = clip.input_asset.path
+
+        # Import Apple Vision framework via PyObjC
+        try:
+            from .apple_vision import generate_foreground_mask
+        except ImportError as e:
+            raise CorridorKeyError(
+                f"Apple Vision not available: {e}. "
+                "Install pyobjc-framework-Vision: pip install pyobjc-framework-Vision"
+            ) from e
+
+        # Read helper
+        def _read_frame(fname: str) -> tuple[str, _np.ndarray | None]:
+            fpath = os.path.join(input_dir, fname)
+            is_exr = fname.lower().endswith(".exr")
+            if is_exr:
+                bgr = _cv2.imread(fpath, _cv2.IMREAD_ANYCOLOR | _cv2.IMREAD_ANYDEPTH)
+            else:
+                bgr = _cv2.imread(fpath, _cv2.IMREAD_COLOR)
+            if bgr is None:
+                logger.warning(f"Apple Vision: could not read {fpath}, skipping")
+                return fname, None
+            rgb = _cv2.cvtColor(bgr, _cv2.COLOR_BGR2RGB)
+            if rgb.dtype != _np.uint8:
+                rgb = (_np.clip(rgb, 0.0, 1.0) * 255.0).astype(_np.uint8)
+            return fname, rgb
+
+        # Write helper
+        def _write_matte(out_path: str, matte: _np.ndarray) -> None:
+            _cv2.imwrite(out_path, matte)
+
+        _PREFETCH = 4
+        _WRITE_WORKERS = 4
+
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="av-read") as read_pool, \
+             ThreadPoolExecutor(max_workers=_WRITE_WORKERS, thread_name_prefix="av-write") as write_pool:
+
+            read_futures: list[Future] = []
+            for fname in selected_input_names[:_PREFETCH]:
+                read_futures.append(read_pool.submit(_read_frame, fname))
+
+            write_futures: list[Future] = []
+            next_read_idx = _PREFETCH
+
+            for i in range(num_frames):
+                if job and job.is_cancelled:
+                    raise JobCancelledError(clip.name, i)
+
+                fname, frame_rgb = read_futures[i].result()
+
+                if next_read_idx < num_frames:
+                    read_futures.append(
+                        read_pool.submit(_read_frame, selected_input_names[next_read_idx])
+                    )
+                    next_read_idx += 1
+
+                if frame_rgb is None:
+                    continue
+
+                # Run Apple Vision foreground detection
+                matte = generate_foreground_mask(frame_rgb)
+
+                # Submit async write
+                stem = os.path.splitext(fname)[0]
+                out_path = os.path.join(alpha_dir, f"{stem}.png")
+                write_futures.append(write_pool.submit(_write_matte, out_path, matte))
+
+                if len(write_futures) > _WRITE_WORKERS * 2:
+                    write_futures = [f for f in write_futures if not f.done()]
+
+                if on_progress:
+                    elapsed = time.monotonic() - t_start
+                    fps = (i + 1) / elapsed if elapsed > 0 else 0
+                    on_progress(clip.name, i + 1, num_frames, fps=fps)
+
+            for f in write_futures:
+                f.result()
+
+        clip.alpha_asset = ClipAsset(alpha_dir, 'sequence')
+
+        try:
+            clip.transition_to(ClipState.READY)
+        except Exception as e:
+            if on_warning:
+                on_warning(f"State transition after Apple Vision: {e}")
+
+        logger.info(
+            f"Apple Vision complete for '{clip.name}': "
             f"{num_frames} alpha frames in {time.monotonic() - t_start:.1f}s"
         )
