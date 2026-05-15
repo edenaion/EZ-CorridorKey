@@ -95,17 +95,25 @@ class BatchPipelineMixin:
 
     def _create_batch_project(self, name: str, configs: list, dialog=None) -> None:
         """Create a new project and import batch clips into it."""
-        from backend.project import create_project, filter_companion_hints, get_clip_dirs
+        from backend.project import filter_companion_hints, get_clip_dirs
+        from backend.project_media import create_project_from_media
+        from ui.widgets.preferences_dialog import (
+            KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE,
+            KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES,
+            get_setting_bool,
+        )
 
-        source_paths = [c.clip_info.source_path for c in configs]
-        filtered = filter_companion_hints(source_paths)
+        # Split video files from sequence directories
+        video_paths = [c.clip_info.source_path for c in configs if not c.clip_info.is_sequence]
+        seq_dirs = [c.clip_info.source_path for c in configs if c.clip_info.is_sequence]
+        video_paths = filter_companion_hints(video_paths)
 
-        from ui.widgets.preferences_dialog import KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE
-        from ui.widgets.preferences_dialog import get_setting_bool
-        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
-
-        project_dir = create_project(
-            filtered, copy_source=copy_source, display_name=name,
+        project_dir = create_project_from_media(
+            video_paths=video_paths or None,
+            sequence_folders=seq_dirs or None,
+            copy_video=get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE),
+            copy_sequences=get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES),
+            display_name=name,
         )
         logger.info(f"Created batch project: {project_dir}")
 
@@ -127,16 +135,29 @@ class BatchPipelineMixin:
     def _run_batch_import_and_process(self, configs: list, dialog=None) -> None:
         """Import batch clips into the current project and run pipelines."""
         from backend.project import add_clips_to_project, filter_companion_hints
-        from ui.widgets.preferences_dialog import KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE
-        from ui.widgets.preferences_dialog import get_setting_bool
-
-        source_paths = [c.clip_info.source_path for c in configs]
-        filtered = filter_companion_hints(source_paths)
-
-        copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
-        new_clip_paths = add_clips_to_project(
-            self._clips_dir, filtered, copy_source=copy_source,
+        from backend.project_media import add_sequences_to_project
+        from ui.widgets.preferences_dialog import (
+            KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE,
+            KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES,
+            get_setting_bool,
         )
+
+        # Split video files from sequence directories
+        video_paths = [c.clip_info.source_path for c in configs if not c.clip_info.is_sequence]
+        seq_dirs = [c.clip_info.source_path for c in configs if c.clip_info.is_sequence]
+        video_paths = filter_companion_hints(video_paths)
+
+        new_clip_paths = []
+        if video_paths:
+            copy_source = get_setting_bool(KEY_COPY_SOURCE, DEFAULT_COPY_SOURCE)
+            new_clip_paths += add_clips_to_project(
+                self._clips_dir, video_paths, copy_source=copy_source,
+            )
+        if seq_dirs:
+            copy_seq = get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES)
+            new_clip_paths += add_sequences_to_project(
+                self._clips_dir, seq_dirs, copy_source=copy_seq,
+            )
 
         # Map actual clip folder names to configs
         self._batch_configs = self._map_configs_to_clips(configs, new_clip_paths)
