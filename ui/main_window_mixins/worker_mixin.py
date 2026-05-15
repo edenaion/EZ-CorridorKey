@@ -38,6 +38,10 @@ class WorkerMixin:
 
         self._queue_panel.refresh()
 
+        # Batch pipeline dialog update
+        if hasattr(self, '_on_batch_progress'):
+            self._on_batch_progress(job_id, clip_name, current, total, fps)
+
     def _schedule_live_asset_refresh(self, clip_name: str, current: int, total: int) -> None:
         """Coalesce progress-driven asset refreshes for the selected clip.
 
@@ -237,6 +241,10 @@ class WorkerMixin:
 
         logger.info(f"Clip finished ({job_type}): {clip_name} -> {target_state.value}")
 
+        # Batch pipeline dialog update
+        if hasattr(self, '_on_batch_clip_finished'):
+            self._on_batch_clip_finished(job_id, clip_name, job_type)
+
     @Slot(str, str)
     def _on_worker_warning(self, job_id: str, message: str) -> None:
         if message.startswith("Cancelled:"):
@@ -308,6 +316,10 @@ class WorkerMixin:
             dlg.exec()
         else:
             QMessageBox.critical(self, _tr("Processing Error"), _tr("Clip: %s\n\n%s") % (clip_name, error_msg))
+
+        # Batch pipeline dialog update
+        if hasattr(self, '_on_batch_clip_error'):
+            self._on_batch_clip_error(job_id, clip_name, error_msg)
 
     @Slot()
     def _on_queue_empty(self) -> None:

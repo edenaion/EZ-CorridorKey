@@ -170,6 +170,10 @@ class ExportMixin:
             from ui.sounds.audio_manager import UIAudio
             UIAudio.frame_extract_done()
 
+        # Batch pipeline: submit GPU job for this clip now that extraction is done
+        if hasattr(self, '_on_batch_extract_finished'):
+            self._on_batch_extract_finished(clip_name)
+
     @Slot(str, str)
     def _on_extract_error(self, clip_name: str, error_msg: str) -> None:
         """Handle extraction failure."""
