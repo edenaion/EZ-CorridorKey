@@ -193,11 +193,13 @@ class ImportMixin:
         from backend.project import (
             is_video_file, add_clips_to_project,
             folder_has_image_sequence, add_sequences_to_project,
+            filter_companion_hints,
         )
         videos = [
             os.path.join(dir_path, f) for f in os.listdir(dir_path)
             if is_video_file(os.path.join(dir_path, f))
         ]
+        videos = filter_companion_hints(videos)
         is_seq = folder_has_image_sequence(dir_path)
 
         if not videos and not is_seq:
@@ -226,10 +228,16 @@ class ImportMixin:
         from backend.project import (
             is_video_file, add_clips_to_project, find_clip_by_source,
             find_removed_clip_by_source, clear_removed_clip,
+            filter_companion_hints,
         )
         videos = [f for f in file_paths if is_video_file(f)]
         if not videos:
             return
+
+        # Exclude companion hint files (_alphahint, _maskhint) from being
+        # imported as separate clips. They'll be auto-copied into the
+        # matching clip folder by _copy_companion_hints during creation.
+        videos = filter_companion_hints(videos)
 
         # Categorise: already active, removed (restore), or genuinely new
         new_videos = []
