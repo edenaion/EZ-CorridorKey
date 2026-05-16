@@ -124,10 +124,8 @@ class MaskUnitAttention(nn.Module):
             q = mx.max(q, axis=3)  # [B, heads, num_win, tokens/stride, head_dim]
 
         # Scaled dot-product attention
-        # Upcast to float32 for softmax (matches torch.autocast behavior --
-        # fp16 softmax causes precision loss over 24 attention blocks)
         attn = (q * self.scale) @ k.transpose(0, 1, 2, 4, 3)  # [..., Nq, Nk]
-        attn = mx.softmax(attn.astype(mx.float32), axis=-1).astype(q.dtype)
+        attn = mx.softmax(attn, axis=-1)
         x = attn @ v  # [B, heads, num_win, Nq, head_dim]
 
         # Reshape back: [B, heads, num_win, Nq, head_dim] -> [B, N_out, dim_out]
