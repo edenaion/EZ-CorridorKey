@@ -123,12 +123,24 @@ class MaskUnitAttention(nn.Module):
             q = q.reshape(B, self.heads, num_windows, self.q_stride, -1, self.head_dim)
             q = mx.max(q, axis=3)  # [B, heads, num_win, tokens/stride, head_dim]
 
-        # Scaled dot-product attention
-        # Softmax in float32 to match torch.autocast policy (fp16 softmax
-        # loses precision over 16K+ token sequences in global attention)
-        attn = (q * self.scale) @ k.transpose(0, 1, 2, 4, 3)  # [..., Nq, Nk]
-        attn = mx.softmax(attn.astype(mx.float32), axis=-1).astype(q.dtype)
-        x = attn @ v  # [B, heads, num_win, Nq, head_dim]
+        # Scaled dot-product attention with float32 softmax (torch.autocast policy).
+        # For large global attention (16K+ tokens), process heads individually
+        # to avoid 8.6 GB fp32 allocation that OOMs on 16 GB Macs.
+        Nq = q.shape[3]
+        kT = k.transpose(0, 1, 2, 4, 3)
+
+        if Nq > 4096:
+            # Head-by-head to fit in memory
+            outs = []
+            for h in range(self.heads):
+                ah = (q[:, h:h+1] * self.scale) @ kT[:, h:h+1]
+                ah = mx.softmax(ah.astype(mx.float32), axis=-1).astype(q.dtype)
+                outs.append(ah @ v[:, h:h+1])
+            x = mx.concatenate(outs, axis=1)
+        else:
+            attn = (q * self.scale) @ kT
+            attn = mx.softmax(attn.astype(mx.float32), axis=-1).astype(q.dtype)
+            x = attn @ v
 
         # Reshape back: [B, heads, num_win, Nq, head_dim] -> [B, N_out, dim_out]
         x = x.transpose(0, 3, 2, 1, 4)  # [B, Nq, num_win, heads, head_dim]
