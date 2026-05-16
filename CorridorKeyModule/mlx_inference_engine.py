@@ -89,15 +89,18 @@ class MLXCorridorKeyEngine:
                 weight_dict[pe_key] = _np.array(pe_resized)
 
         # Load weights in float16 for 2x speed + 2x memory savings.
-        # BatchNorm running stats stay float32 for numerical stability.
+        # Normalization layers (LayerNorm, GroupNorm, BatchNorm) stay float32
+        # to match torch.autocast behavior -- norms are precision-sensitive.
         mx_weights = []
         for k, v in weight_dict.items():
             arr = mx.array(v)
-            if "running_mean" not in k and "running_var" not in k:
+            is_norm = any(t in k for t in ("norm", ".gn", ".bn."))
+            is_running_stat = "running_mean" in k or "running_var" in k
+            if not (is_norm or is_running_stat):
                 arr = arr.astype(mx.float16)
             mx_weights.append((k, arr))
         model.load_weights(mx_weights)
-        logger.info(f"MLX weights loaded (float16): {time.monotonic() - t0:.1f}s")
+        logger.info(f"MLX weights loaded (mixed fp16/fp32): {time.monotonic() - t0:.1f}s")
 
         # Set eval mode (BatchNorm uses running stats) and evaluate parameters
         model.eval()
