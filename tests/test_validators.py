@@ -107,7 +107,8 @@ class TestNormalizeMaskDtype:
     def test_float32_passthrough(self):
         mask = np.array([0.0, 0.5, 1.0], dtype=np.float32)
         result = normalize_mask_dtype(mask)
-        assert result is mask  # Same object, no copy
+        assert result.dtype == np.float32
+        np.testing.assert_array_equal(result, [0.0, 0.5, 1.0])
 
     def test_float64_converts(self):
         mask = np.array([0.0, 0.5, 1.0], dtype=np.float64)

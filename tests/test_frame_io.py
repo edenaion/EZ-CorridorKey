@@ -2,7 +2,6 @@
 import os
 
 import numpy as np
-import pytest
 
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 
@@ -13,18 +12,19 @@ from backend.frame_io import (
     _srgb_to_linear,
     decode_video_mask_frame,
     read_image_frame,
+    read_mask_frame,
     read_video_mask_at,
+    write_exr,
 )
 
 
-def _write_exr_or_skip(path: str, rgb: np.ndarray) -> None:
+def _write_rgb_exr(path: str, rgb: np.ndarray) -> None:
     bgr = cv2.cvtColor(rgb.astype(np.float32), cv2.COLOR_RGB2BGR)
-    try:
-        success = cv2.imwrite(path, bgr)
-    except cv2.error:
-        pytest.skip("OpenCV EXR write support is unavailable in this environment")
-    if not success:
-        pytest.skip("OpenCV EXR write support is unavailable in this environment")
+    assert write_exr(path, bgr, compression="none")
+
+
+def _write_mask_exr(path: str, mask: np.ndarray) -> None:
+    assert write_exr(path, mask.astype(np.float32), compression="none")
 
 
 class TestLinearToSrgb:
@@ -66,11 +66,12 @@ class TestReadImageFrame:
             dtype=np.float32,
         )
         path = os.path.join(str(tmp_path), "gamma.exr")
-        _write_exr_or_skip(path, rgb)
+        _write_rgb_exr(path, rgb)
 
         img = read_image_frame(path, gamma_correct_exr=True)
 
-        assert img is not None
+        assert isinstance(img, np.ndarray)
+        assert img.shape == rgb.shape
         np.testing.assert_allclose(img, _linear_to_srgb(rgb), atol=2e-4)
 
     def test_exr_read_preserves_linear_values_when_gamma_disabled(self, tmp_path):
@@ -79,11 +80,12 @@ class TestReadImageFrame:
             dtype=np.float32,
         )
         path = os.path.join(str(tmp_path), "linear.exr")
-        _write_exr_or_skip(path, rgb)
+        _write_rgb_exr(path, rgb)
 
         img = read_image_frame(path, gamma_correct_exr=False)
 
-        assert img is not None
+        assert isinstance(img, np.ndarray)
+        assert img.shape == rgb.shape
         np.testing.assert_allclose(img, rgb, atol=2e-4)
 
 
@@ -126,3 +128,20 @@ class TestVideoMaskRead:
 
         expected = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255.0
         np.testing.assert_allclose(mask, expected, atol=1e-6)
+
+
+class TestReadMaskFrame:
+    def test_exr_mask_read_preserves_float_precision_and_clips_alpha_range(self, tmp_path):
+        src = np.array(
+            [[-0.01, 0.125, 0.5], [0.75, 1.0, 1.02]],
+            dtype=np.float32,
+        )
+        path = os.path.join(str(tmp_path), "alpha.exr")
+        _write_mask_exr(path, src)
+
+        mask = read_mask_frame(path)
+
+        assert isinstance(mask, np.ndarray)
+        assert mask.dtype == np.float32
+        assert mask.shape == src.shape
+        np.testing.assert_allclose(mask, np.clip(src, 0.0, 1.0), atol=2e-4)
