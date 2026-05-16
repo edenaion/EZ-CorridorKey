@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 if sys.platform != "darwin":
     raise ImportError("apple_vision module requires macOS")
 
-import objc  # noqa: E402
+import objc  # noqa: E402, F401
+import Quartz  # noqa: E402
 import Vision  # noqa: E402
 from Quartz import (  # noqa: E402
     CIImage,
@@ -91,11 +92,11 @@ def generate_foreground_mask(rgb_frame: np.ndarray) -> np.ndarray:
 
     # Generate mask combining all foreground instances
     observation = results[0]
-    all_indices = results  # All observations are foreground instances
+    all_indices = observation.allInstances()
 
     try:
-        mask_buffer, gen_error = observation.generateScaledMaskForImage_forInstances_error_(
-            ci_image, all_indices, None
+        mask_buffer, gen_error = observation.generateScaledMaskForImageForInstances_fromRequestHandler_error_(
+            all_indices, handler, None
         )
     except Exception as e:
         logger.warning(f"Apple Vision: generateScaledMask failed: {e}")
@@ -116,30 +117,27 @@ def _cvpixelbuffer_to_numpy(pixel_buffer, target_h: int, target_w: int) -> np.nd
     Vision outputs masks as OneComponent32Float CVPixelBuffers.
     We convert to uint8 [0, 255] and resize to target dimensions.
     """
-    import CoreVideo  # noqa: E402
     import cv2
 
-    CoreVideo.CVPixelBufferLockBaseAddress(pixel_buffer, 0)
+    Quartz.CVPixelBufferLockBaseAddress(pixel_buffer, 0)
     try:
-        base_address = CoreVideo.CVPixelBufferGetBaseAddress(pixel_buffer)
-        buf_w = CoreVideo.CVPixelBufferGetWidth(pixel_buffer)
-        buf_h = CoreVideo.CVPixelBufferGetHeight(pixel_buffer)
-        bytes_per_row = CoreVideo.CVPixelBufferGetBytesPerRow(pixel_buffer)
+        base_address = Quartz.CVPixelBufferGetBaseAddress(pixel_buffer)
+        buf_w = Quartz.CVPixelBufferGetWidth(pixel_buffer)
+        buf_h = Quartz.CVPixelBufferGetHeight(pixel_buffer)
+        bytes_per_row = Quartz.CVPixelBufferGetBytesPerRow(pixel_buffer)
 
-        # OneComponent32Float: each pixel is float32
-        import ctypes
-        float_count = buf_h * (bytes_per_row // 4)
-        arr = np.ctypeslib.as_array(
-            ctypes.cast(base_address, ctypes.POINTER(ctypes.c_float)),
-            shape=(float_count,),
-        ).copy()  # Copy while buffer is locked
+        # OneComponent32Float: base_address is an objc.varlist,
+        # use as_buffer() to get a memoryview we can read into numpy
+        buf_size = buf_h * bytes_per_row
+        mv = base_address.as_buffer(buf_size)
+        arr = np.frombuffer(mv, dtype=np.float32).copy()
 
         # Reshape accounting for row stride
         floats_per_row = bytes_per_row // 4
         arr = arr.reshape(buf_h, floats_per_row)[:, :buf_w]
 
     finally:
-        CoreVideo.CVPixelBufferUnlockBaseAddress(pixel_buffer, 0)
+        Quartz.CVPixelBufferUnlockBaseAddress(pixel_buffer, 0)
 
     # Convert float [0.0, 1.0] to uint8 [0, 255]
     mask_u8 = (np.clip(arr, 0.0, 1.0) * 255.0).astype(np.uint8)
