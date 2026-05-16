@@ -86,11 +86,11 @@ def normalize_mask_dtype(mask: np.ndarray) -> np.ndarray:
     elif mask.dtype == np.uint16:
         return mask.astype(np.float32) / 65535.0
     elif mask.dtype == np.float64:
-        return mask.astype(np.float32)
+        return np.clip(mask.astype(np.float32), 0.0, 1.0)
     elif mask.dtype == np.float32:
-        return mask
+        return np.clip(mask, 0.0, 1.0).astype(np.float32)
     else:
-        return mask.astype(np.float32)
+        return np.clip(mask.astype(np.float32), 0.0, 1.0)
 
 
 def validate_frame_read(

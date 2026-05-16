@@ -14,13 +14,13 @@ import logging
 import os
 from typing import Callable, Optional
 
+# Enable OpenEXR support in OpenCV before cv2 is imported.
+os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+
 import cv2
 import numpy as np
 
 from .validators import normalize_mask_channels, normalize_mask_dtype
-
-# Enable OpenEXR support in OpenCV
-os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
 
 logger = logging.getLogger(__name__)
 

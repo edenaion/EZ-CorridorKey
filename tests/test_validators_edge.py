@@ -33,19 +33,19 @@ class TestNormalizeMaskDtypeEdge:
     ensuring meaningful value ranges for unrecognised dtypes.
     """
 
-    def test_int32_cast_not_normalized(self):
-        # Value 1000 stays 1000.0 — it is NOT scaled to [0, 1].
+    def test_int32_cast_clipped(self):
+        # Values are clipped to [0, 1] after cast to float32.
         mask = np.array([1000], dtype=np.int32)
         result = normalize_mask_dtype(mask)
         assert result.dtype == np.float32
-        np.testing.assert_array_equal(result, [1000.0])
+        np.testing.assert_array_equal(result, [1.0])
 
-    def test_int64_cast_not_normalized(self):
-        # Same pass-through behaviour for int64.
+    def test_int64_cast_clipped(self):
+        # Values are clipped to [0, 1] after cast to float32.
         mask = np.array([1000], dtype=np.int64)
         result = normalize_mask_dtype(mask)
         assert result.dtype == np.float32
-        np.testing.assert_array_equal(result, [1000.0])
+        np.testing.assert_array_equal(result, [1.0])
 
     def test_bool_true_becomes_one_false_becomes_zero(self):
         # bool is also unrecognised → cast branch; True→1.0, False→0.0.
@@ -54,12 +54,13 @@ class TestNormalizeMaskDtypeEdge:
         assert result.dtype == np.float32
         np.testing.assert_array_equal(result, [1.0, 0.0, 1.0])
 
-    def test_uint32_cast_not_normalized(self):
+    def test_uint32_cast_clipped(self):
         # uint32 is distinct from uint8/uint16 and hits the else branch.
+        # Values are clipped to [0, 1] after cast.
         mask = np.array([0, 500, 65536], dtype=np.uint32)
         result = normalize_mask_dtype(mask)
         assert result.dtype == np.float32
-        np.testing.assert_array_equal(result, [0.0, 500.0, 65536.0])
+        np.testing.assert_array_equal(result, [0.0, 1.0, 1.0])
 
 
 # ---------------------------------------------------------------------------
