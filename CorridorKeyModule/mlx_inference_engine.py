@@ -88,9 +88,16 @@ class MLXCorridorKeyEngine:
                 import numpy as _np
                 weight_dict[pe_key] = _np.array(pe_resized)
 
-        mx_weights = [(k, mx.array(v)) for k, v in weight_dict.items()]
+        # Load weights in float16 for 2x speed + 2x memory savings.
+        # BatchNorm running stats stay float32 for numerical stability.
+        mx_weights = []
+        for k, v in weight_dict.items():
+            arr = mx.array(v)
+            if "running_mean" not in k and "running_var" not in k:
+                arr = arr.astype(mx.float16)
+            mx_weights.append((k, arr))
         model.load_weights(mx_weights)
-        logger.info(f"MLX weights loaded: {time.monotonic() - t0:.1f}s")
+        logger.info(f"MLX weights loaded (float16): {time.monotonic() - t0:.1f}s")
 
         # Set eval mode (BatchNorm uses running stats) and evaluate parameters
         model.eval()
@@ -153,9 +160,9 @@ class MLXCorridorKeyEngine:
         # 3. Normalize (ImageNet)
         img_norm = (img_resized - self.mean) / self.std
 
-        # 4. Prepare input: NHWC for MLX
+        # 4. Prepare input: NHWC for MLX (float16 to match model weights)
         inp_np = np.concatenate([img_norm, mask_resized], axis=-1)  # [H, W, 4]
-        inp_mx = mx.array(inp_np[np.newaxis])  # [1, H, W, 4]
+        inp_mx = mx.array(inp_np[np.newaxis]).astype(mx.float16)  # [1, H, W, 4]
 
         # 5. Inference
         out = self.model(inp_mx, refiner_scale=refiner_scale)
