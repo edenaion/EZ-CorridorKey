@@ -900,7 +900,10 @@ class SplitViewWidget(QWidget):
                 delta, bool(mods & Qt.ShiftModifier), self._wipe_offset)
             self.update()
             return
-        if mods & Qt.ControlModifier:
+        # macOS: Cmd (MetaModifier) is the primary modifier, not Ctrl
+        import sys as _sys
+        _zoom_mod = Qt.MetaModifier if _sys.platform == "darwin" else Qt.ControlModifier
+        if mods & _zoom_mod:
             delta = event.angleDelta().y()
             factor = 1.1 if delta > 0 else 1.0 / 1.1
             new_zoom = self._zoom * factor

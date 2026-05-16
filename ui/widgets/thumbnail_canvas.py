@@ -292,7 +292,7 @@ class ThumbnailCanvas(QWidget):
                 UIAudio.click()
                 if event.modifiers() & Qt.ShiftModifier:
                     self.shift_select_requested.emit(clip)
-                elif event.modifiers() & Qt.ControlModifier:
+                elif event.modifiers() & (Qt.ControlModifier | Qt.MetaModifier):
                     self.multi_select_toggled.emit(clip)
                 else:
                     self.card_clicked.emit(clip)
