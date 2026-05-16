@@ -156,7 +156,9 @@ class HieraBlock(nn.Module):
         self._q_stride = q_stride
 
     def __call__(self, x: mx.array) -> mx.array:
-        x_norm = self.norm1(x)
+        # Upcast to fp32 for LayerNorm then back to input dtype (matches torch.autocast)
+        in_dtype = x.dtype
+        x_norm = self.norm1(x.astype(mx.float32)).astype(in_dtype)
 
         if self.do_expand:
             if self.proj is not None:
@@ -172,7 +174,7 @@ class HieraBlock(nn.Module):
                 x = mx.concatenate([mx.max(xr, axis=1), mx.mean(xr, axis=1)], axis=-1)
 
         x = x + self.attn(x_norm)
-        x = x + self.mlp(self.norm2(x))
+        x = x + self.mlp(self.norm2(x.astype(mx.float32)).astype(in_dtype))
         return x
 
 
@@ -396,7 +398,7 @@ class DecoderHead(nn.Module):
 
         # Fuse (1x1 conv)
         x = self.linear_fuse(cat)  # [B, H, W, embed]
-        x = self.bn(x)
+        x = self.bn(x.astype(mx.float32)).astype(cat.dtype)
         x = nn.relu(x)
 
         # Classify
@@ -422,12 +424,13 @@ class RefinerBlock(nn.Module):
         self._dilation = dilation
 
     def __call__(self, x: mx.array) -> mx.array:
+        in_dtype = x.dtype
         residual = x
         out = self.conv1(x)
-        out = self.gn1(out)
+        out = self.gn1(out.astype(mx.float32)).astype(in_dtype)
         out = nn.relu(out)
         out = self.conv2(out)
-        out = self.gn2(out)
+        out = self.gn2(out.astype(mx.float32)).astype(in_dtype)
         out = out + residual
         out = nn.relu(out)
         return out
@@ -448,8 +451,9 @@ class CNNRefiner(nn.Module):
         self.final = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
 
     def __call__(self, x: mx.array) -> mx.array:
+        in_dtype = x.dtype
         x = self.stem_conv(x)
-        x = self.stem_gn(x)
+        x = self.stem_gn(x.astype(mx.float32)).astype(in_dtype)
         x = nn.relu(x)
         x = self.res1(x)
         x = self.res2(x)
