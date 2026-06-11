@@ -561,7 +561,10 @@ class CorridorKeyEngine:
         # never *subtract* confidence the guide already had. mask_linear is
         # already at full (h, w) resolution and in [0, 1] float space, so
         # no resize or normalization is needed here.
-        res_alpha = np.maximum(res_alpha, mask_linear)
+        # The guard skips a thin shell around the solid silhouette so the
+        # hint's edge over-coverage is not burned in as a 1px outline
+        # around the subject (see refiner_additive_guard).
+        res_alpha = cu.refiner_additive_guard(res_alpha, mask_linear)
 
         # --- SOURCE PASSTHROUGH ---
         # Interior pixels (face, body, clothes — everywhere alpha ≈ 1.0) are passed
@@ -586,15 +589,11 @@ class CorridorKeyEngine:
         else:
             processed_alpha = res_alpha
 
-        # B. Garbage Matte: zero out anything outside the dilated alpha hint
+        # B. Garbage Matte: zero out anything outside the dilated alpha hint.
+        # Binarized + feathered inside apply_garbage_matte so a small px
+        # setting never draws a visible outline on the subject edge.
         if garbage_matte_px > 0:
-            k = 2 * garbage_matte_px + 1
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
-            hint_2d = mask_linear[:, :, 0] if mask_linear.ndim == 3 else mask_linear
-            expanded_hint = cv2.dilate(hint_2d, kernel)
-            if expanded_hint.ndim == 2:
-                expanded_hint = expanded_hint[:, :, np.newaxis]
-            processed_alpha = processed_alpha * expanded_hint
+            processed_alpha = cu.apply_garbage_matte(processed_alpha, mask_linear, garbage_matte_px)
 
         # C. Despill FG
         # res_fg is sRGB (with source passthrough blended in where applicable).

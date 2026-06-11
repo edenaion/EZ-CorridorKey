@@ -178,8 +178,8 @@ class MLXCorridorKeyEngine:
         if res_alpha.ndim == 2:
             res_alpha = res_alpha[:, :, np.newaxis]
 
-        # Refiner additive guard
-        res_alpha = np.maximum(res_alpha, mask_linear)
+        # Refiner additive guard (shell-aware, see cu.refiner_additive_guard)
+        res_alpha = cu.refiner_additive_guard(res_alpha, mask_linear)
 
         # Source passthrough
         if source_passthrough:
@@ -199,15 +199,9 @@ class MLXCorridorKeyEngine:
         else:
             processed_alpha = res_alpha
 
-        # Garbage matte
+        # Garbage matte (binarized + feathered, see cu.apply_garbage_matte)
         if garbage_matte_px > 0:
-            k = 2 * garbage_matte_px + 1
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
-            hint_2d = mask_linear[:, :, 0] if mask_linear.ndim == 3 else mask_linear
-            expanded_hint = cv2.dilate(hint_2d, kernel)
-            if expanded_hint.ndim == 2:
-                expanded_hint = expanded_hint[:, :, np.newaxis]
-            processed_alpha = processed_alpha * expanded_hint
+            processed_alpha = cu.apply_garbage_matte(processed_alpha, mask_linear, garbage_matte_px)
 
         # Despill
         fg_despilled = cu.despill(res_fg, green_limit_mode='average',

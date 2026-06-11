@@ -197,25 +197,81 @@ def dilate_mask(mask, radius):
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
         return cv2.dilate(mask, kernel)
 
-def apply_garbage_matte(predicted_matte, garbage_matte_input, dilation=10):
+def refiner_additive_guard(model_alpha, hint_mask, shell_px=4):
     """
-    Multiplies predicted matte by a dilated garbage matte to clean up background.
+    Per-pixel max of model alpha and hint, except in a thin shell just
+    outside the model's solid silhouette.
+
+    The plain max() guard protects guide detail the refiner erodes (hair
+    wisps), but it also burns the hint's edge over-coverage into the
+    output: alpha hints routinely extend 1-3px past the true subject edge
+    (generator slack, hint resizing), and max() resurrects that band even
+    though the model correctly rejected it. Once the garbage matte clears
+    the surrounding gunk, the band reads as a ~1px white outline around
+    the subject.
+
+    Inside the shell (within shell_px of the solid body) the model's edge
+    is trusted as-is; beyond it the additive guard applies in full, so
+    detached hair strands and wisps stay protected.
+
+    model_alpha: float alpha [H, W] or [H, W, 1], model prediction.
+    hint_mask: float alpha hint, same spatial size.
+    shell_px: width of the trust-the-model shell around the solid body.
     """
-    if garbage_matte_input is None:
+    if hint_mask is None:
+        return model_alpha
+
+    import cv2
+
+    m2 = model_alpha[:, :, 0] if model_alpha.ndim == 3 else model_alpha
+    solid = (m2 > 0.5).astype(np.uint8)
+    k = 2 * int(shell_px) + 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    shell = (cv2.dilate(solid, kernel) > 0) & (solid == 0)
+    if model_alpha.ndim == 3:
+        shell = shell[:, :, np.newaxis]
+
+    guarded = np.maximum(model_alpha, hint_mask)
+    return np.where(shell, model_alpha, guarded)
+
+def apply_garbage_matte(predicted_matte, hint_mask, dilation_px, feather_px=3,
+                        hint_threshold=0.1):
+    """
+    Zeros out predicted alpha outside the hint region expanded by dilation_px.
+
+    The hint is binarized before dilation so its soft edge values never
+    scale the subject's own edge alpha (a fractional multiply at small
+    dilation_px reads as a 1px outline hugging the subject). The cut
+    boundary is feathered outward, with the dilation widened by feather_px
+    so the falloff never intrudes into the requested dilation_px margin.
+
+    predicted_matte: float alpha [H, W] or [H, W, 1].
+    hint_mask: float alpha hint [H, W] or [H, W, 1].
+    dilation_px: full-protection margin (px) around the binarized hint.
+    feather_px: width (px) of the soft falloff beyond that margin.
+    hint_threshold: hint values above this count as inside the matte.
+    """
+    if hint_mask is None or dilation_px <= 0:
         return predicted_matte
-        
-    garbage_mask = dilate_mask(garbage_matte_input, dilation)
-    
-    # Ensure dimensions match for multiplication
-    if _is_tensor(predicted_matte):
-        # Handle broadcasting if needed
-        pass 
-    else:
-        # Numpy
-        if garbage_mask.ndim == 2 and predicted_matte.ndim == 3:
-            garbage_mask = garbage_mask[:, :, np.newaxis]
-            
-    return predicted_matte * garbage_mask
+
+    import cv2
+
+    hint_2d = hint_mask[:, :, 0] if hint_mask.ndim == 3 else hint_mask
+    hint_bin = (hint_2d > hint_threshold).astype(np.float32)
+
+    radius = int(dilation_px) + int(feather_px)
+    k = 2 * radius + 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    expanded = cv2.dilate(hint_bin, kernel)
+
+    if feather_px > 0:
+        fk = 2 * int(feather_px) + 1
+        expanded = cv2.GaussianBlur(expanded, (fk, fk), 0)
+
+    if expanded.ndim == 2 and predicted_matte.ndim == 3:
+        expanded = expanded[:, :, np.newaxis]
+
+    return predicted_matte * expanded
 
 def despill(image, green_limit_mode='average', strength=1.0, screen_color='green'):
     """
