@@ -16,8 +16,14 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Fixed
 
+- **CONTRIBUTING.md pointed to stale requirements.txt** — dev setup now recommends `pip install -e ".[dev]"` which installs from `pyproject.toml`, the canonical dependency source. ([#154](https://github.com/edenaion/EZ-CorridorKey/issues/154))
 - **Companion hint copied to wrong location** — `_copy_companion_alphahint` was copying hint files into `Source/` where they could be mistaken for the input video. Now correctly placed at the clip root where `find_assets()` discovers them.
 - **MLX FG output blocky artifacts** — the external `corridorkey_mlx` package produced lower-quality foreground output. The built-in MLX engine eliminates this by using our own verified model port with proper `model.eval()`, correct weight transposition, and `pytorch_compatible=True` GroupNorm.
+- **MLX mixed-precision to match torch.autocast** — LayerNorm, GroupNorm, BatchNorm, and softmax now run in float32 on MLX, matching PyTorch's autocast policy. Norm inputs are upcast to fp32, computed, then cast back to fp16 to prevent type promotion cascading through the graph. Softmax uses head-by-head fp32 processing for global attention blocks (16K+ tokens) to stay within 16 GB unified memory. Fixes blocky/stepped alpha edges on hair at 2048 resolution.
+- **EXR alpha hints quantized to 8-bit on import** — importing EXR alpha hints previously converted them to 8-bit PNG, losing float precision. EXR files are now preserved as-is during import.
+- **OpenEXR codec disabled at runtime** — `OPENCV_IO_ENABLE_OPENEXR` was set after `cv2` import in several modules, so OpenCV never enabled EXR read/write support. Now set before import in all entry points.
+- **Out-of-range alpha from EXR** — `normalize_mask_dtype` now clips all mask values to [0, 1] regardless of source dtype, preventing rendering artifacts from EXR files with values outside unit range.
+- **1px outline around subjects in the final matte:** the refiner additive guard took a plain per-pixel max of the model's alpha and the alpha hint, which burned the hint's edge over-coverage (generator slack, hint resizing) into the output as a thin line tracing the subject. The line sat inside the hint region, so the garbage matte could never remove it and appeared to "add" a border once surrounding gunk was cleared. The guard now trusts the model's own edge inside a thin shell around the solid silhouette and applies the full max() protection only beyond it, keeping detached hair strands protected. The garbage matte also binarizes the hint before dilation and feathers its cut boundary, so low pixel settings no longer scale down or hard-clip the subject edge. Applies to both CUDA and MLX engines.
 
 ### Changed
 
