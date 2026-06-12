@@ -2,6 +2,185 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US">
 <context>
+    <name>BatchPipelineDialog</name>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="69"/>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="96"/>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="500"/>
+        <source>Batch Pipeline</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="101"/>
+        <source>Select a folder containing video clips. Files with &quot;alphahint&quot; or &quot;maskhint&quot; in the name are automatically paired as hints.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="111"/>
+        <source>Select Folder...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="115"/>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="462"/>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="501"/>
+        <source>No folder selected</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="122"/>
+        <source>Global Settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="127"/>
+        <source>No-hint clips:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="130"/>
+        <source>Alpha generation method for clips with no companion hint file.
+GVM: fast automatic alpha.
+BiRefNet: higher quality, select a model variant.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="157"/>
+        <source>MaskHint clips:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="160"/>
+        <source>Mask refinement method for clips with a companion MaskHint file.
+VideoMaMa: temporal consistency, best for video.
+MatAnyone2: single-frame matting with mask guidance.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="176"/>
+        <source>Per-clip overrides</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="183"/>
+        <source>Clip</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="183"/>
+        <source>Detected</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="183"/>
+        <source>Pipeline</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="183"/>
+        <source>Status</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="204"/>
+        <source>Clear Pipeline</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="205"/>
+        <source>Cancel all pending batch jobs and reset.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="210"/>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="509"/>
+        <source>Cancel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="213"/>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="508"/>
+        <source>Run Batch</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="216"/>
+        <source>Inference settings (despill, refiner, edge, color space, etc.) are inherited from the right panel. Adjust them there before running.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="234"/>
+        <source>Select Batch Folder</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="267"/>
+        <source>No hint</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="268"/>
+        <source>AlphaHint</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="269"/>
+        <source>MaskHint</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="281"/>
+        <source>CK Inference</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="299"/>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="330"/>
+        <source>→ CK</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="355"/>
+        <source>Found %d clip(s): %s</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="356"/>
+        <source>No video clips found in this folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="476"/>
+        <source>Batch Pipeline - Processing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="478"/>
+        <source>Running...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="569"/>
+        <source>Processing failed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="576"/>
+        <source>Batch Pipeline - Complete</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="577"/>
+        <source>Done</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/batch_pipeline_dialog.py" line="579"/>
+        <source>Close</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>DebugConsoleWidget</name>
     <message>
         <location filename="../widgets/debug_console.py" line="86"/>
@@ -474,12 +653,12 @@ Reassign anyway? The conflicting binding will be cleared.</source>
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../main_window.py" line="262"/>
+        <location filename="../main_window.py" line="263"/>
         <source>%s — Mac Performance Warning</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="264"/>
+        <location filename="../main_window.py" line="265"/>
         <source>GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) are very slow on Mac (Apple Silicon MPS).
 
 This may take hours for longer clips and could freeze your system.
@@ -490,47 +669,47 @@ Continue anyway? (This warning won&apos;t appear again this session.)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="282"/>
+        <location filename="../main_window.py" line="283"/>
         <source>EZ-CorridorKey</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="436"/>
+        <location filename="../main_window.py" line="439"/>
         <source>Detected GPU used for inference</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="439"/>
+        <location filename="../main_window.py" line="442"/>
         <source>VRAM</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="450"/>
+        <location filename="../main_window.py" line="453"/>
         <source>GPU video memory usage — updates during inference</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="456"/>
+        <location filename="../main_window.py" line="459"/>
         <source>Current VRAM used / total available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="635"/>
+        <location filename="../main_window.py" line="651"/>
         <source>No GPU</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="642"/>
+        <location filename="../main_window.py" line="658"/>
         <source>Memory</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="643"/>
+        <location filename="../main_window.py" line="659"/>
         <source>Unified memory usage — CPU and GPU share the same pool</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../main_window.py" line="644"/>
+        <location filename="../main_window.py" line="660"/>
         <source>Current unified memory used / total available</source>
         <translation type="unfinished"></translation>
     </message>
@@ -538,149 +717,162 @@ Continue anyway? (This warning won&apos;t appear again this session.)</source>
 <context>
     <name>ParameterPanel</name>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="113"/>
+        <location filename="../widgets/parameter_panel.py" line="132"/>
         <source>ALPHA GENERATION</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="118"/>
+        <location filename="../widgets/parameter_panel.py" line="137"/>
         <source>Manual</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="123"/>
+        <location filename="../widgets/parameter_panel.py" line="142"/>
         <source>CHROMA KEY</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="128"/>
+        <location filename="../widgets/parameter_panel.py" line="147"/>
         <source>Generate alpha hints using a traditional chroma keyer.
 Best for clean green/blue screen shots.
 No GPU or AI model required — instant processing.
 
-Click to expand parameters, then click GENERATE.</source>
+Click to expand parameters, then click GENERATE.
+Hotkey: `</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="146"/>
-        <source> Pick Screen Color (E)</source>
+        <location filename="../widgets/parameter_panel.py" line="166"/>
+        <source> Pick Screen Color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="149"/>
+        <location filename="../widgets/parameter_panel.py" line="169"/>
         <source>Click on the viewer to sample the screen color.
 Works on either the input or output viewport.
 Hotkey: E</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="161"/>
+        <location filename="../widgets/parameter_panel.py" line="181"/>
         <source>Sampled screen color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="166"/>
+        <location filename="../widgets/parameter_panel.py" line="186"/>
         <source>Key Strength: 1.0</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="171"/>
+        <location filename="../widgets/parameter_panel.py" line="191"/>
         <source>How aggressively to key the screen color. Higher = more separation.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="173"/>
+        <location filename="../widgets/parameter_panel.py" line="193"/>
         <source>Key Strength: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="179"/>
+        <location filename="../widgets/parameter_panel.py" line="199"/>
         <source>Clip Black: 0.0</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="184"/>
+        <location filename="../widgets/parameter_panel.py" line="204"/>
         <source>Push near-transparent values to fully transparent.
 Cleans up noise in background areas.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="186"/>
+        <location filename="../widgets/parameter_panel.py" line="206"/>
         <source>Clip Black: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="192"/>
+        <location filename="../widgets/parameter_panel.py" line="212"/>
         <source>Clip White: 1.0</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="197"/>
+        <location filename="../widgets/parameter_panel.py" line="217"/>
         <source>Push near-opaque values to fully opaque.
 Solidifies the foreground core.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="199"/>
+        <location filename="../widgets/parameter_panel.py" line="219"/>
         <source>Clip White: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="207"/>
+        <location filename="../widgets/parameter_panel.py" line="231"/>
         <source>Shrink/Grow</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="212"/>
+        <location filename="../widgets/parameter_panel.py" line="236"/>
         <source>Erode (negative) or dilate (positive) the matte edge.
 0 = no change.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="220"/>
+        <location filename="../widgets/parameter_panel.py" line="240"/>
         <source>Edge Blur</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="225"/>
+        <location filename="../widgets/parameter_panel.py" line="245"/>
         <source>Gaussian blur radius for softening matte edges.
 0 = no blur.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="231"/>
+        <location filename="../widgets/parameter_panel.py" line="252"/>
         <source>GENERATE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="232"/>
+        <location filename="../widgets/parameter_panel.py" line="253"/>
         <source>Generate alpha hint frames for the entire clip using these chroma key settings.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="248"/>
+        <location filename="../widgets/parameter_panel.py" line="271"/>
         <source>Automatic</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="253"/>
+        <location filename="../widgets/parameter_panel.py" line="278"/>
+        <source>APPLE VISION</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/parameter_panel.py" line="282"/>
+        <source>Auto-generate alpha hint using Apple Vision (Neural Engine).
+Detects foreground subjects automatically.
+macOS 14+ only. Runs on Apple Neural Engine (fast, no GPU needed).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/parameter_panel.py" line="300"/>
         <source>GVM AUTO</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="257"/>
+        <location filename="../widgets/parameter_panel.py" line="304"/>
         <source>Auto-generate alpha hint for the entire clip.
 Uses GVM to predict foreground/background separation.
 Available when clip is in RAW state (frames extracted).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="268"/>
+        <location filename="../widgets/parameter_panel.py" line="315"/>
         <source>BIREFNET</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="272"/>
+        <location filename="../widgets/parameter_panel.py" line="319"/>
         <source>Auto-generate alpha hint using BiRefNet.
 Fully automatic — no painting or annotation needed.
 Downloads the selected model variant on first use.
@@ -692,27 +884,27 @@ HR variants: For 2K/4K footage (uses more VRAM).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="287"/>
+        <location filename="../widgets/parameter_panel.py" line="334"/>
         <source>BiRefNet model variant — changes take effect on next run.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="308"/>
+        <location filename="../widgets/parameter_panel.py" line="355"/>
         <source>Requires brushstrokes</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="313"/>
+        <location filename="../widgets/parameter_panel.py" line="360"/>
         <source>Paint subject with 1, background with 2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="319"/>
+        <location filename="../widgets/parameter_panel.py" line="366"/>
         <source>TRACK MASK</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="323"/>
+        <location filename="../widgets/parameter_panel.py" line="370"/>
         <source>Use SAM2 to turn painted prompts into a dense mask track.
 Required before running MatAnyone2 or VideoMaMa.
 
@@ -721,21 +913,29 @@ HOW TO USE:
 2. Press 2 to select the RED brush (background — area to remove)
 3. Paint strokes on the left viewer over your footage
 4. Click TRACK MASK to preview SAM2 on the painted frame
-5. If the preview looks right, confirm to propagate across all frames</source>
+5. If the preview looks right, confirm to propagate across all frames
+
+TIPS:
+Shift + Left-drag up/down: change brush size
+Alt + Left-drag: draw a straight line between two points
+Ctrl+Z: undo last stroke</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="340"/>
-        <source>Requires paint strokes on frame 1</source>
+        <location filename="../widgets/parameter_panel.py" line="600"/>
+        <source>Edge refinement strength (0.0-3.0).
+Scales the CNN refiner&apos;s edge corrections.
+1.0 = default, 0.0 = backbone only (no refinement),
+higher = sharper edges but may introduce artifacts.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="346"/>
+        <location filename="../widgets/parameter_panel.py" line="391"/>
         <source>MATANYONE2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="350"/>
+        <location filename="../widgets/parameter_panel.py" line="395"/>
         <source>Generate alpha hints using MatAnyone2 video matting.
 Requires paint strokes on the FIRST FRAME (frame 1).
 
@@ -746,12 +946,12 @@ Requires paint strokes on the FIRST FRAME (frame 1).
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="361"/>
+        <location filename="../widgets/parameter_panel.py" line="406"/>
         <source>VIDEOMAMA</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="365"/>
+        <location filename="../widgets/parameter_panel.py" line="410"/>
         <source>Generate alpha hints from a dense VideoMaMa mask track.
 
 1. Paint sparse foreground/background prompts
@@ -760,7 +960,7 @@ Requires paint strokes on the FIRST FRAME (frame 1).
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="380"/>
+        <location filename="../widgets/parameter_panel.py" line="433"/>
         <source>Import your own mask for VideoMaMa.
 
 Bypasses the Track Mask step. Select a folder or
@@ -769,12 +969,12 @@ VideoMaMa&apos;s guidance input directly.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="407"/>
+        <location filename="../widgets/parameter_panel.py" line="462"/>
         <source>IMPORT ALPHA</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="411"/>
+        <location filename="../widgets/parameter_panel.py" line="466"/>
         <source>Import alpha hints from an image folder or video file.
 Supports: PNG/JPG/TIF/EXR sequences, or MOV/MP4/ProRes video.
 White = foreground, black = background.
@@ -783,17 +983,17 @@ and the clip advances to READY state for inference.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="424"/>
+        <location filename="../widgets/parameter_panel.py" line="479"/>
         <source>INFERENCE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="430"/>
+        <location filename="../widgets/parameter_panel.py" line="492"/>
         <source>BG Color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="434"/>
+        <location filename="../widgets/parameter_panel.py" line="495"/>
         <source>Background screen color for this clip.
 
 Auto: detected from the middle frame of the clip.
@@ -805,168 +1005,180 @@ detection are used. Also changes the UI accent color.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="444"/>
+        <location filename="../widgets/parameter_panel.py" line="505"/>
         <source>Auto</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="444"/>
+        <location filename="../widgets/parameter_panel.py" line="505"/>
         <source>Green</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="444"/>
+        <location filename="../widgets/parameter_panel.py" line="505"/>
         <source>Blue</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="452"/>
+        <location filename="../widgets/parameter_panel.py" line="511"/>
         <source>Color Space</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="457"/>
+        <location filename="../widgets/parameter_panel.py" line="515"/>
         <source>sRGB</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="457"/>
+        <location filename="../widgets/parameter_panel.py" line="515"/>
         <source>Linear</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="464"/>
+        <location filename="../widgets/parameter_panel.py" line="525"/>
+        <source>Removes small floating noise and speckles from the
+alpha by discarding isolated regions smaller than the
+size threshold.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/parameter_panel.py" line="547"/>
+        <source>Garbage Matte</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/parameter_panel.py" line="551"/>
+        <source>Expands the alpha hint by N pixels, then zeros out
+anything in the predicted matte that falls outside
+that expanded region. Removes edge-of-frame artifacts
+and background gunk that inference leaves behind.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/parameter_panel.py" line="565"/>
+        <source>Pixel expansion around the alpha hint.
+Higher = more breathing room around subject edges.
+Lower = tighter crop to the hint boundary.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/parameter_panel.py" line="577"/>
         <source>Despill: 0.5</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="471"/>
+        <location filename="../widgets/parameter_panel.py" line="584"/>
         <source>Screen spill removal strength (0.0-1.0).
 Removes background color bleed from hair, skin, and edges.
 1.0 = full despill, 0.0 = no despill (keep original colors).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="481"/>
+        <location filename="../widgets/parameter_panel.py" line="521"/>
         <source>Despeckle</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="485"/>
-        <source>Automatic garbage matte — removes small floating noise
-and speckles from the alpha by discarding isolated regions
-smaller than the size threshold.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../widgets/parameter_panel.py" line="498"/>
+        <location filename="../widgets/parameter_panel.py" line="538"/>
         <source>Minimum area (in pixels) for a region to survive.
 Isolated alpha blobs smaller than this are removed.
 Lower = keep more detail, higher = cleaner matte.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="508"/>
+        <location filename="../widgets/parameter_panel.py" line="593"/>
         <source>Refiner: 1.0</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="515"/>
-        <source>Edge refinement strength (0.0–3.0).
-Scales the CNN refiner&apos;s edge corrections.
-1.0 = default, 0.0 = backbone only (no refinement),
-higher = sharper edges but may introduce artifacts.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../widgets/parameter_panel.py" line="525"/>
+        <location filename="../widgets/parameter_panel.py" line="610"/>
         <source>Live Preview</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="533"/>
+        <location filename="../widgets/parameter_panel.py" line="618"/>
         <source>OUTPUT</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="539"/>
+        <location filename="../widgets/parameter_panel.py" line="624"/>
         <source>FG</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="543"/>
+        <location filename="../widgets/parameter_panel.py" line="628"/>
         <source>Foreground — despilled subject on black background.
 Screen spill removed from hair and edges.
 Straight alpha (not premultiplied).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="552"/>
-        <location filename="../widgets/parameter_panel.py" line="571"/>
+        <location filename="../widgets/parameter_panel.py" line="637"/>
+        <location filename="../widgets/parameter_panel.py" line="656"/>
         <source>EXR = 32-bit float (post-production).
 PNG = 8-bit (general use).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="558"/>
+        <location filename="../widgets/parameter_panel.py" line="643"/>
         <source>Matte</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="562"/>
+        <location filename="../widgets/parameter_panel.py" line="647"/>
         <source>Alpha matte — grayscale transparency map.
 White = fully opaque, black = fully transparent.
 Use in compositing software for manual keying control.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="577"/>
+        <location filename="../widgets/parameter_panel.py" line="662"/>
         <source>Comp</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="581"/>
+        <location filename="../widgets/parameter_panel.py" line="666"/>
         <source>Composite — final keyed result over checkerboard.
 Best representation of the key quality.
 Colors match the original input faithfully.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="590"/>
+        <location filename="../widgets/parameter_panel.py" line="675"/>
         <source>PNG = 8-bit with transparency.
 EXR = 32-bit float (post-production).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="596"/>
+        <location filename="../widgets/parameter_panel.py" line="681"/>
         <source>Processed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="600"/>
+        <location filename="../widgets/parameter_panel.py" line="685"/>
         <source>Processed — production-ready RGBA (straight, linear).
 Designed for import into Resolve, Premiere, and compositing tools.
 Includes despill + garbage matte cleanup applied.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="609"/>
+        <location filename="../widgets/parameter_panel.py" line="694"/>
         <source>EXR = 32-bit float (recommended for Processed).
 PNG = 8-bit (lossy for straight linear RGBA).</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="616"/>
+        <location filename="../widgets/parameter_panel.py" line="701"/>
         <source>PERFORMANCE</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="621"/>
+        <location filename="../widgets/parameter_panel.py" line="706"/>
         <source>Parallel frames</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="627"/>
+        <location filename="../widgets/parameter_panel.py" line="712"/>
         <source>Process multiple frames simultaneously using parallel engines.
 
 Each extra engine loads a full copy of the model.
@@ -983,17 +1195,17 @@ CUDA only right now. Not currently supported on Apple Silicon.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="686"/>
+        <location filename="../widgets/parameter_panel.py" line="797"/>
         <source>Despill: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="691"/>
+        <location filename="../widgets/parameter_panel.py" line="802"/>
         <source>Refiner: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/parameter_panel.py" line="826"/>
+        <location filename="../widgets/parameter_panel.py" line="939"/>
         <source>Painted: %d / %d frames</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1417,19 +1629,19 @@ CorridorKey will use FFmpeg immediately.</source>
 <context>
     <name>PreviewViewport</name>
     <message>
-        <location filename="../widgets/preview_viewport.py" line="216"/>
+        <location filename="../widgets/preview_viewport.py" line="235"/>
         <source>Extracting frames...
 %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/preview_viewport.py" line="242"/>
+        <location filename="../widgets/preview_viewport.py" line="261"/>
         <source>Selected: %s
 State: %s</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/preview_viewport.py" line="383"/>
+        <location filename="../widgets/preview_viewport.py" line="402"/>
         <source>Toggle A/B wipe comparison (hotkey: A)
 
 Overlays input (A) and current output (B) in one viewer
@@ -1442,7 +1654,7 @@ Middle-click the line to reset to default.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/preview_viewport.py" line="541"/>
+        <location filename="../widgets/preview_viewport.py" line="560"/>
         <source>No frame available for stem %d</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1637,83 +1849,83 @@ Steps to reproduce are very helpful.</source>
 <context>
     <name>SetupWizard</name>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="632"/>
+        <location filename="../widgets/setup_wizard.py" line="652"/>
         <source>EZ-CorridorKey Setup</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="654"/>
+        <location filename="../widgets/setup_wizard.py" line="674"/>
         <source>Select which models to download. The core CorridorKey model is required.
 Optional models can be downloaded later from Edit → Download Manager.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="666"/>
-        <source>Install path:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../widgets/setup_wizard.py" line="684"/>
+        <location filename="../widgets/setup_wizard.py" line="704"/>
         <source>Browse...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="693"/>
+        <location filename="../widgets/setup_wizard.py" line="713"/>
         <source>Default Location</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="696"/>
-        <source>Reset the install path to the platform default (in case you changed it and want to return).</source>
+        <location filename="../widgets/setup_wizard.py" line="686"/>
+        <source>Data directory (models, projects, frame cache):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="737"/>
+        <location filename="../widgets/setup_wizard.py" line="716"/>
+        <source>Reset the data directory to the platform default (in case you changed it and want to return).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../widgets/setup_wizard.py" line="757"/>
         <source>Create Desktop shortcut</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="755"/>
+        <location filename="../widgets/setup_wizard.py" line="775"/>
         <source>Cancel &amp;&amp; Exit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="766"/>
+        <location filename="../widgets/setup_wizard.py" line="786"/>
         <source>Download &amp;&amp; Install</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="812"/>
+        <location filename="../widgets/setup_wizard.py" line="832"/>
         <source>Choose Install Location</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="826"/>
+        <location filename="../widgets/setup_wizard.py" line="846"/>
         <source>Cancelling...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="852"/>
+        <location filename="../widgets/setup_wizard.py" line="872"/>
         <source>Preparing downloads (0/%d)...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="867"/>
+        <location filename="../widgets/setup_wizard.py" line="887"/>
         <source>Downloading %d/%d: %s...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="893"/>
+        <location filename="../widgets/setup_wizard.py" line="913"/>
         <source>All %d downloads complete!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="897"/>
+        <location filename="../widgets/setup_wizard.py" line="917"/>
         <source>Some downloads failed. You can retry from Edit → Download Manager.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="905"/>
+        <location filename="../widgets/setup_wizard.py" line="925"/>
         <source>Continue</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1721,12 +1933,12 @@ Optional models can be downloaded later from Edit → Download Manager.</source>
 <context>
     <name>SplitViewWidget</name>
     <message>
-        <location filename="../widgets/split_view.py" line="344"/>
+        <location filename="../widgets/split_view.py" line="512"/>
         <source>Extracting frames...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/split_view.py" line="371"/>
+        <location filename="../widgets/split_view.py" line="539"/>
         <source>%d%%  (%d/%d frames)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1947,17 +2159,17 @@ Hotkey: F7</source>
 <context>
     <name>_ModelRow</name>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="583"/>
+        <location filename="../widgets/setup_wizard.py" line="603"/>
         <source>  — Installed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="605"/>
+        <location filename="../widgets/setup_wizard.py" line="625"/>
         <source>Downloading...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../widgets/setup_wizard.py" line="612"/>
+        <location filename="../widgets/setup_wizard.py" line="632"/>
         <source>%d / %d MB</source>
         <translation type="unfinished"></translation>
     </message>
