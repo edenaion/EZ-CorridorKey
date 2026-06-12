@@ -148,8 +148,13 @@ def detect_installed_models(install_path: Path | None = None) -> dict[str, bool]
         ck_dir / "corridorkey_mlx.safetensors"
     ).is_file()
 
-    # SAM2 Base+ — HF hub cache (shared across installs)
-    results["sam2"] = _hf_cache_has("facebook/sam2.1-hiera-base-plus", hf)
+    # SAM2 Base+ needs BOTH the Python package (installed by the installer,
+    # not the wizard) and the checkpoint in the HF hub cache (shared across
+    # installs). Checking only the cache reported "installed" while the
+    # runtime import still failed (issue #157).
+    results["sam2"] = _sam2_package_available() and _hf_cache_has(
+        "facebook/sam2.1-hiera-base-plus", hf
+    )
 
     # GVM — unet safetensors
     results["gvm"] = (
@@ -177,6 +182,19 @@ def detect_installed_models(install_path: Path | None = None) -> dict[str, bool]
     results["videomama"] = vm_main.is_file() and vm_base.is_file()
 
     return results
+
+
+def _sam2_package_available() -> bool:
+    """True when the sam2 Python package is importable in this environment.
+
+    Probes sam2.build_sam because that is the exact module the tracker
+    imports at runtime. A partial install can leave the bare top-level
+    package importable while the submodule the runtime needs is missing.
+    """
+    try:
+        return importlib.util.find_spec("sam2.build_sam") is not None
+    except Exception:
+        return False
 
 
 def _hf_cache_has(repo_id: str, cache_dir: Path) -> bool:
@@ -243,7 +261,9 @@ MODELS += [
         "label": "SAM2 Tracker (Base+)",
         "size": "324 MB",
         "required": False,
-        "description": "Object tracking for multi-frame consistency",
+        "description": "Object tracking for multi-frame consistency. "
+                       "The Python package is installed by the installer: "
+                       "re-run the installer or pip install -e \".[tracker]\".",
         "default_checked": True,
     },
     {

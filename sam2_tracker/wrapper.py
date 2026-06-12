@@ -203,7 +203,9 @@ class SAM2Tracker:
         except ImportError as exc:
             raise SAM2NotInstalledError(
                 "SAM2 is not installed. Install the optional tracker dependency "
-                "to generate dense masks from annotations."
+                "to generate dense masks from annotations.\n"
+                f"Python: {sys.executable}\n"
+                f"Import error: {exc}"
             ) from exc
 
         # sam2/__init__.py registers its config module with hydra on first
@@ -309,7 +311,11 @@ class SAM2Tracker:
         try:
             import torch
         except ImportError as exc:
-            raise SAM2NotInstalledError("PyTorch is required for SAM2 tracking") from exc
+            raise SAM2NotInstalledError(
+                "PyTorch is required for SAM2 tracking.\n"
+                f"Python: {sys.executable}\n"
+                f"Import error: {exc}"
+            ) from exc
 
         temp_root = Path(tempfile.mkdtemp(prefix="corridorkey_sam2_"))
         frames_dir = temp_root / "frames"

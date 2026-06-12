@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import glob
 import hashlib
+import importlib.util
 import os
 import platform
 import shutil
@@ -165,12 +166,16 @@ SAM2_MODELS = {
 
 
 def tracker_dependency_installed() -> bool:
-    """Check whether the optional SAM2 Python package is installed."""
+    """Check whether the optional SAM2 Python package is installed.
+
+    Probes sam2.build_sam, the exact module the runtime imports, rather
+    than the bare top-level package so a broken partial install does not
+    report as ready.
+    """
     try:
-        import sam2  # noqa: F401
+        return importlib.util.find_spec("sam2.build_sam") is not None
     except Exception:
         return False
-    return True
 
 
 def is_installed(name: str) -> bool:
