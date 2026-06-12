@@ -41,6 +41,41 @@ TORCH_EXT = ".pth"
 MLX_EXT = ".safetensors"
 DEFAULT_IMG_SIZE = 2048
 
+
+def _checkpoint_search_dirs() -> list[str]:
+    """Directories to scan for checkpoints, in priority order.
+
+    The writable data dir comes first so user-downloaded or updated weights
+    win, then the bundled dir (next to this module, which in a frozen onedir
+    build is _internal/CorridorKeyModule/checkpoints). Both the green and blue
+    core weights are bundled by the installers, but _resolve_checkpoint_dir()
+    points at the writable data dir when frozen, so without this fallback the
+    bundled weights are shipped yet never loaded — a fresh install would prompt
+    to re-download core models that are already on disk.
+    """
+    dirs: list[str] = []
+    for d in (CHECKPOINT_DIR, _BUNDLED_CHECKPOINT_DIR):
+        if d and d not in dirs:
+            dirs.append(d)
+    return dirs
+
+
+def _glob_checkpoints(ext: str) -> list[str]:
+    """Glob ``*{ext}`` across all search dirs, deduped by filename.
+
+    Earlier dirs win on a name collision, so a user-updated weight in the
+    writable dir shadows the bundled copy of the same name.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for d in _checkpoint_search_dirs():
+        for match in glob.glob(os.path.join(d, f"*{ext}")):
+            key = os.path.basename(match).lower()
+            if key not in seen:
+                seen.add(key)
+                out.append(match)
+    return out
+
 BACKEND_ENV_VAR = "CORRIDORKEY_BACKEND"
 VALID_BACKENDS = ("auto", "torch", "mlx")
 
@@ -85,7 +120,7 @@ def _auto_detect_backend() -> str:
             logger.info("Neither mlx nor corridorkey_mlx installed — using torch backend")
             return "torch"
 
-    safetensor_files = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{MLX_EXT}"))
+    safetensor_files = _glob_checkpoints(MLX_EXT)
     if not safetensor_files:
         logger.info("No %s checkpoint found — using torch backend", MLX_EXT)
         return "torch"
@@ -137,16 +172,17 @@ def _discover_checkpoint(ext: str, screen_color: str = "green") -> Path:
 
     Raises FileNotFoundError if no checkpoint exists at all.
     """
-    all_matches = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{ext}"))
+    all_matches = _glob_checkpoints(ext)
 
     if not all_matches:
         other_ext = MLX_EXT if ext == TORCH_EXT else TORCH_EXT
-        other_files = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{other_ext}"))
+        other_files = _glob_checkpoints(other_ext)
         hint = ""
         if other_files:
             other_backend = "mlx" if other_ext == MLX_EXT else "torch"
             hint = f" (Found {other_ext} files — did you mean CORRIDORKEY_BACKEND={other_backend}?)"
-        raise FileNotFoundError(f"No {ext} checkpoint found in {CHECKPOINT_DIR}.{hint}")
+        searched = ", ".join(_checkpoint_search_dirs())
+        raise FileNotFoundError(f"No {ext} checkpoint found in {searched}.{hint}")
 
     # Split into blue and green (non-blue) variants
     blue_matches = [m for m in all_matches if "blue" in os.path.basename(m).lower()]
@@ -167,7 +203,7 @@ def _discover_checkpoint(ext: str, screen_color: str = "green") -> Path:
 def has_blue_checkpoint() -> bool:
     """Check if a blue-screen checkpoint is available."""
     for ext in (TORCH_EXT, MLX_EXT):
-        matches = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{ext}"))
+        matches = _glob_checkpoints(ext)
         if any("blue" in os.path.basename(m).lower() for m in matches):
             return True
     return False

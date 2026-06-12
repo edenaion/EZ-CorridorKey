@@ -133,20 +133,38 @@ def detect_installed_models(install_path: Path | None = None) -> dict[str, bool]
 
     results: dict[str, bool] = {}
 
-    # CorridorKey core .pth — any .pth in the checkpoints dir counts
+    # CorridorKey core/blue/MLX weights are bundled into the app by the
+    # installers, but they live in the read-only bundle dir (_MEIPASS in a
+    # frozen build), not the writable install path. Check both, mirroring the
+    # loader's search order in CorridorKeyModule.backend, so the wizard does
+    # not offer to download core models that already ship in the bundle.
     ck_dir = root / "CorridorKeyModule" / "checkpoints"
-    try:
-        results["corridorkey"] = ck_dir.is_dir() and any(ck_dir.glob("*.pth"))
-    except OSError:
-        results["corridorkey"] = False
+    ck_bundled = _project_root() / "CorridorKeyModule" / "checkpoints"
+
+    def _ck_has(*names: str) -> bool:
+        for d in (ck_dir, ck_bundled):
+            if any((d / n).is_file() for n in names):
+                return True
+        return False
+
+    # CorridorKey core .pth — any .pth in either checkpoints dir counts
+    def _ck_any_pth() -> bool:
+        for d in (ck_dir, ck_bundled):
+            try:
+                if d.is_dir() and any(d.glob("*.pth")):
+                    return True
+            except OSError:
+                continue
+        return False
+
+    results["corridorkey"] = _ck_any_pth()
 
     # CorridorKey Blue — specific filename check
-    results["corridorkey-blue"] = (ck_dir / "CorridorKeyBlue_1.0.pth").is_file()
+    results["corridorkey-blue"] = _ck_has("CorridorKeyBlue_1.0.pth")
 
     # CorridorKey MLX — built-in engine needs both green and blue weights
-    results["corridorkey-mlx"] = (
-        (ck_dir / "CorridorKey.mlx.safetensors").is_file()
-        and (ck_dir / "CorridorKeyBlue_1.0.mlx.safetensors").is_file()
+    results["corridorkey-mlx"] = _ck_has("CorridorKey.mlx.safetensors") and _ck_has(
+        "CorridorKeyBlue_1.0.mlx.safetensors"
     )
 
     # SAM2 Base+ needs BOTH the Python package (installed by the installer,
