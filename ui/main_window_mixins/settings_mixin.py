@@ -240,14 +240,16 @@ class SettingsMixin:
         box.setWindowTitle(_tr("About EZ-CorridorKey"))
         box.setTextFormat(Qt.RichText)
         box.setText(
-            f"<h2>EZ-CorridorKey v{app_version}</h2>"
+            f'<h2><a href="https://www.ezcorridorkey.com" '
+            f'style="color: #FFF203; text-decoration: none;">'
+            f"EZ-CorridorKey</a> v{app_version}</h2>"
             "<p>" + _tr("AI Green Screen Keyer") + "<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"
             "<p><b>" + _tr("Special Thanks") + "</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
-            '<a href="https://www.edzisk.com">Ed Zisk</a> — Maintainer, GUI, workflow, SFX, QA<br>'
+            '<a href="https://www.edzisk.com">Ed Zisk</a> — Maintainer, GUI, workflow, SFX, QA<br><br>'
             '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo<br>'
             '<a href="https://github.com/Raiden129">Jhe Kim</a> — Hiera optimization<br>'
             '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization<br>'
