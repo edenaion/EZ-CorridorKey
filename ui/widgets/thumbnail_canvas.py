@@ -192,7 +192,8 @@ class ThumbnailCanvas(QWidget):
         font.setPointSize(8)
         font.setBold(True)
         p.setFont(font)
-        badge_text = clip.state.value
+        from ui.state_labels import state_display_name
+        badge_text = state_display_name(clip.state)
         metrics = p.fontMetrics()
         text_w = metrics.horizontalAdvance(badge_text)
         bg_rect = QRect(
@@ -234,11 +235,11 @@ class ThumbnailCanvas(QWidget):
             font.setBold(False)
             p.setFont(font)
             info_rect = QRect(rect.x() + pad, text_y + 14, self.CARD_WIDTH - pad * 2, 14)
-            info_text = f"{clip.input_asset.frame_count} frames"
+            info_text = self.tr("%d frames") % clip.input_asset.frame_count
             if clip.input_asset.asset_type == "video":
-                info_text += " (video)"
+                info_text += " " + self.tr("(video)")
             elif clip.source_type == "sequence":
-                info_text += " (imported)"
+                info_text += " " + self.tr("(imported)")
             p.fillRect(info_rect, QColor(0, 0, 0, 128))
             p.setPen(QColor("#808070"))
             p.drawText(info_rect, Qt.AlignLeft | Qt.AlignVCenter, info_text)

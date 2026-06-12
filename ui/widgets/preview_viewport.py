@@ -257,8 +257,9 @@ class PreviewViewport(QWidget):
         if self._frame_index.frame_count > 0:
             self._navigate_to(0)
         else:
+            from ui.state_labels import state_display_name
             self._split_view.set_placeholder(
-                self.tr("Selected: %s\nState: %s") % (clip.name, clip.state.value)
+                self.tr("Selected: %s\nState: %s") % (clip.name, state_display_name(clip.state))
             )
 
     def refresh_available_assets(self) -> None:
@@ -435,7 +436,8 @@ class PreviewViewport(QWidget):
             dims = asset.get_dimensions()
             if dims:
                 parts.append(f"{dims[0]}x{dims[1]}")
-        parts.append(clip.state.value)
+        from ui.state_labels import state_display_name
+        parts.append(state_display_name(clip.state))
         self._clip_info.setText("  \u00B7  ".join(parts))  # middle dot separator
 
     def set_split_mode(self, enabled: bool) -> None:
