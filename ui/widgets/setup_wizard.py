@@ -143,10 +143,11 @@ def detect_installed_models(install_path: Path | None = None) -> dict[str, bool]
     # CorridorKey Blue — specific filename check
     results["corridorkey-blue"] = (ck_dir / "CorridorKeyBlue_1.0.pth").is_file()
 
-    # CorridorKey MLX — specific .safetensors filename
+    # CorridorKey MLX — built-in engine needs both green and blue weights
     results["corridorkey-mlx"] = (
-        ck_dir / "corridorkey_mlx.safetensors"
-    ).is_file()
+        (ck_dir / "CorridorKey.mlx.safetensors").is_file()
+        and (ck_dir / "CorridorKeyBlue_1.0.mlx.safetensors").is_file()
+    )
 
     # SAM2 Base+ needs BOTH the Python package (installed by the installer,
     # not the wizard) and the checkpoint in the HF hub cache (shared across
@@ -249,9 +250,9 @@ if _IS_APPLE_SILICON:
     MODELS.append({
         "key": "corridorkey-mlx",
         "label": "CorridorKey MLX (Apple Silicon)",
-        "size": "380 MB",
+        "size": "2x 380 MB",
         "required": False,
-        "description": "1.5-2x faster inference on Apple Silicon",
+        "description": "1.5-2x faster inference on Apple Silicon, green and blue checkpoints",
         "default_checked": True,
     })
 
@@ -471,41 +472,22 @@ class _DownloadWorker(QThread):
         original = setup_models.download_corridorkey_mlx
 
         def patched():
-            import urllib.request
-            cfg = setup_models.MLX_CHECKPOINT
-            local_dir = cfg["local_dir"]
-            local_dir.mkdir(parents=True, exist_ok=True)
-            dest = local_dir / cfg["filename"]
-            if dest.is_file():
-                return True
-            if not setup_models.check_disk_space(cfg["size_bytes"], local_dir):
-                return False
+            # Reuse the canonical per-file downloader (SHA256 verify, tmp
+            # rename, disk-space check) and only supply wizard progress.
+            def hook(bn, bs, total):
+                if total > 0 and not worker._cancelled:
+                    worker.model_progress.emit(
+                        worker._current_key,
+                        (bn * bs) // (1024 * 1024),
+                        total // (1024 * 1024),
+                    )
 
-            tmp = dest.with_suffix(".safetensors.tmp")
-            try:
-                def hook(bn, bs, total):
-                    if total > 0 and not worker._cancelled:
-                        worker.model_progress.emit(
-                            worker._current_key,
-                            (bn * bs) // (1024 * 1024),
-                            total // (1024 * 1024),
-                        )
-                urllib.request.urlretrieve(cfg["url"], str(tmp), reporthook=hook)
-                try:
-                    import hashlib
-                    resp = urllib.request.urlopen(cfg["sha256_url"])
-                    expected = resp.read().decode().strip().split()[0]
-                    actual = hashlib.sha256(tmp.read_bytes()).hexdigest()
-                    if actual != expected:
-                        tmp.unlink(missing_ok=True)
-                        return False
-                except Exception:
-                    pass
-                tmp.rename(dest)
-                return True
-            except Exception:
-                tmp.unlink(missing_ok=True)
-                return False
+            ok = True
+            for cfg in setup_models.MLX_CHECKPOINTS:
+                if worker._cancelled:
+                    return False
+                ok = setup_models._download_mlx_one(cfg, reporthook=hook) and ok
+            return ok
 
         setup_models.download_corridorkey_mlx = patched
 
