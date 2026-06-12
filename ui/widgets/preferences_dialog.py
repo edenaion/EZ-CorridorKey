@@ -185,6 +185,21 @@ class PreferencesDialog(QDialog):
         ui_group = QGroupBox(self.tr("User Interface"))
         ui_layout = QVBoxLayout(ui_group)
 
+        # Language lives at the very top of the page: it is the first thing
+        # a non-English user needs to find.
+        lang_label = QLabel(self.tr("Language"))
+        ui_layout.addWidget(lang_label)
+        self._language_combo = _no_scroll_wheel(QComboBox())
+        self._language_combo.addItem(self.tr("English"), "en")
+        self._populate_available_languages()
+        saved_lang = get_setting_str(KEY_UI_LANGUAGE, "en")
+        idx = self._language_combo.findData(saved_lang)
+        self._language_combo.setCurrentIndex(max(0, idx))
+        self._language_combo.setToolTip(
+            self.tr("Select display language. Applies immediately.")
+        )
+        ui_layout.addWidget(self._language_combo)
+
         self._tooltips_cb = QCheckBox(self.tr("Show tooltips on controls"))
         self._tooltips_cb.setChecked(
             get_setting_bool(KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS)
@@ -196,19 +211,6 @@ class PreferencesDialog(QDialog):
             get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS)
         )
         ui_layout.addWidget(self._sounds_cb)
-
-        lang_label = QLabel(self.tr("Language"))
-        ui_layout.addWidget(lang_label)
-        self._language_combo = _no_scroll_wheel(QComboBox())
-        self._language_combo.addItem(self.tr("English"), "en")
-        self._populate_available_languages()
-        saved_lang = get_setting_str(KEY_UI_LANGUAGE, "en")
-        idx = self._language_combo.findData(saved_lang)
-        self._language_combo.setCurrentIndex(max(0, idx))
-        self._language_combo.setToolTip(
-            self.tr("Select display language. Restart required to apply.")
-        )
-        ui_layout.addWidget(self._language_combo)
 
         # (added to layout below in display order)
 

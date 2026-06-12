@@ -14,7 +14,7 @@ from ui.widgets.preferences_dialog import (
     PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
     KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
     KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION,
-    KEY_INFERENCE_BACKEND,
+    KEY_INFERENCE_BACKEND, KEY_UI_LANGUAGE,
     get_setting_bool, get_setting_str, get_setting_int,
 )
 
@@ -56,6 +56,7 @@ class SettingsMixin:
         if self._prefs_dialog is not None:
             self._prefs_dialog.reject()
             return
+        old_lang = get_setting_str(KEY_UI_LANGUAGE, "en")
         dlg = PreferencesDialog(self)
         self._prefs_dialog = dlg
         accepted = dlg.exec() == PreferencesDialog.Accepted
@@ -67,6 +68,75 @@ class SettingsMixin:
             self._apply_parallel_clips_setting()
             self._apply_model_resolution_setting()
             self._apply_inference_backend_setting()
+            self._apply_language_setting(old_lang)
+
+    def _apply_language_setting(self, old_lang: str) -> None:
+        """Apply a language change immediately by reloading the UI.
+
+        Strings are baked into widgets at construction time, so a live
+        switch swaps the QTranslator and rebuilds the main window. The
+        session is saved on close and restored by the new window, so the
+        open project, selected clip, and parameters survive the swap.
+        Skipped while jobs are running: tearing down the window mid-job
+        would orphan worker signals.
+        """
+        new_lang = get_setting_str(KEY_UI_LANGUAGE, "en")
+        if new_lang == old_lang:
+            return
+
+        busy = (
+            self._active_job_id is not None
+            or self._service.job_queue.has_pending
+            or self._extract_worker.is_busy
+        )
+        if busy:
+            QMessageBox.information(
+                self, _tr("Language"),
+                _tr("The interface language will change after the current "
+                    "jobs finish and the app restarts."),
+            )
+            return
+
+        from PySide6.QtWidgets import QApplication
+        from ui.app import apply_language
+        app = QApplication.instance()
+        if not apply_language(app, new_lang):
+            QMessageBox.warning(
+                self, _tr("Language"),
+                _tr("Could not load the selected language. "
+                    "The interface stays in English."),
+            )
+            return
+
+        logger.info("Language changed %s -> %s, reloading main window", old_lang, new_lang)
+        self._reload_main_window()
+
+    def _reload_main_window(self) -> None:
+        """Tear down this window and build a fresh one in the new language.
+
+        The shared service and recent-sessions store carry over; the open
+        project is reopened through the normal session-restore path.
+        """
+        from PySide6.QtWidgets import QApplication
+        from ui.main_window import MainWindow
+
+        app = QApplication.instance()
+        clips_dir = self._clips_dir
+        geometry = self.geometry()
+
+        # Keep the app alive while no window exists
+        prev_quit = app.quitOnLastWindowClosed()
+        app.setQuitOnLastWindowClosed(False)
+        try:
+            # closeEvent saves the session and stops this window's workers
+            self.close()
+            new_window = MainWindow(self._service, self._recent_store)
+            new_window.setGeometry(geometry)
+            new_window.show()
+            if clips_dir and os.path.isdir(clips_dir):
+                new_window._on_clips_dir_changed(clips_dir, skip_session_restore=False)
+        finally:
+            app.setQuitOnLastWindowClosed(prev_quit)
 
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
