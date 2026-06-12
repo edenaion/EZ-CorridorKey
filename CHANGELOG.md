@@ -4,7 +4,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
-## [Unreleased]
+## [2.1.0] - 2026-06-12 - Batch Pipeline, 14-language UI, fixes
 
 > **macOS support ends with this release.** Starting with 2.1.0, the Python application is Windows/Linux only and no Mac installer is published. Mid-production, all macOS effort moved to a fully native Mac application, coming to the App Store shortly. Subscribe on [YouTube](https://www.youtube.com/@edenaion) for release updates.
 >
