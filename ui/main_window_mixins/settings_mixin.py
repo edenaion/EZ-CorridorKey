@@ -243,7 +243,8 @@ class SettingsMixin:
         box.setText(
             f'<h2><a href="https://www.ezcorridorkey.com" '
             f'style="color: #FFF203; text-decoration: none;">'
-            f'EZ<span style="color:{accent};">-</span>CorridorKey</a>'
+            f'EZ<span style="color:{accent};">-</span>Corridor'
+            f'<span style="color:{accent};">Key</span></a>'
             f" v{app_version}</h2>"
             "<p>" + _tr("AI Green Screen Keyer") + "<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
