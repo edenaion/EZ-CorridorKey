@@ -95,13 +95,19 @@ def _default_range(pix_fmt: str) -> str:
 # ---------------------------------------------------------------------------
 
 # in_color_matrix (swscale colorspace table)
+# FFmpeg 8.x scale filter accepts only the plain "bt2020" constant. The
+# ffprobe-style variants (bt2020nc/bt2020ncl/bt2020c/bt2020cl) all fail with
+# "Undefined constant or missing '(' in 'bt2020nc'". Verified against
+# ffmpeg 8.0.1 (issue #91).
 _SCALE_MATRIX_MAP = {
     "bt470bg": "bt601",          # BT.470 System B/G = same matrix as BT.601
-    "bt2020c": "bt2020ncl",     # constant-luminance -> non-constant (swscale compat)
+    "bt2020nc": "bt2020",
+    "bt2020ncl": "bt2020",
+    "bt2020c": "bt2020",        # constant-luminance: nearest swscale support
+    "bt2020cl": "bt2020",
 }
 _KNOWN_MATRICES = {
-    "bt709", "fcc", "bt601", "smpte170m", "smpte240m",
-    "bt2020nc", "bt2020ncl",
+    "bt709", "fcc", "bt601", "smpte170m", "smpte240m", "bt2020",
 }
 
 # in_primaries
