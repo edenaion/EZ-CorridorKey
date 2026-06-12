@@ -491,8 +491,9 @@ class MainWindow(
         self._param_panel = ParameterPanel()
         self._splitter.addWidget(self._param_panel)
 
-        # Viewer fills, param panel fixed width
-        self._splitter.setSizes([920, 280])
+        # Viewer fills, param panel starts at its full content width so
+        # nothing is clipped on the right
+        self._splitter.setSizes([920, max(280, self._param_panel.minimumWidth())])
         self._splitter.setStretchFactor(0, 1)
         self._splitter.setStretchFactor(1, 0)
         self._splitter.setCollapsible(0, False)
@@ -765,11 +766,28 @@ class MainWindow(
         self._position_update_btn()
 
     def _position_queue_panel(self) -> None:
-        """Keep the floating queue panel sized to the viewer area height."""
+        """Keep the floating queue panel sized to the viewer area height.
+
+        The panel must never cover the coverage bar / scrubber strip at the
+        bottom of the viewer area, so its bottom edge is clamped to the
+        coverage bar's top.
+        """
         if hasattr(self, '_workspace') and hasattr(self, '_queue_panel'):
             # Use the top section height (viewer+params) not the full workspace
             sizes = self._vsplitter.sizes()
             h = sizes[0] if sizes else self._workspace.height()
+            try:
+                # Clamp to the scrubber center strip (coverage bar + slider +
+                # marker overlay). The in/out bracket tips paint from the very
+                # top of this strip, so using the coverage bar itself would
+                # still clip them.
+                strip = self._dual_viewer._scrubber._center
+                if strip.isVisible():
+                    strip_top = strip.mapTo(self._workspace, strip.rect().topLeft()).y()
+                    if 0 < strip_top < h:
+                        h = strip_top
+            except (AttributeError, RuntimeError):
+                pass  # before first layout or scrubber not built yet
             self._queue_panel.setFixedHeight(h)
             self._queue_panel.move(0, 0)
             self._queue_panel.raise_()

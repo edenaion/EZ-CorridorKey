@@ -735,6 +735,14 @@ class ParameterPanel(QWidget):
         scroll.setWidget(inner)
         outer.addWidget(scroll)
 
+        # The panel must always show its content at full width: horizontal
+        # scrolling is off, so anything narrower than the content's minimum
+        # clips on the right. Reserve room for the content plus the vertical
+        # scrollbar and never let the splitter shrink below it.
+        content_w = inner.minimumSizeHint().width()
+        vsb_w = scroll.verticalScrollBar().sizeHint().width()
+        self.setMinimumWidth(max(240, content_w + vsb_w + 2))
+
         # Middle-click reset: map widget → (setter_callable, default_value)
         self._middle_click_defaults: dict[QWidget, tuple] = {
             self._bg_color: (self._bg_color.setCurrentIndex, 0),            # Auto
