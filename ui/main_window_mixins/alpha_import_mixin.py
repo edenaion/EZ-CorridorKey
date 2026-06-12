@@ -298,15 +298,17 @@ class AlphaImportMixin:
                 clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
 
-        label = "VideoMaMa masks" if import_as_vmama_mask else "alpha hints"
+        from ui.state_labels import state_display_name
+        label = _tr("VideoMaMa masks") if import_as_vmama_mask else _tr("alpha hints")
+        state_label = state_display_name(clip.state)
         if source_kind == "video":
             toast_msg = (
-                f"Imported {imported_count}/{n_paired} {label} from video.\n"
-                f"Clip is now {clip.state.value}."
+                _tr("Imported %d/%d %s from video.\nClip is now %s.")
+                % (imported_count, n_paired, label, state_label)
             )
         else:
             toast_msg = (
-                f"Imported {imported_count}/{n_paired} {label}.\n"
-                f"Clip is now {clip.state.value}."
+                _tr("Imported %d/%d %s.\nClip is now %s.")
+                % (imported_count, n_paired, label, state_label)
             )
         _Toast(self, toast_msg)

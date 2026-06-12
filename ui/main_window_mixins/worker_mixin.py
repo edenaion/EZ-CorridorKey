@@ -85,7 +85,8 @@ class WorkerMixin:
             return
         if self._active_job_id is None:
             self._active_job_id = job_id
-        self._status_bar.set_phase(message)
+        from ui.state_labels import backend_status_text
+        self._status_bar.set_phase(backend_status_text(message))
 
     @Slot(str, str, int, str)
     def _on_worker_preview(self, job_id: str, clip_name: str, frame_index: int, path: str) -> None:
@@ -182,19 +183,11 @@ class WorkerMixin:
             # Reset progress for next job — show descriptive label
             self._status_bar.reset_progress()
             next_job = self._service.job_queue.next_job()
+            from ui.state_labels import job_type_display_name
             if next_job:
-                _label_map = {
-                    JobType.GVM_ALPHA: "GVM Auto",
-                    JobType.BIREFNET_ALPHA: "BiRefNet",
-                    JobType.SAM2_PREVIEW: "Track Preview",
-                    JobType.SAM2_TRACK: "Track Mask",
-                    JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
-                    JobType.MATANYONE2_ALPHA: "MatAnyone2",
-                    JobType.INFERENCE: "Inference",
-                }
-                next_label = _label_map.get(next_job.job_type, "Pipeline")
+                next_label = job_type_display_name(next_job.job_type)
             else:
-                next_label = "Pipeline"
+                next_label = job_type_display_name(None)
             self._status_bar.start_job_timer(label=next_label)
 
         from ui.sounds.audio_manager import UIAudio
@@ -208,7 +201,7 @@ class WorkerMixin:
                 JobType.BIREFNET_ALPHA.value: "BiRefNet",
                 JobType.VIDEOMAMA_ALPHA.value: "VideoMaMa",
                 JobType.MATANYONE2_ALPHA.value: "MatAnyone2",
-            }.get(job_type, "Alpha")
+            }.get(job_type, _tr("Alpha"))
             # Show alpha coverage count
             alpha_info = ""
             for c in self._clip_model.clips:
