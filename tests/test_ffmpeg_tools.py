@@ -95,9 +95,11 @@ class TestBuildExrVf:
             "bits_per_raw_sample": 10,
         })
 
+        # bt2020nc must map to plain bt2020: the FFmpeg 8.x scale filter
+        # rejects the ffprobe-style nc/ncl/c/cl variants (issue #91)
         assert (
             vf ==
-            "scale=in_color_matrix=bt2020nc:in_range=tv,format=gbrpf32le"
+            "scale=in_color_matrix=bt2020:in_range=tv,format=gbrpf32le"
         )
 
     def test_sd_missing_transfer_uses_sd_fallback(self):
