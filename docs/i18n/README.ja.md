@@ -20,15 +20,25 @@
 ### 目次
 
 ☼ [インストール](#インストール) - デスクトップインストーラー、CLI セットアップ、Docker
+
 ☼ [アンインストール](#アンインストール) - アプリをきれいに削除
+
 ☼ [アプリケーションレイアウト](#アプリケーションレイアウト) - UI の概要
+
 ☼ [クイックスタート](#クイックスタート) - 読み込み、アルファ生成、推論実行
+
 ☼ [キーボードショートカット](#キーボードショートカット) - ホットキー一覧
+
 ☼ [表示モード](#表示モード) - 出力チャンネルの切り替え
+
 ☼ [推論コントロール](#推論コントロール) - パラメーターと出力形式
+
 ☼ [ハードウェア要件](#ハードウェア要件) - VRAM、GPU、プラットフォーム情報
+
 ☼ [セキュリティ](#セキュリティ) - 検証済みダウンロード、署名済み更新、チェックサム
+
 ☼ [ローカライズ](#ローカライズ) - EZ-CorridorKey をあなたの言語に翻訳
+
 ☼ [貢献](#貢献とサポート) - 支援とヘルプの方法
 
 [![スター履歴グラフ](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
@@ -66,33 +76,48 @@
 2. ワンクリックの手順では管理された Python 3.11 を自動で用意して使用するため、`1-install` を使うためだけに Python を事前インストールする必要はありません。
 3. お使いのプラットフォーム用インストーラーを実行します。
    ☼ **Windows:** `1-install.bat` をダブルクリック
+
    ☼ **macOS / Linux:** `chmod +x 1-install.sh && ./1-install.sh`
+
 4. インストーラーが、管理された Python、仮想環境、依存関係 (利用可能な場合は GPU に合った PyTorch backend を含む)、検証、モデルのダウンロードを処理します。
 5. 起動するには、`2-start.bat` (Windows) をダブルクリックするか、`./2-start.sh` (macOS/Linux) を実行します。
 
 **前提条件:**
 
 ☼ ワンクリックインストーラーの場合: 事前インストール済み Python は不要
+
 ☼ 手動インストールの場合: [Python 3.10-3.13](https://python.org) (3.14 はまだ未対応)
+
 ☼ **Windows/Linux:** CUDA 対応 NVIDIA GPU (8 GB+ VRAM 推奨)。ドライバーは最新に保ってください。インストーラーは torch runtime を検証し、誤った backend のまま進めるのではなく診断付きで停止します。
+
 ☼ **macOS:** Apple Silicon (M1+)。CorridorKey 推論は MLX でネイティブ実行されます (MPS より 1.5-2x 高速)。GPU 負荷の高いアルファ生成器 (SAM2, GVM, VideoMaMa, MatAnyone2) は MPS で動作しますが、かなり遅くなります。Mac では作成済みアルファマットの読み込みを推奨します。
 
 **インストーラーの処理内容:**
 
 ☼ [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) を確認します (OpenEXR に必要な C++ コンパイラー)。見つからない場合は自動インストールを提案します
+
 ☼ [uv](https://docs.astral.sh/uv/) をインストールし、インストーラーのパスに管理された Python 3.11 を用意します
+
 ☼ プロジェクトフォルダー内に `.venv` 仮想環境を作成します
+
 ☼ プラットフォーム/GPU に合った PyTorch backend をインストールし、成功を表示する前に torch runtime を検証します
+
 ☼ PATH に見つからない場合、[FFmpeg](https://ffmpeg.org/) をローカルにダウンロードしてインストールします (動画読み込みに使用)
+
 ☼ CorridorKey モデル checkpoint (383 MB、必須) をダウンロードします
+
 ☼ 任意で SAM2 tracking サポートをインストールし、既定の Base+ checkpoint (324 MB) を事前ダウンロードします
+
 ☼ 任意で BiRefNet (~940 MB)、MatAnyone2 (~135 MB)、GVM (~6 GB)、VideoMaMa (~37 GB) のアルファヒント生成器をダウンロードします
+
 ☼ デスクトップショートカットを作成します (任意)
 
 **更新:**
 
 ☼ **Windows Desktop App Installer ユーザー:** アプリは自動で更新を確認します。新しいバージョンが利用可能な場合は、アプリ内の更新ボタンをクリックしてください。軽量パッチをダウンロードして再起動します。
+
 ☼ **1.9.x の macOS Desktop App ユーザー:** 1.10.0 は Mac で自動更新されません。Gumroad から新しい `.pkg` をダウンロードして手動で実行する必要があります。インストーラーは既存の `/Applications/EZ-CorridorKey.app` をその場で置き換えます。設定、プロジェクト、ダウンロード済みモデルは `~/Library/Application Support/EZ-CorridorKey/` にあり、再インストール後も保持されます。Mac の自動更新は 1.11.0 以降で戻ります。
+
 ☼ **CLI ユーザー:** `3-update.bat` (Windows) をダブルクリックするか、`./3-update.sh` (macOS/Linux) を実行します。git で最新コードを取得します。git が利用できない場合は ZIP をダウンロードします。
 
 > **注:** GitHub Releases の更新 ZIP (`EZ-CorridorKey-windows-x64.zip`) は Windows Desktop App Installer ユーザー専用です。既存インストールにパッチを当てます。CLI ユーザーは `3-update.bat` / `3-update.sh` を使い続けてください。
@@ -109,18 +134,24 @@ Linux ユーザーやリモート/cloud セットアップでは、EZ-CorridorKe
 
 **Windows:**
 ☼ Settings > Apps > Installed Apps を開きます
+
 ☼ **EZ-CorridorKey** を見つけて Uninstall をクリックします
+
 ☼ アプリケーションと Start Menu ショートカットが削除されます
+
 ☼ プロジェクトとダウンロード済みモデルは `%APPDATA%\EZ-CorridorKey\` に保存されています。すべてのユーザーデータを削除するには、そのフォルダーを削除してください。
 
 **macOS:**
 ☼ `/Applications/EZ-CorridorKey.app` をゴミ箱にドラッグします
+
 ☼ プロジェクト、設定、ダウンロード済みモデルは `~/Library/Application Support/EZ-CorridorKey/` に保存されています。すべてのユーザーデータを削除するには、そのフォルダーを削除してください。
 
 ### CLI インストール (git clone)
 
 ☼ クローンしたリポジトリフォルダー (例: `EZ-CorridorKey/`) を削除します。これには `.venv` 仮想環境、ダウンロード済みモデル、`Projects/` 内のすべてのプロジェクトデータが含まれます。
+
 ☼ インストール時にデスクトップショートカットを作成した場合は、手動で削除してください。
+
 ☼ CLI インストールはシステムレベルのファイルを変更しません。他に削除するものはありません。
 
 ### Hugging Face モデルキャッシュ
@@ -128,6 +159,7 @@ Linux ユーザーやリモート/cloud セットアップでは、EZ-CorridorKe
 一部の任意モデル (BiRefNet, SAM2) は Hugging Face Hub 経由でダウンロードされ、プロジェクトフォルダーの外にキャッシュされます。そのディスク容量を回収するには:
 
 ☼ **Windows:** `%USERPROFILE%\.cache\huggingface\hub\`
+
 ☼ **macOS / Linux:** `~/.cache/huggingface/hub/`
 
 このキャッシュは Hugging Face を使うすべてのアプリケーションで共有されます。他の AI ツールも使っている場合は、`hub/` ディレクトリ全体ではなく、特定のモデルフォルダー (例: `models--ZhengPeng7--BiRefNet`, `models--facebook--sam2.1-hiera-base-plus`) だけを削除してください。
@@ -170,10 +202,15 @@ Linux ユーザーやリモート/cloud セットアップでは、EZ-CorridorKe
 ```
 
 ☼ **ブランドバー + メニュー** - ロゴ、メニューバー、GPU 名 + VRAM メーターを含む上部行
+
 ☼ **キューパネル** - 折りたたみ可能な左サイドバー。**Q** で切り替え
+
 ☼ **デュアルビューアー** - 中央。INPUT (左) と切り替え可能な出力 (右) に分割
+
 ☼ **パラメーターパネル** - 右サイドバー。アルファ生成、推論、出力のコントロール
+
 ☼ **I/O トレイ** - ビューアー下の横型サムネイル列
+
 ☼ **ステータスバー** - 進捗バーと RUN INFERENCE ボタン
 
 ---
@@ -200,6 +237,7 @@ Linux ユーザーやリモート/cloud セットアップでは、EZ-CorridorKe
 
 **オプション B - ワンクリックアルファ生成器:**
 ☼ **GVM Auto** - パラメーターパネルで **GVM AUTO** をクリックします。人物を含む多くのグリーンバック footage でよく機能します。
+
 ☼ **BiRefNet** (推奨) - パラメーターパネルで **BIREFNET** をクリックします。高速で精度が高く、幅広い footage でよく機能します。
 
 
@@ -222,11 +260,17 @@ Linux ユーザーやリモート/cloud セットアップでは、EZ-CorridorKe
 別ツール (Rotobrush, Silhouette, Resolve, Nuke など) で作成したアルファマットがある場合は、パラメーターパネルで **IMPORT ALPHA** をクリックし、画像フォルダーまたは matte 動画ファイルを選択します。
 
 ☼ 対応画像形式: **PNG, JPG, JPEG, TIF, TIFF, EXR**
+
 ☼ 対応アルファ動画パス: 通常のクリップインポーターが受け付ける標準動画ファイル (例: **MOV** または **MP4**)
+
 ☼ 画像と表示可能な matte 動画は **グレースケール** にしてください (白 = 前景、黒 = 背景)
+
 ☼ フレーム数は入力シーケンスと一致している必要があります
+
 ☼ PNG 以外の静止画は、読み込み時にグレースケール PNG へ自動変換されます
+
 ☼ 読み込まれたアルファ動画はグレースケールの `AlphaHint/*.png` フレームへデコードされるため、画像シーケンスのヒントと同じ downstream パスを使います
+
 ☼ 読み込まれたファイルはクリップの `AlphaHint/` フォルダーへコピーされ、クリップは **READY** 状態に進みます
 
 いつでも再読み込みできます。クリップに既存のアルファヒントがある場合は、上書きするか確認されます。
@@ -251,8 +295,11 @@ I/O トレイで複数クリップを選択し (Ctrl+クリックまたは Shift
 表示モードを切り替えて結果を確認します。
 
 ☼ **COMP** - チェッカーボード上の key
+
 ☼ **FG** - 緑のフリンジを確認
+
 ☼ **MATTE** - アルファ品質を確認
+
 ☼ **PROCESSED** - 制作用 RGBA
 
 出力は推論中にプロジェクトの `Output/` サブディレクトリへ書き込まれます (設定可能。詳しくは[カスタム出力フォルダー](#カスタム出力フォルダー)を参照)。
@@ -345,9 +392,13 @@ I/O トレイで複数クリップを選択し (Ctrl+クリックまたは Shift
 **Color Space の動作**
 
 ☼ **左の INPUT ビューアー** は、CorridorKey によるソースの現在の解釈を常に表示します。そこで入力が正しく見えない場合、今後の推論結果と書き出しもその誤った解釈に基づきます。
+
 ☼ **RUN INFERENCE** をクリックする前に **Color Space** を変更すると、次のライブプレビューと次の書き出しの生成方法に影響します。
+
 ☼ 出力がすでに存在する後で **Color Space** を変更しても、ディスク上のそれらのファイルは**書き換えられません**。ビューアーとライブプレビューだけが更新されます。その新しい解釈を保存ファイルに残すには、推論を再実行してください。
+
 ☼ CorridorKey は可能な場合、ファイルタイプとメタデータからカラースペースを自動検出します。ただし、INPUT ビューアーが代表的に見えない場合は上書きできます。
+
 ☼ **Live Preview** が有効な場合、クリーン起動後の最初の調整では、推論エンジンのロード中に短く一時停止することがあります。
 
 任意のスライダーを**中クリック**すると既定値に戻ります。
@@ -383,8 +434,11 @@ I/O トレイで複数クリップを選択し (Ctrl+クリックまたは Shift
 デュアルビューアー下のスクラバーには次があります。
 
 ☼ **トランスポートボタン:** 最初のフレーム、1 つ戻る、再生/一時停止、1 つ進む、最後のフレーム
+
 ☼ **再生は制限済み:** スペースバーを押すと footage は固定の 3 FPS で再生されます。これは意図した動作です。ファイルが大きいためです。
+
 ☼ **カバレッジバー:** 3 つの色分けレーンで、ペイントストローク (緑)、アルファヒント (白)、推論出力 (黄) があるフレームを示します
+
 ☼ **In/Out マーカー:** **I** / **O** を押して処理用のサブ範囲を設定します。設定すると RUN ボタンは "RUN SELECTED" に変わり、再生はその範囲内でループします。
 
 ---
@@ -427,7 +481,9 @@ Edit > Preferences から開きます。
 既定では、推論出力は各クリップフォルダー内の `Output/` に書き込まれます。出力先は 3 レベルで変更できます。
 
 ☼ **グローバル**: Preferences > Output > Default output directory
+
 ☼ **プロジェクトごと**: File > Set Project Output Folder
+
 ☼ **クリップごと**: クリップを右クリック > Set Output Directory
 
 優先順位: クリップごと > プロジェクトごと > グローバル設定 > 既定。
@@ -501,6 +557,7 @@ EZ-CorridorKey の最適化 (Hiera FlashAttention, TF32 tensor cores, torch.comp
 EZ-CorridorKey の公式ソースは次の 2 つだけです。
 
 ☼ **GitHub:** [github.com/edenaion/EZ-CorridorKey/releases](https://github.com/edenaion/EZ-CorridorKey/releases)
+
 ☼ **Gumroad:** [edenaion.gumroad.com](https://edenaion.gumroad.com/)
 
 EZ-CorridorKey のダウンロードを提供するその他のサイトは**未検証で、マルウェアの可能性があります**。サードパーティミラー、再パッケージサイト、ファイル共有リンクからダウンロードしないでください。EZ-CorridorKey が他の場所で配布されているのを見つけた場合は、[GitHub Issues](https://github.com/edenaion/EZ-CorridorKey/issues) または [EZSCAPE Discord](https://discord.gg/TyxNjcWeF3) で報告してください。
@@ -508,6 +565,7 @@ EZ-CorridorKey のダウンロードを提供するその他のサイトは**未
 ### コード署名
 
 ☼ **Windows:** インストーラー (.exe) は Azure Trusted Signing で署名されています。Windows SmartScreen には検証済み発行元として **EZscape Ventures LLC** が表示されます。
+
 ☼ **macOS:** .pkg は **Developer ID: Edward Zisk (UX6RDC39ZW)** でコード署名され、Apple notarization 済みです。Gatekeeper が初回起動時に検証します。
 
 ### 署名済み更新
@@ -540,6 +598,7 @@ sha256sum -c SHA256SUMS.txt
 独立スキャン:
 
 ☼ [**EZ-CorridorKey.exe** (v2.0.0、署名済み内部実行ファイル) - VirusTotal scan](https://www.virustotal.com/gui/file/627129e270cfced9174866cc434cc5e295fae6e315d614d2f1de99cf27ff3820?nocache=1)
+
 ☼ [**EZ-CorridorKey.exe** (v1.10.0、署名済み内部実行ファイル) - VirusTotal scan](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
 
 > **サードパーティモデル:** コア CorridorKey checkpoint (`CorridorKey.pth`) だけが、こちらで保証できるモデルです。任意モデル (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) は各作者のリポジトリからダウンロードされます。利用は自己判断で行ってください。
@@ -573,9 +632,13 @@ EZ-CorridorKey は、Brooklyn の一人の開発者が VFX コミュニティの
 [![RunPod](https://img.shields.io/badge/RunPod-Cloud%20GPU-673AB7?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNS0xMC01LTEwIDV6TTIgMTJsMTAgNSAxMC01LTEwLTUtMTAgNXoiLz48L3N2Zz4=&logoColor=white)](https://runpod.io?ref=2k18fmnh)
 
 ☼ **この repo にスターを付ける**。役に立った場合、他の人がプロジェクトを見つけやすくなります
+
 ☼ **プラグインを購入する**。[EZSCAPE plugins](https://www.ezscape.space) に力を注いでいます
+
 ☼ **バグを報告する**。[GitHub Issues](https://github.com/edenaion/EZ-CorridorKey/issues) を使ってください
+
 ☼ **コードで貢献する**。[CONTRIBUTING.md](../../CONTRIBUTING.md) のガイドラインを参照してください
+
 ☼ **セキュリティ問題**。[SECURITY.md](../../SECURITY.md) の責任ある開示を参照してください
 
 推論用の GPU compute が必要ですか？ [RunPod](https://runpod.io?ref=2k18fmnh) はオンデマンド cloud GPU を提供しており、大きな撮影素材をローカルマシンを占有せずに batch 処理するのに便利です。紹介リンクを使うと、より多くのツールを作る支援になります。
@@ -597,11 +660,17 @@ GUI/SFX/Workflow/QA/Maintenance は [Ed Zisk](https://www.edzisk.com)。
 <summary><strong>貢献者</strong></summary>
 
 ☼ ロゴ: [Sara Ann Stewart](https://www.instagram.com/sarastewartwork)
+
 ☼ Hiera 最適化: [Jhe Kim](https://github.com/Raiden129)
+
 ☼ Tiling 最適化: [MarcelLieb](https://github.com/MarcelLieb)
+
 ☼ MLX Apple Silicon backend: [Cristopher Yates](https://github.com/cmoyates) ([corridorkey-mlx](https://github.com/cmoyates/corridorkey-mlx))
+
 ☼ FX graph cache: [99oblivius](https://github.com/99oblivius) ([CorridorKey-Engine](https://github.com/99oblivius/CorridorKey-Engine))
+
 ☼ BiRefNet 統合: [Warwlock](https://github.com/Warwlock) の [upstream PR](https://github.com/edenaion/EZ-CorridorKey/pull/10) から適用
+
 ☼ Docker / noVNC ブラウザモード: [DCRepublic](https://github.com/DCRepublic)
 
 </details>
@@ -610,9 +679,13 @@ GUI/SFX/Workflow/QA/Maintenance は [Ed Zisk](https://www.edzisk.com)。
 <summary><strong>任意モジュールとライセンス</strong></summary>
 
 ☼ **SAM 2.1** ([facebookresearch/sam2](https://github.com/facebookresearch/sam2)) - Apache 2.0
+
 ☼ **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) - CC BY-NC-SA 4.0
+
 ☼ **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) - CC BY-NC 4.0、モデル weights は Stability AI Community License
+
 ☼ **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) - Apache 2.0
+
 ☼ **BiRefNet** ([ZhengPeng7/BiRefNet](https://github.com/ZhengPeng7/BiRefNet)) - MIT
 
 </details>

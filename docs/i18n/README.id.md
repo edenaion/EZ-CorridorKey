@@ -20,15 +20,25 @@ GUI ini menggantikan alur kerja CLI drag-and-drop dengan aplikasi desktop lengka
 ### Daftar isi
 
 ☼ [Instalasi](#instalasi) - Installer desktop, penyiapan CLI, Docker
+
 ☼ [Menghapus instalasi](#menghapus-instalasi) - Hapus aplikasi dengan bersih
+
 ☼ [Tata letak aplikasi](#tata-letak-aplikasi) - Ikhtisar UI
+
 ☼ [Mulai cepat](#mulai-cepat) - Impor, buat alpha, jalankan inferensi
+
 ☼ [Pintasan keyboard](#pintasan-keyboard) - Referensi hotkey lengkap
+
 ☼ [Mode tampilan](#mode-tampilan) - Beralih kanal output
+
 ☼ [Kontrol inferensi](#kontrol-inferensi) - Parameter dan format output
+
 ☼ [Persyaratan perangkat keras](#persyaratan-perangkat-keras) - Info VRAM, GPU, dan platform
+
 ☼ [Keamanan](#keamanan) - Unduhan terverifikasi, update bertanda tangan, checksum
+
 ☼ [Lokalisasi](#lokalisasi) - Terjemahkan EZ-CorridorKey ke bahasa Anda
+
 ☼ [Kontribusi](#kontribusi--dukungan) - Cara membantu dan mendapatkan bantuan
 
 [![Grafik riwayat bintang](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
@@ -66,33 +76,48 @@ Installer menyertakan semuanya: runtime Python, model AI, library GPU. Tidak per
 2. Jalur one-click menyediakan dan memakai Python 3.11 terkelola secara otomatis, jadi Anda tidak perlu memasang Python lebih dulu hanya untuk memakai `1-install`.
 3. Jalankan installer untuk platform Anda:
    ☼ **Windows:** Klik dua kali `1-install.bat`
+
    ☼ **macOS / Linux:** `chmod +x 1-install.sh && ./1-install.sh`
+
 4. Installer menangani semuanya: Python terkelola, virtual environment, dependency (termasuk backend PyTorch yang tepat untuk GPU Anda jika tersedia), verifikasi, dan unduhan model.
 5. Untuk meluncurkan: klik dua kali `2-start.bat` (Windows) atau `./2-start.sh` (macOS/Linux).
 
 **Prasyarat:**
 
 ☼ Untuk installer one-click: Python prainstal tidak diperlukan
+
 ☼ Untuk instalasi manual: [Python 3.10–3.13](https://python.org) (3.14 belum didukung)
+
 ☼ **Windows/Linux:** GPU NVIDIA dengan dukungan CUDA (VRAM 8 GB+ direkomendasikan). Pastikan driver tetap baru. Installer memverifikasi runtime torch dan akan berhenti dengan diagnostik, bukan diam-diam meninggalkan Anda pada backend yang salah.
+
 ☼ **macOS:** Apple Silicon (M1+). Inferensi CorridorKey berjalan native melalui MLX (1,5-2x lebih cepat daripada MPS). Generator alpha yang intensif GPU (SAM2, GVM, VideoMaMa, MatAnyone2) berjalan di MPS tetapi jauh lebih lambat. Mengimpor matte alpha siap pakai direkomendasikan di Mac.
 
 **Yang dilakukan installer:**
 
 ☼ Memeriksa [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (compiler C++ yang dibutuhkan OpenEXR), dan menawarkan auto-install jika belum ada
+
 ☼ Menginstal [uv](https://docs.astral.sh/uv/) dan menyediakan Python 3.11 terkelola untuk jalur installer
+
 ☼ Membuat virtual environment `.venv` di folder proyek
+
 ☼ Menginstal backend PyTorch yang tepat untuk platform/GPU Anda dan memverifikasi runtime torch yang dihasilkan sebelum melaporkan sukses
+
 ☼ Mengunduh dan menginstal [FFmpeg](https://ffmpeg.org/) secara lokal jika tidak ditemukan di PATH (dipakai untuk impor video)
+
 ☼ Mengunduh checkpoint model CorridorKey (383 MB, wajib)
+
 ☼ Opsional: menginstal dukungan tracking SAM2 dan mengunduh lebih dulu checkpoint Base+ default (324 MB)
+
 ☼ Opsional: mengunduh generator alpha hint BiRefNet (~940 MB), MatAnyone2 (~135 MB), GVM (~6 GB), dan VideoMaMa (~37 GB)
+
 ☼ Membuat pintasan desktop (opsional)
 
 **Update:**
 
 ☼ **Pengguna installer aplikasi desktop Windows:** Aplikasi memeriksa update secara otomatis. Saat versi baru tersedia, klik tombol update di aplikasi. Aplikasi mengunduh patch ringan dan meluncur ulang.
+
 ☼ **Pengguna macOS Desktop App pada 1.9.x:** 1.10.0 **tidak** auto-update di Mac. Anda harus mengunduh `.pkg` baru dari Gumroad dan menjalankannya secara manual. Installer mengganti `/Applications/EZ-CorridorKey.app` yang ada di tempat. Preferensi, proyek, dan model yang sudah diunduh berada di `~/Library/Application Support/EZ-CorridorKey/` dan dipertahankan saat instal ulang. Auto-update Mac kembali di 1.11.0 atau lebih baru.
+
 ☼ **Pengguna CLI:** Klik dua kali `3-update.bat` (Windows) atau jalankan `./3-update.sh` (macOS/Linux). Ini mengambil kode terbaru melalui git, atau mengunduh ZIP jika git tidak tersedia.
 
 > **Catatan:** ZIP update di GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) hanya untuk pengguna installer aplikasi desktop Windows. ZIP ini menambal instalasi yang sudah ada. Pengguna CLI harus tetap memakai `3-update.bat` / `3-update.sh`.
@@ -109,18 +134,24 @@ Untuk pengguna Linux atau setup remote/cloud, EZ-CorridorKey dapat berjalan di d
 
 **Windows:**
 ☼ Buka Settings > Apps > Installed Apps
+
 ☼ Cari **EZ-CorridorKey** dan klik Uninstall
+
 ☼ Ini menghapus aplikasi dan pintasan Start Menu
+
 ☼ Proyek dan model yang diunduh disimpan di `%APPDATA%\EZ-CorridorKey\`. Hapus folder itu untuk menghapus semua data pengguna.
 
 **macOS:**
 ☼ Seret `/Applications/EZ-CorridorKey.app` ke Trash
+
 ☼ Proyek, preferensi, dan model yang diunduh disimpan di `~/Library/Application Support/EZ-CorridorKey/`. Hapus folder itu untuk menghapus semua data pengguna.
 
 ### Instalasi CLI (git clone)
 
 ☼ Hapus folder repositori hasil clone (mis. `EZ-CorridorKey/`). Ini mencakup virtual environment `.venv`, model yang diunduh, dan semua data proyek di dalam `Projects/`.
+
 ☼ Jika Anda membuat pintasan desktop saat instalasi, hapus secara manual.
+
 ☼ Tidak ada file tingkat sistem yang diubah oleh instalasi CLI. Tidak ada lagi yang perlu dibersihkan.
 
 ### Cache model Hugging Face
@@ -128,6 +159,7 @@ Untuk pengguna Linux atau setup remote/cloud, EZ-CorridorKey dapat berjalan di d
 Beberapa model opsional (BiRefNet, SAM2) diunduh melalui Hugging Face Hub dan di-cache di luar folder proyek. Untuk mengambil kembali ruang disk itu:
 
 ☼ **Windows:** `%USERPROFILE%\.cache\huggingface\hub\`
+
 ☼ **macOS / Linux:** `~/.cache/huggingface/hub/`
 
 Cache ini dipakai bersama oleh semua aplikasi yang menggunakan Hugging Face. Jika Anda memakai tool AI lain, hapus hanya folder model tertentu (mis. `models--ZhengPeng7--BiRefNet`, `models--facebook--sam2.1-hiera-base-plus`), bukan seluruh direktori `hub/`.
@@ -170,10 +202,15 @@ Cache ini dipakai bersama oleh semua aplikasi yang menggunakan Hugging Face. Jik
 ```
 
 ☼ **Brand bar + menu** - Baris atas dengan logo, menu bar, nama GPU + meter VRAM
+
 ☼ **Panel antrean** - Sidebar yang dapat dilipat (kiri), toggle dengan **Q**
+
 ☼ **Penampil ganda** - Tengah, terbagi menjadi INPUT (kiri) dan output yang dapat diganti (kanan)
+
 ☼ **Panel parameter** - Sidebar kanan dengan kontrol Alpha Generation, Inference, dan Output
+
 ☼ **Tray I/O** - Strip thumbnail horizontal di bawah penampil
+
 ☼ **Status bar** - Bilah progres dan tombol RUN INFERENCE
 
 ---
@@ -200,6 +237,7 @@ Klik **CHROMA KEY** di panel parameter. Keyer berbasis perbedaan warna untuk foo
 
 **Opsi B - Generator alpha sekali klik:**
 ☼ **GVM Auto** - Klik **GVM AUTO** di panel parameter. Sangat baik untuk sebagian besar footage layar hijau dengan orang.
+
 ☼ **BiRefNet** (direkomendasikan) - Klik **BIREFNET** di panel parameter. Cepat, akurat, dan bekerja baik pada banyak jenis footage.
 
 
@@ -222,11 +260,17 @@ Model ini membutuhkan mask hint. Ada dua cara untuk memberikannya:
 Jika Anda sudah memiliki matte alpha dari tool lain (Rotobrush, Silhouette, Resolve, Nuke, dll.), klik **IMPORT ALPHA** di panel parameter dan pilih folder gambar atau file video matte.
 
 ☼ Format gambar yang didukung: **PNG, JPG, JPEG, TIF, TIFF, EXR**
+
 ☼ Jalur video alpha yang didukung: file video standar yang diterima oleh pengimpor klip normal (misalnya **MOV** atau **MP4**)
+
 ☼ Gambar dan video matte yang terlihat harus **grayscale** (putih = latar depan, hitam = latar belakang)
+
 ☼ Jumlah frame harus cocok dengan sekuens input Anda
+
 ☼ Still non-PNG otomatis dikonversi menjadi PNG grayscale saat impor
+
 ☼ Video alpha yang diimpor didekode menjadi frame grayscale `AlphaHint/*.png` sehingga mengikuti jalur downstream yang sama dengan hint sekuens gambar
+
 ☼ File yang diimpor disalin ke folder `AlphaHint/` milik klip dan klip maju ke status **READY**
 
 Anda dapat mengimpor ulang kapan saja. Jika klip sudah memiliki alpha hint, Anda akan diminta memilih apakah akan menimpanya.
@@ -251,8 +295,11 @@ Seluruh pipeline dapat dibatalkan (Esc) dan dapat dilanjutkan dari checkpoint. J
 Beralih antar mode tampilan untuk memeriksa hasil:
 
 ☼ **COMP** - Key di atas checkerboard
+
 ☼ **FG** - Periksa green fringing
+
 ☼ **MATTE** - Periksa kualitas alpha
+
 ☼ **PROCESSED** - RGBA produksi
 
 Output ditulis ke subdirektori `Output/` proyek selama inferensi (dapat dikonfigurasi, lihat [Direktori output kustom](#direktori-output-kustom)).
@@ -345,9 +392,13 @@ Bar mode tampilan di bagian atas tiap viewport mengganti apa yang ditampilkan pe
 **Perilaku Color Space**
 
 ☼ **Viewer INPUT kiri** selalu menampilkan interpretasi sumber saat ini oleh CorridorKey. Jika input terlihat salah di sana, hasil inferensi dan ekspor Anda berikutnya juga akan didasarkan pada interpretasi yang salah itu.
+
 ☼ Mengubah **Color Space** sebelum mengklik **RUN INFERENCE** memengaruhi cara live preview berikutnya dan run ekspor berikutnya dibuat.
+
 ☼ Mengubah **Color Space** setelah output sudah ada **tidak** menulis ulang file tersebut di disk. Ini hanya memperbarui penampil dan live preview. Untuk menyimpan interpretasi baru itu ke file, jalankan ulang inferensi.
+
 ☼ CorridorKey mendeteksi color space otomatis dari jenis file dan metadata jika memungkinkan, tetapi Anda dapat menimpanya jika penampil INPUT tidak tampak representatif.
+
 ☼ Dengan **Live Preview** aktif, penyesuaian pertama setelah peluncuran baru mungkin berhenti sebentar saat inference engine dimuat.
 
 **Middle-click** slider mana pun untuk meresetnya ke default.
@@ -383,8 +434,11 @@ Setiap kanal output dapat diaktifkan secara terpisah dan diatur ke EXR atau PNG:
 Scrubber di bawah penampil ganda menyediakan:
 
 ☼ **Tombol transport:** Frame pertama, mundur satu langkah, putar/jeda, maju satu langkah, frame terakhir
+
 ☼ **Playback is CAPPED:** Menekan spacebar akan memutar footage pada laju hardcoded 3FPS. Ini disengaja, filenya besar.
+
 ☼ **Bilah cakupan:** Tiga jalur berkode warna yang menunjukkan frame mana yang memiliki sapuan (hijau), alpha hint (putih), dan output inferensi (kuning)
+
 ☼ **Marker In/Out:** Tekan **I** / **O** untuk mengatur sub-range pemrosesan. Saat diatur, tombol RUN berubah menjadi "RUN SELECTED" dan playback loop dalam rentang tersebut.
 
 ---
@@ -427,7 +481,9 @@ Akses melalui Edit > Preferensi.
 Secara default, output inferensi ditulis ke `Output/` di dalam setiap folder klip. Anda dapat mengalihkan output pada tiga tingkat:
 
 ☼ **Global**: Preferensi > Output > Direktori output default
+
 ☼ **Per-proyek**: File > Atur Folder Output Proyek
+
 ☼ **Per-klip**: Klik kanan klip > Atur Direktori Output
 
 Prioritas: per-klip > per-proyek > preferensi global > default.
@@ -501,6 +557,7 @@ Optimisasi EZ-CorridorKey (Hiera FlashAttention, tensor core TF32, torch.compile
 Satu-satunya sumber resmi untuk EZ-CorridorKey adalah:
 
 ☼ **GitHub:** [github.com/edenaion/EZ-CorridorKey/releases](https://github.com/edenaion/EZ-CorridorKey/releases)
+
 ☼ **Gumroad:** [edenaion.gumroad.com](https://edenaion.gumroad.com/)
 
 Situs lain yang menyediakan unduhan EZ-CorridorKey **tidak terverifikasi dan berpotensi malware**. Jangan mengunduh dari mirror pihak ketiga, situs repackaging, atau link file-sharing. Jika Anda melihat EZ-CorridorKey dihosting di tempat lain, laporkan di [GitHub Issues](https://github.com/edenaion/EZ-CorridorKey/issues) atau di [EZSCAPE Discord](https://discord.gg/TyxNjcWeF3).
@@ -508,6 +565,7 @@ Situs lain yang menyediakan unduhan EZ-CorridorKey **tidak terverifikasi dan ber
 ### Penandatanganan kode
 
 ☼ **Windows:** Installer (.exe) ditandatangani melalui Azure Trusted Signing. Windows SmartScreen menampilkan **EZscape Ventures LLC** sebagai publisher terverifikasi.
+
 ☼ **macOS:** .pkg code-signed dan Apple-notarized di bawah **Developer ID: Edward Zisk (UX6RDC39ZW)**. Gatekeeper memverifikasinya pada peluncuran pertama.
 
 ### Update bertanda tangan
@@ -540,6 +598,7 @@ Semua commit ke `main` ditandatangani dengan kunci SSH Ed25519. Branch protectio
 Scan independen:
 
 ☼ [**EZ-CorridorKey.exe** (v2.0.0, executable dalam bertanda tangan) - Scan VirusTotal](https://www.virustotal.com/gui/file/627129e270cfced9174866cc434cc5e295fae6e315d614d2f1de99cf27ff3820?nocache=1)
+
 ☼ [**EZ-CorridorKey.exe** (v1.10.0, executable dalam bertanda tangan) - Scan VirusTotal](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
 
 > **Model pihak ketiga:** Checkpoint inti CorridorKey (`CorridorKey.pth`) adalah satu-satunya model yang dapat kami jamin. Model opsional (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) diunduh dari repositori penulis masing-masing. Gunakan sesuai pertimbangan Anda sendiri.
@@ -573,9 +632,13 @@ EZ-CorridorKey adalah karya yang dibuat dengan cinta, dibangun dan dipelihara ol
 [![RunPod](https://img.shields.io/badge/RunPod-Cloud%20GPU-673AB7?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNS0xMC01LTEwIDV6TTIgMTJsMTAgNSAxMC01LTEwLTUtMTAgNXoiLz48L3N2Zz4=&logoColor=white)](https://runpod.io?ref=2k18fmnh)
 
 ☼ **Beri star repo ini** jika menurut Anda berguna. Ini membantu orang lain menemukan proyek ini
+
 ☼ **Beli plugin**. Saya mencurahkan banyak tenaga ke [plugin EZSCAPE](https://www.ezscape.space)
+
 ☼ **Laporkan bug** melalui [GitHub Issues](https://github.com/edenaion/EZ-CorridorKey/issues)
+
 ☼ **Kontribusikan kode**. Lihat [CONTRIBUTING.md](CONTRIBUTING.md) untuk pedoman
+
 ☼ **Masalah keamanan**. Lihat [SECURITY.md](SECURITY.md) untuk responsible disclosure
 
 Butuh komputasi GPU untuk inferensi? [RunPod](https://runpod.io?ref=2k18fmnh) menawarkan cloud GPU on-demand, cocok untuk pemrosesan batch shoot besar tanpa mengikat mesin lokal Anda. Menggunakan link referral saya akan membantu saya membangun lebih banyak tool untuk semua orang!
@@ -597,11 +660,17 @@ GUI/SFX/Workflow/QA/Maintenance oleh [Ed Zisk](https://www.edzisk.com).
 <summary><strong>Kontributor</strong></summary>
 
 ☼ Logo oleh [Sara Ann Stewart](https://www.instagram.com/sarastewartwork)
+
 ☼ Optimisasi Hiera oleh [Jhe Kim](https://github.com/Raiden129)
+
 ☼ Optimisasi tiling oleh [MarcelLieb](https://github.com/MarcelLieb)
+
 ☼ Backend MLX Apple Silicon oleh [Cristopher Yates](https://github.com/cmoyates) ([corridorkey-mlx](https://github.com/cmoyates/corridorkey-mlx))
+
 ☼ Cache graph FX dari [99oblivius](https://github.com/99oblivius) ([CorridorKey-Engine](https://github.com/99oblivius/CorridorKey-Engine))
+
 ☼ Integrasi BiRefNet diadaptasi dari [Warwlock](https://github.com/Warwlock) [upstream PR](https://github.com/edenaion/EZ-CorridorKey/pull/10)
+
 ☼ Mode browser Docker / noVNC oleh [DCRepublic](https://github.com/DCRepublic)
 
 </details>
@@ -610,9 +679,13 @@ GUI/SFX/Workflow/QA/Maintenance oleh [Ed Zisk](https://www.edzisk.com).
 <summary><strong>Modul opsional & lisensi</strong></summary>
 
 ☼ **SAM 2.1** ([facebookresearch/sam2](https://github.com/facebookresearch/sam2)) - Apache 2.0
+
 ☼ **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) - CC BY-NC-SA 4.0
+
 ☼ **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) - CC BY-NC 4.0, bobot model di bawah Stability AI Community License
+
 ☼ **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) - Apache 2.0
+
 ☼ **BiRefNet** ([ZhengPeng7/BiRefNet](https://github.com/ZhengPeng7/BiRefNet)) - MIT
 
 </details>

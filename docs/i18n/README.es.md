@@ -20,15 +20,25 @@ Esta GUI sustituye el flujo CLI de arrastrar y soltar por una aplicación de esc
 ### Contenido
 
 ☼ [Instalación](#instalación) - Instalador de escritorio, configuración CLI, Docker
+
 ☼ [Desinstalación](#desinstalación) - Eliminar la app limpiamente
+
 ☼ [Diseño de la aplicación](#diseño-de-la-aplicación) - Vista general de la interfaz
+
 ☼ [Inicio rápido](#inicio-rápido) - Importar, generar alfa, ejecutar inferencia
+
 ☼ [Atajos de teclado](#atajos-de-teclado) - Referencia completa de hotkeys
+
 ☼ [Modos de visualización](#modos-de-visualización) - Cambio de canal de salida
+
 ☼ [Controles de inferencia](#controles-de-inferencia) - Parámetros y formatos de salida
+
 ☼ [Requisitos de hardware](#requisitos-de-hardware) - VRAM, GPU e información de plataforma
+
 ☼ [Seguridad](#seguridad) - Descargas verificadas, actualizaciones firmadas, checksums
+
 ☼ [Localización](#localización) - Traducir EZ-CorridorKey a tu idioma
+
 ☼ [Contribución](#contribución--soporte) - Cómo ayudar y obtener ayuda
 
 [![Gráfico del historial de estrellas](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
@@ -66,33 +76,48 @@ El instalador incluye todo: runtime de Python, modelos de IA, bibliotecas GPU. N
 2. La ruta de un clic aprovisiona y usa Python 3.11 gestionado automáticamente, así que no necesitas preinstalar Python solo para usar `1-install`.
 3. Ejecuta el instalador para tu plataforma:
    ☼ **Windows:** Doble clic en `1-install.bat`
+
    ☼ **macOS / Linux:** `chmod +x 1-install.sh && ./1-install.sh`
+
 4. El instalador gestiona todo: Python gestionado, entorno virtual, dependencias (incluido el backend PyTorch correcto para tu GPU cuando esté disponible), verificación y descargas de modelos.
 5. Para iniciar: doble clic en `2-start.bat` (Windows) o `./2-start.sh` (macOS/Linux).
 
 **Requisitos previos:**
 
 ☼ Para el instalador de un clic: no se requiere Python preinstalado
+
 ☼ Para instalaciones manuales: [Python 3.10–3.13](https://python.org) (3.14 todavía no está soportado)
+
 ☼ **Windows/Linux:** GPU NVIDIA con soporte CUDA (se recomiendan 8 GB+ de VRAM). Mantén el driver actualizado. El instalador verifica el runtime de torch y se detendrá con diagnósticos en lugar de dejarte en silencio con el backend equivocado.
+
 ☼ **macOS:** Apple Silicon (M1+). La inferencia de CorridorKey se ejecuta de forma nativa mediante MLX (1,5 a 2x más rápida que MPS). Los generadores de alfa intensivos en GPU (SAM2, GVM, VideoMaMa, MatAnyone2) se ejecutan en MPS, pero son mucho más lentos. En Mac se recomienda importar mates alfa ya creados.
 
 **Qué hace el instalador:**
 
 ☼ Comprueba [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (compilador C++ necesario para OpenEXR) y ofrece instalarlo automáticamente si falta
+
 ☼ Instala [uv](https://docs.astral.sh/uv/) y aprovisiona Python 3.11 gestionado para la ruta del instalador
+
 ☼ Crea un entorno virtual `.venv` en la carpeta del proyecto
+
 ☼ Instala el backend PyTorch correcto para tu plataforma/GPU y verifica el runtime de torch resultante antes de informar éxito
+
 ☼ Descarga e instala [FFmpeg](https://ffmpeg.org/) localmente si no se encuentra en PATH (se usa para importar video)
+
 ☼ Descarga el checkpoint del modelo CorridorKey (383 MB, obligatorio)
+
 ☼ Instala opcionalmente soporte de rastreo SAM2 y descarga previamente el checkpoint Base+ predeterminado (324 MB)
+
 ☼ Descarga opcionalmente los generadores de guías alfa BiRefNet (~940 MB), MatAnyone2 (~135 MB), GVM (~6 GB) y VideoMaMa (~37 GB)
+
 ☼ Crea un acceso directo en el escritorio (opcional)
 
 **Actualización:**
 
 ☼ **Usuarios del instalador Windows Desktop App:** La app comprueba actualizaciones automáticamente. Cuando hay una nueva versión disponible, haz clic en el botón de actualización dentro de la app. Descarga un parche ligero y se relanza.
+
 ☼ **Usuarios de macOS Desktop App en 1.9.x:** 1.10.0 **no** se actualiza automáticamente en Mac. Debes descargar el nuevo `.pkg` desde Gumroad y ejecutarlo manualmente. El instalador sustituye la app existente `/Applications/EZ-CorridorKey.app` en su lugar. Tus preferencias, proyectos y modelos descargados viven en `~/Library/Application Support/EZ-CorridorKey/` y se conservan durante la reinstalación. La actualización automática de Mac vuelve en 1.11.0 o posterior.
+
 ☼ **Usuarios CLI:** Doble clic en `3-update.bat` (Windows) o ejecuta `./3-update.sh` (macOS/Linux). Esto obtiene el código más reciente vía git, o descarga un ZIP si git no está disponible.
 
 > **Nota:** El ZIP de actualización en GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) es solo para usuarios del instalador Windows Desktop App. Parchea una instalación existente. Los usuarios CLI deben seguir usando `3-update.bat` / `3-update.sh`.
@@ -109,18 +134,24 @@ Para usuarios de Linux o configuraciones remotas/cloud, EZ-CorridorKey puede eje
 
 **Windows:**
 ☼ Abre Settings > Apps > Installed Apps
+
 ☼ Busca **EZ-CorridorKey** y haz clic en Uninstall
+
 ☼ Esto elimina la aplicación y el acceso directo del menú Inicio
+
 ☼ Tus proyectos y modelos descargados se almacenan en `%APPDATA%\EZ-CorridorKey\`. Elimina esa carpeta para quitar todos los datos de usuario.
 
 **macOS:**
 ☼ Arrastra `/Applications/EZ-CorridorKey.app` a la papelera
+
 ☼ Tus proyectos, preferencias y modelos descargados se almacenan en `~/Library/Application Support/EZ-CorridorKey/`. Elimina esa carpeta para quitar todos los datos de usuario.
 
 ### Instalación CLI (git clone)
 
 ☼ Elimina la carpeta del repositorio clonado (por ejemplo `EZ-CorridorKey/`). Esto incluye el entorno virtual `.venv`, los modelos descargados y todos los datos de proyecto dentro de `Projects/`.
+
 ☼ Si creaste un acceso directo en el escritorio durante la instalación, elimínalo manualmente.
+
 ☼ La instalación CLI no modifica archivos de nivel sistema. No hay nada más que limpiar.
 
 ### Caché de modelos de Hugging Face
@@ -128,6 +159,7 @@ Para usuarios de Linux o configuraciones remotas/cloud, EZ-CorridorKey puede eje
 Algunos modelos opcionales (BiRefNet, SAM2) se descargan mediante Hugging Face Hub y se almacenan en caché fuera de la carpeta del proyecto. Para recuperar ese espacio en disco:
 
 ☼ **Windows:** `%USERPROFILE%\.cache\huggingface\hub\`
+
 ☼ **macOS / Linux:** `~/.cache/huggingface/hub/`
 
 Esta caché se comparte entre todas las aplicaciones que usan Hugging Face. Si usas otras herramientas de IA, elimina solo las carpetas de modelos específicas (por ejemplo `models--ZhengPeng7--BiRefNet`, `models--facebook--sam2.1-hiera-base-plus`) en lugar de todo el directorio `hub/`.
@@ -170,10 +202,15 @@ Esta caché se comparte entre todas las aplicaciones que usan Hugging Face. Si u
 ```
 
 ☼ **Barra de marca + menú** - fila superior con logo, barra de menú, nombre de GPU + medidor de VRAM
+
 ☼ **Panel de cola** - barra lateral plegable (izquierda), alternar con **Q**
+
 ☼ **Visor dual** - centro, dividido en INPUT (izquierda) y salida conmutable (derecha)
+
 ☼ **Panel de parámetros** - barra lateral derecha con controles de Alpha Generation, Inference y Output
+
 ☼ **Bandeja I/O** - tira horizontal de miniaturas bajo el visor
+
 ☼ **Barra de estado** - barra de progreso y botón RUN INFERENCE
 
 ---
@@ -200,6 +237,7 @@ Haz clic en **CHROMA KEY** en el panel de parámetros. Keyer por diferencia de c
 
 **Opción B - Generadores de alfa de un clic:**
 ☼ **GVM Auto** - haz clic en **GVM AUTO** en el panel de parámetros. Funciona muy bien para la mayoría de metraje de pantalla verde con personas.
+
 ☼ **BiRefNet** (recomendado) - haz clic en **BIREFNET** en el panel de parámetros. Rápido, preciso y funciona bien en una amplia variedad de metraje.
 
 **Opción C - MatAnyone2 / VideoMaMa:**
@@ -221,11 +259,17 @@ Estos modelos necesitan una guía de máscara. Hay dos formas de proporcionarla:
 Si ya tienes mates alfa de otra herramienta (Rotobrush, Silhouette, Resolve, Nuke, etc.), haz clic en **IMPORT ALPHA** en el panel de parámetros y elige una carpeta de imágenes o un archivo de video mate.
 
 ☼ Formatos de imagen soportados: **PNG, JPG, JPEG, TIF, TIFF, EXR**
+
 ☼ Ruta de video alfa soportada: archivos de video estándar aceptados por el importador normal de clips (por ejemplo **MOV** o **MP4**)
+
 ☼ Las imágenes y los videos mate visibles deben estar en **escala de grises** (blanco = primer plano, negro = fondo)
+
 ☼ El número de fotogramas debe coincidir con la secuencia de entrada
+
 ☼ Las imágenes fijas no PNG se convierten automáticamente a PNG en escala de grises al importar
+
 ☼ Los videos alfa importados se decodifican como fotogramas en escala de grises `AlphaHint/*.png`, para seguir la misma ruta posterior que las guías por secuencia de imágenes
+
 ☼ Los archivos importados se copian en la carpeta `AlphaHint/` del clip y el clip avanza al estado **READY**
 
 Puedes volver a importar en cualquier momento. Si el clip ya tiene guías alfa, se te preguntará si quieres sobrescribirlas.
@@ -250,8 +294,11 @@ Todo el pipeline se puede cancelar (Esc) y admite checkpoints. Si se interrumpe,
 Cambia entre modos de visualización para inspeccionar los resultados:
 
 ☼ **COMP** - key sobre damero
+
 ☼ **FG** - revisar fringing verde
+
 ☼ **MATTE** - inspeccionar calidad del alfa
+
 ☼ **PROCESSED** - RGBA de producción
 
 Las salidas se escriben en los subdirectorios `Output/` del proyecto durante la inferencia (configurable, ver [Carpeta de salida personalizada](#carpeta-de-salida-personalizada)).
@@ -344,9 +391,13 @@ La barra de modo en la parte superior de cada viewport cambia lo que muestra el 
 **Comportamiento de Color Space**
 
 ☼ El **visor INPUT izquierdo** siempre muestra la interpretación actual de la fuente por CorridorKey. Si la entrada se ve mal ahí, tus futuros resultados de inferencia y exportaciones también se basarán en esa interpretación incorrecta.
+
 ☼ Cambiar **Color Space** antes de hacer clic en **RUN INFERENCE** afecta cómo se generan la siguiente vista previa en vivo y la siguiente exportación.
+
 ☼ Cambiar **Color Space** después de que ya existen salidas **no** reescribe esos archivos en disco. Solo actualiza el visor y la vista previa en vivo. Para conservar esa nueva interpretación en archivos guardados, vuelve a ejecutar la inferencia.
+
 ☼ CorridorKey detecta automáticamente el espacio de color a partir del tipo de archivo y los metadatos cuando es posible, pero puedes sobrescribirlo si el visor INPUT no parece representativo.
+
 ☼ Con **Live Preview** activado, el primer ajuste después de un inicio reciente puede pausarse brevemente mientras se carga el motor de inferencia.
 
 Haz **Middle-click** en cualquier deslizador para restablecerlo al valor predeterminado.
@@ -382,8 +433,11 @@ Cada canal de salida se puede activar individualmente y configurar en EXR o PNG:
 El scrubber bajo el visor dual ofrece:
 
 ☼ **Botones de transporte:** Primer fotograma, paso atrás, reproducir/pausar, paso adelante, último fotograma
+
 ☼ **La reproducción está CAPPED:** Pulsar la barra espaciadora reproducirá el metraje a una tasa fija codificada de 3FPS. Es intencional, los archivos son grandes.
+
 ☼ **Barra de cobertura:** Tres carriles con código de color muestran qué fotogramas tienen trazos de pintura (verde), guías alfa (blanco) y salida de inferencia (amarillo)
+
 ☼ **Marcadores In/Out:** Pulsa **I** / **O** para definir un subrango de procesamiento. Cuando está definido, el botón RUN cambia a "RUN SELECTED" y la reproducción entra en bucle dentro del rango.
 
 ---
@@ -426,7 +480,9 @@ Acceso vía Edit > Preferences.
 Por defecto, la salida de inferencia se escribe en `Output/` dentro de cada carpeta de clip. Puedes redirigir la salida en tres niveles:
 
 ☼ **Global**: Preferences > Output > Default output directory
+
 ☼ **Por proyecto**: File > Set Project Output Folder
+
 ☼ **Por clip**: Clic derecho en un clip > Set Output Directory
 
 Prioridad: por clip > por proyecto > preferencia global > predeterminado.
@@ -500,6 +556,7 @@ Las optimizaciones de EZ-CorridorKey (Hiera FlashAttention, núcleos tensoriales
 Las únicas fuentes oficiales para EZ-CorridorKey son:
 
 ☼ **GitHub:** [github.com/edenaion/EZ-CorridorKey/releases](https://github.com/edenaion/EZ-CorridorKey/releases)
+
 ☼ **Gumroad:** [edenaion.gumroad.com](https://edenaion.gumroad.com/)
 
 Cualquier otro sitio que aloje descargas de EZ-CorridorKey está **sin verificar y puede contener malware**. No descargues desde espejos de terceros, sitios de reempaquetado o enlaces de intercambio de archivos. Si ves EZ-CorridorKey alojado en otro lugar, repórtalo en [GitHub Issues](https://github.com/edenaion/EZ-CorridorKey/issues) o en el [Discord de EZSCAPE](https://discord.gg/TyxNjcWeF3).
@@ -507,6 +564,7 @@ Cualquier otro sitio que aloje descargas de EZ-CorridorKey está **sin verificar
 ### Firma de código
 
 ☼ **Windows:** El instalador (.exe) está firmado mediante Azure Trusted Signing. Windows SmartScreen muestra **EZscape Ventures LLC** como editor verificado.
+
 ☼ **macOS:** El .pkg está firmado con código y notarizado por Apple bajo **Developer ID: Edward Zisk (UX6RDC39ZW)**. Gatekeeper lo verifica en el primer inicio.
 
 ### Actualizaciones firmadas
@@ -539,6 +597,7 @@ Todos los commits a `main` están firmados con una clave SSH Ed25519. La protecc
 Escaneos independientes:
 
 ☼ [**EZ-CorridorKey.exe** (v2.0.0, ejecutable interno firmado) - Escaneo VirusTotal](https://www.virustotal.com/gui/file/627129e270cfced9174866cc434cc5e295fae6e315d614d2f1de99cf27ff3820?nocache=1)
+
 ☼ [**EZ-CorridorKey.exe** (v1.10.0, ejecutable interno firmado) - Escaneo VirusTotal](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
 
 > **Modelos de terceros:** El checkpoint principal de CorridorKey (`CorridorKey.pth`) es el único modelo del que podemos responder. Los modelos opcionales (SAM2, GVM, VideoMaMa, MatAnyone2, BiRefNet) se descargan desde los repositorios de sus autores respectivos. Úsalos bajo tu propio criterio.
@@ -572,9 +631,13 @@ EZ-CorridorKey es un proyecto hecho con cariño, construido y mantenido por una 
 [![RunPod](https://img.shields.io/badge/RunPod-Cloud%20GPU-673AB7?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNS0xMC01LTEwIDV6TTIgMTJsMTAgNSAxMC01LTEwLTUtMTAgNXoiLz48L3N2Zz4=&logoColor=white)](https://runpod.io?ref=2k18fmnh)
 
 ☼ **Dale una estrella a este repo** si te resulta útil. Ayuda a que otras personas descubran el proyecto.
+
 ☼ **Compra un plugin**. Pongo mucho trabajo en [EZSCAPE plugins](https://www.ezscape.space).
+
 ☼ **Reporta bugs** vía [GitHub Issues](https://github.com/edenaion/EZ-CorridorKey/issues).
+
 ☼ **Contribuye código**. Ver [CONTRIBUTING.md](CONTRIBUTING.md) para las pautas.
+
 ☼ **Problemas de seguridad**. Ver [SECURITY.md](SECURITY.md) para divulgación responsable.
 
 ¿Necesitas cómputo GPU para inferencia? [RunPod](https://runpod.io?ref=2k18fmnh) ofrece GPU cloud bajo demanda, ideal para procesamiento por lotes de rodajes grandes sin ocupar tu máquina local. Usar mi enlace de referido me permitirá crear más herramientas para todos.
@@ -596,11 +659,17 @@ GUI/SFX/Workflow/QA/Maintenance por [Ed Zisk](https://www.edzisk.com).
 <summary><strong>Contribuidores</strong></summary>
 
 ☼ Logo por [Sara Ann Stewart](https://www.instagram.com/sarastewartwork)
+
 ☼ Optimización Hiera por [Jhe Kim](https://github.com/Raiden129)
+
 ☼ Optimización de tiling por [MarcelLieb](https://github.com/MarcelLieb)
+
 ☼ Backend MLX Apple Silicon por [Cristopher Yates](https://github.com/cmoyates) ([corridorkey-mlx](https://github.com/cmoyates/corridorkey-mlx))
+
 ☼ Caché de grafo FX de [99oblivius](https://github.com/99oblivius) ([CorridorKey-Engine](https://github.com/99oblivius/CorridorKey-Engine))
+
 ☼ Integración BiRefNet adaptada de la [PR upstream](https://github.com/edenaion/EZ-CorridorKey/pull/10) de [Warwlock](https://github.com/Warwlock)
+
 ☼ Modo navegador Docker / noVNC por [DCRepublic](https://github.com/DCRepublic)
 
 </details>
@@ -609,9 +678,13 @@ GUI/SFX/Workflow/QA/Maintenance por [Ed Zisk](https://www.edzisk.com).
 <summary><strong>Módulos opcionales & licencias</strong></summary>
 
 ☼ **SAM 2.1** ([facebookresearch/sam2](https://github.com/facebookresearch/sam2)) - Apache 2.0
+
 ☼ **GVM** ([aim-uofa/GVM](https://github.com/aim-uofa/GVM)) - CC BY-NC-SA 4.0
+
 ☼ **VideoMaMa** ([cvlab-kaist/VideoMaMa](https://github.com/cvlab-kaist/VideoMaMa)) - CC BY-NC 4.0, pesos del modelo bajo Stability AI Community License
+
 ☼ **MatAnyone2** ([pq-yang/MatAnyone2](https://github.com/pq-yang/MatAnyone2)) - Apache 2.0
+
 ☼ **BiRefNet** ([ZhengPeng7/BiRefNet](https://github.com/ZhengPeng7/BiRefNet)) - MIT
 
 </details>
