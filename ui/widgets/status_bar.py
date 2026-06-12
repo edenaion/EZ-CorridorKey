@@ -113,7 +113,7 @@ class StatusBar(QWidget):
         # Run button (primary CTA)
         self._run_btn = QPushButton(self.tr("RUN INFERENCE"))
         self._run_btn.setObjectName("runButton")
-        self._run_btn.setFixedWidth(160)
+        self._run_btn.setMinimumWidth(160)
         self._run_btn.setFixedHeight(32)
         self._run_btn.setEnabled(False)
         self._run_btn.setToolTip(
@@ -138,7 +138,7 @@ class StatusBar(QWidget):
         # Resume button (secondary — only shown when partial outputs exist)
         self._resume_btn = QPushButton(self.tr("RESUME"))
         self._resume_btn.setObjectName("resumeButton")
-        self._resume_btn.setFixedWidth(100)
+        self._resume_btn.setMinimumWidth(100)
         self._resume_btn.setFixedHeight(32)
         self._resume_btn.setToolTip(
             self.tr(
@@ -153,7 +153,7 @@ class StatusBar(QWidget):
         # Stop button (replaces run+resume during jobs)
         self._stop_btn = QPushButton(self.tr("STOP"))
         self._stop_btn.setObjectName("stopButton")
-        self._stop_btn.setFixedWidth(80)
+        self._stop_btn.setMinimumWidth(80)
         self._stop_btn.setFixedHeight(32)
         self._stop_btn.setToolTip(self.tr("Stop the current job (Escape).\nAlready-processed frames are kept on disk."))
         self._stop_btn.clicked.connect(self.stop_clicked.emit)
@@ -201,7 +201,7 @@ class StatusBar(QWidget):
             )
         else:
             self._stop_btn.setText(self.tr("STOP"))
-            self._stop_btn.setFixedWidth(80)
+            self._stop_btn.setMinimumWidth(80)
             self._stop_btn.setToolTip(
                 self.tr(
                     "Stop the current job (Escape).\n"
