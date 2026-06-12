@@ -77,10 +77,13 @@ def _auto_detect_backend() -> str:
         return "torch"
 
     try:
-        import corridorkey_mlx  # type: ignore[import-not-found]  # noqa: F401
+        import mlx.core  # noqa: F401
     except ImportError:
-        logger.info("corridorkey_mlx not installed — using torch backend")
-        return "torch"
+        try:
+            import corridorkey_mlx  # type: ignore[import-not-found]  # noqa: F401
+        except ImportError:
+            logger.info("Neither mlx nor corridorkey_mlx installed — using torch backend")
+            return "torch"
 
     safetensor_files = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{MLX_EXT}"))
     if not safetensor_files:
@@ -111,12 +114,15 @@ def _validate_mlx_available() -> None:
         raise RuntimeError("MLX backend requires Apple Silicon (M1+ Mac)")
 
     try:
-        import corridorkey_mlx  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError as err:
-        raise RuntimeError(
-            "MLX backend requested but corridorkey_mlx is not installed. "
-            "Install with: uv pip install -e '.[mlx]'"
-        ) from err
+        import mlx.core  # noqa: F401
+    except ImportError:
+        try:
+            import corridorkey_mlx  # type: ignore[import-not-found]  # noqa: F401
+        except ImportError as err:
+            raise RuntimeError(
+                "MLX backend requested but mlx is not installed. "
+                "Install with: pip install mlx"
+            ) from err
 
 
 def _discover_checkpoint(ext: str, screen_color: str = "green") -> Path:
@@ -676,16 +682,25 @@ def create_engine(
     """
     backend = resolve_backend(backend)
 
-    # No blue MLX checkpoint exists yet. Force Torch/MPS on Apple Silicon
-    # when blue screen is active so we use the .pth blue checkpoint.
-    if backend == "mlx" and screen_color == "blue":
-        logger.info("Blue screen active — no MLX checkpoint available, switching to Torch/MPS")
-        backend = "torch"
-        if device is None:
-            device = "mps"
-
     if backend == "mlx":
         ckpt = _discover_checkpoint(MLX_EXT, screen_color=screen_color)
+
+        # Prefer built-in MLX engine (uses our own mlx_model.py)
+        try:
+            import mlx.core  # noqa: F401
+            from CorridorKeyModule.mlx_inference_engine import MLXCorridorKeyEngine
+
+            logger.info("Built-in MLX engine loaded: %s (screen=%s)", ckpt.name, screen_color)
+            return MLXCorridorKeyEngine(
+                checkpoint_path=str(ckpt),
+                img_size=img_size,
+                use_refiner=True,
+                on_status=on_status,
+            )
+        except ImportError:
+            pass
+
+        # Fall back to external corridorkey_mlx package (legacy)
         from corridorkey_mlx import CorridorKeyMLXEngine  # type: ignore[import-not-found]
 
         try:
@@ -694,10 +709,9 @@ def create_engine(
             )
             mode = f"tiled (tile={tile_size}, overlap={overlap})" if tile_size else "full-frame"
         except TypeError:
-            # Older corridorkey_mlx without tiled inference support
             raw_engine = CorridorKeyMLXEngine(str(ckpt), img_size=img_size)
             mode = "full-frame (tiling not supported by installed corridorkey_mlx)"
-        logger.info("MLX engine loaded: %s [%s]", ckpt.name, mode)
+        logger.info("Legacy MLX engine loaded: %s [%s]", ckpt.name, mode)
         return _MLXEngineAdapter(raw_engine)
     else:
         ckpt = _discover_checkpoint(TORCH_EXT, screen_color=screen_color)

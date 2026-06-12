@@ -10,6 +10,7 @@ easydict
 einops
 imageio
 huggingface_hub
+socksio
 peft
 Pillow
 PIMS

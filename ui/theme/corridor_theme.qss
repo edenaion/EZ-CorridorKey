@@ -384,6 +384,12 @@ QComboBox:hover {
     border-color: #5A5940;
 }
 
+QComboBox:disabled {
+    background-color: #141300;
+    color: #555;
+    border-color: #2A2910;
+}
+
 QComboBox::drop-down {
     border: none;
     width: 20px;

@@ -17,6 +17,8 @@ import threading
 from collections import OrderedDict
 from functools import lru_cache
 
+os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+
 import cv2
 import numpy as np
 from PySide6.QtGui import QImage
@@ -54,7 +56,7 @@ def decode_frame(
     Applies mode-specific display transforms:
     - COMP: Already 8-bit sRGB PNG, direct load
     - INPUT: Uses the current source interpretation for EXR, PNG, JPG, etc.
-    - ALPHA: 8-bit grayscale PNG from AlphaHint, direct load
+    - ALPHA: Matte visualization from AlphaHint image frames
     - FG: Linear float EXR → sRGB gamma
     - MATTE: 1-channel float → grayscale visualization
     - PROCESSED: Straight RGBA float → composite over black for display
@@ -133,9 +135,13 @@ def _decode_exr(path: str, mode: ViewMode, *, input_exr_is_linear: bool = False)
             # Rare: treat first channel as matte
             return _transform_matte(img[:, :, 0])
         elif channels == 3:
+            if mode in (ViewMode.ALPHA, ViewMode.MASK, ViewMode.MATTE):
+                return _transform_matte(img[:, :, 0])
             # BGR float — FG or Input
             return _transform_linear_rgb(img, mode, input_exr_is_linear=input_exr_is_linear)
         elif channels == 4:
+            if mode in (ViewMode.ALPHA, ViewMode.MASK, ViewMode.MATTE):
+                return _transform_matte(img[:, :, 0])
             # BGRA float — Processed (straight RGBA)
             if mode == ViewMode.PROCESSED:
                 return _transform_processed_rgba(img)

@@ -132,17 +132,31 @@ def _migrate_legacy_settings() -> None:
     logger.info("Migrated %d settings from Corridor Digital/CorridorKey", len(old_keys))
 
 
-def _install_translator(app: QApplication) -> None:
-    """Load a .qm translation file based on user preference or system locale."""
+def apply_language(app: QApplication, lang: str | None = None) -> bool:
+    """Install the .qm translator for `lang`, replacing any active one.
+
+    `lang=None` resolves from the saved preference, falling back to the
+    system locale. Returns True when the requested language is active
+    (English counts: it is the source language and needs no catalogue).
+    Safe to call at any point after QApplication creation, so Preferences
+    can switch languages at runtime without an app restart.
+    """
     from PySide6.QtCore import QSettings
 
-    settings = QSettings()
-    lang = settings.value("ui/language", "", type=str)
-    if not lang:
-        lang = QLocale.system().name().split("_")[0]  # e.g. "fr" from "fr_FR"
+    if lang is None:
+        settings = QSettings()
+        lang = settings.value("ui/language", "", type=str)
+        if not lang:
+            lang = QLocale.system().name().split("_")[0]  # e.g. "fr" from "fr_FR"
+
+    # Drop the active translator (no-op on startup)
+    old = getattr(app, "_corridorkey_translator", None)
+    if old is not None:
+        app.removeTranslator(old)
+        app._corridorkey_translator = None
 
     if lang == "en":
-        return  # English is the source language, no translation needed
+        return True  # English is the source language, no translation needed
 
     if getattr(sys, "frozen", False):
         translations_dir = os.path.join(sys._MEIPASS, "ui", "translations")
@@ -152,7 +166,7 @@ def _install_translator(app: QApplication) -> None:
     qm_file = os.path.join(translations_dir, f"corridorkey_{lang}.qm")
     if not os.path.isfile(qm_file):
         logger.debug("No translation file for '%s' at %s", lang, qm_file)
-        return
+        return False
 
     translator = QTranslator(app)
     if translator.load(qm_file):
@@ -160,8 +174,9 @@ def _install_translator(app: QApplication) -> None:
         # Store ref on app to prevent garbage collection
         app._corridorkey_translator = translator
         logger.info("Loaded translation: %s", lang)
-    else:
-        logger.warning("Failed to load translation file: %s", qm_file)
+        return True
+    logger.warning("Failed to load translation file: %s", qm_file)
+    return False
 
 
 def _prewarm_mlx() -> None:
@@ -201,7 +216,7 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     app.setOrganizationName("EZSCAPE")
 
     # ── i18n: load translation for user's language ──
-    _install_translator(app)
+    apply_language(app)
 
     # One-time migration from old registry path
     # (Corridor Digital\CorridorKey → EZSCAPE\EZ-CorridorKey)

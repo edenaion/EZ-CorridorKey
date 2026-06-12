@@ -143,13 +143,19 @@ def detect_installed_models(install_path: Path | None = None) -> dict[str, bool]
     # CorridorKey Blue — specific filename check
     results["corridorkey-blue"] = (ck_dir / "CorridorKeyBlue_1.0.pth").is_file()
 
-    # CorridorKey MLX — specific .safetensors filename
+    # CorridorKey MLX — built-in engine needs both green and blue weights
     results["corridorkey-mlx"] = (
-        ck_dir / "corridorkey_mlx.safetensors"
-    ).is_file()
+        (ck_dir / "CorridorKey.mlx.safetensors").is_file()
+        and (ck_dir / "CorridorKeyBlue_1.0.mlx.safetensors").is_file()
+    )
 
-    # SAM2 Base+ — HF hub cache (shared across installs)
-    results["sam2"] = _hf_cache_has("facebook/sam2.1-hiera-base-plus", hf)
+    # SAM2 Base+ needs BOTH the Python package (installed by the installer,
+    # not the wizard) and the checkpoint in the HF hub cache (shared across
+    # installs). Checking only the cache reported "installed" while the
+    # runtime import still failed (issue #157).
+    results["sam2"] = _sam2_package_available() and _hf_cache_has(
+        "facebook/sam2.1-hiera-base-plus", hf
+    )
 
     # GVM — unet safetensors
     results["gvm"] = (
@@ -177,6 +183,19 @@ def detect_installed_models(install_path: Path | None = None) -> dict[str, bool]
     results["videomama"] = vm_main.is_file() and vm_base.is_file()
 
     return results
+
+
+def _sam2_package_available() -> bool:
+    """True when the sam2 Python package is importable in this environment.
+
+    Probes sam2.build_sam because that is the exact module the tracker
+    imports at runtime. A partial install can leave the bare top-level
+    package importable while the submodule the runtime needs is missing.
+    """
+    try:
+        return importlib.util.find_spec("sam2.build_sam") is not None
+    except Exception:
+        return False
 
 
 def _hf_cache_has(repo_id: str, cache_dir: Path) -> bool:
@@ -231,9 +250,9 @@ if _IS_APPLE_SILICON:
     MODELS.append({
         "key": "corridorkey-mlx",
         "label": "CorridorKey MLX (Apple Silicon)",
-        "size": "380 MB",
+        "size": "2x 380 MB",
         "required": False,
-        "description": "1.5-2x faster inference on Apple Silicon",
+        "description": "1.5-2x faster inference on Apple Silicon, green and blue checkpoints",
         "default_checked": True,
     })
 
@@ -243,7 +262,9 @@ MODELS += [
         "label": "SAM2 Tracker (Base+)",
         "size": "324 MB",
         "required": False,
-        "description": "Object tracking for multi-frame consistency",
+        "description": "Object tracking for multi-frame consistency. "
+                       "The Python package is installed by the installer: "
+                       "re-run the installer or pip install -e \".[tracker]\".",
         "default_checked": True,
     },
     {
@@ -451,41 +472,22 @@ class _DownloadWorker(QThread):
         original = setup_models.download_corridorkey_mlx
 
         def patched():
-            import urllib.request
-            cfg = setup_models.MLX_CHECKPOINT
-            local_dir = cfg["local_dir"]
-            local_dir.mkdir(parents=True, exist_ok=True)
-            dest = local_dir / cfg["filename"]
-            if dest.is_file():
-                return True
-            if not setup_models.check_disk_space(cfg["size_bytes"], local_dir):
-                return False
+            # Reuse the canonical per-file downloader (SHA256 verify, tmp
+            # rename, disk-space check) and only supply wizard progress.
+            def hook(bn, bs, total):
+                if total > 0 and not worker._cancelled:
+                    worker.model_progress.emit(
+                        worker._current_key,
+                        (bn * bs) // (1024 * 1024),
+                        total // (1024 * 1024),
+                    )
 
-            tmp = dest.with_suffix(".safetensors.tmp")
-            try:
-                def hook(bn, bs, total):
-                    if total > 0 and not worker._cancelled:
-                        worker.model_progress.emit(
-                            worker._current_key,
-                            (bn * bs) // (1024 * 1024),
-                            total // (1024 * 1024),
-                        )
-                urllib.request.urlretrieve(cfg["url"], str(tmp), reporthook=hook)
-                try:
-                    import hashlib
-                    resp = urllib.request.urlopen(cfg["sha256_url"])
-                    expected = resp.read().decode().strip().split()[0]
-                    actual = hashlib.sha256(tmp.read_bytes()).hexdigest()
-                    if actual != expected:
-                        tmp.unlink(missing_ok=True)
-                        return False
-                except Exception:
-                    pass
-                tmp.rename(dest)
-                return True
-            except Exception:
-                tmp.unlink(missing_ok=True)
-                return False
+            ok = True
+            for cfg in setup_models.MLX_CHECKPOINTS:
+                if worker._cancelled:
+                    return False
+                ok = setup_models._download_mlx_one(cfg, reporthook=hook) and ok
+            return ok
 
         setup_models.download_corridorkey_mlx = patched
 
@@ -662,8 +664,8 @@ class SetupWizard(QDialog):
 
         layout.addSpacing(8)
 
-        # Install path picker
-        loc_label = QLabel(self.tr("Install path:"))
+        # Data directory picker (models, projects, frame cache)
+        loc_label = QLabel(self.tr("Data directory (models, projects, frame cache):"))
         loc_label.setStyleSheet("color: #CCCCCC;")
         layout.addWidget(loc_label)
 
@@ -693,7 +695,7 @@ class SetupWizard(QDialog):
         default_btn = QPushButton(self.tr("Default Location"))
         default_btn.setToolTip(
             self.tr(
-                "Reset the install path to the platform default "
+                "Reset the data directory to the platform default "
                 "(in case you changed it and want to return)."
             )
         )

@@ -223,6 +223,15 @@ class IOTrayActionsMixin:
         if os.path.isdir(clip.root_path):
             QDesktopServices.openUrl(QUrl.fromLocalFile(clip.root_path))
 
+    def _kick_extraction_if_needed(self, clips: list[ClipEntry]) -> None:
+        """After a clear, a video-source clip with no extracted frames lands
+        in EXTRACTING. Nothing services that state from here on its own, so
+        the clip would sit stuck. Submit those clips for extraction so they
+        recover to RAW automatically."""
+        needs = [c for c in clips if c.state == ClipState.EXTRACTING]
+        if needs:
+            self.extract_requested.emit(needs)
+
     def _clear_mask_batch(self, clips: list[ClipEntry]) -> None:
         """Delete VideoMamaMaskHint folder from disk for one or more clips."""
         names = ", ".join(c.name for c in clips[:3])
@@ -252,6 +261,7 @@ class IOTrayActionsMixin:
         if clips:
             self.clip_clicked.emit(clips[0])
         logger.info(f"Cleared masks for {len(clips)} clip(s)")
+        self._kick_extraction_if_needed(clips)
 
     @staticmethod
     def _all_output_dirs(clip: ClipEntry) -> list[str]:
@@ -331,6 +341,7 @@ class IOTrayActionsMixin:
         if clips:
             self.clip_clicked.emit(clips[0])
         logger.info(f"Cleared all generated data for {len(clips)} clip(s)")
+        self._kick_extraction_if_needed(clips)
 
     def _clear_alpha_batch(self, clips: list[ClipEntry]) -> None:
         """Delete AlphaHint folder from disk for one or more clips."""
@@ -363,6 +374,7 @@ class IOTrayActionsMixin:
         if clips:
             self.clip_clicked.emit(clips[0])
         logger.info(f"Cleared AlphaHint for {len(clips)} clip(s)")
+        self._kick_extraction_if_needed(clips)
 
     def _clear_outputs_batch(self, clips: list[ClipEntry]) -> None:
         """Clear output files for one or more clips."""

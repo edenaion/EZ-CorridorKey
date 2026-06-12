@@ -28,25 +28,6 @@ _STATUS_COLORS = {
     JobStatus.FAILED: "#D10000",
 }
 
-_STATUS_TEXT = {
-    JobStatus.QUEUED: "QUEUED",
-    JobStatus.RUNNING: "PROCESSING",
-    JobStatus.COMPLETED: "DONE",
-    JobStatus.CANCELLED: "CANCELLED",
-    JobStatus.FAILED: "FAILED",
-}
-
-_JOB_TYPE_LABELS = {
-    JobType.INFERENCE: "Inference",
-    JobType.GVM_ALPHA: "GVM Auto",
-    JobType.SAM2_PREVIEW: "Track Preview",
-    JobType.SAM2_TRACK: "Track Mask",
-    JobType.VIDEOMAMA_ALPHA: "VideoMaMa",
-    JobType.MATANYONE2_ALPHA: "MatAnyone2",
-    JobType.BIREFNET_ALPHA: "BiRefNet",
-    JobType.PREVIEW_REPROCESS: "Preview",
-}
-
 _TAB_W = 24
 _CONTENT_W = 216
 _EXPANDED_W = _TAB_W + _CONTENT_W  # 240
@@ -56,14 +37,16 @@ _ROW_H = 60
 class _JobRowCache:
     """Cached widgets for a single job row, enabling in-place updates."""
     __slots__ = ("frame", "progress_bar", "frame_label", "status_label",
-                 "last_status", "last_current", "last_total")
+                 "dismiss_btn", "last_status", "last_current", "last_total")
 
     def __init__(self, frame: QFrame, progress_bar: QProgressBar | None,
-                 frame_label: QLabel | None, status_label: QLabel | None):
+                 frame_label: QLabel | None, status_label: QLabel | None,
+                 dismiss_btn: QPushButton | None = None):
         self.frame = frame
         self.progress_bar = progress_bar
         self.frame_label = frame_label
         self.status_label = status_label
+        self.dismiss_btn = dismiss_btn
         self.last_status: JobStatus | None = None
         self.last_current: int = -1
         self.last_total: int = -1
@@ -106,7 +89,7 @@ class QueuePanel(QWidget):
         tab_layout.setSpacing(0)
         tab_layout.addStretch()
         self._tab_letters: list[QLabel] = []
-        for ch in "QUEUE":
+        for ch in self.tr("QUEUE"):
             lbl = QLabel(ch)
             lbl.setAlignment(Qt.AlignCenter)
             lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -298,6 +281,18 @@ class QueuePanel(QWidget):
         self._job_layout.addStretch()
         self._displayed_ids = [job.id for job in jobs]
 
+    def _status_display(self, status: JobStatus) -> str:
+        """Translated status text for a job row. Literal tr() calls so
+        lupdate extracts every label."""
+        texts = {
+            JobStatus.QUEUED: self.tr("QUEUED"),
+            JobStatus.RUNNING: self.tr("PROCESSING"),
+            JobStatus.COMPLETED: self.tr("DONE"),
+            JobStatus.CANCELLED: self.tr("CANCELLED"),
+            JobStatus.FAILED: self.tr("FAILED"),
+        }
+        return texts.get(status, "?")
+
     def _create_job_row(self, job: GPUJob) -> tuple[QFrame, _JobRowCache]:
         """Create a single job row — vertical stack: type+clip, progress/status."""
         row = QFrame()
@@ -313,7 +308,8 @@ class QueuePanel(QWidget):
         top = QHBoxLayout()
         top.setSpacing(6)
 
-        type_text = self.tr(_JOB_TYPE_LABELS.get(job.job_type, "???"))
+        from ui.state_labels import job_type_display_name
+        type_text = job_type_display_name(job.job_type)
         type_label = QLabel(type_text)
         type_label.setStyleSheet(
             "color: #999980; font-size: 9px; font-weight: 700; "
@@ -323,22 +319,27 @@ class QueuePanel(QWidget):
 
         top.addStretch()
 
-        # Dismiss button for finished jobs
-        if job.status in (JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED):
-            dismiss_btn = QPushButton("\u2715")  # ✕
-            dismiss_btn.setFixedSize(14, 14)
-            dismiss_btn.setCursor(Qt.PointingHandCursor)
-            dismiss_btn.setStyleSheet(
-                "QPushButton { background: transparent; color: #555540; "
-                "font-size: 9px; border: none; padding: 0; }"
-                "QPushButton:hover { color: #999980; }"
-            )
-            dismiss_btn.setToolTip(self.tr("Dismiss"))
-            job_id = job.id
-            dismiss_btn.clicked.connect(
-                lambda checked, jid=job_id: self._dismiss_job(jid)
-            )
-            top.addWidget(dismiss_btn)
+        # Dismiss button -- always created, shown only once the job finishes.
+        # Rows update in place as jobs progress, so a button created
+        # conditionally at build time would never appear for jobs that
+        # finish while displayed.
+        dismiss_btn = QPushButton("\u2715")  # ✕
+        dismiss_btn.setFixedSize(14, 14)
+        dismiss_btn.setCursor(Qt.PointingHandCursor)
+        dismiss_btn.setStyleSheet(
+            "QPushButton { background: transparent; color: #555540; "
+            "font-size: 9px; border: none; padding: 0; }"
+            "QPushButton:hover { color: #999980; }"
+        )
+        dismiss_btn.setToolTip(self.tr("Dismiss"))
+        job_id = job.id
+        dismiss_btn.clicked.connect(
+            lambda checked, jid=job_id: self._dismiss_job(jid)
+        )
+        dismiss_btn.setVisible(
+            job.status in (JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED)
+        )
+        top.addWidget(dismiss_btn)
 
         layout.addLayout(top)
 
@@ -378,14 +379,18 @@ class QueuePanel(QWidget):
 
         layout.addLayout(bottom)
 
-        cache = _JobRowCache(row, progress_bar, frame_label, status_label)
+        cache = _JobRowCache(row, progress_bar, frame_label, status_label, dismiss_btn)
         self._update_row_in_place(cache, job)
         return row, cache
 
     def _update_row_in_place(self, cache: _JobRowCache, job: GPUJob) -> None:
         """Update a cached row's widgets to reflect current job state."""
         color = _STATUS_COLORS.get(job.status, "#808070")
-        status_text = self.tr(_STATUS_TEXT.get(job.status, "?"))
+        status_text = self._status_display(job.status)
+        if cache.dismiss_btn is not None:
+            cache.dismiss_btn.setVisible(
+                job.status in (JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED)
+            )
 
         pb = cache.progress_bar
         fl = cache.frame_label

@@ -49,6 +49,7 @@ class ExportMixin:
             # Restructure: create clip_name/ dir and copy video as Input.ext
             source_dir = os.path.join(clip.root_path, "Source")
             if not os.path.isdir(source_dir) and clip.root_path == self._clips_dir:
+                original_video = video_path  # preserve before restructuring
                 ext = os.path.splitext(video_path)[1]
                 clip_dir = os.path.join(self._clips_dir, clip.name)
                 target = os.path.join(clip_dir, f"Input{ext}")
@@ -58,6 +59,9 @@ class ExportMixin:
                     logger.info(f"Restructured standalone video: {video_path} -> {target}")
                 clip.root_path = clip_dir
                 clip.input_asset.path = target
+                # Copy companion hint videos (AlphaHint/MaskHint) from original location
+                from backend.project import _copy_companion_hints
+                _copy_companion_hints(original_video, clip_dir)
 
             self._extract_worker.submit(
                 clip.name, clip.input_asset.path, clip.root_path,
@@ -147,9 +151,15 @@ class ExportMixin:
                 if os.path.isdir(actual_dir):
                     clip.input_asset = ClipAsset(actual_dir, "sequence")
 
-                # Transition EXTRACTING -> RAW
-                clip.state = ClipState.RAW
-                self._clip_model.update_clip_state(clip_name, ClipState.RAW)
+                # Re-scan for hint assets that may have been copied during
+                # restructuring or auto-extracted alongside the video.
+                # find_assets() calls _resolve_state() which sets the right
+                # state (READY if AlphaHint found, MASKED if MaskHint, etc.)
+                clip.find_assets()
+                if clip.state == ClipState.EXTRACTING:
+                    # Frames exist now but find_assets may still see EXTRACTING
+                    clip.state = ClipState.RAW
+                self._clip_model.update_clip_state(clip_name, clip.state)
 
                 # Regenerate thumbnail from sequence
                 self._refresh_input_thumbnail(clip)
@@ -169,6 +179,10 @@ class ExportMixin:
             self._status_bar.reset_progress()
             from ui.sounds.audio_manager import UIAudio
             UIAudio.frame_extract_done()
+
+        # Batch pipeline: submit GPU job for this clip now that extraction is done
+        if hasattr(self, '_on_batch_extract_finished'):
+            self._on_batch_extract_finished(clip_name)
 
     @Slot(str, str)
     def _on_extract_error(self, clip_name: str, error_msg: str) -> None:

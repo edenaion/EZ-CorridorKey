@@ -29,6 +29,9 @@ class MenuMixin:
         self._open_action = file_menu.addAction(_tr("Open Project..."), self._on_open_project)
 
         file_menu.addSeparator()
+        file_menu.addAction(_tr("Batch Pipeline..."), self._on_batch_pipeline)
+
+        file_menu.addSeparator()
         self._set_project_output_action = file_menu.addAction(
             _tr("Set Project Output Folder..."), self._on_set_project_output_dir,
         )
@@ -72,13 +75,21 @@ class MenuMixin:
         # Click sound on any menu action
         menu_bar.triggered.connect(lambda _: self._menu_click_sound())
 
-        # Right corner: update button (hidden) + volume control
+        # Right corner: volume control only
         self._corner_widget = QWidget()
         corner_layout = QHBoxLayout(self._corner_widget)
         corner_layout.setContentsMargins(0, 0, 4, 0)
         corner_layout.setSpacing(8)
 
-        self._update_btn = QPushButton(_tr("Update Available"))
+        from ui.widgets.volume_control import VolumeControl
+        self._volume_control = VolumeControl(self._corner_widget)
+        corner_layout.addWidget(self._volume_control)
+
+        menu_bar.setCornerWidget(self._corner_widget)
+
+        # Update button: floating overlay (direct child of main window)
+        # Stays in top-right below menu bar regardless of window size.
+        self._update_btn = QPushButton(_tr("Update Available"), self)
         self._update_btn.setVisible(False)
         self._update_btn.setCursor(Qt.PointingHandCursor)
         self._update_btn.setStyleSheet(
@@ -90,13 +101,6 @@ class MenuMixin:
             "QPushButton:hover { background: #E0D600; }"
         )
         self._update_btn.clicked.connect(self._run_update)
-        corner_layout.addWidget(self._update_btn)
-
-        from ui.widgets.volume_control import VolumeControl
-        self._volume_control = VolumeControl(self._corner_widget)
-        corner_layout.addWidget(self._volume_control)
-
-        menu_bar.setCornerWidget(self._corner_widget)
 
     def _menu_click_sound(self) -> None:
         from ui.sounds.audio_manager import UIAudio

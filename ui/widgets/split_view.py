@@ -14,7 +14,7 @@ strokes in image-pixel coordinates. Shift+drag resizes brush.
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtCore import Qt, Signal, QPointF, QRectF
 from PySide6.QtGui import (
     QPainter, QPen, QColor, QImage, QMouseEvent, QWheelEvent,
@@ -49,6 +49,7 @@ class SplitViewWidget(QWidget):
     """Image display with optional split view, zoom, and pan."""
 
     zoom_changed = Signal(float)  # current zoom level
+    view_transform_changed = Signal(float, QPointF)  # user pan/zoom, for tandem viewer sync
     stroke_finished = Signal()    # emitted when an annotation stroke completes
     color_sampled = Signal(int, int, int)  # eyedropper: final averaged RGB on release
     color_preview = Signal(int, int, int)  # eyedropper: live running-average RGB during drag
@@ -90,6 +91,8 @@ class SplitViewWidget(QWidget):
         self._panning = False
         self._pan_start = QPointF()
         self._pan_start_offset = QPointF()
+        self._pan_pressed = False   # left button down, becomes a pan past threshold
+        self._pan_did_drag = False  # last press panned; suppress double-click reset
 
         # Zoom limits
         self._zoom_min = 0.25
@@ -188,6 +191,30 @@ class SplitViewWidget(QWidget):
         """Reset zoom to fit and center pan."""
         self._zoom = 1.0
         self._pan = QPointF(0.0, 0.0)
+        self.zoom_changed.emit(self._zoom)
+        self.view_transform_changed.emit(self._zoom, QPointF(self._pan))
+        self.update()
+
+    # ── Tandem view sync API ──
+
+    def view_transform(self) -> tuple[float, QPointF]:
+        """Current (zoom, pan) of this viewer."""
+        return self._zoom, QPointF(self._pan)
+
+    def set_view_transform(self, zoom: float, pan: QPointF) -> None:
+        """Apply a zoom/pan from a synced sibling viewer.
+
+        Does not re-emit view_transform_changed, so two viewers can be
+        cross-connected without a feedback loop. Emits zoom_changed so
+        zoom labels stay accurate.
+        """
+        zoom = max(self._zoom_min, min(self._zoom_max, zoom))
+        if (abs(zoom - self._zoom) < 1e-4
+                and abs(pan.x() - self._pan.x()) < 0.01
+                and abs(pan.y() - self._pan.y()) < 0.01):
+            return
+        self._zoom = zoom
+        self._pan = QPointF(pan)
         self.zoom_changed.emit(self._zoom)
         self.update()
 
@@ -727,6 +754,18 @@ class SplitViewWidget(QWidget):
             self.setCursor(Qt.ClosedHandCursor)
             return
 
+        # Left-drag pan fallback: nothing else claimed this left press
+        # (annotation, eyedropper, divider, and wipe line all return above).
+        # The pan only engages after the drag threshold in mouseMoveEvent,
+        # so plain clicks and double-click reset keep working. Some mice
+        # have no middle button.
+        if event.button() == Qt.LeftButton and not self._annotation_mode:
+            self._pan_pressed = True
+            self._pan_did_drag = False
+            self._pan_start = event.position()
+            self._pan_start_offset = QPointF(self._pan)
+            return
+
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
@@ -806,12 +845,21 @@ class SplitViewWidget(QWidget):
                     self._annotation_sibling.update()
             return
 
+        # Promote a pressed left button to a pan once past the drag threshold
+        if self._pan_pressed and not self._panning:
+            dist = (event.position() - self._pan_start).manhattanLength()
+            if dist >= QApplication.startDragDistance():
+                self._panning = True
+                self._pan_did_drag = True
+                self.setCursor(Qt.ClosedHandCursor)
+
         if self._panning:
             delta = event.position() - self._pan_start
             self._pan = QPointF(
                 self._pan_start_offset.x() + delta.x(),
                 self._pan_start_offset.y() + delta.y(),
             )
+            self.view_transform_changed.emit(self._zoom, QPointF(self._pan))
             self.update()
             return
 
@@ -879,14 +927,21 @@ class SplitViewWidget(QWidget):
 
         if self._panning:
             self._panning = False
+            self._pan_pressed = False
             self.unsetCursor()
             return
 
+        self._pan_pressed = False
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """Double-click to reset zoom/pan (disabled during annotation)."""
         if event.button() == Qt.LeftButton and not self._annotation_mode:
+            if self._pan_did_drag:
+                # The preceding click was a left-drag pan; a quick follow-up
+                # click must not reset the view the user just framed.
+                self._pan_did_drag = False
+                return
             self.reset_zoom()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -900,7 +955,10 @@ class SplitViewWidget(QWidget):
                 delta, bool(mods & Qt.ShiftModifier), self._wipe_offset)
             self.update()
             return
-        if mods & Qt.ControlModifier:
+        # macOS: Cmd (MetaModifier) is the primary modifier, not Ctrl
+        import sys as _sys
+        _zoom_mod = Qt.MetaModifier if _sys.platform == "darwin" else Qt.ControlModifier
+        if mods & _zoom_mod:
             delta = event.angleDelta().y()
             factor = 1.1 if delta > 0 else 1.0 / 1.1
             new_zoom = self._zoom * factor
@@ -921,11 +979,13 @@ class SplitViewWidget(QWidget):
 
             self._zoom = new_zoom
             self.zoom_changed.emit(self._zoom)
+            self.view_transform_changed.emit(self._zoom, QPointF(self._pan))
             self.update()
         elif mods & Qt.ShiftModifier:
             # Shift+Wheel: horizontal pan (left/right)
             delta = event.angleDelta().y()
             self._pan = QPointF(self._pan.x() + delta * 0.5, self._pan.y())
+            self.view_transform_changed.emit(self._zoom, QPointF(self._pan))
             self.update()
         else:
             super().wheelEvent(event)
@@ -936,10 +996,12 @@ class SplitViewWidget(QWidget):
         if key == Qt.Key_Plus or key == Qt.Key_Equal:
             self._zoom = min(self._zoom_max, self._zoom * 1.2)
             self.zoom_changed.emit(self._zoom)
+            self.view_transform_changed.emit(self._zoom, QPointF(self._pan))
             self.update()
         elif key == Qt.Key_Minus:
             self._zoom = max(self._zoom_min, self._zoom / 1.2)
             self.zoom_changed.emit(self._zoom)
+            self.view_transform_changed.emit(self._zoom, QPointF(self._pan))
             self.update()
         elif key == Qt.Key_0:
             self.reset_zoom()
