@@ -73,10 +73,12 @@ class InferenceMixin:
         if app:
             app.setStyleSheet(load_stylesheet(screen_color=effective))
 
-        # Update brand mark text
+        # Update brand mark text — hyphen and KEY carry the accent
         palette = ACCENT_COLORS[effective]
+        self._current_accent = palette["accent"]
         self._brand_label.setText(
-            f'<span style="color:#FFF203;">EZ-</span>'
+            f'<span style="color:#FFF203;">EZ</span>'
+            f'<span style="color:{palette["accent"]};">-</span>'
             f'<span style="color:#FFF203;">CORRIDOR</span>'
             f'<span style="color:{palette["accent"]};">KEY</span>'
         )
