@@ -6,12 +6,14 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [Unreleased]
 
-> **macOS support ends with this release.** Starting with 2.1, the Python application is Windows-only and no Mac installer is published. A native Mac application is coming to the App Store shortly. Subscribe on YouTube for release updates. The macOS features below remain in the source tree and work on source installs, but are no longer packaged or supported.
+> **macOS support ends with this release.** Starting with 2.1, the Python application is Windows-only and no Mac installer is published. Mid-production, all macOS effort moved to a fully native Mac application, coming to the App Store shortly. Subscribe on YouTube for release updates.
+>
+> The macOS features below remain in the source tree, but the macOS side of 2.1 is untested as a whole. Mac users should stay on 2.0 unless they are comfortable being their own testers.
 
 ### Added
 
 - **Garbage matte cleanup:** new post-inference cleanup in the Inference section. Dilates the alpha hint by a configurable pixel amount and zeroes everything outside it, removing edge-of-frame gunk the model lets through. Works with any hint source and all engines.
-- **UI translated into 15 languages:** German, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, Vietnamese, Chinese, plus English. Pick a language in Preferences. Strings added late in this release fall back to English until the catalogues refresh.
+- **UI translated into 15 languages:** German, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, Vietnamese, Chinese. Pick a language in Preferences. Strings added late in this release fall back to English until the catalogues refresh.
 - **First launch installs automatically:** the start scripts now run the installer when no virtual environment is found, so a fresh clone or zip starts with one click. ([#90](https://github.com/edenaion/EZ-CorridorKey/pull/90), thanks Benjamin Morgan)
 - **Built-in MLX inference engine** (macOS source installs): EZ-CorridorKey ships its own MLX model port for Apple Silicon, replacing the external `corridorkey_mlx` package that had quality complaints. Both green and blue checkpoints are converted to `.mlx.safetensors` format (380 MB each). Runs in float16 for roughly 2x speed (5.2s to 2.5s per frame at 1024 on an M1 Pro) with output verified at 52-67 dB PSNR on real 4K footage. Auto-detection routes green/blue clips to the correct MLX checkpoint on Apple Silicon and falls back to Torch/MPS elsewhere.
 - **Apple Vision foreground hint** (macOS 14+ source installs): new APPLE VISION button in the Alpha Generation panel. Uses Apple's Neural Engine via `VNGenerateForegroundInstanceMaskRequest` to generate a foreground segmentation hint without any painting or annotation, with guided-filter edge refinement for clean mask borders. Auto-hidden on non-macOS platforms.
