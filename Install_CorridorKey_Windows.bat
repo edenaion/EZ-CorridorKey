@@ -50,6 +50,17 @@ if /i "!CUDA_DETECT_MODE!"=="nvidia" (
         echo(  If you have an NVIDIA GPU, ensure drivers are installed and nvidia-smi works.
     )
 )
+if /i "!CUDA_DETECT_REASON!"=="nvidia_smi_failed" (
+    if "%CORRIDORKEY_EXPECT_GPU%"=="0" (
+        echo(  CORRIDORKEY_EXPECT_GPU=0 is set, continuing with CPU-only PyTorch.
+    ) else (
+        echo   [ERROR] nvidia-smi was found but failed to run. Your NVIDIA driver is broken or outdated.
+        echo   Reinstall the driver from https://www.nvidia.com/Download/index.aspx then re-run this installer.
+        echo   To install CPU-only PyTorch anyway, set CORRIDORKEY_EXPECT_GPU=0 and re-run this installer.
+        pause
+        exit /b 1
+    )
+)
 
 if defined INDEX_URL (
     pip install --extra-index-url !INDEX_URL! -r requirements.txt
