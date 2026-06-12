@@ -424,8 +424,10 @@ class MainWindow(
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(12, 6, 12, 6)
 
+        self._current_accent = "#2CC350"
         self._brand_label = QLabel(
-            '<span style="color:#FFF203;">EZ-</span>'
+            '<span style="color:#FFF203;">EZ</span>'
+            '<span style="color:#2CC350;">-</span>'
             '<span style="color:#FFF203;">CORRIDOR</span>'
             '<span style="color:#2CC350;">KEY</span>'
         )

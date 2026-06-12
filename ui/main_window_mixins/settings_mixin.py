@@ -239,10 +239,12 @@ class SettingsMixin:
         box = QMessageBox(self)
         box.setWindowTitle(_tr("About EZ-CorridorKey"))
         box.setTextFormat(Qt.RichText)
+        accent = getattr(self, "_current_accent", "#2CC350")
         box.setText(
             f'<h2><a href="https://www.ezcorridorkey.com" '
             f'style="color: #FFF203; text-decoration: none;">'
-            f"EZ-CorridorKey</a> v{app_version}</h2>"
+            f'EZ<span style="color:{accent};">-</span>CorridorKey</a>'
+            f" v{app_version}</h2>"
             "<p>" + _tr("AI Green Screen Keyer") + "<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"
