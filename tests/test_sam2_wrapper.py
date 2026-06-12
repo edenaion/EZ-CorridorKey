@@ -1,11 +1,12 @@
 import os
+import sys
 import tempfile
 
 import numpy as np
 import pytest
 import torch
 
-from sam2_tracker.wrapper import PromptFrame, SAM2Tracker
+from sam2_tracker.wrapper import PromptFrame, SAM2NotInstalledError, SAM2Tracker
 
 
 def test_sanitize_prompt_frame_clamps_points_box_and_mask():
@@ -135,6 +136,35 @@ def test_track_video_refines_sparse_point_batches(monkeypatch):
         assert call["box"] is None
         assert call["points"].shape == (8, 2)
         assert call["labels"].tolist() == [1, 1, 1, 1, 1, 1, 0, 0]
+
+
+# ── Not-installed error message tests ────────────────────────────────────
+
+
+class TestNotInstalledErrorMessage:
+    """SAM2NotInstalledError must say which interpreter failed (issue #157)."""
+
+    def test_sam2_import_failure_includes_python_and_cause(self, monkeypatch):
+        import builtins
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "sam2" or name.startswith("sam2."):
+                raise ImportError("No module named 'sam2'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+
+        tracker = SAM2Tracker(device="cpu")
+        with pytest.raises(SAM2NotInstalledError) as excinfo:
+            tracker._get_predictor()
+
+        message = str(excinfo.value)
+        assert "SAM2 is not installed" in message
+        assert f"Python: {sys.executable}" in message
+        assert "Import error: No module named 'sam2'" in message
+        assert isinstance(excinfo.value.__cause__, ImportError)
 
 
 # ── Checkpoint validation tests ──────────────────────────────────────────
