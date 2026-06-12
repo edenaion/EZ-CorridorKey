@@ -140,6 +140,35 @@ def write_exr_dwab(path: str, img: np.ndarray) -> bool:
     return write_exr(path, img, compression="dwab")
 
 
+def imwrite_unicode(path: str, img: np.ndarray, params: Optional[list] = None) -> bool:
+    """Write an image to disk via cv2.imencode, safe for unicode paths.
+
+    cv2.imwrite cannot handle non-ASCII paths on Windows. Encoding to an
+    in-memory buffer and writing it through numpy's tofile goes through
+    Python's unicode-aware file API instead, so the path round-trips
+    correctly on every platform.
+
+    Args:
+        path: Output file path. The extension selects the encoder.
+        img: Image array to write (any dtype/layout cv2.imencode accepts).
+        params: Optional cv2.IMWRITE_* flag pairs forwarded to the encoder.
+
+    Returns:
+        True on success, False on failure.
+    """
+    try:
+        ext = os.path.splitext(path)[1]
+        ok, buf = cv2.imencode(ext, img, params or [])
+        if not ok:
+            logger.warning(f"Failed to encode image for {path}")
+            return False
+        buf.tofile(path)
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to write image {path}: {e}")
+        return False
+
+
 def recompress_exr(src_path: str, dst_path: str, compression: str = "dwab") -> bool:
     """Recompress an EXR file to the specified compression.
 

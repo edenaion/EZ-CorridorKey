@@ -96,9 +96,9 @@ class FrameOpsMixin:
         exr_compression: str = "dwab",
     ) -> None:
         """Write a single image in the requested format."""
-        import cv2
         from . import write_exr
-        
+        from .. import frame_io
+
         if fmt == "exr":
             # EXR requires float32 — convert if uint8 (e.g. pre-converted comp)
             if img.dtype == np.uint8:
@@ -110,10 +110,14 @@ class FrameOpsMixin:
                 clip_name, frame_index, path,
             )
         else:
-            # PNG 8-bit
+            # PNG 8-bit. Module-attribute call keeps the write unicode-safe
+            # on Windows and patchable as backend.frame_io.imwrite_unicode.
             if img.dtype != np.uint8:
                 img = (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8)
-            validate_write(cv2.imwrite(path, img), clip_name, frame_index, path)
+            validate_write(
+                frame_io.imwrite_unicode(path, img),
+                clip_name, frame_index, path,
+            )
 
     def _write_manifest(
         self,
