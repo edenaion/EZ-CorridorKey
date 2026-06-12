@@ -12,7 +12,8 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Added
 
-- **UI translated into 15 languages:** German, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, Vietnamese, Chinese. Pick a language in Preferences. Strings added late in this release fall back to English until the catalogues refresh.
+- **UI translated into 14 languages:** German, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, Vietnamese, Chinese. Pick a language at the top of Preferences.
+- **Language switching applies instantly:** changing the language in Preferences reloads the interface on the spot. No restart needed, and the open project, selected clip, and parameters carry over.
 - **Built-in MLX inference engine** (macOS source installs): EZ-CorridorKey ships its own MLX model port for Apple Silicon, replacing the external `corridorkey_mlx` package that had quality complaints. Both green and blue checkpoints are converted to `.mlx.safetensors` format (380 MB each). Runs in float16 for roughly 2x speed (5.2s to 2.5s per frame at 1024 on an M1 Pro) with output verified at 52-67 dB PSNR on real 4K footage. Auto-detection routes green/blue clips to the correct MLX checkpoint on Apple Silicon and falls back to Torch/MPS elsewhere.
 - **Apple Vision foreground hint** (macOS 14+ source installs): new APPLE VISION button in the Alpha Generation panel. Uses Apple's Neural Engine via `VNGenerateForegroundInstanceMaskRequest` to generate a foreground segmentation hint without any painting or annotation, with guided-filter edge refinement for clean mask borders. Auto-hidden on non-macOS platforms.
 - **Batch Pipeline** — File > Batch Pipeline opens a dialog for batch-processing an entire folder of clips. Select a folder, configure which alpha generation model to use (GVM, BiRefNet, VideoMaMa, MatAnyone2), and run everything autonomously. Per-clip overrides let you mix models in the same batch. Live progress bars and checkmarks track each clip's status. Works with image sequence folders too: sequence subfolders are detected and can be mixed with videos in one batch.
@@ -23,6 +24,9 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Fixed
 
+- **Menus, queue panel, status bar, and clip badges were untranslated:** the first translation pass missed every string routed through the main-window helper (File/Edit/View/Help menus and all menu actions), the queue tab and its job status labels, status bar progress phases, clip state badges, and thumbnail captions. All 605 strings are now extracted and translated in every language.
+- **Queue items could not be dismissed:** the dismiss button on a queue row only appeared if the job was already finished when the row was drawn. Jobs that finished while displayed never got one. The button now appears the moment a job completes, is cancelled, or fails.
+- **Status bar buttons truncated long translations:** RUN INFERENCE / RESUME / STOP now grow with their text instead of clipping.
 - **CONTRIBUTING.md pointed to stale requirements.txt** — dev setup now recommends `pip install -e ".[dev]"` which installs from `pyproject.toml`, the canonical dependency source. ([#154](https://github.com/edenaion/EZ-CorridorKey/issues/154))
 - **Queue panel covered the timeline:** the queue overlay now stops above the coverage bar, so the scrubber, completion lanes, and in/out bracket markers stay visible while the queue is open.
 - **Right parameter panel loaded cut off:** the panel now opens at its full content width and can no longer be shrunk to the point of clipping controls on the right.
