@@ -179,7 +179,11 @@ def main() -> int:
         if added:
             line += f" (+{added} injected)"
         print(line)
-        if args.release and not args.report:
+        if args.release and not args.report and ts.stem != "corridorkey_en":
+            # Skip English: it is the source language. Compiling corridorkey_en.ts
+            # produces a 33-byte stub corridorkey_en.qm that was scrubbed from the
+            # repo; regenerating it would re-add the scrubbed file and ship a useless
+            # empty catalogue. English UI uses the source strings directly.
             run_lrelease(ts)
 
     if args.release and not args.report:
