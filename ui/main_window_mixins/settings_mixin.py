@@ -250,6 +250,10 @@ class SettingsMixin:
 
     @Slot(str)
     def _on_update_available(self, remote_version: str) -> None:
+        # Remember what the checker found so _run_update can re-validate
+        # against the local version at click time (the button can outlive
+        # an update that already completed).
+        self._remote_version = remote_version
         self._update_btn.setText(_tr("Update Available (v%s)") % remote_version)
         self._update_btn.setToolTip(
             _tr("A new version (v%s) is available.\n"
@@ -272,10 +276,38 @@ class SettingsMixin:
 
     def _run_update(self) -> None:
         import sys as _sys
+        if not self._update_still_pending():
+            return
         if getattr(_sys, "frozen", False):
             self._run_frozen_update()
         else:
             self._run_script_update()
+
+    def _update_still_pending(self) -> bool:
+        """Re-validate the stored update against the current local version.
+
+        The update button can go stale: after the updater runs (or the
+        user pulls manually) the code on disk is already current, but the
+        running process still shows the button. Clicking it again would
+        relaunch the updater for nothing. Re-read the local version and
+        compare against the remote version captured at check time; if the
+        update already landed, hide the button, tell the user a restart
+        is all that is left, and skip the updater.
+        """
+        remote = getattr(self, "_remote_version", "")
+        if not remote:
+            return True
+        from ui.main_window import _UpdateChecker
+        local = self._get_local_version()
+        if _UpdateChecker._is_newer(remote, local):
+            return True
+        self._update_btn.setVisible(False)
+        QMessageBox.information(
+            self, _tr("Update EZ-CorridorKey"),
+            _tr("EZ-CorridorKey is already updated to v%s.\n\n"
+                "Restart the app to load the new version.") % local,
+        )
+        return False
 
     def _run_script_update(self) -> None:
         """Update via 3-update.sh / 3-update.bat (CLI/dev installs)."""

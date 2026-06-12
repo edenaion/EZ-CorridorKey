@@ -46,9 +46,15 @@ elif [ "$CURRENT_BRANCH" = "main" ] && [ "$CURRENT_UPSTREAM" = "origin/master" ]
     fi
 fi
 
+# Track pull failure but keep going: the dependency and weights steps
+# below still clean up partial environments. Only the final status and
+# exit code report the failure so callers (and the in-app updater) know
+# the code was not actually updated.
+PULL_FAILED=0
 if git pull --recurse-submodules 2>&1; then
     echo "  [OK] Code updated"
 else
+    PULL_FAILED=1
     echo "  [WARN] Git pull had issues. You may have local changes."
     echo "  If stuck, try: git stash && git pull && git stash pop"
 fi
@@ -132,9 +138,25 @@ fi
 
 # ── Done ──
 echo ""
+if [ "$PULL_FAILED" = "1" ]; then
+    echo "  ========================================"
+    echo "   Update INCOMPLETE - code was not updated"
+    echo "  ========================================"
+    echo ""
+    echo "  Resolve the git issue above, then run ./3-update.sh again."
+    echo ""
+    exit 1
+fi
 echo "  ========================================"
 echo "   Update complete!"
 echo "  ========================================"
 echo ""
+
+# Auto-relaunch if called with --relaunch flag
+if [ "${1:-}" = "--relaunch" ]; then
+    echo "  Relaunching EZ-CorridorKey..."
+    exec ./2-start.sh
+fi
+
 echo "  To launch: ./2-start.sh"
 echo ""
