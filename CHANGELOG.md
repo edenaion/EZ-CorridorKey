@@ -8,13 +8,11 @@ All notable changes to EZ-CorridorKey are documented here.
 
 > **macOS support ends with this release.** Starting with 2.1.0, the Python application is Windows/Linux only and no Mac installer is published. Mid-production, all macOS effort moved to a fully native Mac application, coming to the App Store shortly. Subscribe on [YouTube](https://www.youtube.com/@edenaion) for release updates.
 >
-> The macOS features below remain in the source tree, but the macOS side of 2.1 is untested as a whole. Mac users should stay on 2.0 unless they are comfortable being their own testers.
+> The macOS features below remain in the source tree, but the macOS side of 2.1 is untested as a whole. Mac users should stay on 2.0.0 unless they are comfortable being their own testers.
 
 ### Added
 
-- **Garbage matte cleanup:** new post-inference cleanup in the Inference section. Dilates the alpha hint by a configurable pixel amount and zeroes everything outside it, removing edge-of-frame gunk the model lets through. Works with any hint source and all engines.
 - **UI translated into 15 languages:** German, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, Vietnamese, Chinese. Pick a language in Preferences. Strings added late in this release fall back to English until the catalogues refresh.
-- **First launch installs automatically:** the start scripts now run the installer when no virtual environment is found, so a fresh clone or zip starts with one click. ([#90](https://github.com/edenaion/EZ-CorridorKey/pull/90), thanks Benjamin Morgan)
 - **Built-in MLX inference engine** (macOS source installs): EZ-CorridorKey ships its own MLX model port for Apple Silicon, replacing the external `corridorkey_mlx` package that had quality complaints. Both green and blue checkpoints are converted to `.mlx.safetensors` format (380 MB each). Runs in float16 for roughly 2x speed (5.2s to 2.5s per frame at 1024 on an M1 Pro) with output verified at 52-67 dB PSNR on real 4K footage. Auto-detection routes green/blue clips to the correct MLX checkpoint on Apple Silicon and falls back to Torch/MPS elsewhere.
 - **Apple Vision foreground hint** (macOS 14+ source installs): new APPLE VISION button in the Alpha Generation panel. Uses Apple's Neural Engine via `VNGenerateForegroundInstanceMaskRequest` to generate a foreground segmentation hint without any painting or annotation, with guided-filter edge refinement for clean mask borders. Auto-hidden on non-macOS platforms.
 - **Batch Pipeline** — File > Batch Pipeline opens a dialog for batch-processing an entire folder of clips. Select a folder, configure which alpha generation model to use (GVM, BiRefNet, VideoMaMa, MatAnyone2), and run everything autonomously. Per-clip overrides let you mix models in the same batch. Live progress bars and checkmarks track each clip's status. Works with image sequence folders too: sequence subfolders are detected and can be mixed with videos in one batch.
@@ -30,15 +28,13 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Right parameter panel loaded cut off:** the panel now opens at its full content width and can no longer be shrunk to the point of clipping controls on the right.
 - **HDR clips failed frame extraction on FFmpeg 8:** ffprobe-style bt2020 matrix tags (bt2020nc and friends) are now mapped to the plain `bt2020` constant the FFmpeg 8 scale filter accepts, fixing EXR extraction for iPhone HDR footage. ([#91](https://github.com/edenaion/EZ-CorridorKey/issues/91))
 - **Output writes failed on non-ASCII paths (Windows):** PNG and other image outputs are written through a unicode-safe encoder, so project paths with accented or non-Latin characters no longer break rendering.
-- **Installer treated a broken NVIDIA driver as a working GPU:** the Windows installer now requires nvidia-smi to actually run before selecting CUDA wheels. A failing driver aborts the install with clear reinstall guidance instead of silently installing CPU-only PyTorch and failing verification with a confusing message. ([#159](https://github.com/edenaion/EZ-CorridorKey/issues/159))
+- **Installer treated a broken NVIDIA driver as a working GPU:** the Windows installer now requires nvidia-smi to actually run before selecting CUDA wheels. A failing driver aborts the install with clear reinstall guidance instead of silently installing CPU-only PyTorch and failing verification with a confusing message. Resolves the recurring auto-filed reports. ([#159](https://github.com/edenaion/EZ-CorridorKey/issues/159), [#149](https://github.com/edenaion/EZ-CorridorKey/issues/149), [#136](https://github.com/edenaion/EZ-CorridorKey/issues/136), [#135](https://github.com/edenaion/EZ-CorridorKey/issues/135), [#124](https://github.com/edenaion/EZ-CorridorKey/issues/124), [#120](https://github.com/edenaion/EZ-CorridorKey/issues/120))
 - **In-app updater was broken on Linux:** the Update button resolved the update script one directory level short of the project root, so clicking it did nothing. 3-update.sh also ignored the --relaunch flag the app passes, and a failed git pull still claimed success. All fixed: the script path resolves correctly, the app relaunches after updating, a failed pull reports "Update INCOMPLETE" with a nonzero exit, and a stale "Update Available" button re-validates when clicked and clears itself if the app is already up to date. The button also moved to a floating overlay so it no longer squishes at narrow window widths. ([#146](https://github.com/edenaion/EZ-CorridorKey/issues/146))
 - **Download Manager showed SAM2 as installed when it was not:** the installed check now requires both the SAM2 Python package and the cached checkpoint, matching what track mask actually needs. The "SAM2 is not installed" error also reports the interpreter path and the underlying import error so environment mismatches are diagnosable. ([#157](https://github.com/edenaion/EZ-CorridorKey/issues/157))
 - **Model downloads crashed behind socks4 system proxies:** users running V2Ray-family proxy clients hit "Unknown scheme for proxy URL" on any model not already cached. Downloads now upgrade socks4 to socks5 on the same port for the duration of the transfer, plain socks5 proxies work out of the box, and proxy misconfigurations surface as clear instructions instead of an unexpected error.
-- **GVM AUTO produced a black alpha on Apple Silicon:** the float16 UNet/VAE triggered Metal NaN assertions on MPS. The GVM pipeline now runs in float32 with vanilla attention on Apple Silicon.
+- **GVM AUTO produced a black alpha on Apple Silicon:** the float16 UNet/VAE triggered Metal NaN assertions on MPS. The GVM pipeline now runs in float32 with vanilla attention on Apple Silicon. ([#115](https://github.com/edenaion/EZ-CorridorKey/issues/115))
 - **Import Alpha with EXR files produced a black alpha:** the import read path truncated float EXR data to zeros. EXR alphas now read at full depth.
 - **Cmd key did not work for zoom or multi-select on macOS:** Cmd+scroll zoom and Cmd+click multi-select now behave like Ctrl on Windows and Linux.
-- **Annotation strokes took seconds to appear on the other viewer:** overlays now sync between viewers immediately. The E hotkey also deactivates paint mode before entering the eyedropper, so the two cursor modes can no longer be active at once.
-- **Middle-click reset did not work on spinboxes:** middle-clicking a spinbox now resets it to its default like the sliders do.
 - **Companion hint copied to wrong location** — `_copy_companion_alphahint` was copying hint files into `Source/` where they could be mistaken for the input video. Now correctly placed at the clip root where `find_assets()` discovers them.
 - **MLX FG output blocky artifacts** — the external `corridorkey_mlx` package produced lower-quality foreground output. The built-in MLX engine eliminates this by using our own verified model port with proper `model.eval()`, correct weight transposition, and `pytorch_compatible=True` GroupNorm.
 - **MLX mixed-precision to match torch.autocast** — LayerNorm, GroupNorm, BatchNorm, and softmax now run in float32 on MLX, matching PyTorch's autocast policy. Norm inputs are upcast to fp32, computed, then cast back to fp16 to prevent type promotion cascading through the graph. Softmax uses head-by-head fp32 processing for global attention blocks (16K+ tokens) to stay within 16 GB unified memory. Fixes blocky/stepped alpha edges on hair at 2048 resolution.
@@ -49,7 +45,6 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Changed
 
-- **Inference panel reordered to signal-chain order** so controls follow the processing pipeline top to bottom.
 - **Setup wizard "Install path" renamed to "Data directory (models, projects, frame cache)"** so it is clear what the folder holds.
 - **QComboBox disabled state** — added `QComboBox:disabled` style to the global theme so disabled dropdowns are visually distinct (darker background, dim text).
 
@@ -73,6 +68,8 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Blue checkpoint in Download Manager** — CorridorKey Blue appears in the setup wizard model list (after Green, before SAM2). Default checked for new installs. CLI: `python scripts/setup_models.py --corridorkey-blue`.
 - **On-demand blue download** — when a blue clip is detected and the blue checkpoint is missing (skinny update / git clone users), a dialog offers to download it via the setup wizard.
 - **Chroma key holdout mask** — paint foreground (1) and background (2) strokes directly on the chroma key preview to force regions. Background strokes force alpha to 0 (transparent), foreground strokes force alpha to 1 (opaque). The mask is static per-clip, applied to every frame. Strokes render as outlines so the matte preview shows through. Persists to `holdout_strokes.json`. Ctrl+Z undoes strokes, Ctrl+C clears all holdout strokes. Hotkeys 1/2 automatically route to holdout painting when chroma key mode is active, and to SAM2 annotation painting when it is not.
+- **Garbage matte cleanup:** post-inference cleanup in the Inference section. Dilates the alpha hint by a configurable pixel amount and zeroes everything outside it, removing edge-of-frame artifacts and background gunk inference leaves behind. Works with any hint source (chroma key, BiRefNet, VideoMaMa, SAM2) and all engines.
+- **First launch installs automatically:** the start scripts now run the installer when no virtual environment is found, so a fresh clone or zip starts with one click. ([#90](https://github.com/edenaion/EZ-CorridorKey/pull/90), thanks Benjamin Morgan)
 - **Chroma key eyedropper drag-sampling** — the eyedropper (E) now samples a range of colors via click-drag instead of a single pixel click. A floating color chip shows the running average near the cursor. The keyer uses the 10th percentile screen excess across all samples for normalization, so dragging across shadows and hotspots produces a cleaner key than a single click.
 - **Chroma key hotkey** — tilde (`` ` ``) toggles chroma key mode on/off.
 - **Localization / i18n support** ([#109](https://github.com/edenaion/EZ-CorridorKey/issues/109)) — all 329 user-visible strings are marked for translation via Qt i18n. Language picker in Preferences. Translators can contribute by editing `.ts` files with Qt Linguist. See `ui/translations/TRANSLATING.md`.
@@ -89,6 +86,12 @@ All notable changes to EZ-CorridorKey are documented here.
 - **Triton runtime hook** — catches `sysconfig.KeyError` in frozen PyInstaller builds that lack the sysconfig data module.
 - **Despill parameterized for blue** — `despill()` swaps the suppression channel (green ch1 vs blue ch2) based on screen color. `_restore_opaque_source_detail()` spill detection likewise adapts.
 - **All "green spill" tooltips** now read "screen spill" for neutrality.
+- **Annotation strokes took seconds to appear on the other viewer:** overlays now sync between viewers immediately. The E hotkey also deactivates paint mode before entering the eyedropper, so the two cursor modes can no longer be active at once.
+- **Middle-click reset did not work on spinboxes:** middle-clicking a spinbox now resets it to its default like the sliders do.
+
+### Changed
+
+- **Inference panel reordered to signal-chain order** (despeckle, garbage matte, despill, refiner) so controls follow the processing pipeline top to bottom.
 
 ### Distribution
 
