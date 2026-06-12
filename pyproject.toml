@@ -19,6 +19,7 @@ dependencies = [
     "kornia",
     "imageio",
     "huggingface_hub",
+    "socksio",  # socks5 proxy support for httpx model downloads
     "peft",
     "Pillow",
     "PIMS",

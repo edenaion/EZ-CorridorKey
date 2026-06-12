@@ -32,6 +32,22 @@ from pathlib import Path
 _SCRIPT_ROOT = Path(__file__).resolve().parent.parent
 
 
+def _proxy_guard():
+    """Proxy sanitation for downloads; no-op when backend is unavailable.
+
+    See backend/net_proxy.py: upgrades socks4 system proxies to socks5 for
+    the duration of a download so httpx-based huggingface_hub can work.
+    """
+    try:
+        if str(_SCRIPT_ROOT) not in sys.path:
+            sys.path.insert(0, str(_SCRIPT_ROOT))
+        from backend.net_proxy import sanitized_proxy_env
+        return sanitized_proxy_env()
+    except Exception:
+        from contextlib import nullcontext
+        return nullcontext()
+
+
 def _data_root() -> Path:
     """Writable root for model downloads.
 
@@ -424,12 +440,13 @@ def download_model(name: str) -> bool:
         print(f"  Available: {free_gb:.1f} GB")
         return False
 
-    if name == "corridorkey":
-        return download_corridorkey()
-    elif name == "corridorkey-blue":
-        return download_corridorkey_blue()
-    else:
-        return download_repo(name)
+    with _proxy_guard():
+        if name == "corridorkey":
+            return download_corridorkey()
+        elif name == "corridorkey-blue":
+            return download_corridorkey_blue()
+        else:
+            return download_repo(name)
 
 
 def download_sam2_model(name: str) -> bool:
@@ -447,7 +464,8 @@ def download_sam2_model(name: str) -> bool:
         print(f"  Available: {free_gb:.1f} GB")
         return False
 
-    return download_sam2(name)
+    with _proxy_guard():
+        return download_sam2(name)
 
 
 def is_matanyone2_installed() -> bool:
@@ -540,11 +558,12 @@ def download_birefnet() -> bool:
     print(f"  Downloading BiRefNet ({cfg['repo_name']}, {cfg['size_human']})...")
     try:
         from huggingface_hub import snapshot_download
-        snapshot_download(
-            repo_id=cfg["repo_id"],
-            local_dir=str(local_dir),
-            local_dir_use_symlinks=False,
-        )
+        with _proxy_guard():
+            snapshot_download(
+                repo_id=cfg["repo_id"],
+                local_dir=str(local_dir),
+                local_dir_use_symlinks=False,
+            )
         print(f"  Saved to: {local_dir}")
         return True
     except Exception as e:

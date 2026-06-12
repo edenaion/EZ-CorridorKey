@@ -190,11 +190,19 @@ class BiRefNetProcessor:
             )
             os.makedirs(model_local_dir, exist_ok=True)
             from huggingface_hub import snapshot_download
-            snapshot_download(
-                repo_id=repo_id,
-                local_dir=model_local_dir,
-                local_dir_use_symlinks=False,
-            )
+            from backend.net_proxy import friendly_proxy_error, sanitized_proxy_env
+            try:
+                with sanitized_proxy_env():
+                    snapshot_download(
+                        repo_id=repo_id,
+                        local_dir=model_local_dir,
+                        local_dir_use_symlinks=False,
+                    )
+            except Exception as exc:
+                friendly = friendly_proxy_error(exc)
+                if friendly is None:
+                    raise
+                raise RuntimeError(friendly) from exc
 
         if on_status:
             on_status(f"Loading BiRefNet ({self._usage})...")
