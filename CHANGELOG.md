@@ -6,7 +6,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [Unreleased]
 
-> **macOS support ends with this release.** Starting with 2.1, the Python application is Windows-only and no Mac installer is published. Mid-production, all macOS effort moved to a fully native Mac application, coming to the App Store shortly. Subscribe on YouTube for release updates.
+> **macOS support ends with this release.** Starting with 2.1.0, the Python application is Windows/Linux only and no Mac installer is published. Mid-production, all macOS effort moved to a fully native Mac application, coming to the App Store shortly. Subscribe on [YouTube](https://www.youtube.com/@edenaion) for release updates.
 >
 > The macOS features below remain in the source tree, but the macOS side of 2.1 is untested as a whole. Mac users should stay on 2.0 unless they are comfortable being their own testers.
 
@@ -55,7 +55,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ### Distribution
 
-- Windows installer only. No macOS package is published for this release; the native Mac app arrives on the App Store separately (see the notice at the top).
+- Windows installer only. Linux stays supported through the source install scripts (1-install.sh). No macOS package is published for this release; the native Mac app arrives on the App Store separately (see the notice at the top).
 - Skinny update zip continues to strip all model weights (users get models via the setup wizard or the full installer).
 
 ---
