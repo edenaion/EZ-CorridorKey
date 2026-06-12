@@ -20,6 +20,7 @@ def _info(**overrides):
         mps_built=False,
         nvidia_smi_path=r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
         nvidia_smi_summary="| NVIDIA-SMI 581.57 Driver Version: 581.57 CUDA Version: 13.0 |",
+        nvidia_smi_ok=True,
     )
     return RuntimeInfo(**{**base.__dict__, **overrides})
 
@@ -40,6 +41,12 @@ def test_gpu_runtime_fails_when_cuda_build_cannot_initialize():
     ok, message = evaluate_runtime(_info(cuda_available=False))
     assert ok is False
     assert "torch.cuda.is_available() is false" in message
+
+
+def test_gpu_runtime_fails_when_nvidia_smi_is_present_but_broken():
+    ok, message = evaluate_runtime(_info(nvidia_smi_ok=False))
+    assert ok is False
+    assert "Reinstall the driver" in message
 
 
 def test_macos_runtime_passes_without_nvidia():

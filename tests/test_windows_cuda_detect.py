@@ -77,11 +77,31 @@ def test_detect_uses_mock_output_file(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     monkeypatch.setenv("CORRIDORKEY_MOCK_NVIDIA_SMI_FILE", str(mock))
+    monkeypatch.delenv("CORRIDORKEY_MOCK_NVIDIA_SMI_EXIT_CODE", raising=False)
     monkeypatch.delenv("CORRIDORKEY_NVIDIA_SMI_PATH", raising=False)
     result = detect()
     assert result["INDEX_URL"] == CU128_URL
     assert result["DRIVER"] == "581.57"
     assert result["CUDA_VERSION"] == "12.8"
+
+
+def test_detect_broken_driver_falls_back_to_cpu_with_guidance(monkeypatch, tmp_path):
+    mock = tmp_path / "nvidia_smi.txt"
+    mock.write_text(
+        "NVIDIA-SMI has failed because it could not communicate with the NVIDIA driver.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CORRIDORKEY_MOCK_NVIDIA_SMI_FILE", str(mock))
+    monkeypatch.setenv("CORRIDORKEY_MOCK_NVIDIA_SMI_EXIT_CODE", "9")
+    monkeypatch.delenv("CORRIDORKEY_NVIDIA_SMI_PATH", raising=False)
+    result = detect()
+    assert result["CUDA_DETECT_MODE"] == "cpu"
+    assert result["CUDA_DETECT_REASON"] == "nvidia_smi_failed"
+    assert result["INDEX_URL"] == CPU_URL
+    assert "exit code 9" in result["CUDA_NOTE"]
+    assert "Reinstall the driver" in result["CUDA_NOTE"]
+    # Batch installers echo this note under delayed expansion, so it must not contain '!'.
+    assert "!" not in result["CUDA_NOTE"]
 
 
 def test_detect_without_nvidia_smi_returns_cpu(monkeypatch):

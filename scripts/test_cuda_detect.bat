@@ -14,6 +14,7 @@ mkdir "%TMPDIR%" >nul 2>&1
 > "%TMPDIR%\cuda128.txt" echo ^| NVIDIA-SMI 572.16     Driver Version: 572.16     CUDA Version: 12.8     ^|
 > "%TMPDIR%\cuda_es.txt" echo ^| NVIDIA-SMI 581.57     Version del controlador: 581.57     Version de CUDA: 12.3     ^|
 > "%TMPDIR%\cuda_unsupported.txt" echo ^| NVIDIA-SMI 537.58     Driver Version: 537.58     CUDA Version: 11.8     ^|
+> "%TMPDIR%\cuda_broken.txt" echo NVIDIA-SMI has failed because it could not communicate with the NVIDIA driver.
 
 for %%C in (437 850 1252 65001) do (
     chcp %%C >nul 2>&1
@@ -25,6 +26,7 @@ for %%C in (437 850 1252 65001) do (
         call :run_case %%C "%TMPDIR%\cuda128.txt" cu128 "English CUDA 12.8"
         call :run_case %%C "%TMPDIR%\cuda_es.txt" cu126 "Spanish-style CUDA 12.3"
         call :run_case %%C "%TMPDIR%\cuda_unsupported.txt" cpu "Unsupported CUDA 11.8"
+        call :run_broken_case %%C "%TMPDIR%\cuda_broken.txt" "Broken driver exit code 9"
     )
 )
 
@@ -47,12 +49,34 @@ if /i "%EXPECTED%"=="cu130" set "EXPECTED=https://download.pytorch.org/whl/cu130
 if /i "%EXPECTED%"=="cpu" set "EXPECTED=https://download.pytorch.org/whl/cpu"
 for %%V in (CUDA_DETECT_MODE CUDA_DETECT_REASON INDEX_URL CUDA_WHEEL_LABEL CUDA_NOTE DRIVER CUDA_VERSION CUDA_LINE NVIDIA_SMI_PATH) do set "%%V="
 set "CORRIDORKEY_MOCK_NVIDIA_SMI_FILE=%MOCK_FILE%"
+set "CORRIDORKEY_MOCK_NVIDIA_SMI_EXIT_CODE="
 for /f "usebackq tokens=1,* delims==" %%A in (`python scripts\detect_windows_torch_index.py --format env`) do set "%%A=%%B"
 if /i "!INDEX_URL!"=="%EXPECTED%" (
     echo [PASS] CP %CP%: %LABEL% URL !INDEX_URL!
     set /a PASS+=1
 ) else (
     echo [FAIL] CP %CP%: %LABEL% expected %EXPECTED%, got !INDEX_URL!
+    set /a FAIL+=1
+)
+exit /b 0
+
+:run_broken_case
+set "CP=%~1"
+set "MOCK_FILE=%~2"
+set "LABEL=%~3"
+for %%V in (CUDA_DETECT_MODE CUDA_DETECT_REASON INDEX_URL CUDA_WHEEL_LABEL CUDA_NOTE DRIVER CUDA_VERSION CUDA_LINE NVIDIA_SMI_PATH) do set "%%V="
+set "CORRIDORKEY_MOCK_NVIDIA_SMI_FILE=%MOCK_FILE%"
+set "CORRIDORKEY_MOCK_NVIDIA_SMI_EXIT_CODE=9"
+for /f "usebackq tokens=1,* delims==" %%A in (`python scripts\detect_windows_torch_index.py --format env`) do set "%%A=%%B"
+set "CORRIDORKEY_MOCK_NVIDIA_SMI_EXIT_CODE="
+set "CASE_OK=1"
+if /i not "!CUDA_DETECT_REASON!"=="nvidia_smi_failed" set "CASE_OK=0"
+if /i not "!INDEX_URL!"=="https://download.pytorch.org/whl/cpu" set "CASE_OK=0"
+if "!CASE_OK!"=="1" (
+    echo [PASS] CP %CP%: %LABEL% reason !CUDA_DETECT_REASON! URL !INDEX_URL!
+    set /a PASS+=1
+) else (
+    echo [FAIL] CP %CP%: %LABEL% expected nvidia_smi_failed with CPU URL, got !CUDA_DETECT_REASON! !INDEX_URL!
     set /a FAIL+=1
 )
 exit /b 0

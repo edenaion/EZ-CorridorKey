@@ -38,6 +38,8 @@ class RuntimeInfo:
     mps_built: bool
     nvidia_smi_path: str
     nvidia_smi_summary: str
+    # Kept last so positional constructors written before this field stay valid.
+    nvidia_smi_ok: bool = False
 
 
 def _safe_getattr(obj: object, name: str, default: object) -> object:
@@ -52,9 +54,26 @@ def find_nvidia_smi() -> str:
     return which or ""
 
 
-def read_nvidia_smi_summary(path: str) -> str:
+def read_nvidia_smi_summary(path: str) -> tuple[str, bool]:
     if not path:
-        return ""
+        return "", False
+    # Test hooks, same family as detect_windows_torch_index.py: lets the
+    # installer smoke tests simulate a broken driver without touching the
+    # real one.
+    mock_file = os.environ.get("CORRIDORKEY_MOCK_NVIDIA_SMI_FILE")
+    if mock_file:
+        try:
+            raw_rc = os.environ.get("CORRIDORKEY_MOCK_NVIDIA_SMI_EXIT_CODE", "0")
+            rc = int(raw_rc)
+        except ValueError:
+            rc = 0
+        try:
+            with open(mock_file, encoding="utf-8", errors="replace") as fh:
+                text = fh.read().strip()
+        except OSError:
+            return "", False
+        first = text.splitlines()[0][:400] if text else ""
+        return first, rc == 0
     try:
         result = subprocess.run(
             [path],
@@ -67,12 +86,13 @@ def read_nvidia_smi_summary(path: str) -> str:
             check=False,
         )
     except Exception as exc:  # pragma: no cover - defensive against platform oddities
-        return f"failed to run nvidia-smi: {exc}"
+        return f"failed to run nvidia-smi: {exc}", False
 
+    ok = result.returncode == 0
     text = (result.stdout or "").strip()
     if not text:
-        return ""
-    return text.splitlines()[0][:400]
+        return "", ok
+    return text.splitlines()[0][:400], ok
 
 
 def should_probe_cuda(platform_name: str, nvidia_smi_path: str, torch_cuda_version: str) -> bool:
@@ -97,6 +117,7 @@ def collect_runtime_info() -> RuntimeInfo:
 
     platform_name = platform.platform()
     nvidia_smi_path = find_nvidia_smi()
+    nvidia_smi_summary, nvidia_smi_ok = read_nvidia_smi_summary(nvidia_smi_path)
     torch_cuda_version = getattr(_safe_getattr(torch, "version", None), "cuda", "") or ""
     cuda = None
     cuda_available = False
@@ -117,7 +138,8 @@ def collect_runtime_info() -> RuntimeInfo:
         mps_available=bool(mps and mps.is_available()),
         mps_built=bool(mps and mps.is_built()),
         nvidia_smi_path=nvidia_smi_path,
-        nvidia_smi_summary=read_nvidia_smi_summary(nvidia_smi_path),
+        nvidia_smi_summary=nvidia_smi_summary,
+        nvidia_smi_ok=nvidia_smi_ok,
     )
 
 
@@ -127,6 +149,12 @@ def evaluate_runtime(info: RuntimeInfo, expect_gpu: str = "auto") -> tuple[bool,
 
     gpu_expected = expect_gpu == "1" or (expect_gpu == "auto" and bool(info.nvidia_smi_path))
     if gpu_expected:
+        if info.nvidia_smi_path and not info.nvidia_smi_ok:
+            return (
+                False,
+                "nvidia-smi is present but failed to run, which usually means the NVIDIA driver is broken or outdated. "
+                "Reinstall the driver from https://www.nvidia.com/Download/index.aspx then re-run this installer.",
+            )
         if not info.torch_cuda_version:
             return (
                 False,
