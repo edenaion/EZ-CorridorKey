@@ -2,8 +2,7 @@
 Apple Vision framework foreground subject mask generation via PyObjC.
 
 Uses VNGenerateForegroundInstanceMaskRequest (macOS 14+) to detect
-foreground subjects on Apple Neural Engine. Returns float32 alpha mattes
-with guided-filter edge refinement for smooth, anti-aliased edges.
+foreground subjects on Apple Neural Engine. Returns uint8 alpha mattes.
 
 Requires: macOS 14+, pyobjc-framework-Vision
     pip install pyobjc-framework-Vision pyobjc-framework-CoreImage pyobjc-framework-Quartz
@@ -56,16 +55,11 @@ def _get_request():
 def generate_foreground_mask(rgb_frame: np.ndarray) -> np.ndarray:
     """Generate a foreground alpha mask using Apple Vision.
 
-    Returns a float32 matte with guided-filter edge refinement for smooth,
-    anti-aliased edges suitable for VFX compositing.
-
     Args:
         rgb_frame: Input image as uint8 RGB numpy array [H, W, 3].
 
     Returns:
         Alpha matte as uint8 numpy array [H, W] (0=background, 255=foreground).
-        Internally processed as float32 with guided-filter refinement before
-        final quantization.
     """
     h, w = rgb_frame.shape[:2]
 
@@ -119,117 +113,61 @@ def generate_foreground_mask(rgb_frame: np.ndarray) -> np.ndarray:
         logger.warning(f"Apple Vision: mask generation failed: {gen_error}")
         return np.zeros((h, w), dtype=np.uint8)
 
-    # Extract float32 mask from CVPixelBuffer (preserve full precision)
-    mask_f32 = _cvpixelbuffer_to_float32(mask_buffer, h, w)
-
-    # Refine edges using guided filter (source image guides edge placement)
-    mask_f32 = _guided_filter_refine(mask_f32, rgb_frame)
-
-    # Final quantization to uint8 for PNG output
-    return (np.clip(mask_f32, 0.0, 1.0) * 255.0).astype(np.uint8)
+    return _cvpixelbuffer_to_uint8(mask_buffer, h, w)
 
 
-def _cvpixelbuffer_to_float32(pixel_buffer, target_h: int, target_w: int) -> np.ndarray:
-    """Convert a CVPixelBuffer to a float32 numpy array [0.0, 1.0].
+def _cvpixelbuffer_to_uint8(pixel_buffer, target_h: int, target_w: int) -> np.ndarray:
+    """Convert a Vision mask CVPixelBuffer to a uint8 alpha image.
 
-    Vision outputs masks as OneComponent32Float CVPixelBuffers at some
-    internal resolution. We preserve float32 precision and use Lanczos
-    resampling to scale to target dimensions.
+    Apple Vision can return OneComponent8, OneComponent16Half, or
+    OneComponent32Float masks. Match the Swift app's path: read the buffer
+    according to its real pixel format, normalize float formats, then resize
+    only if Vision returned a non-target size.
     """
-    Quartz.CVPixelBufferLockBaseAddress(pixel_buffer, 0)
+    lock_readonly = getattr(Quartz, "kCVPixelBufferLock_ReadOnly", 0)
+    Quartz.CVPixelBufferLockBaseAddress(pixel_buffer, lock_readonly)
     try:
         base_address = Quartz.CVPixelBufferGetBaseAddress(pixel_buffer)
         buf_w = Quartz.CVPixelBufferGetWidth(pixel_buffer)
         buf_h = Quartz.CVPixelBufferGetHeight(pixel_buffer)
         bytes_per_row = Quartz.CVPixelBufferGetBytesPerRow(pixel_buffer)
+        pixel_format = Quartz.CVPixelBufferGetPixelFormatType(pixel_buffer)
+
+        if base_address is None:
+            logger.warning("Apple Vision: empty CVPixelBuffer base address")
+            return np.zeros((target_h, target_w), dtype=np.uint8)
 
         buf_size = buf_h * bytes_per_row
         mv = base_address.as_buffer(buf_size)
-        arr = np.frombuffer(mv, dtype=np.float32).copy()
 
-        # Reshape accounting for row stride padding
-        floats_per_row = bytes_per_row // 4
-        arr = arr.reshape(buf_h, floats_per_row)[:, :buf_w]
+        fmt_u8 = getattr(Quartz, "kCVPixelFormatType_OneComponent8", None)
+        fmt_f16 = getattr(Quartz, "kCVPixelFormatType_OneComponent16Half", None)
+        fmt_f32 = getattr(Quartz, "kCVPixelFormatType_OneComponent32Float", None)
+
+        if fmt_u8 is not None and pixel_format == fmt_u8:
+            arr = np.frombuffer(mv, dtype=np.uint8).reshape(buf_h, bytes_per_row)[:, :buf_w].copy()
+        elif fmt_f32 is not None and pixel_format == fmt_f32:
+            floats_per_row = bytes_per_row // 4
+            arr_f = np.frombuffer(mv, dtype=np.float32).reshape(buf_h, floats_per_row)[:, :buf_w]
+            arr = np.rint(np.clip(arr_f, 0.0, 1.0) * 255.0).astype(np.uint8)
+        elif fmt_f16 is not None and pixel_format == fmt_f16:
+            halfs_per_row = bytes_per_row // 2
+            arr_f = np.frombuffer(mv, dtype=np.float16).reshape(buf_h, halfs_per_row)[:, :buf_w]
+            arr = np.rint(np.clip(arr_f.astype(np.float32), 0.0, 1.0) * 255.0).astype(np.uint8)
+        else:
+            logger.warning("Apple Vision: unsupported mask pixel format %s", pixel_format)
+            return np.zeros((target_h, target_w), dtype=np.uint8)
 
     finally:
-        Quartz.CVPixelBufferUnlockBaseAddress(pixel_buffer, 0)
+        Quartz.CVPixelBufferUnlockBaseAddress(pixel_buffer, lock_readonly)
 
     logger.debug("Apple Vision mask buffer: %dx%d -> target %dx%d",
                  buf_w, buf_h, target_w, target_h)
 
-    arr = np.clip(arr, 0.0, 1.0)
-
-    # Lanczos resize to target dimensions (much sharper than bilinear)
     if arr.shape[0] != target_h or arr.shape[1] != target_w:
-        arr = cv2.resize(arr, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
+        arr = cv2.resize(arr, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
 
-    return arr
-
-
-def _guided_filter_refine(
-    mask: np.ndarray,
-    guide_rgb: np.ndarray,
-    radius: int = 16,
-    eps: float = 1e-4,
-) -> np.ndarray:
-    """Refine mask edges using the source image as a guide.
-
-    The guided filter smooths flat regions of the mask while preserving
-    edges that align with the source image structure. This converts
-    blocky segmentation boundaries into smooth, image-aligned edges.
-
-    Uses cv2.ximgproc.guidedFilter if available (opencv-contrib), otherwise
-    falls back to a numpy box-filter implementation.
-
-    Args:
-        mask: Float32 alpha matte [H, W] in [0.0, 1.0].
-        guide_rgb: Source image as uint8 RGB [H, W, 3].
-        radius: Filter kernel radius in pixels.
-        eps: Regularization (smaller = sharper edges, larger = smoother).
-
-    Returns:
-        Refined float32 alpha matte [H, W].
-    """
-    guide_f = guide_rgb.astype(np.float32) / 255.0
-
-    # Try opencv-contrib guided filter first (fastest, GPU-optimized)
-    try:
-        refined = cv2.ximgproc.guidedFilter(
-            guide=guide_f, src=mask, radius=radius, eps=eps, dDepth=-1
-        )
-        return np.clip(refined, 0.0, 1.0)
-    except AttributeError:
-        pass
-
-    # Fallback: numpy guided filter with grayscale guide
-    guide_gray = cv2.cvtColor(guide_rgb, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255.0
-    return _guided_filter_numpy(guide_gray, mask, radius, eps)
-
-
-def _guided_filter_numpy(
-    guide: np.ndarray,
-    src: np.ndarray,
-    radius: int,
-    eps: float,
-) -> np.ndarray:
-    """Guided filter using numpy box filters. Grayscale guide only."""
-    ksize = 2 * radius + 1
-
-    def box(x):
-        return cv2.blur(x, (ksize, ksize))
-
-    mean_I = box(guide)
-    mean_p = box(src)
-    corr_Ip = box(guide * src)
-    var_I = box(guide * guide) - mean_I * mean_I
-
-    a = (corr_Ip - mean_I * mean_p) / (var_I + eps)
-    b = mean_p - a * mean_I
-
-    mean_a = box(a)
-    mean_b = box(b)
-
-    return np.clip(mean_a * guide + mean_b, 0.0, 1.0)
+    return np.clip(arr, 0, 255).astype(np.uint8)
 
 
 def is_available() -> bool:

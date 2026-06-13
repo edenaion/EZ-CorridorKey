@@ -261,6 +261,9 @@ class SettingsMixin:
             '<a href="https://github.com/DCRepublic">DCRepublic</a> — Docker integration'
             "</p>"
             "<p>"
+            '<a href="https://patreon.com/edenaion" style="color: #FF0000; '
+            'text-decoration: none; font-weight: bold;">'
+            "Subscribe on Patreon</a><br>"
             '<a href="https://ko-fi.com/edenaion" style="color: #FF5915; '
             'text-decoration: none; font-weight: bold;">'
             "\u2615 Support on Ko-fi</a>"
