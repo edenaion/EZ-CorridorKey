@@ -190,7 +190,12 @@ class PreferencesDialog(QDialog):
         lang_label = QLabel(self.tr("Language"))
         ui_layout.addWidget(lang_label)
         self._language_combo = _no_scroll_wheel(QComboBox())
-        self._language_combo.addItem(self.tr("English"), "en")
+        # Language names are endonyms and must never be translated, otherwise
+        # tr("English") picks up a bad .ts entry (every file translates the
+        # word "English" to its own native name) and the English option shows
+        # up labeled as the current language, with no way back. Hardcode it,
+        # matching the native names used in _populate_available_languages.
+        self._language_combo.addItem("English", "en")
         self._populate_available_languages()
         saved_lang = get_setting_str(KEY_UI_LANGUAGE, "en")
         idx = self._language_combo.findData(saved_lang)
