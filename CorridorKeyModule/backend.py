@@ -60,16 +60,31 @@ def _checkpoint_search_dirs() -> list[str]:
     return dirs
 
 
+def _glob_suffix(ext: str) -> str:
+    """Filename suffix to match for a checkpoint extension.
+
+    MLX weights follow the ``<name>.mlx.safetensors`` convention. Matching the
+    bare ``.safetensors`` would also pick up the legacy external-package file
+    ``corridorkey_mlx.safetensors`` (underscore, not dot, before ``mlx``),
+    whose architecture differs from the built-in MLX model and fails to load
+    with a large parameter-mismatch error. Require the ``.mlx.`` infix so only
+    current-format MLX weights match; the legacy file is ignored.
+    """
+    return ".mlx.safetensors" if ext == MLX_EXT else ext
+
+
 def _glob_checkpoints(ext: str) -> list[str]:
-    """Glob ``*{ext}`` across all search dirs, deduped by filename.
+    """Glob the checkpoints for ``ext`` across all search dirs, deduped by name.
 
     Earlier dirs win on a name collision, so a user-updated weight in the
-    writable dir shadows the bundled copy of the same name.
+    writable dir shadows the bundled copy of the same name. MLX matching is
+    narrowed to the current ``.mlx.safetensors`` convention (see _glob_suffix).
     """
+    suffix = _glob_suffix(ext)
     out: list[str] = []
     seen: set[str] = set()
     for d in _checkpoint_search_dirs():
-        for match in glob.glob(os.path.join(d, f"*{ext}")):
+        for match in glob.glob(os.path.join(d, f"*{suffix}")):
             key = os.path.basename(match).lower()
             if key not in seen:
                 seen.add(key)
