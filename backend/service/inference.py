@@ -20,7 +20,6 @@ from ..errors import (
 from ..frame_io import read_video_frame_at, read_video_mask_at
 from ..job_queue import GPUJob
 from ..validators import ensure_output_dirs, validate_frame_counts
-from .core import InferenceParams
 from .inference_parallel import ParallelInferenceMixin
 
 logger = logging.getLogger(__name__)
