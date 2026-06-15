@@ -11,8 +11,6 @@
 
 > **Latest release: [v2.1.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.0):** UI in 15 languages, Batch Pipeline folder processing, built-in MLX engine for Apple Silicon, tandem viewer pan/zoom. See the [full changelog](CHANGELOG.md).
 
-> **macOS note:** 2.1.0 ships no macOS installer. Mid-production, all Mac effort moved to a fully native Mac app, coming to the App Store soon. An in-app update to 2.1.0 is available but untested as a whole, update at your own risk. Mac users should stay on [v2.0.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.0.0) and wait for the native app. Subscribe on [YouTube](https://www.youtube.com/@edenaion) for release updates.
-
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI chroma keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
 This GUI replaces the CLI drag-and-drop workflow with a complete desktop application while preserving 100% backward compatibility (`python main.py --cli` still runs the original wizard).
