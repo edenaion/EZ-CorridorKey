@@ -535,15 +535,32 @@ The verification code is open source: [`backend/update_verify.py`](backend/updat
 
 ### Checksums
 
-Each release includes a `SHA256SUMS.txt` file listing the SHA-256 hash of every release artifact. Download it alongside the binary and verify manually:
+Each release includes a `SHA256SUMS.txt` file listing the SHA-256 hash of every release artifact. Use it to confirm your download is genuine and not corrupted. Put `SHA256SUMS.txt` in the same folder as the file you downloaded, then follow the steps for your system.
+
+**Windows (PowerShell):**
+
+```powershell
+# In the download folder (Shift + right-click > "Open PowerShell window here")
+Get-FileHash .\EZ-CorridorKey-2.1.0-Windows-x64-Setup.exe -Algorithm SHA256
+# Open SHA256SUMS.txt, find the line ending in that filename, compare the hash.
+# The two strings must match exactly. If they differ, do not run the file, download it again.
+```
+
+**macOS (Terminal):**
 
 ```bash
-# macOS / Linux
-sha256sum -c SHA256SUMS.txt
+cd ~/Downloads   # wherever you saved the files
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+# Expect: EZ-CorridorKey-2.1.0-macOS-arm64.dmg: OK
+# If it says FAILED, the file is corrupted or tampered with, download it again.
+```
 
-# Windows PowerShell
-(Get-FileHash EZ-CorridorKey-2.1.0-Windows-x64-Setup.exe -Algorithm SHA256).Hash
-# Compare the output against the matching line in SHA256SUMS.txt
+**Linux:**
+
+```bash
+cd ~/Downloads
+sha256sum -c SHA256SUMS.txt --ignore-missing
+# Expect OK next to each file you downloaded.
 ```
 
 ### Git integrity
