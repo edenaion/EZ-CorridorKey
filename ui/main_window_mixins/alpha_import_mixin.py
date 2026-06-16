@@ -5,6 +5,8 @@ import logging
 import os
 import shutil
 
+os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+
 import cv2
 import numpy as np
 from PySide6.QtWidgets import QMessageBox, QFileDialog
@@ -31,11 +33,11 @@ class AlphaImportMixin:
         self._on_import_alpha()
 
     def _on_import_alpha(self) -> None:
-        """Import user-provided alpha hints into AlphaHint/*.png.
+        """Import user-provided alpha hints into AlphaHint.
 
-        Image folders and alpha videos are both normalized into 8-bit PNG
-        frames named to match input frame stems so index-based matching in
-        the inference loop works correctly (frame 0 -> frame 0, etc.).
+        Image folders are renamed to match input frame stems. Final AlphaHint
+        imports preserve EXR files as EXR; video imports and VideoMaMa mask
+        imports are normalized into 8-bit PNG frame sequences.
         """
         from ui.main_window import _remove_alpha_hint_assets, _import_alpha_video_as_sequence, _Toast
 
@@ -164,7 +166,17 @@ class AlphaImportMixin:
                 f"The video will be converted to 8-bit PNG frames in {target_name}/."
             )
         else:
-            msg = f"Import {n_paired} alpha images into '{clip.name}' as {target_name}?"
+            exr_count = sum(
+                1 for p in src_files[:n_paired]
+                if os.path.splitext(p)[1].lower() == ".exr"
+            )
+            if import_as_vmama_mask or exr_count == 0:
+                msg = f"Import {n_paired} alpha images into '{clip.name}' as {target_name}?"
+            else:
+                msg = (
+                    f"Import {n_paired} alpha images into '{clip.name}' as {target_name}?\n\n"
+                    f"{exr_count} EXR file(s) will be preserved as EXR."
+                )
         if n_src != n_input:
             msg += f"\n({abs(n_src - n_input)} frames will have no alpha)"
         if QMessageBox.question(self, _tr("Import Alpha"), msg) != QMessageBox.Yes:
@@ -192,23 +204,41 @@ class AlphaImportMixin:
                 if imported_count == 0:
                     shutil.rmtree(alpha_dir, ignore_errors=True)
                 logger.info(
-                    "Imported %d/%d alpha frames from video into %s",
-                    imported_count, n_paired, alpha_dir,
+                    "Imported %d/%d alpha frames from video %s into %s",
+                    imported_count, n_paired, source_path, alpha_dir,
                 )
             else:
                 os.makedirs(alpha_dir, exist_ok=True)
+                preserved_exr_count = 0
 
                 for i in range(n_paired):
                     src_path = src_files[i]
                     input_stem = os.path.splitext(input_files[i])[0]
-                    dst_path = os.path.join(alpha_dir, f"{input_stem}.png")
 
                     src_ext = os.path.splitext(src_path)[1].lower()
+                    dst_ext = ".png"
+                    if not import_as_vmama_mask and src_ext == ".exr":
+                        dst_ext = ".exr"
+                    dst_path = os.path.join(alpha_dir, f"{input_stem}{dst_ext}")
 
                     if not import_as_vmama_mask and src_ext == ".png":
                         # Fast path: copy PNG as-is for final alpha
                         shutil.copy2(src_path, dst_path)
                         imported_count += 1
+                        continue
+
+                    if not import_as_vmama_mask and src_ext == ".exr":
+                        # Preserve float EXR alpha hints instead of quantizing to PNG.
+                        img = cv2.imread(
+                            src_path,
+                            cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED,
+                        )
+                        if img is None:
+                            logger.warning("Failed to import alpha EXR: %s", src_path)
+                            continue
+                        shutil.copy2(src_path, dst_path)
+                        imported_count += 1
+                        preserved_exr_count += 1
                         continue
 
                     if src_ext == ".exr":
@@ -243,8 +273,10 @@ class AlphaImportMixin:
                 if imported_count == 0:
                     shutil.rmtree(alpha_dir, ignore_errors=True)
                 logger.info(
-                    "Imported %d/%d alpha hints into %s (renamed to match input stems)",
-                    imported_count, n_paired, alpha_dir,
+                    "Imported %d/%d alpha hints from %s into %s "
+                    "(renamed to match input stems, preserved %d EXR)",
+                    imported_count, n_paired, source_path, alpha_dir,
+                    preserved_exr_count,
                 )
         except OSError as exc:
             QMessageBox.critical(
@@ -266,15 +298,17 @@ class AlphaImportMixin:
                 clip.state in (ClipState.RAW, ClipState.MASKED, ClipState.READY)
             )
 
-        label = "VideoMaMa masks" if import_as_vmama_mask else "alpha hints"
+        from ui.state_labels import state_display_name
+        label = _tr("VideoMaMa masks") if import_as_vmama_mask else _tr("alpha hints")
+        state_label = state_display_name(clip.state)
         if source_kind == "video":
             toast_msg = (
-                f"Imported {imported_count}/{n_paired} {label} from video.\n"
-                f"Clip is now {clip.state.value}."
+                _tr("Imported %d/%d %s from video.\nClip is now %s.")
+                % (imported_count, n_paired, label, state_label)
             )
         else:
             toast_msg = (
-                f"Imported {imported_count}/{n_paired} {label}.\n"
-                f"Clip is now {clip.state.value}."
+                _tr("Imported %d/%d %s.\nClip is now %s.")
+                % (imported_count, n_paired, label, state_label)
             )
         _Toast(self, toast_msg)

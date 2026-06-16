@@ -203,7 +203,9 @@ class SAM2Tracker:
         except ImportError as exc:
             raise SAM2NotInstalledError(
                 "SAM2 is not installed. Install the optional tracker dependency "
-                "to generate dense masks from annotations."
+                "to generate dense masks from annotations.\n"
+                f"Python: {sys.executable}\n"
+                f"Import error: {exc}"
             ) from exc
 
         # sam2/__init__.py registers its config module with hydra on first
@@ -236,14 +238,22 @@ class SAM2Tracker:
         config_name, checkpoint_name = HF_MODEL_ID_TO_FILENAMES[self.model_id]
         if on_status:
             on_status("Checking model cache")
-        ckpt_path = hf_hub_download(
-            repo_id=self.model_id,
-            filename=checkpoint_name,
-            tqdm_class=self._make_download_progress_class(
-                on_progress=on_progress,
-                on_status=on_status,
-            ),
-        )
+        from backend.net_proxy import friendly_proxy_error, sanitized_proxy_env
+        try:
+            with sanitized_proxy_env():
+                ckpt_path = hf_hub_download(
+                    repo_id=self.model_id,
+                    filename=checkpoint_name,
+                    tqdm_class=self._make_download_progress_class(
+                        on_progress=on_progress,
+                        on_status=on_status,
+                    ),
+                )
+        except Exception as exc:
+            friendly = friendly_proxy_error(exc)
+            if friendly is None:
+                raise
+            raise RuntimeError(friendly) from exc
         self._validate_checkpoint(ckpt_path)
         self._predictor = build_sam2_video_predictor(
             config_file=config_name,
@@ -309,7 +319,11 @@ class SAM2Tracker:
         try:
             import torch
         except ImportError as exc:
-            raise SAM2NotInstalledError("PyTorch is required for SAM2 tracking") from exc
+            raise SAM2NotInstalledError(
+                "PyTorch is required for SAM2 tracking.\n"
+                f"Python: {sys.executable}\n"
+                f"Import error: {exc}"
+            ) from exc
 
         temp_root = Path(tempfile.mkdtemp(prefix="corridorkey_sam2_"))
         frames_dir = temp_root / "frames"

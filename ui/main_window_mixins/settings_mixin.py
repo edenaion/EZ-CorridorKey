@@ -14,7 +14,7 @@ from ui.widgets.preferences_dialog import (
     PreferencesDialog, KEY_SHOW_TOOLTIPS, DEFAULT_SHOW_TOOLTIPS,
     KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
     KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION,
-    KEY_INFERENCE_BACKEND,
+    KEY_INFERENCE_BACKEND, KEY_UI_LANGUAGE,
     get_setting_bool, get_setting_str, get_setting_int,
 )
 
@@ -56,6 +56,7 @@ class SettingsMixin:
         if self._prefs_dialog is not None:
             self._prefs_dialog.reject()
             return
+        old_lang = get_setting_str(KEY_UI_LANGUAGE, "en")
         dlg = PreferencesDialog(self)
         self._prefs_dialog = dlg
         accepted = dlg.exec() == PreferencesDialog.Accepted
@@ -67,6 +68,75 @@ class SettingsMixin:
             self._apply_parallel_clips_setting()
             self._apply_model_resolution_setting()
             self._apply_inference_backend_setting()
+            self._apply_language_setting(old_lang)
+
+    def _apply_language_setting(self, old_lang: str) -> None:
+        """Apply a language change immediately by reloading the UI.
+
+        Strings are baked into widgets at construction time, so a live
+        switch swaps the QTranslator and rebuilds the main window. The
+        session is saved on close and restored by the new window, so the
+        open project, selected clip, and parameters survive the swap.
+        Skipped while jobs are running: tearing down the window mid-job
+        would orphan worker signals.
+        """
+        new_lang = get_setting_str(KEY_UI_LANGUAGE, "en")
+        if new_lang == old_lang:
+            return
+
+        busy = (
+            self._active_job_id is not None
+            or self._service.job_queue.has_pending
+            or self._extract_worker.is_busy
+        )
+        if busy:
+            QMessageBox.information(
+                self, _tr("Language"),
+                _tr("The interface language will change after the current "
+                    "jobs finish and the app restarts."),
+            )
+            return
+
+        from PySide6.QtWidgets import QApplication
+        from ui.app import apply_language
+        app = QApplication.instance()
+        if not apply_language(app, new_lang):
+            QMessageBox.warning(
+                self, _tr("Language"),
+                _tr("Could not load the selected language. "
+                    "The interface stays in English."),
+            )
+            return
+
+        logger.info("Language changed %s -> %s, reloading main window", old_lang, new_lang)
+        self._reload_main_window()
+
+    def _reload_main_window(self) -> None:
+        """Tear down this window and build a fresh one in the new language.
+
+        The shared service and recent-sessions store carry over; the open
+        project is reopened through the normal session-restore path.
+        """
+        from PySide6.QtWidgets import QApplication
+        from ui.main_window import MainWindow
+
+        app = QApplication.instance()
+        clips_dir = self._clips_dir
+        geometry = self.geometry()
+
+        # Keep the app alive while no window exists
+        prev_quit = app.quitOnLastWindowClosed()
+        app.setQuitOnLastWindowClosed(False)
+        try:
+            # closeEvent saves the session and stops this window's workers
+            self.close()
+            new_window = MainWindow(self._service, self._recent_store)
+            new_window.setGeometry(geometry)
+            new_window.show()
+            if clips_dir and os.path.isdir(clips_dir):
+                new_window._on_clips_dir_changed(clips_dir, skip_session_restore=False)
+        finally:
+            app.setQuitOnLastWindowClosed(prev_quit)
 
     def _show_hotkeys(self) -> None:
         """Open the Hotkeys configuration dialog and apply changes."""
@@ -169,24 +239,31 @@ class SettingsMixin:
         box = QMessageBox(self)
         box.setWindowTitle(_tr("About EZ-CorridorKey"))
         box.setTextFormat(Qt.RichText)
+        accent = getattr(self, "_current_accent", "#2CC350")
         box.setText(
-            f"<h2>EZ-CorridorKey v{app_version}</h2>"
+            f'<h2><a href="https://www.ezcorridorkey.com" '
+            f'style="color: #FFF203; text-decoration: none;">'
+            f'EZ<span style="color:{accent};">-</span>Corridor'
+            f'<span style="color:{accent};">Key</span></a>'
+            f" v{app_version}</h2>"
             "<p>" + _tr("AI Green Screen Keyer") + "<br>"
             '<a href="https://github.com/nikopueringer/CorridorKey#corridorkey-licensing-and-permissions">'
             "CC BY-NC-SA 4.0 License</a></p>"
             "<p><b>" + _tr("Special Thanks") + "</b></p>"
             "<p>"
             '<a href="https://github.com/nikopueringer/">Niko Pueringer</a> — OG CorridorKey Creator<br>'
-            '<a href="https://www.edzisk.com">Ed Zisk</a> — Maintainer, GUI, workflow, SFX, QA<br>'
+            '<a href="https://www.edzisk.com">Ed Zisk</a> — Maintainer, GUI, workflow, SFX, QA<br><br>'
             '<a href="https://www.clade.design/">Sara Ann Stewart</a> — Logo<br>'
             '<a href="https://github.com/Raiden129">Jhe Kim</a> — Hiera optimization<br>'
             '<a href="https://github.com/MarcelLieb">MarcelLieb</a> — Tiling optimization<br>'
-            '<a href="https://github.com/cmoyates">Cristopher Yates</a> — MLX Apple Silicon (<a href="https://github.com/cmoyates/corridorkey-mlx">corridorkey-mlx</a>)<br>'
             '<a href="https://github.com/99oblivius">99oblivius</a> — FX graph cache (<a href="https://github.com/99oblivius/CorridorKey-Engine">CorridorKey-Engine</a>)<br>'
             '<a href="https://github.com/Warwlock">Warwlock</a> — BiRefNet integration<br>'
             '<a href="https://github.com/DCRepublic">DCRepublic</a> — Docker integration'
             "</p>"
             "<p>"
+            '<a href="https://patreon.com/edenaion" style="color: #FF0000; '
+            'text-decoration: none; font-weight: bold;">'
+            "Subscribe on Patreon</a><br>"
             '<a href="https://ko-fi.com/edenaion" style="color: #FF5915; '
             'text-decoration: none; font-weight: bold;">'
             "\u2615 Support on Ko-fi</a>"
@@ -250,21 +327,64 @@ class SettingsMixin:
 
     @Slot(str)
     def _on_update_available(self, remote_version: str) -> None:
+        # Remember what the checker found so _run_update can re-validate
+        # against the local version at click time (the button can outlive
+        # an update that already completed).
+        self._remote_version = remote_version
         self._update_btn.setText(_tr("Update Available (v%s)") % remote_version)
         self._update_btn.setToolTip(
             _tr("A new version (v%s) is available.\n"
                 "Click to save your session and run the updater.") % remote_version
         )
-        # Set minimum width from text metrics to prevent Qt corner widget squish
-        self._update_btn.setMinimumWidth(self._update_btn.sizeHint().width())
+        self._update_btn.adjustSize()
         self._update_btn.setVisible(True)
+        self._position_update_btn()
+
+    def _position_update_btn(self) -> None:
+        """Keep the floating update button pinned to top-right, below the menu bar."""
+        if not hasattr(self, '_update_btn') or not self._update_btn.isVisible():
+            return
+        btn = self._update_btn
+        margin = 8
+        x = self.width() - btn.width() - margin
+        y = self.menuBar().height() + margin
+        btn.move(x, y)
+        btn.raise_()
 
     def _run_update(self) -> None:
         import sys as _sys
+        if not self._update_still_pending():
+            return
         if getattr(_sys, "frozen", False):
             self._run_frozen_update()
         else:
             self._run_script_update()
+
+    def _update_still_pending(self) -> bool:
+        """Re-validate the stored update against the current local version.
+
+        The update button can go stale: after the updater runs (or the
+        user pulls manually) the code on disk is already current, but the
+        running process still shows the button. Clicking it again would
+        relaunch the updater for nothing. Re-read the local version and
+        compare against the remote version captured at check time; if the
+        update already landed, hide the button, tell the user a restart
+        is all that is left, and skip the updater.
+        """
+        remote = getattr(self, "_remote_version", "")
+        if not remote:
+            return True
+        from ui.main_window import _UpdateChecker
+        local = self._get_local_version()
+        if _UpdateChecker._is_newer(remote, local):
+            return True
+        self._update_btn.setVisible(False)
+        QMessageBox.information(
+            self, _tr("Update EZ-CorridorKey"),
+            _tr("EZ-CorridorKey is already updated to v%s.\n\n"
+                "Restart the app to load the new version.") % local,
+        )
+        return False
 
     def _run_script_update(self) -> None:
         """Update via 3-update.sh / 3-update.bat (CLI/dev installs)."""
@@ -279,7 +399,7 @@ class SettingsMixin:
             return
         self._auto_save_session()
         import subprocess
-        root = os.path.dirname(os.path.dirname(__file__))
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         if os.name == "nt":
             bat = os.path.join(root, "3-update.bat")
             subprocess.Popen(
@@ -298,6 +418,7 @@ class SettingsMixin:
     def _run_frozen_update(self) -> None:
         """Update a frozen .app/.exe by downloading from GitHub Releases."""
         import sys as _sys
+        from PySide6.QtWidgets import QApplication
         reply = QMessageBox.question(
             self, _tr("Update EZ-CorridorKey"),
             _tr("This will download the latest version, replace the current app,\n"
@@ -391,7 +512,6 @@ class SettingsMixin:
                         f"{block_num * block_size // (1024*1024)}/"
                         f"{total_size // (1024*1024)} MB"
                     )
-                from PySide6.QtWidgets import QApplication
                 QApplication.processEvents()
 
             urllib.request.urlretrieve(

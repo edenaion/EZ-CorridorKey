@@ -41,6 +41,56 @@ TORCH_EXT = ".pth"
 MLX_EXT = ".safetensors"
 DEFAULT_IMG_SIZE = 2048
 
+
+def _checkpoint_search_dirs() -> list[str]:
+    """Directories to scan for checkpoints, in priority order.
+
+    The writable data dir comes first so user-downloaded or updated weights
+    win, then the bundled dir (next to this module, which in a frozen onedir
+    build is _internal/CorridorKeyModule/checkpoints). Both the green and blue
+    core weights are bundled by the installers, but _resolve_checkpoint_dir()
+    points at the writable data dir when frozen, so without this fallback the
+    bundled weights are shipped yet never loaded — a fresh install would prompt
+    to re-download core models that are already on disk.
+    """
+    dirs: list[str] = []
+    for d in (CHECKPOINT_DIR, _BUNDLED_CHECKPOINT_DIR):
+        if d and d not in dirs:
+            dirs.append(d)
+    return dirs
+
+
+def _glob_suffix(ext: str) -> str:
+    """Filename suffix to match for a checkpoint extension.
+
+    MLX weights follow the ``<name>.mlx.safetensors`` convention. Matching the
+    bare ``.safetensors`` would also pick up the legacy external-package file
+    ``corridorkey_mlx.safetensors`` (underscore, not dot, before ``mlx``),
+    whose architecture differs from the built-in MLX model and fails to load
+    with a large parameter-mismatch error. Require the ``.mlx.`` infix so only
+    current-format MLX weights match; the legacy file is ignored.
+    """
+    return ".mlx.safetensors" if ext == MLX_EXT else ext
+
+
+def _glob_checkpoints(ext: str) -> list[str]:
+    """Glob the checkpoints for ``ext`` across all search dirs, deduped by name.
+
+    Earlier dirs win on a name collision, so a user-updated weight in the
+    writable dir shadows the bundled copy of the same name. MLX matching is
+    narrowed to the current ``.mlx.safetensors`` convention (see _glob_suffix).
+    """
+    suffix = _glob_suffix(ext)
+    out: list[str] = []
+    seen: set[str] = set()
+    for d in _checkpoint_search_dirs():
+        for match in glob.glob(os.path.join(d, f"*{suffix}")):
+            key = os.path.basename(match).lower()
+            if key not in seen:
+                seen.add(key)
+                out.append(match)
+    return out
+
 BACKEND_ENV_VAR = "CORRIDORKEY_BACKEND"
 VALID_BACKENDS = ("auto", "torch", "mlx")
 
@@ -77,12 +127,15 @@ def _auto_detect_backend() -> str:
         return "torch"
 
     try:
-        import corridorkey_mlx  # type: ignore[import-not-found]  # noqa: F401
+        import mlx.core  # noqa: F401
     except ImportError:
-        logger.info("corridorkey_mlx not installed — using torch backend")
-        return "torch"
+        try:
+            import corridorkey_mlx  # type: ignore[import-not-found]  # noqa: F401
+        except ImportError:
+            logger.info("Neither mlx nor corridorkey_mlx installed — using torch backend")
+            return "torch"
 
-    safetensor_files = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{MLX_EXT}"))
+    safetensor_files = _glob_checkpoints(MLX_EXT)
     if not safetensor_files:
         logger.info("No %s checkpoint found — using torch backend", MLX_EXT)
         return "torch"
@@ -111,12 +164,15 @@ def _validate_mlx_available() -> None:
         raise RuntimeError("MLX backend requires Apple Silicon (M1+ Mac)")
 
     try:
-        import corridorkey_mlx  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError as err:
-        raise RuntimeError(
-            "MLX backend requested but corridorkey_mlx is not installed. "
-            "Install with: uv pip install -e '.[mlx]'"
-        ) from err
+        import mlx.core  # noqa: F401
+    except ImportError:
+        try:
+            import corridorkey_mlx  # type: ignore[import-not-found]  # noqa: F401
+        except ImportError as err:
+            raise RuntimeError(
+                "MLX backend requested but mlx is not installed. "
+                "Install with: pip install mlx"
+            ) from err
 
 
 def _discover_checkpoint(ext: str, screen_color: str = "green") -> Path:
@@ -131,16 +187,17 @@ def _discover_checkpoint(ext: str, screen_color: str = "green") -> Path:
 
     Raises FileNotFoundError if no checkpoint exists at all.
     """
-    all_matches = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{ext}"))
+    all_matches = _glob_checkpoints(ext)
 
     if not all_matches:
         other_ext = MLX_EXT if ext == TORCH_EXT else TORCH_EXT
-        other_files = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{other_ext}"))
+        other_files = _glob_checkpoints(other_ext)
         hint = ""
         if other_files:
             other_backend = "mlx" if other_ext == MLX_EXT else "torch"
             hint = f" (Found {other_ext} files — did you mean CORRIDORKEY_BACKEND={other_backend}?)"
-        raise FileNotFoundError(f"No {ext} checkpoint found in {CHECKPOINT_DIR}.{hint}")
+        searched = ", ".join(_checkpoint_search_dirs())
+        raise FileNotFoundError(f"No {ext} checkpoint found in {searched}.{hint}")
 
     # Split into blue and green (non-blue) variants
     blue_matches = [m for m in all_matches if "blue" in os.path.basename(m).lower()]
@@ -161,7 +218,7 @@ def _discover_checkpoint(ext: str, screen_color: str = "green") -> Path:
 def has_blue_checkpoint() -> bool:
     """Check if a blue-screen checkpoint is available."""
     for ext in (TORCH_EXT, MLX_EXT):
-        matches = glob.glob(os.path.join(CHECKPOINT_DIR, f"*{ext}"))
+        matches = _glob_checkpoints(ext)
         if any("blue" in os.path.basename(m).lower() for m in matches):
             return True
     return False
@@ -676,16 +733,25 @@ def create_engine(
     """
     backend = resolve_backend(backend)
 
-    # No blue MLX checkpoint exists yet. Force Torch/MPS on Apple Silicon
-    # when blue screen is active so we use the .pth blue checkpoint.
-    if backend == "mlx" and screen_color == "blue":
-        logger.info("Blue screen active — no MLX checkpoint available, switching to Torch/MPS")
-        backend = "torch"
-        if device is None:
-            device = "mps"
-
     if backend == "mlx":
         ckpt = _discover_checkpoint(MLX_EXT, screen_color=screen_color)
+
+        # Prefer built-in MLX engine (uses our own mlx_model.py)
+        try:
+            import mlx.core  # noqa: F401
+            from CorridorKeyModule.mlx_inference_engine import MLXCorridorKeyEngine
+
+            logger.info("Built-in MLX engine loaded: %s (screen=%s)", ckpt.name, screen_color)
+            return MLXCorridorKeyEngine(
+                checkpoint_path=str(ckpt),
+                img_size=img_size,
+                use_refiner=True,
+                on_status=on_status,
+            )
+        except ImportError:
+            pass
+
+        # Fall back to external corridorkey_mlx package (legacy)
         from corridorkey_mlx import CorridorKeyMLXEngine  # type: ignore[import-not-found]
 
         try:
@@ -694,10 +760,9 @@ def create_engine(
             )
             mode = f"tiled (tile={tile_size}, overlap={overlap})" if tile_size else "full-frame"
         except TypeError:
-            # Older corridorkey_mlx without tiled inference support
             raw_engine = CorridorKeyMLXEngine(str(ckpt), img_size=img_size)
             mode = "full-frame (tiling not supported by installed corridorkey_mlx)"
-        logger.info("MLX engine loaded: %s [%s]", ckpt.name, mode)
+        logger.info("Legacy MLX engine loaded: %s [%s]", ckpt.name, mode)
         return _MLXEngineAdapter(raw_engine)
     else:
         ckpt = _discover_checkpoint(TORCH_EXT, screen_color=screen_color)

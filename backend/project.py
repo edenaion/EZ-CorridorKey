@@ -226,19 +226,47 @@ def add_clips_to_project(
     return new_paths
 
 
-def _copy_companion_alphahint(video_path: str, source_dir: str) -> None:
-    """Copy a companion ``{stem}_alphahint.*`` video into *source_dir* if found."""
-    stem = os.path.splitext(os.path.basename(video_path))[0]
+def _copy_companion_hints(video_path: str, clip_dir: str) -> None:
+    """Copy companion hint videos into the clip folder if found.
+
+    Scans the same directory as *video_path* for sibling files named
+    ``{source_stem}_{keyword}.{ext}`` (case insensitive), where keyword
+    is "alphahint" or "maskhint":
+    ☼ ``MyClip_AlphaHint.mov`` -> ``AlphaHint.mov`` at clip root
+    ☼ ``MyClip_MaskHint.mov``  -> ``VideoMamaMaskHint.mov`` at clip root
+
+    The hint file must contain both the keyword and the source video's stem
+    so that ``Shot01_AlphaHint.mp4`` matches ``Shot01.mp4`` but not ``Shot02.mp4``.
+    """
     parent = os.path.dirname(video_path)
+    video_basename = os.path.basename(video_path).lower()
+    source_stem = os.path.splitext(video_basename)[0]
+
+    _KEYWORD_MAP = {
+        "alphahint": "AlphaHint",
+        "maskhint": "VideoMamaMaskHint",
+    }
+
+    found: dict[str, bool] = {}
     for f in os.listdir(parent):
-        f_stem, f_ext = os.path.splitext(f.lower())
-        if f_ext in {e.lower() for e in _VIDEO_EXTS} and f_stem == f"{stem.lower()}_alphahint":
-            src = os.path.join(parent, f)
-            dst = os.path.join(source_dir, f)
-            if not os.path.isfile(dst):
-                shutil.copy2(src, dst)
-                logger.info("Copied companion alpha hint: %s -> %s", src, dst)
-            return
+        f_lower = f.lower()
+        if f_lower == video_basename:
+            continue
+        f_stem, f_ext = os.path.splitext(f_lower)
+        if f_ext not in _VIDEO_EXTS:
+            continue
+        for keyword, dest_name in _KEYWORD_MAP.items():
+            if keyword in found:
+                continue
+            # Hint must contain both the keyword AND the source stem
+            if keyword in f_stem and source_stem in f_stem:
+                _, real_ext = os.path.splitext(f)
+                dst = os.path.join(clip_dir, f"{dest_name}{real_ext}")
+                src = os.path.join(parent, f)
+                if not os.path.isfile(dst):
+                    shutil.copy2(src, dst)
+                    logger.info("Copied companion %s: %s -> %s", dest_name, src, dst)
+                found[keyword] = True
 
 
 def _create_clip_folder(
@@ -273,9 +301,9 @@ def _create_clip_folder(
             shutil.copy2(video_path, target)
             logger.info(f"Copied source video: {video_path} -> {target}")
 
-        # Auto-copy companion alpha hint video if present
-        # Convention: {stem}_alphahint.{ext} next to the source video
-        _copy_companion_alphahint(video_path, source_dir)
+        # Auto-copy companion hint videos if present next to source
+        # Convention: {stem}_alphahint.{ext} and {stem}_maskhint.{ext}
+        _copy_companion_hints(video_path, clip_dir)
     else:
         logger.info(f"Referencing source video in place: {video_path}")
 
@@ -531,6 +559,32 @@ def is_video_file(filename: str) -> bool:
 def is_image_file(filename: str) -> bool:
     """Check if a filename has an image extension."""
     return os.path.splitext(filename)[1].lower() in _IMAGE_EXTS
+
+
+_HINT_KEYWORDS = ("alphahint", "maskhint")
+
+
+def filter_companion_hints(paths: list[str]) -> list[str]:
+    """Remove companion hint files from a list of video paths.
+
+    Any file whose stem contains "alphahint" or "maskhint" (case insensitive)
+    is excluded, as long as there is at least one non-hint file in the batch
+    it could belong to.
+    """
+    non_hint: list[str] = []
+    hints: list[str] = []
+    for p in paths:
+        stem = os.path.splitext(os.path.basename(p))[0].lower()
+        if any(kw in stem for kw in _HINT_KEYWORDS):
+            hints.append(p)
+        else:
+            non_hint.append(p)
+
+    if not hints or not non_hint:
+        return paths
+
+    # Only exclude hints when there's a real source video in the batch
+    return non_hint
 
 
 def folder_has_image_sequence(folder_path: str) -> bool:

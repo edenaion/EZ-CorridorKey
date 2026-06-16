@@ -68,7 +68,7 @@ def _read_mock_output() -> str | None:
     return Path(mock_file).read_text(encoding="utf-8", errors="replace")
 
 
-def _run_command(args: list[str]) -> str:
+def _run_command(args: list[str]) -> tuple[str, int]:
     result = subprocess.run(
         args,
         stdout=subprocess.PIPE,
@@ -78,15 +78,23 @@ def _run_command(args: list[str]) -> str:
         errors="replace",
         check=False,
     )
-    return result.stdout or ""
+    return result.stdout or "", result.returncode
 
 
-def read_nvidia_smi_output(nvidia_smi_path: str | None) -> str:
+def _read_mock_exit_code() -> int:
+    raw = os.environ.get("CORRIDORKEY_MOCK_NVIDIA_SMI_EXIT_CODE", "0")
+    try:
+        return int(raw)
+    except ValueError:
+        return 0
+
+
+def read_nvidia_smi_output(nvidia_smi_path: str | None) -> tuple[str, int]:
     mock = _read_mock_output()
     if mock is not None:
-        return mock
+        return mock, _read_mock_exit_code()
     if not nvidia_smi_path:
-        return ""
+        return "", 1
     return _run_command([nvidia_smi_path])
 
 
@@ -165,7 +173,24 @@ def detect() -> dict[str, str]:
             "NVIDIA_SMI_PATH": "",
         }
 
-    output = read_nvidia_smi_output(nvidia_smi_path)
+    output, returncode = read_nvidia_smi_output(nvidia_smi_path)
+    if returncode != 0:
+        return {
+            "CUDA_DETECT_MODE": "cpu",
+            "CUDA_DETECT_REASON": "nvidia_smi_failed",
+            "INDEX_URL": CPU_URL,
+            "CUDA_WHEEL_LABEL": "CPU-only PyTorch",
+            "CUDA_NOTE": (
+                f"nvidia-smi was found but failed to run (exit code {returncode}). "
+                "Your NVIDIA driver is broken or outdated. Reinstall the driver from "
+                "https://www.nvidia.com/Download/index.aspx then re-run this installer."
+            ),
+            "DRIVER": "",
+            "CUDA_VERSION": "",
+            "CUDA_LINE": "",
+            "NVIDIA_SMI_PATH": nvidia_smi_path,
+        }
+
     driver = parse_driver_version(output) or os.environ.get("CORRIDORKEY_MOCK_DRIVER_VERSION", "")
     cuda_line = parse_cuda_line(output) or ""
     cuda_version = parse_cuda_version(output) or ""

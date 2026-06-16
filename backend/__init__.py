@@ -1,5 +1,9 @@
 """Backend service layer for ez-CorridorKey."""
 
+import os
+
+os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+
 from .clip_state import (
     ClipAsset, ClipEntry, ClipState, InOutRange, PipelineRoute,
     classify_pipeline_route, mask_sequence_is_videomama_ready,

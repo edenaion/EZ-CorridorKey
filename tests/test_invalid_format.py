@@ -65,7 +65,7 @@ class TestWriteImageFormats:
             captured["arr"] = arr
             return True
 
-        with patch("backend.service.cv2.imwrite", side_effect=fake_imwrite):
+        with patch("backend.frame_io.imwrite_unicode", side_effect=fake_imwrite):
             service._write_image(img, out_path, "png", "clip", 0)
 
         written = captured["arr"]
@@ -92,7 +92,7 @@ class TestWriteImageFormats:
             captured_calls[path] = {"arr": arr, "extra_args": extra_args}
             return True
 
-        with patch("backend.service.cv2.imwrite", side_effect=fake_imwrite):
+        with patch("backend.frame_io.imwrite_unicode", side_effect=fake_imwrite):
             tiff_path = str(tmp_path / "frame.tiff")
             service._write_image(img, tiff_path, "tiff", "clip", 0)
 
@@ -122,7 +122,7 @@ class TestWriteImageFormats:
             captured["extra_args"] = extra_args
             return True
 
-        with patch("backend.service.cv2.imwrite", side_effect=fake_imwrite):
+        with patch("backend.frame_io.imwrite_unicode", side_effect=fake_imwrite):
             service._write_image(img, out_path, "", "clip", 0)
 
         assert captured["dtype"] == np.uint8
@@ -140,7 +140,7 @@ class TestWriteImageFormats:
             captured["arr"] = arr
             return True
 
-        with patch("backend.service.cv2.imwrite", side_effect=fake_imwrite):
+        with patch("backend.frame_io.imwrite_unicode", side_effect=fake_imwrite):
             service._write_image(img, out_path, "png", "clip", 0)
 
         written = captured["arr"]

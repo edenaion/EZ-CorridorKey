@@ -22,7 +22,7 @@ cd EZ-CorridorKey
 python -m venv .venv
 .venv/Scripts/activate      # Windows
 source .venv/bin/activate    # macOS / Linux
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 ### Running the App

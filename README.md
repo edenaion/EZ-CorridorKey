@@ -1,4 +1,4 @@
-# EZ-CorridorKey **v2.0.0**
+# EZ-CorridorKey **v2.1.0**
 
 [![Release](https://img.shields.io/github/v/release/edenaion/EZ-CorridorKey?style=flat-square&label=Release&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![Stars](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
@@ -7,7 +7,9 @@
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
-> **Latest release: [v2.0.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.0.0)** — Blue screen keying, chroma key eyedropper, VideoMaMa mask import, i18n support. See the [full changelog](CHANGELOG.md).
+<p><img alt="🇺🇸 English" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%B8&message=English&color=FFF203&labelColor=141300&style=flat-square"> <a href="docs/i18n/README.fr.md"><img alt="🇫🇷 Français" src="https://img.shields.io/static/v1?label=%F0%9F%87%AB%F0%9F%87%B7&message=Fran%C3%A7ais&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.de.md"><img alt="🇩🇪 Deutsch" src="https://img.shields.io/static/v1?label=%F0%9F%87%A9%F0%9F%87%AA&message=Deutsch&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.es.md"><img alt="🇪🇸 Español" src="https://img.shields.io/static/v1?label=%F0%9F%87%AA%F0%9F%87%B8&message=Espa%C3%B1ol&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.it.md"><img alt="🇮🇹 Italiano" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B9&message=Italiano&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.pt.md"><img alt="🇧🇷 Português (Brasil)" src="https://img.shields.io/static/v1?label=%F0%9F%87%A7%F0%9F%87%B7&message=Portugu%C3%AAs%20%28Brasil%29&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ja.md"><img alt="🇯🇵 日本語" src="https://img.shields.io/static/v1?label=%F0%9F%87%AF%F0%9F%87%B5&message=%E6%97%A5%E6%9C%AC%E8%AA%9E&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ko.md"><img alt="🇰🇷 한국어" src="https://img.shields.io/static/v1?label=%F0%9F%87%B0%F0%9F%87%B7&message=%ED%95%9C%EA%B5%AD%EC%96%B4&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.zh.md"><img alt="🇨🇳 简体中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%A8%F0%9F%87%B3&message=%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ru.md"><img alt="🇷🇺 Русский" src="https://img.shields.io/static/v1?label=%F0%9F%87%B7%F0%9F%87%BA&message=%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.pl.md"><img alt="🇵🇱 Polski" src="https://img.shields.io/static/v1?label=%F0%9F%87%B5%F0%9F%87%B1&message=Polski&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.tr.md"><img alt="🇹🇷 Türkçe" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%B7&message=T%C3%BCrk%C3%A7e&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.hi.md"><img alt="🇮🇳 हिन्दी" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B3&message=%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.id.md"><img alt="🇮🇩 Bahasa Indonesia" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%A9&message=Bahasa%20Indonesia&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.vi.md"><img alt="🇻🇳 Tiếng Việt" src="https://img.shields.io/static/v1?label=%F0%9F%87%BB%F0%9F%87%B3&message=Ti%E1%BA%BFng%20Vi%E1%BB%87t&color=454430&labelColor=0E0D00&style=flat-square"></a></p>
+
+> **Latest release: [v2.1.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.0):** UI in 15 languages, Batch Pipeline folder processing, built-in MLX engine for Apple Silicon, tandem viewer pan/zoom. See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI chroma keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -43,7 +45,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 | Sound feedback      | None                        | 7 context-aware sound effects                        |
 | Session persistence | None                        | Recent projects, auto-save                           |
 | Paint / masking     | Manual external tool        | Built-in brush for masks + chroma key holdout        |
-| Alpha generators    | None                        | GVM, BiRefNet, VideoMaMa, MatAnyone2, Chroma Key     |
+| Alpha generators    | None                        | GVM, BiRefNet, VideoMaMa, MatAnyone2, Chroma Key, Apple Vision (macOS) |
 | Apple Silicon       | MPS only                    | MLX acceleration (auto-detected)                     |
 
 ---
@@ -52,7 +54,7 @@ This GUI replaces the CLI drag-and-drop workflow with a complete desktop applica
 
 ### Desktop App Installer (recommended)
 
-**Don't want to deal with Python, git, or the command line?** A full Windows installer, portable exe, and macOS `.pkg` are available. Entirely optional and free — donations help support active development.
+**Don't want to deal with Python, git, or the command line?** A full Windows installer and portable exe are available. Mac users can grab the v2.0.0 macOS `.pkg` while the native Mac app is in production. Entirely optional and free, donations help support active development.
 
 [![Download on Gumroad](https://img.shields.io/badge/Download-Gumroad-ff90e8?style=for-the-badge&logo=gumroad&logoColor=white)](https://edenaion.gumroad.com/)
 
@@ -90,7 +92,7 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 **Updating:**
 
 - **Windows Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app. It downloads a lightweight patch and relaunches.
-- **macOS Desktop App users on 1.9.x:** 1.10.0 does **not** auto-update on Mac. You must download the new `.pkg` from Gumroad and run it manually. The installer replaces the existing `/Applications/EZ-CorridorKey.app` in place. Your preferences, projects, and downloaded models live in `~/Library/Application Support/EZ-CorridorKey/` and are preserved across the reinstall. Mac auto-update returns in 1.11.0 or later.
+- **macOS Desktop App users:** the in-app updater offers 2.1.0, but the macOS side of 2.1.0 is untested as a whole. Update at your own risk. The recommended path is staying on v2.0.0 and waiting for the fully native Mac app, coming to the App Store soon (see the macOS note at the top).
 - **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git, or downloads a ZIP if git isn't available.
 
 > **Note:** The update ZIP on GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) is for Windows Desktop App Installer users only. It patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
@@ -189,6 +191,8 @@ This two-pass approach preserves full floating-point precision from the video de
 
 The recompression runs in a separate process so the UI stays fully responsive during extraction.
 
+**Companion hints:** files with "alphahint" or "maskhint" anywhere in the filename (case insensitive) are automatically paired with the matching clip as alpha or mask hints instead of being imported as separate clips. Works for video imports and frame sequence folders alike.
+
 ### 2. Generate Alpha Hint
 
 Your clip starts in **RAW** state (gray badge). You need an alpha hint before running inference.
@@ -199,6 +203,7 @@ Click **CHROMA KEY** in the parameter panel. Color-difference keyer for green or
 **Option B — One-click alpha generators:**
 - **GVM Auto** — click **GVM AUTO** in the parameter panel. Works great for most green screen footage with people.
 - **BiRefNet** (recommended) — click **BIREFNET** in the parameter panel. Fast, accurate, and works well on a wide range of footage.
+- **Apple Vision** (macOS 14+) — click **APPLE VISION** in the parameter panel. Apple's Neural Engine segments the foreground, no painting or annotation needed. Auto-hidden on other platforms.
 
 
 **Option C — MatAnyone2 / VideoMaMa:**
@@ -235,7 +240,13 @@ Your clip is now **READY** (yellow badge). Adjust parameters as needed, then cli
 
 ### Batch Pipeline (Unattended)
 
-Select multiple clips in the I/O tray (Ctrl+click or Shift+click), then click **RUN PIPELINE** in the status bar. The system automatically:
+Two ways to run a batch:
+
+**From the I/O tray:** select multiple clips (Ctrl+click or Shift+click), then click **RUN PIPELINE** in the status bar.
+
+**From a folder:** File > Batch Pipeline opens a dialog for processing an entire folder of clips. Pick the folder, choose which alpha generation model to use (GVM, BiRefNet, VideoMaMa, MatAnyone2), and run everything autonomously. Per-clip overrides let you mix models in one batch. Live progress bars and checkmarks track each clip's status. Image sequence subfolders are detected and can be mixed with videos in the same batch.
+
+For tray-selected clips, the system automatically:
 
 1. Detects each clip's state and paint strokes
 2. Runs **TRACK MASK** and then **VideoMaMa** for painted clips
@@ -285,8 +296,11 @@ Viewable and rebindable in-app via Edit > Hotkeys.
 | **A**                    | Toggle A/B wipe comparison                |
 | **Ctrl + scroll wheel**  | Zoom in/out toward cursor (0.25x to 8.0x) |
 | **Shift + scroll wheel** | Horizontal pan (left/right)               |
+| **Left-click + drag**    | Pan the image (paint, eyedropper, and wipe tools take priority) |
 | **Middle-click + drag**  | Pan the image                             |
 | **Double-click**         | Reset zoom to 100%                        |
+
+Pan and zoom are tandem: both viewers always show the same region, and double-click reset applies to both.
 
 ### Timeline
 
@@ -337,6 +351,7 @@ The view mode bar at the top of each viewport switches what the right viewer dis
 | **Color Space**      | sRGB, Linear | sRGB       | How CorridorKey interprets the input before inference |
 | **Despill Strength** | 0.0 – 1.0    | 1.0        | Green spill removal intensity                         |
 | **Despeckle**        | 0 – 999999 px | ON, 400 px | Removes isolated artifacts smaller than threshold     |
+| **Garbage Matte**    | 1 – 500 px   | OFF, 20 px | Dilates the alpha hint and zeroes everything outside it |
 | **Refiner Scale**    | 0.0 – 3.0    | 1.0        | Edge refinement. 0 = disabled                         |
 | **Live Preview**     | —            | ON         | Reprocess current frame when parameters change        |
 
@@ -471,16 +486,16 @@ Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=s
 
 ### macOS (Apple Silicon)
 
+> Applies to v2.0.0 and source installs. 2.1.0 ships no Mac installer, and the macOS side of 2.1.0 is untested as a whole (see the macOS note at the top).
+
 |             | Minimum       | Recommended                                      |
 | ----------- | ------------- | ------------------------------------------------ |
 | **Chip**    | M1 (8 GB)     | M1 Pro+ (16 GB+)                                 |
-| **Backend** | MPS (PyTorch) | MLX (auto-detected if corridorkey-mlx installed) |
+| **Backend** | MPS (PyTorch) | MLX (built-in, auto-detected)                    |
 
-CorridorKey inference auto-selects the fastest available backend: MLX (1.5–2x faster) when `corridorkey-mlx` and a `.safetensors` checkpoint are present, otherwise PyTorch MPS. Override with `CORRIDORKEY_BACKEND=torch|mlx|auto`.
+CorridorKey inference auto-selects the fastest available backend: the built-in MLX engine (roughly 2x faster than MPS, runs in float16) when its `.mlx.safetensors` checkpoints are present, otherwise PyTorch MPS. Both green and blue MLX checkpoints download through the setup wizard. Override with `CORRIDORKEY_BACKEND=torch|mlx|auto`.
 
 Alpha generators (SAM2, GVM, VideoMaMa, MatAnyone2) always run on PyTorch MPS — no MLX ports exist for these models. For best Mac experience, import pre-made alpha mattes from After Effects, DaVinci Resolve, or Nuke.
-
-> **Known issue:** MLX FG output can produce blocky/artifacted results. Disable FG output and use Matte + Processed outputs instead. CUDA users are not affected.
 
 ---
 
@@ -518,15 +533,32 @@ The verification code is open source: [`backend/update_verify.py`](backend/updat
 
 ### Checksums
 
-Each release includes a `SHA256SUMS.txt` file listing the SHA-256 hash of every release artifact. Download it alongside the binary and verify manually:
+Each release includes a `SHA256SUMS.txt` file listing the SHA-256 hash of every release artifact. Use it to confirm your download is genuine and not corrupted. Put `SHA256SUMS.txt` in the same folder as the file you downloaded, then follow the steps for your system.
+
+**Windows (PowerShell):**
+
+```powershell
+# In the download folder (Shift + right-click > "Open PowerShell window here")
+Get-FileHash .\EZ-CorridorKey-2.1.0-Windows-x64-Setup.exe -Algorithm SHA256
+# Open SHA256SUMS.txt, find the line ending in that filename, compare the hash.
+# The two strings must match exactly. If they differ, do not run the file, download it again.
+```
+
+**macOS (Terminal):**
 
 ```bash
-# macOS / Linux
-sha256sum -c SHA256SUMS.txt
+cd ~/Downloads   # wherever you saved the files
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+# Expect: EZ-CorridorKey-2.1.0-macOS-arm64.dmg: OK
+# If it says FAILED, the file is corrupted or tampered with, download it again.
+```
 
-# Windows PowerShell
-(Get-FileHash EZ-CorridorKey-2.0.0-Windows-x64-Setup.exe -Algorithm SHA256).Hash
-# Compare the output against the matching line in SHA256SUMS.txt
+**Linux:**
+
+```bash
+cd ~/Downloads
+sha256sum -c SHA256SUMS.txt --ignore-missing
+# Expect OK next to each file you downloaded.
 ```
 
 ### Git integrity
@@ -557,7 +589,7 @@ EZ-CorridorKey supports translation into any language. All UI strings are extrac
 
 Full instructions with examples are in [`ui/translations/TRANSLATING.md`](ui/translations/TRANSLATING.md).
 
-**Current languages:** English (built-in). Want to see your language here? PRs welcome.
+**Current languages:** English plus German, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese (Brazil), Russian, Turkish, Vietnamese, and Chinese (Simplified). Pick yours in Edit > Preferences. Want to see your language here or improve upon a translation? PRs welcome.
 
 ---
 

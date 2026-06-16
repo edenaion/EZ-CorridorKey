@@ -68,15 +68,27 @@ class ClipListModel(QAbstractListModel):
         elif role == self.ExportThumbnailRole:
             return self._export_thumbnails.get(clip.name)
         elif role == Qt.ToolTipRole:
-            lines = [f"State: {clip.state.value}"]
+            from PySide6.QtCore import QCoreApplication
+            from ui.state_labels import state_display_name
+            lines = [QCoreApplication.translate("ClipListModel", "State: %s") % state_display_name(clip.state)]
             if clip.input_asset:
-                lines.append(f"Input: {clip.input_asset.frame_count} frames ({clip.input_asset.asset_type})")
+                lines.append(
+                    QCoreApplication.translate("ClipListModel", "Input: %d frames (%s)")
+                    % (clip.input_asset.frame_count, clip.input_asset.asset_type)
+                )
             if clip.alpha_asset:
-                lines.append(f"Alpha: {clip.alpha_asset.frame_count} frames")
+                lines.append(
+                    QCoreApplication.translate("ClipListModel", "Alpha: %d frames")
+                    % clip.alpha_asset.frame_count
+                )
             if clip.warnings:
-                lines.append(f"Warnings: {len(clip.warnings)}")
+                lines.append(
+                    QCoreApplication.translate("ClipListModel", "Warnings: %d") % len(clip.warnings)
+                )
             if clip.error_message:
-                lines.append(f"Error: {clip.error_message}")
+                lines.append(
+                    QCoreApplication.translate("ClipListModel", "Error: %s") % clip.error_message
+                )
             return "\n".join(lines)
 
         return None

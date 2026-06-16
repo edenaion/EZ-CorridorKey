@@ -246,6 +246,8 @@ class GPUJobWorker(QThread):
                 self._run_birefnet(job)
             elif job.job_type == JobType.CHROMA_KEY_ALPHA:
                 self._run_chroma_key(job)
+            elif job.job_type == JobType.APPLEVISION_ALPHA:
+                self._run_applevision(job)
             elif job.job_type == JobType.PREVIEW_REPROCESS:
                 self._run_preview_reprocess(job)
             else:
@@ -362,6 +364,25 @@ class GPUJobWorker(QThread):
         self._service.run_chroma_key(
             clip=clip,
             chroma_params=chroma_params,
+            job=job,
+            on_progress=on_progress,
+            on_warning=on_warning,
+        )
+
+    def _run_applevision(self, job: GPUJob) -> None:
+        """Run Apple Vision foreground alpha hint generation (Neural Engine)."""
+        clip = job.params.get("_clip_snapshot")
+        if clip is None:
+            raise CorridorKeyError(f"Job [{job.id}] for '{job.clip_name}' missing clip snapshot")
+
+        def on_progress(clip_name: str, current: int, total: int, **kwargs) -> None:
+            self.progress.emit(job.id, clip_name, current, total, kwargs.get("fps", 0.0))
+
+        def on_warning(message: str) -> None:
+            self.warning.emit(job.id, message)
+
+        self._service.run_applevision(
+            clip=clip,
             job=job,
             on_progress=on_progress,
             on_warning=on_warning,

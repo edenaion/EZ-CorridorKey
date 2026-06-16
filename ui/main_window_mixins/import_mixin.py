@@ -26,7 +26,35 @@ class ImportMixin:
     def _on_welcome_folder(self, dir_path: str) -> None:
         """Handle folder selected from welcome screen."""
         self._switch_to_workspace()
-        self._on_clips_dir_changed(dir_path)
+        # Walk the tree looking for image sequence leaf directories.
+        # If found, create a project from them (with companion detection).
+        # Otherwise fall back to legacy standalone-video scanner.
+        seq_dirs = self._find_sequence_dirs(dir_path)
+        if seq_dirs:
+            self._create_project_from_sequence_folder(dir_path, seq_dirs)
+        else:
+            self._on_clips_dir_changed(dir_path)
+
+    @staticmethod
+    def _find_sequence_dirs(root: str) -> list[str]:
+        """Recursively find directories containing image sequences.
+
+        Returns leaf directories that have image files. Skips hidden and
+        underscore-prefixed directories.
+        """
+        from backend.project import folder_has_image_sequence
+        results = []
+        for dirpath, dirnames, _filenames in os.walk(root):
+            # Prune hidden/special dirs from traversal
+            dirnames[:] = [
+                d for d in dirnames
+                if not d.startswith(('.', '_'))
+            ]
+            if folder_has_image_sequence(dirpath) and dirpath != root:
+                results.append(dirpath)
+                # Don't descend into sequence dirs (they're leaf nodes)
+                dirnames.clear()
+        return results
 
     @Slot(str)
     def _on_recent_project_opened(self, workspace_path: str) -> None:
@@ -69,13 +97,41 @@ class ImportMixin:
         self._clip_input_is_linear = {}
         self._refresh_project_output_actions()
 
-    @Slot(list)
+    @Slot(str)
     def _on_tray_folder_imported(self, dir_path: str) -> None:
         """Handle folder from I/O tray +ADD button — context-aware."""
         if self._clips_dir:
             self._add_folder_to_project(dir_path)
         else:
-            self._on_clips_dir_changed(dir_path)
+            self._on_welcome_folder(dir_path)
+
+    def _create_project_from_sequence_folder(
+        self, dir_path: str, seq_subdirs: list[str],
+    ) -> None:
+        """Create a project from a folder containing image sequence subdirectories.
+
+        Filters out companion hint subdirs (alphahint/maskhint in name) and
+        imports the remaining subdirs as sequence clips with companion detection.
+        """
+        from backend.project import _HINT_KEYWORDS
+        from backend.project_media import create_project_from_media
+
+        # Filter out hint-named subdirectories
+        non_hint = [
+            d for d in seq_subdirs
+            if not any(kw in os.path.basename(d).lower() for kw in _HINT_KEYWORDS)
+        ]
+        if not non_hint:
+            return
+
+        copy_seq = get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES)
+        folder_name = os.path.basename(dir_path.rstrip("/\\"))
+        project_dir = create_project_from_media(
+            sequence_folders=non_hint,
+            copy_sequences=copy_seq,
+            display_name=folder_name,
+        )
+        self._on_clips_dir_changed(project_dir)
 
     def _on_tray_files_imported(self, file_paths: list) -> None:
         """Handle files from I/O tray +ADD button — context-aware."""
@@ -191,16 +247,27 @@ class ImportMixin:
     def _add_folder_to_project(self, dir_path: str) -> None:
         """Import all videos and image sequences from a folder into the current project."""
         from backend.project import (
-            is_video_file, add_clips_to_project,
+            _HINT_KEYWORDS, is_video_file, add_clips_to_project,
             folder_has_image_sequence, add_sequences_to_project,
+            filter_companion_hints,
         )
         videos = [
             os.path.join(dir_path, f) for f in os.listdir(dir_path)
             if is_video_file(os.path.join(dir_path, f))
         ]
+        videos = filter_companion_hints(videos)
         is_seq = folder_has_image_sequence(dir_path)
 
-        if not videos and not is_seq:
+        # Also check subdirectories for image sequences (filter out hint dirs)
+        seq_subdirs = [
+            os.path.join(dir_path, d) for d in os.listdir(dir_path)
+            if os.path.isdir(os.path.join(dir_path, d))
+            and not d.startswith(('.', '_'))
+            and folder_has_image_sequence(os.path.join(dir_path, d))
+            and not any(kw in d.lower() for kw in _HINT_KEYWORDS)
+        ]
+
+        if not videos and not is_seq and not seq_subdirs:
             QMessageBox.information(
                 self, _tr("No Media"),
                 _tr("No video files or image sequences found in that folder.")
@@ -219,6 +286,13 @@ class ImportMixin:
             )
             logger.info(f"Added image sequence from folder to project")
 
+        if seq_subdirs:
+            copy_seq = get_setting_bool(KEY_COPY_SEQUENCES, DEFAULT_COPY_SEQUENCES)
+            add_sequences_to_project(
+                self._clips_dir, seq_subdirs, copy_source=copy_seq,
+            )
+            logger.info(f"Added {len(seq_subdirs)} image sequence(s) from subdirectories")
+
         self._on_clips_dir_changed(self._clips_dir, skip_session_restore=True)
 
     def _add_videos_to_project(self, file_paths: list) -> None:
@@ -226,10 +300,16 @@ class ImportMixin:
         from backend.project import (
             is_video_file, add_clips_to_project, find_clip_by_source,
             find_removed_clip_by_source, clear_removed_clip,
+            filter_companion_hints,
         )
         videos = [f for f in file_paths if is_video_file(f)]
         if not videos:
             return
+
+        # Exclude companion hint files (_alphahint, _maskhint) from being
+        # imported as separate clips. They'll be auto-copied into the
+        # matching clip folder by _copy_companion_hints during creation.
+        videos = filter_companion_hints(videos)
 
         # Categorise: already active, removed (restore), or genuinely new
         new_videos = []

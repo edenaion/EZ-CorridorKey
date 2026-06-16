@@ -97,6 +97,14 @@ class DualViewerPanel(QWidget):
         self._output_viewer._split_view.zoom_changed.connect(self._on_zoom_changed)
         self._output_viewer.view_mode_changed.connect(self.output_mode_changed.emit)
 
+        # Tandem pan/zoom: pan or zoom on either viewer mirrors to the other.
+        # set_view_transform does not re-emit view_transform_changed, so the
+        # cross-connection cannot feed back.
+        self._input_viewer._split_view.view_transform_changed.connect(
+            self._output_viewer._split_view.set_view_transform)
+        self._output_viewer._split_view.view_transform_changed.connect(
+            self._input_viewer._split_view.set_view_transform)
+
         # Refresh wipe overlay when output viewer decodes a new frame or switches mode
         self._output_viewer._decoder.frame_decoded.connect(self._on_wipe_frame_ready)
         self._input_viewer._decoder.frame_decoded.connect(self._on_wipe_frame_ready)
