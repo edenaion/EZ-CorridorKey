@@ -2,7 +2,7 @@
 
 # EZ-CorridorKey **v2.0.0**
 
-[![Release](https://img.shields.io/github/v/release/edenaion/EZ-CorridorKey?style=flat-square&label=Release&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
+[![Release](https://img.shields.io/badge/Release-v2.1.0-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![Stelle](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
 [![Licenza](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
