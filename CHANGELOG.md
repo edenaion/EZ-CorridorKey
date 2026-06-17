@@ -4,6 +4,15 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [2.1.1] - 2026-06-17 - Non-ASCII paths, first-run language
+
+### Fixed
+
+- **Projects with non-ASCII folder names now work.** Projects whose path contains Cyrillic, CJK, Arabic, Hindi, or accented Latin characters showed blank input/output previews and produced no output, because OpenCV cannot open such paths on Windows. All image and video reads and writes now go through a Unicode-safe layer. ASCII paths are unchanged, so existing projects produce byte-identical output.
+- **First-run language now matches the Preferences menu.** When the app detected your system language on first launch (for example Russian), the interface switched but the language dropdown still showed English. The detected language is now saved on first run, so the menu reflects the active language. Manually chosen languages are never overwritten.
+
+---
+
 ## [2.1.0] - 2026-06-12 - Batch Pipeline, 14-language UI, fixes
 
 > **Python macOS support ends with this release.** Starting with 2.1.1+, all macOS effort moves to a fully native Mac application, coming to the App Store shortly. Subscribe on [YouTube](https://www.youtube.com/@edenaion) for release updates.
