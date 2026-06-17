@@ -10,8 +10,11 @@ _load_frames_for_videomama, _load_mask_frames_for_videomama).
 """
 from __future__ import annotations
 
+import atexit
 import logging
 import os
+import shutil
+import tempfile
 from typing import Callable, Optional
 
 # Enable OpenEXR support in OpenCV before cv2 is imported.
@@ -140,6 +143,133 @@ def write_exr_dwab(path: str, img: np.ndarray) -> bool:
     return write_exr(path, img, compression="dwab")
 
 
+def _is_ascii(path: str) -> bool:
+    """True if every character in the path is ASCII (safe for cv2's narrow API)."""
+    try:
+        path.encode("ascii")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
+def imread_unicode(path: str, flags: int = cv2.IMREAD_COLOR) -> Optional[np.ndarray]:
+    """Read an image from disk, safe for non-ASCII paths on Windows.
+
+    cv2.imread uses a narrow (ANSI codepage) file API on Windows and returns
+    None for any path containing characters outside that codepage (accented
+    Latin, Cyrillic, CJK, Arabic, etc.). ASCII paths take the original
+    cv2.imread route unchanged (byte-identical pixels, no extra read); non-ASCII
+    paths decode from an in-memory buffer read through numpy's unicode-aware
+    file API. cv2.imread and cv2.imdecode share the same codecs, so the decoded
+    array is identical for every format and flag combination.
+
+    Args:
+        path: Image file path. May contain any Unicode characters.
+        flags: cv2 IMREAD_* flags, forwarded verbatim to the decoder.
+
+    Returns:
+        Decoded ndarray, or None if the file is missing/unreadable/undecodable
+        (matching cv2.imread's None-on-failure contract).
+    """
+    if _is_ascii(path):
+        return cv2.imread(path, flags)
+    try:
+        data = np.fromfile(path, dtype=np.uint8)
+    except (OSError, ValueError):
+        return None
+    if data.size == 0:
+        return None
+    return cv2.imdecode(data, flags)
+
+
+# ── Unicode-safe video opening ──────────────────────────────────────────────
+# Some OpenCV builds open non-ASCII video paths fine (modern FFmpeg backend);
+# older builds fail. When the plain open fails we stage the file at an ASCII
+# path. Staged hardlinks/copies are deduped per source and cleaned at exit.
+_stage_dir: Optional[str] = None
+_staged: dict[str, str] = {}
+
+
+def _short_path_windows(path: str) -> Optional[str]:
+    """Return the Windows 8.3 short-path alias for an existing file, or None.
+
+    The 8.3 alias is pure ASCII, so cv2's narrow file API can open it. Only
+    available on Windows volumes with 8.3 generation enabled.
+    """
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        get_short = ctypes.windll.kernel32.GetShortPathNameW
+        get_short.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        get_short.restype = wintypes.DWORD
+        buf = ctypes.create_unicode_buffer(32768)
+        n = get_short(path, buf, len(buf))
+        if n and buf.value and _is_ascii(buf.value):
+            return buf.value
+    except Exception:
+        pass
+    return None
+
+
+def _cleanup_staged() -> None:
+    if _stage_dir and os.path.isdir(_stage_dir):
+        shutil.rmtree(_stage_dir, ignore_errors=True)
+
+
+def _stage_ascii(path: str) -> str:
+    """Stage a file at an ASCII temp path via hardlink (else copy); deduped.
+
+    Returns the staged ASCII path, or the original path if staging fails.
+    """
+    global _stage_dir
+    existing = _staged.get(path)
+    if existing and os.path.isfile(existing):
+        return existing
+    if _stage_dir is None:
+        _stage_dir = tempfile.mkdtemp(prefix="ck_uvid_")
+        atexit.register(_cleanup_staged)
+    dst = os.path.join(_stage_dir, f"v{len(_staged):04d}{os.path.splitext(path)[1]}")
+    try:
+        os.link(path, dst)  # cheap: no data copy on the same volume
+    except OSError:
+        try:
+            shutil.copy2(path, dst)
+        except OSError:
+            return path
+    _staged[path] = dst
+    return dst
+
+
+def open_video(path: str) -> cv2.VideoCapture:
+    """Open a video, safe for non-ASCII paths across all OpenCV builds.
+
+    Plain VideoCapture works for ASCII paths and for modern OpenCV builds whose
+    FFmpeg backend is wide-path aware. When it fails on a non-ASCII path (older
+    builds), fall back to a Windows 8.3 short-path alias, then to a
+    hardlink/copy at an ASCII temp path. Returns a normal VideoCapture, so
+    callers keep their existing isOpened()/release() handling unchanged.
+    """
+    cap = cv2.VideoCapture(path)
+    if cap.isOpened() or _is_ascii(path):
+        return cap
+    cap.release()
+
+    short = _short_path_windows(path)
+    if short and short != path:
+        cap = cv2.VideoCapture(short)
+        if cap.isOpened():
+            return cap
+        cap.release()
+
+    staged = _stage_ascii(path)
+    if staged != path:
+        return cv2.VideoCapture(staged)
+    return cv2.VideoCapture(path)
+
+
 def imwrite_unicode(path: str, img: np.ndarray, params: Optional[list] = None) -> bool:
     """Write an image to disk via cv2.imencode, safe for unicode paths.
 
@@ -183,7 +313,7 @@ def recompress_exr(src_path: str, dst_path: str, compression: str = "dwab") -> b
     Returns:
         True on success, False on failure.
     """
-    img = cv2.imread(src_path, cv2.IMREAD_UNCHANGED)
+    img = imread_unicode(src_path, cv2.IMREAD_UNCHANGED)
     if img is None:
         logger.warning(f"Failed to read EXR for recompression: {src_path}")
         return False
@@ -205,7 +335,7 @@ def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np
     is_exr = fpath.lower().endswith('.exr')
 
     if is_exr:
-        img = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
+        img = imread_unicode(fpath, cv2.IMREAD_UNCHANGED)
         if img is None:
             return None
         # Strip alpha channel from BGRA EXR
@@ -217,7 +347,7 @@ def read_image_frame(fpath: str, gamma_correct_exr: bool = False) -> Optional[np
             result = _linear_to_srgb(result)
         return result
     else:
-        img = cv2.imread(fpath)
+        img = imread_unicode(fpath)
         if img is None:
             return None
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -236,7 +366,7 @@ def read_video_frame_at(
     Returns:
         float32 array [H, W, 3] in RGB order, or None if seek/read fails.
     """
-    cap = cv2.VideoCapture(video_path)
+    cap = open_video(video_path)
     try:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
         ret, frame = cap.read()
@@ -264,7 +394,7 @@ def read_video_frames(
         List of processed frames.
     """
     frames: list[np.ndarray] = []
-    cap = cv2.VideoCapture(video_path)
+    cap = open_video(video_path)
     try:
         while True:
             ret, frame = cap.read()
@@ -293,7 +423,7 @@ def read_mask_frame(fpath: str, clip_name: str = "", frame_index: int = 0) -> Op
     Returns:
         float32 array [H, W] in [0, 1], or None if read fails.
     """
-    mask_in = cv2.imread(fpath, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED)
+    mask_in = imread_unicode(fpath, cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED)
     if mask_in is None:
         return None
     # dtype normalization MUST happen before channel extraction, because
@@ -341,7 +471,7 @@ def read_video_mask_at(
     Returns:
         float32 array [H, W] in [0, 1], or None if seek/read fails.
     """
-    cap = cv2.VideoCapture(video_path)
+    cap = open_video(video_path)
     try:
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
         ret, frame = cap.read()

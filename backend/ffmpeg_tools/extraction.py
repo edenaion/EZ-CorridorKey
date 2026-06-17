@@ -127,7 +127,8 @@ def _recompress_one_exr(args: tuple) -> bool:
         import numpy as np
         import OpenEXR
         import Imath
-        img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
+        from backend.frame_io import imread_unicode
+        img = imread_unicode(src, cv2.IMREAD_UNCHANGED)
         if img is None:
             return False
         HALF = Imath.Channel(Imath.PixelType(Imath.PixelType.HALF))
@@ -232,7 +233,13 @@ def recompress_one(args):
     try:
         os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
         import cv2, numpy as np, OpenEXR, Imath
-        img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
+        # Unicode-safe read: cv2.imread fails on non-ASCII paths on Windows.
+        # This standalone script cannot import the backend.frame_io facade, so
+        # the imdecode(np.fromfile(...)) pattern is inlined here.
+        try:
+            img = cv2.imdecode(np.fromfile(src, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
+        except (OSError, ValueError):
+            img = None
         if img is None:
             return False
         HALF = Imath.Channel(Imath.PixelType(Imath.PixelType.HALF))

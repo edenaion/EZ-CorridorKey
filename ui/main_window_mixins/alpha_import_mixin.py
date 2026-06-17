@@ -15,6 +15,7 @@ from . import _tr
 
 from backend import ClipAsset, ClipState
 from backend.project import VIDEO_FILE_FILTER, is_video_file
+from backend.frame_io import imread_unicode, imwrite_unicode
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +230,7 @@ class AlphaImportMixin:
 
                     if not import_as_vmama_mask and src_ext == ".exr":
                         # Preserve float EXR alpha hints instead of quantizing to PNG.
-                        img = cv2.imread(
+                        img = imread_unicode(
                             src_path,
                             cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED,
                         )
@@ -242,7 +243,7 @@ class AlphaImportMixin:
                         continue
 
                     if src_ext == ".exr":
-                        img = cv2.imread(
+                        img = imread_unicode(
                             src_path,
                             cv2.IMREAD_ANYDEPTH | cv2.IMREAD_UNCHANGED,
                         )
@@ -255,7 +256,7 @@ class AlphaImportMixin:
                                 )
                                 img = (img * 255.0).astype(np.uint8)
                     else:
-                        img = cv2.imread(src_path, cv2.IMREAD_GRAYSCALE)
+                        img = imread_unicode(src_path, cv2.IMREAD_GRAYSCALE)
                     if img is None:
                         logger.warning("Failed to import alpha image: %s", src_path)
                         continue
@@ -265,7 +266,7 @@ class AlphaImportMixin:
                     if import_as_vmama_mask:
                         _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
 
-                    if cv2.imwrite(dst_path, img):
+                    if imwrite_unicode(dst_path, img):
                         imported_count += 1
                     else:
                         logger.warning("Failed to write alpha image: %s", dst_path)

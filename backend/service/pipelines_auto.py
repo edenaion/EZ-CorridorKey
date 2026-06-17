@@ -240,6 +240,7 @@ class AutoPipelinesMixin:
         import numpy as _np
         from concurrent.futures import ThreadPoolExecutor, Future
         from CorridorKeyModule.core.chroma_key import chroma_key_matte
+        from ..frame_io import imread_unicode as _imread, imwrite_unicode as _imwrite
 
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for chroma key")
@@ -280,9 +281,9 @@ class AutoPipelinesMixin:
             fpath = os.path.join(input_dir, fname)
             is_exr = fname.lower().endswith(".exr")
             if is_exr:
-                bgr = _cv2.imread(fpath, _cv2.IMREAD_ANYCOLOR | _cv2.IMREAD_ANYDEPTH)
+                bgr = _imread(fpath, _cv2.IMREAD_ANYCOLOR | _cv2.IMREAD_ANYDEPTH)
             else:
-                bgr = _cv2.imread(fpath, _cv2.IMREAD_COLOR)
+                bgr = _imread(fpath, _cv2.IMREAD_COLOR)
             if bgr is None:
                 logger.warning(f"Chroma key: could not read {fpath}, skipping")
                 return fname, None
@@ -293,7 +294,7 @@ class AutoPipelinesMixin:
 
         # ── Write helper (runs in write ThreadPool) ──
         def _write_matte(out_path: str, matte: _np.ndarray) -> None:
-            _cv2.imwrite(out_path, matte)
+            _imwrite(out_path, matte)
 
         _PREFETCH = 4
         _WRITE_WORKERS = 4
@@ -390,6 +391,7 @@ class AutoPipelinesMixin:
         import cv2 as _cv2
         import numpy as _np
         from concurrent.futures import ThreadPoolExecutor, Future
+        from ..frame_io import imread_unicode as _imread, imwrite_unicode as _imwrite
 
         if clip.input_asset is None:
             raise CorridorKeyError(f"Clip '{clip.name}' missing input asset for Apple Vision")
@@ -423,9 +425,9 @@ class AutoPipelinesMixin:
             fpath = os.path.join(input_dir, fname)
             is_exr = fname.lower().endswith(".exr")
             if is_exr:
-                bgr = _cv2.imread(fpath, _cv2.IMREAD_ANYCOLOR | _cv2.IMREAD_ANYDEPTH)
+                bgr = _imread(fpath, _cv2.IMREAD_ANYCOLOR | _cv2.IMREAD_ANYDEPTH)
             else:
-                bgr = _cv2.imread(fpath, _cv2.IMREAD_COLOR)
+                bgr = _imread(fpath, _cv2.IMREAD_COLOR)
             if bgr is None:
                 logger.warning(f"Apple Vision: could not read {fpath}, skipping")
                 return fname, None
@@ -436,7 +438,7 @@ class AutoPipelinesMixin:
 
         # Write helper
         def _write_matte(out_path: str, matte: _np.ndarray) -> None:
-            _cv2.imwrite(out_path, matte)
+            _imwrite(out_path, matte)
 
         _PREFETCH = 4
         _WRITE_WORKERS = 4

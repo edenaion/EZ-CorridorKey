@@ -195,20 +195,33 @@ def build_frame_index(
     # Build ordered stem list using natural sort
     index.stems = natsorted(list(all_stems))
 
-    # For video input with no image stems, generate stems from frame count
+    # For video input with no image stems, generate stems from frame count.
+    # ffprobe first (unicode-safe via subprocess argv, no VideoCapture needed);
+    # fall back to the unicode-safe video opener if ffprobe yields nothing
+    # (some containers like mkv/webm omit nb_frames).
     if ViewMode.INPUT in index.video_modes and not index.stems:
         vpath = index.video_modes[ViewMode.INPUT]
+        count = 0
         try:
-            import cv2
-            cap = cv2.VideoCapture(vpath)
-            if cap.isOpened():
-                count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                cap.release()
-                if count > 0:
-                    # Generate synthetic stem names for video-only clips
-                    index.stems = [f"frame_{i:06d}" for i in range(count)]
+            from backend.ffmpeg_tools.probe import probe_video
+            count = int(probe_video(vpath).get("frame_count", 0) or 0)
         except Exception:
-            pass
+            count = 0
+        if count <= 0:
+            try:
+                import cv2
+                from backend.frame_io import open_video
+                cap = open_video(vpath)
+                try:
+                    if cap.isOpened():
+                        count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                finally:
+                    cap.release()
+            except Exception:
+                count = 0
+        if count > 0:
+            # Generate synthetic stem names for video-only clips
+            index.stems = [f"frame_{i:06d}" for i in range(count)]
 
     # For video input, mark all stems as available (seekable)
     if ViewMode.INPUT in index.video_modes:

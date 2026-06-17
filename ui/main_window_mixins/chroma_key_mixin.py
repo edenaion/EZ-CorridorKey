@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QMessageBox
 from . import _tr
 
 from backend import ClipState, JobType
+from backend.frame_io import imread_unicode
 from ui.workers.job_helpers import create_job_snapshot
 
 logger = logging.getLogger(__name__)
@@ -162,11 +163,11 @@ class ChromaKeyMixin:
         # Read frame (handle EXR float data properly)
         is_exr = input_path.lower().endswith(".exr")
         if is_exr:
-            frame_bgr = cv2.imread(input_path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
+            frame_bgr = imread_unicode(input_path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
         else:
-            frame_bgr = cv2.imread(input_path, cv2.IMREAD_COLOR)
+            frame_bgr = imread_unicode(input_path, cv2.IMREAD_COLOR)
         if frame_bgr is None:
-            logger.warning(f"Chroma key preview: cv2.imread failed for {input_path}")
+            logger.warning(f"Chroma key preview: imread failed for {input_path}")
             return
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         # EXR comes as float32 in 0-1 range; convert to uint8 for display

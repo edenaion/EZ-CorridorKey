@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from backend.frame_io import imwrite_unicode
+
 from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import QPainter, QPen, QColor
 
@@ -189,7 +191,7 @@ class AnnotationModel:
                 mask = np.zeros((height, width), dtype=np.uint8)
 
             out_path = os.path.join(mask_dir, f"{stem}.png")
-            cv2.imwrite(out_path, mask)
+            imwrite_unicode(out_path, mask)
 
         logger.info(
             f"Exported {len(frame_stems)} mask frames to {mask_dir} "

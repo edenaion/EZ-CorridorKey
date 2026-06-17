@@ -18,6 +18,7 @@ from ..frame_io import (
     _linear_to_srgb,
     _srgb_to_linear,
     decode_video_mask_frame,
+    imread_unicode,
     read_video_frame_at,
     read_video_frames,
 )
@@ -235,7 +236,7 @@ class FrameOpsMixin:
             if not mask_files:
                 return None
             first_mask_path = os.path.join(clip.mask_asset.path, mask_files[0])
-            mask = cv2.imread(first_mask_path, cv2.IMREAD_GRAYSCALE)
+            mask = imread_unicode(first_mask_path, cv2.IMREAD_GRAYSCALE)
             if mask is None:
                 return None
             # Binarize
@@ -287,7 +288,7 @@ class FrameOpsMixin:
         masks = []
         for fname in asset.get_frame_files():
             fpath = os.path.join(asset.path, fname)
-            mask = cv2.imread(fpath, cv2.IMREAD_GRAYSCALE)
+            mask = imread_unicode(fpath, cv2.IMREAD_GRAYSCALE)
             if mask is None:
                 continue
             _, binary = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)

@@ -41,6 +41,7 @@ from backend import (
     PipelineRoute, classify_pipeline_route, mask_sequence_is_videomama_ready,
 )
 from backend.project import VIDEO_FILE_FILTER, is_video_file
+from backend.frame_io import open_video, imwrite_unicode
 
 from ui.models.clip_model import ClipListModel
 from ui.preview.frame_index import ViewMode
@@ -146,7 +147,7 @@ def _import_alpha_video_as_sequence(
 ) -> int:
     """Decode an alpha video into AlphaHint/*.png named to match input stems."""
     os.makedirs(alpha_dir, exist_ok=True)
-    cap = cv2.VideoCapture(video_path)
+    cap = open_video(video_path)
     imported_count = 0
     try:
         for input_name in input_files:
@@ -163,7 +164,7 @@ def _import_alpha_video_as_sequence(
                 mask_u8 = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             if mask_u8.dtype != np.uint8:
                 mask_u8 = (np.clip(mask_u8, 0.0, 1.0) * 255.0).astype(np.uint8)
-            if cv2.imwrite(dst_path, mask_u8):
+            if imwrite_unicode(dst_path, mask_u8):
                 imported_count += 1
             else:
                 logger.warning("Failed to write imported alpha video frame: %s", dst_path)

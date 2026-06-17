@@ -35,6 +35,7 @@ from backend import (
     JobType,
 )
 from backend.job_queue import JobStatus
+from backend.frame_io import imread_unicode, imwrite_unicode
 from backend.errors import JobCancelledError, CorridorKeyError
 
 # Re-export create_job_snapshot for backward compatibility
@@ -559,7 +560,7 @@ class GPUJobWorker(QThread):
                 return
 
             latest = os.path.join(comp_dir, comp_files[-1])
-            img = cv2.imread(latest)
+            img = imread_unicode(latest)
             if img is None:
                 return
 
@@ -570,7 +571,7 @@ class GPUJobWorker(QThread):
                 img = cv2.resize(img, (960, int(h * scale)), interpolation=cv2.INTER_AREA)
 
             preview_path = os.path.join(self._preview_dir, f"preview_{job_id}.png")
-            cv2.imwrite(preview_path, img)
+            imwrite_unicode(preview_path, img)
 
             self.preview_ready.emit(job_id, clip.name, frame_index, preview_path)
         except Exception as e:

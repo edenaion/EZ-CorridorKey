@@ -113,6 +113,9 @@ class TestVideoMaskRead:
             def __init__(self, path):
                 self.path = path
 
+            def isOpened(self):
+                return True
+
             def set(self, *_args):
                 return True
 

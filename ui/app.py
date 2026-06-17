@@ -143,11 +143,22 @@ def apply_language(app: QApplication, lang: str | None = None) -> bool:
     """
     from PySide6.QtCore import QSettings
 
+    settings = QSettings()
+    auto_resolved = False
     if lang is None:
-        settings = QSettings()
         lang = settings.value("ui/language", "", type=str)
         if not lang:
+            # First run, no saved preference: detect the system language and
+            # persist whatever ends up applied, so the Preferences dropdown
+            # reflects the active language instead of defaulting to English
+            # (issue #168). Only the auto path persists; explicit calls from
+            # Preferences store their own value.
             lang = QLocale.system().name().split("_")[0]  # e.g. "fr" from "fr_FR"
+            auto_resolved = True
+
+    def _persist(effective: str) -> None:
+        if auto_resolved:
+            settings.setValue("ui/language", effective)
 
     # Drop the active translator (no-op on startup)
     old = getattr(app, "_corridorkey_translator", None)
@@ -156,6 +167,7 @@ def apply_language(app: QApplication, lang: str | None = None) -> bool:
         app._corridorkey_translator = None
 
     if lang == "en":
+        _persist("en")
         return True  # English is the source language, no translation needed
 
     if getattr(sys, "frozen", False):
@@ -166,6 +178,7 @@ def apply_language(app: QApplication, lang: str | None = None) -> bool:
     qm_file = os.path.join(translations_dir, f"corridorkey_{lang}.qm")
     if not os.path.isfile(qm_file):
         logger.debug("No translation file for '%s' at %s", lang, qm_file)
+        _persist("en")  # unsupported system language; UI stays English
         return False
 
     translator = QTranslator(app)
@@ -174,8 +187,10 @@ def apply_language(app: QApplication, lang: str | None = None) -> bool:
         # Store ref on app to prevent garbage collection
         app._corridorkey_translator = translator
         logger.info("Loaded translation: %s", lang)
+        _persist(lang)
         return True
     logger.warning("Failed to load translation file: %s", qm_file)
+    _persist("en")  # load failed; UI is English
     return False
 
 
