@@ -134,22 +134,27 @@ class ClipAsset:
         try:
             if self.asset_type == 'video':
                 import cv2
-                cap = cv2.VideoCapture(self.path)
-                if cap.isOpened():
-                    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                from .frame_io import open_video
+                cap = open_video(self.path)
+                try:
+                    if cap.isOpened():
+                        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                        if w > 0 and h > 0:
+                            self._dimensions = (w, h)
+                            return self._dimensions
+                finally:
                     cap.release()
-                    if w > 0 and h > 0:
-                        self._dimensions = (w, h)
-                        return self._dimensions
             elif self.asset_type == 'sequence':
                 files = self.get_frame_files()
                 if not files:
                     return None
                 first = os.path.join(self.path, files[0])
-                # Use cv2.imread with IMREAD_UNCHANGED to support EXR/PNG/TIFF.
+                # imread_unicode with IMREAD_UNCHANGED to support EXR/PNG/TIFF
+                # and non-ASCII paths.
                 import cv2
-                img = cv2.imread(first, cv2.IMREAD_UNCHANGED)
+                from .frame_io import imread_unicode
+                img = imread_unicode(first, cv2.IMREAD_UNCHANGED)
                 if img is not None:
                     h, w = img.shape[:2]
                     self._dimensions = (int(w), int(h))
@@ -168,10 +173,13 @@ class ClipAsset:
         elif self.asset_type == 'video':
             try:
                 import cv2
-                cap = cv2.VideoCapture(self.path)
-                if cap.isOpened():
-                    self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                cap.release()
+                from .frame_io import open_video
+                cap = open_video(self.path)
+                try:
+                    if cap.isOpened():
+                        self.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                finally:
+                    cap.release()
             except Exception as e:
                 logger.debug(f"Video frame count detection failed for {self.path}: {e}")
                 self.frame_count = 0

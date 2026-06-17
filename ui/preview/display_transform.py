@@ -24,6 +24,7 @@ import numpy as np
 from PySide6.QtGui import QImage
 
 from .frame_index import ViewMode
+from backend.frame_io import imread_unicode, open_video
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ def _decode_ldr(
     input_exr_is_linear: bool = False,
 ) -> QImage | None:
     """Decode an 8-bit image (PNG/JPG/etc) to QImage."""
-    img = cv2.imread(path, cv2.IMREAD_COLOR)
+    img = imread_unicode(path, cv2.IMREAD_COLOR)
     if img is None:
         return None
     if mode == ViewMode.INPUT and input_exr_is_linear:
@@ -119,7 +120,7 @@ def _decode_ldr(
 
 def _decode_exr(path: str, mode: ViewMode, *, input_exr_is_linear: bool = False) -> QImage | None:
     """Decode an EXR file with mode-specific display transform."""
-    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    img = imread_unicode(path, cv2.IMREAD_UNCHANGED)
     if img is None:
         return None
 
@@ -269,7 +270,7 @@ def decode_video_frame(
             return _QIMAGE_CACHE[key]
 
     try:
-        cap = cv2.VideoCapture(video_path)
+        cap = open_video(video_path)
         if not cap.isOpened():
             return None
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)

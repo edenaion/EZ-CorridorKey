@@ -211,6 +211,9 @@ def test_import_alpha_video_as_sequence_writes_pngs_named_like_input_frames(tmp_
         def __init__(self, _path):
             self._index = 0
 
+        def isOpened(self):
+            return True
+
         def read(self):
             if self._index >= len(frames):
                 return False, None

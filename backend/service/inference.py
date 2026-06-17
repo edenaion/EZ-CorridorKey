@@ -17,7 +17,7 @@ from ..errors import (
     JobCancelledError,
     WriteFailureError,
 )
-from ..frame_io import read_video_frame_at, read_video_mask_at
+from ..frame_io import open_video, read_video_frame_at, read_video_mask_at
 from ..job_queue import GPUJob
 from ..validators import ensure_output_dirs, validate_frame_counts
 from .inference_parallel import ParallelInferenceMixin
@@ -161,12 +161,12 @@ class InferenceMixin(ParallelInferenceMixin):
         alpha_files: list[str] = []
 
         if clip.input_asset.asset_type == 'video':
-            input_cap = cv2.VideoCapture(clip.input_asset.path)
+            input_cap = open_video(clip.input_asset.path)
         else:
             input_files = clip.input_asset.get_frame_files()
 
         if clip.alpha_asset.asset_type == 'video':
-            alpha_cap = cv2.VideoCapture(clip.alpha_asset.path)
+            alpha_cap = open_video(clip.alpha_asset.path)
         else:
             alpha_files = clip.alpha_asset.get_frame_files()
         alpha_stem_lookup = (

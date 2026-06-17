@@ -22,6 +22,7 @@ from ..errors import (
     JobCancelledError,
     WriteFailureError,
 )
+from ..frame_io import imread_unicode, imwrite_unicode
 from .helpers import BASE_DIR
 from .model_manager import _ActiveModel
 
@@ -159,7 +160,7 @@ class GuidedPipelinesMixin:
             stem = os.path.splitext(fname)[0]
             stems.append(stem)
             out_path = os.path.join(mask_dir, f"{stem}.png")
-            if not cv2.imwrite(out_path, mask):
+            if not imwrite_unicode(out_path, mask):
                 raise WriteFailureError(clip.name, len(stems) - 1, out_path)
 
         self._write_mask_track_manifest(
@@ -375,7 +376,7 @@ class GuidedPipelinesMixin:
             for i, fname in enumerate(mask_files):
                 _check_cancel("mask load")
                 fpath = os.path.join(clip.mask_asset.path, fname)
-                m = cv2.imread(fpath, cv2.IMREAD_GRAYSCALE)
+                m = imread_unicode(fpath, cv2.IMREAD_GRAYSCALE)
                 if m is not None:
                     _, binary = cv2.threshold(m, 10, 255, cv2.THRESH_BINARY)
                     stem = os.path.splitext(fname)[0]
@@ -456,7 +457,7 @@ class GuidedPipelinesMixin:
                 else:
                     out_name = f"frame_{frames_written:06d}.png"
                 out_path = os.path.join(alpha_dir, out_name)
-                if not cv2.imwrite(out_path, out_bgr):
+                if not imwrite_unicode(out_path, out_bgr):
                     raise WriteFailureError(clip.name, frames_written, out_path)
                 frames_written += 1
             logger.debug(f"Clip '{clip.name}' chunk {chunk_idx}: {len(chunk_output)} frames in {time.monotonic() - t_chunk:.3f}s")
