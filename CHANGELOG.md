@@ -6,6 +6,8 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [2.1.1] - 2026-06-17 - Non-ASCII paths, first-run language
 
+> **Windows only.** 2.1.1 ships as a Windows auto-update. There is no macOS build for this release; macOS is moving to a fully native app (see the 2.1.0 note above).
+
 ### Fixed
 
 - **Projects with non-ASCII folder names now work.** Projects whose path contains Cyrillic, CJK, Arabic, Hindi, or accented Latin characters showed blank input/output previews and produced no output, because OpenCV cannot open such paths on Windows. All image and video reads and writes now go through a Unicode-safe layer. ASCII paths are unchanged, so existing projects produce byte-identical output.
