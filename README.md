@@ -486,7 +486,7 @@ Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=s
 
 ### macOS (Apple Silicon)
 
-> Applies to v2.0.0 and source installs. Patch releases like 2.1.2 ship as an in-app auto-update, not a new Mac installer.
+> Applies to v2.0.0 and source installs. 2.1.2 is a Windows-only patch, so there is no macOS update this release; source installs can still update with `3-update.sh`.
 
 |             | Minimum       | Recommended                                      |
 | ----------- | ------------- | ------------------------------------------------ |

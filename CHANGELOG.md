@@ -8,7 +8,7 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ## [2.1.2] - 2026-06-27 - FFmpeg import fix, update button, 2 new languages
 
-> 2.1.2 ships as an in-app auto-update for Windows and macOS. No new full installer this release; existing apps update in place.
+> 2.1.2 ships as a Windows in-app auto-update. No new full installer this release; existing Windows apps update in place.
 
 ### Fixed
 
