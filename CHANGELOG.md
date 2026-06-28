@@ -2,6 +2,30 @@
 
 All notable changes to EZ-CorridorKey are documented here.
 
+> **Updating:** Hotfix and patch releases (the third version number, like 2.1.1 or 2.1.2) ship as in-app updates only. They do not come with a fresh full installer. Get them by clicking the update button in the app, or run `3-update.bat` (Windows) or `3-update.sh` (macOS/Linux) for source installs.
+
+---
+
+## [2.1.2] - 2026-06-27 - FFmpeg import fix, update button, 2 new languages
+
+> 2.1.2 ships as an in-app auto-update for Windows and macOS. No new full installer this release; existing apps update in place.
+
+### Fixed
+
+- **Video import no longer fails with "Unrecognized option 'vsync'".** Newer FFmpeg builds removed the old `-vsync` option, which broke frame extraction on those builds. Extraction now uses the current equivalent (`-fps_mode`), so imports work on every supported FFmpeg version. ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175))
+- **Repair FFmpeg now installs a stable build.** The button previously downloaded a nightly development build that could be missing options the app relies on. It now fetches the latest stable FFmpeg release, validates it, and only then replaces your existing copy. A failed or interrupted repair restores the previous working FFmpeg instead of leaving you with none. ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175))
+- **The update button no longer covers the VRAM meter.** It now sits in the top center of the title bar, clear of the GPU memory readout. ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176))
+- **Eyedropper button label now translates in every language.** The "Pick Screen Color" button kept its English text in all translated interfaces because of an emoji-encoding mismatch in its translation key. It now appears in your selected language.
+
+### Added
+
+- **Two more interface languages: Ukrainian and Traditional Chinese.** EZ-CorridorKey now ships 16 languages. Traditional Chinese uses Taiwan VFX terminology, and first-run detection routes Taiwan, Hong Kong, and Macau to Traditional Chinese, mainland and Singapore to Simplified.
+- **Show update notifications toggle.** Preferences > User Interface has a new switch to hide the update button and skip update checks entirely. ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176))
+
+### Changed
+
+- **Update checks now read published releases.** The app checks GitHub's latest release, the same source the updater installs from, instead of the development branch. The update button only appears when a downloadable update actually exists. ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176))
+
 ---
 
 ## [2.1.1] - 2026-06-17 - Non-ASCII paths, first-run language

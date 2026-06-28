@@ -163,7 +163,7 @@ class ParameterPanel(QWidget):
         # Eyedropper row: button + color swatch
         eyedropper_row = QHBoxLayout()
         eyedropper_row.setSpacing(4)
-        self._eyedropper_btn = QPushButton(self.tr("\U0001F4A7 Pick Screen Color"))
+        self._eyedropper_btn = QPushButton(self.tr("💧 Pick Screen Color"))
         self._eyedropper_btn.setToolTip(
             self.tr(
                 "Click on the viewer to sample the screen color.\n"

@@ -153,7 +153,18 @@ def apply_language(app: QApplication, lang: str | None = None) -> bool:
             # reflects the active language instead of defaulting to English
             # (issue #168). Only the auto path persists; explicit calls from
             # Preferences store their own value.
-            lang = QLocale.system().name().split("_")[0]  # e.g. "fr" from "fr_FR"
+            loc = QLocale.system()
+            name = loc.name()  # e.g. "fr_FR", "zh_TW", "uk_UA"
+            if name.split("_")[0] == "zh":
+                # Chinese is script-sensitive: Traditional (Taiwan/Hong Kong/
+                # Macau) must map to the zh_TW catalogue, not the Simplified zh
+                # one. A bare split("_")[0] would collapse zh_TW -> "zh" and
+                # hand a Taiwan user Simplified text.
+                is_trad = (loc.script() == QLocale.Script.TraditionalHanScript
+                           or name in ("zh_TW", "zh_HK", "zh_MO"))
+                lang = "zh_TW" if is_trad else "zh"
+            else:
+                lang = name.split("_")[0]  # e.g. "fr" from "fr_FR"
             auto_resolved = True
 
     def _persist(effective: str) -> None:

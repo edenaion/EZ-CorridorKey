@@ -5,6 +5,7 @@ and provides repair/install functionality per platform.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -12,6 +13,7 @@ import shutil
 import ssl
 import subprocess
 import sys
+import time
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -23,10 +25,95 @@ _METADATA_FILENAME = ".video_metadata.json"
 _MIN_FFMPEG_MAJOR = 7
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _LOCAL_FFMPEG_BIN = os.path.join(_REPO_ROOT, "tools", "ffmpeg", "bin")
-_WINDOWS_FFMPEG_BUNDLE_URL = (
+
+# Repair pulls a Windows build from BtbN/FFmpeg-Builds. We deliberately avoid the
+# "master" nightly: nightlies remove deprecated options (the -vsync removal broke
+# imports in issue #175). BtbN ships stable n-builds in the same rolling release,
+# e.g. ffmpeg-n8.1-latest-win64-gpl-8.1.zip. We resolve the newest stable n-build
+# from the releases API, and fall back to a fixed ordered list if the API is
+# unreachable (rate-limited, offline, etc.).
+_BTBN_LATEST_API = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"
+_BTBN_DOWNLOAD_BASE = (
     "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/"
-    "ffmpeg-master-latest-win64-gpl.zip"
 )
+# Stable win64 gpl asset, e.g. "ffmpeg-n8.1-latest-win64-gpl-8.1.zip".
+# Excludes master, -shared, lgpl, win32 and winarm64 by construction.
+_BTBN_STABLE_ASSET_RE = re.compile(
+    r"^ffmpeg-n(?P<ver>\d+(?:\.\d+)*)-latest-win64-gpl-(?P<ver2>\d+(?:\.\d+)*)\.zip$"
+)
+# Ordered fallback (newest first) used only when the API call fails.
+_BTBN_FALLBACK_ASSETS = (
+    "ffmpeg-n8.1-latest-win64-gpl-8.1.zip",
+    "ffmpeg-n7.1-latest-win64-gpl-7.1.zip",
+)
+
+
+def _version_tuple(ver: str) -> tuple[int, ...]:
+    """Parse a dotted version like '8.1' or '10.0' into an int tuple for sorting.
+
+    String sorting would rank 'n8.1' above 'n10.0'; numeric tuples fix that.
+    """
+    parts: list[int] = []
+    for piece in ver.split("."):
+        try:
+            parts.append(int(piece))
+        except ValueError:
+            parts.append(0)
+    return tuple(parts)
+
+
+def _select_stable_btbn_asset(assets: list[dict]) -> tuple[str, str] | None:
+    """Pick the newest stable win64-gpl asset from a BtbN release 'assets' list.
+
+    Returns (asset_name, download_url) for the highest version, or None if no
+    stable asset matches.
+    """
+    candidates: list[tuple[tuple[int, ...], str, str]] = []
+    for asset in assets:
+        name = asset.get("name", "")
+        match = _BTBN_STABLE_ASSET_RE.match(name)
+        if not match:
+            continue
+        url = asset.get("browser_download_url")
+        if not url:
+            continue
+        candidates.append((_version_tuple(match.group("ver")), name, url))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda c: c[0])
+    _, name, url = candidates[-1]
+    return name, url
+
+
+def _resolve_windows_ffmpeg_asset(
+    ssl_ctx: ssl.SSLContext | None,
+) -> tuple[str, str]:
+    """Resolve (asset_name, download_url) for the newest stable BtbN n-build.
+
+    Queries the BtbN releases API; on any failure, falls back to the first entry
+    in the fixed ordered list pointed at releases/latest/download/.
+    """
+    try:
+        req = urllib.request.Request(
+            _BTBN_LATEST_API, headers={"User-Agent": "CorridorKey"}
+        )
+        with urllib.request.urlopen(req, timeout=30, context=ssl_ctx) as resp:
+            release = json.loads(resp.read().decode("utf-8"))
+        picked = _select_stable_btbn_asset(release.get("assets", []))
+        if picked:
+            logger.info("Repair FFmpeg: selected stable BtbN asset %s", picked[0])
+            return picked
+        logger.warning(
+            "Repair FFmpeg: no stable n-build asset found in BtbN latest release; "
+            "using fallback."
+        )
+    except Exception as exc:
+        logger.warning(
+            "Repair FFmpeg: BtbN releases API lookup failed (%s); using fallback.",
+            exc,
+        )
+    name = _BTBN_FALLBACK_ASSETS[0]
+    return name, _BTBN_DOWNLOAD_BASE + name
 
 # QSettings key for user-configured FFmpeg directory
 _QSETTINGS_FFMPEG_DIR = "tools/ffmpeg_custom_dir"
@@ -395,6 +482,93 @@ def get_ffmpeg_install_help() -> str:
     )
 
 
+def _safe_extract_zip(zip_path: str, dest_dir: str) -> None:
+    """Extract a zip, rejecting any member that resolves outside dest_dir.
+
+    Plain extractall is vulnerable to zip-slip (absolute paths or ../ escapes).
+    """
+    dest_root = os.path.abspath(dest_dir)
+    with zipfile.ZipFile(zip_path) as archive:
+        for member in archive.namelist():
+            target = os.path.abspath(os.path.join(dest_root, member))
+            if target != dest_root and not target.startswith(dest_root + os.sep):
+                raise RuntimeError(
+                    f"Refusing to extract unsafe path from FFmpeg archive: {member}"
+                )
+        archive.extractall(dest_root)
+
+
+def _find_staged_ffmpeg_dir(extract_dir: str) -> str | None:
+    """Find the extracted folder that actually contains ffmpeg.exe + ffprobe.exe.
+
+    Selects by CONTENTS, not folder name, so it survives BtbN renaming the inner
+    directory across builds (master vs n8.1 etc.).
+    """
+    for root, _dirs, files in os.walk(extract_dir):
+        lowered = {f.lower() for f in files}
+        if "ffmpeg.exe" in lowered and "ffprobe.exe" in lowered:
+            # root is the bin/ dir; the install root is its parent
+            return os.path.dirname(root)
+    return None
+
+
+def _validate_staged_ffmpeg(install_root: str) -> None:
+    """Validate staged ffmpeg/ffprobe binaries before swapping them in.
+
+    Raises RuntimeError if either binary is missing, fails to report a version,
+    or reports a major version below the minimum.
+    """
+    bin_dir = os.path.join(install_root, "bin")
+    for name in ("ffmpeg", "ffprobe"):
+        binary = os.path.join(bin_dir, f"{name}.exe")
+        if not os.path.isfile(binary):
+            raise RuntimeError(f"Downloaded FFmpeg build is missing {name}.exe")
+        info = _read_program_version(binary, name)
+        if info.major is not None and info.major < _MIN_FFMPEG_MAJOR:
+            raise RuntimeError(
+                f"Downloaded {name} is version {info.major}, but CorridorKey "
+                f"requires {_MIN_FFMPEG_MAJOR}.0 or newer."
+            )
+
+
+def _robust_copytree(src: str, dst: str, attempts: int = 8, delay: float = 0.6) -> None:
+    """Copy a directory tree to ``dst``, tolerating transient Windows file locks.
+
+    A freshly extracted ``.exe`` is often briefly locked by an antivirus scan or
+    a lingering execute handle from validation. Copying only needs read access to
+    the source, so it succeeds where a move (which must delete the locked source)
+    fails with ``WinError 32``. Retries with backoff cover the transient scan window.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+            return
+        except (PermissionError, OSError) as exc:
+            last_exc = exc
+            shutil.rmtree(dst, ignore_errors=True)
+            time.sleep(delay * (attempt + 1))
+    raise RuntimeError(
+        f"Could not copy FFmpeg into place after {attempts} attempts "
+        f"(file locked by antivirus or another process): {last_exc}"
+    )
+
+
+def _robust_move(src: str, dst: str, attempts: int = 8, delay: float = 0.6) -> None:
+    """Move a directory, retrying through transient Windows file locks."""
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            shutil.move(src, dst)
+            return
+        except (PermissionError, OSError) as exc:
+            last_exc = exc
+            time.sleep(delay * (attempt + 1))
+    raise RuntimeError(
+        f"Could not move {src} to {dst} after {attempts} attempts: {last_exc}"
+    )
+
+
 def repair_ffmpeg_install(
     progress_callback: Optional[Callable[[str, int, int], None]] = None,
 ) -> FFmpegValidationResult:
@@ -445,13 +619,12 @@ def repair_ffmpeg_install(
     tools_dir = os.path.join(_REPO_ROOT, "tools")
     dest_dir = os.path.join(tools_dir, "ffmpeg")
     temp_dir = os.path.join(_REPO_ROOT, ".tmp", "ffmpeg-repair")
-    zip_path = os.path.join(temp_dir, "ffmpeg-master-latest-win64-gpl.zip")
     extract_dir = os.path.join(temp_dir, "extract")
+    backup_dir = os.path.join(temp_dir, "ffmpeg-backup")
 
     os.makedirs(temp_dir, exist_ok=True)
     os.makedirs(tools_dir, exist_ok=True)
 
-    _emit("Downloading FFmpeg", 0, 0)
     # Build an SSL context that works in frozen (PyInstaller) builds where
     # Python's bundled cert store may be incomplete. Try certifi first,
     # then the system default, then fall back to unverified as last resort.
@@ -470,8 +643,14 @@ def repair_ffmpeg_install(
                 "SSL certificate verification disabled for FFmpeg download — "
                 "certifi is missing and the system cert store failed."
             )
+
+    # Resolve the newest STABLE BtbN n-build (never the master nightly).
+    asset_name, download_url = _resolve_windows_ffmpeg_asset(ssl_ctx)
+    zip_path = os.path.join(temp_dir, asset_name)
+
+    _emit("Downloading FFmpeg", 0, 0)
     with urllib.request.urlopen(
-        _WINDOWS_FFMPEG_BUNDLE_URL, timeout=60, context=ssl_ctx,
+        download_url, timeout=60, context=ssl_ctx,
     ) as response:
         total_header = response.headers.get("Content-Length", "")
         total_bytes = int(total_header) if total_header.isdigit() else 0
@@ -485,28 +664,52 @@ def repair_ffmpeg_install(
                 downloaded += len(chunk)
                 _emit("Downloading FFmpeg", downloaded, total_bytes)
 
+    # Extract to a staging dir and validate BEFORE touching the working install,
+    # so a bad download never strands the user without a usable FFmpeg.
     _emit("Extracting FFmpeg", 0, 0)
     if os.path.isdir(extract_dir):
         shutil.rmtree(extract_dir, ignore_errors=True)
     os.makedirs(extract_dir, exist_ok=True)
-    with zipfile.ZipFile(zip_path) as archive:
-        archive.extractall(extract_dir)
+    _safe_extract_zip(zip_path, extract_dir)
 
-    inner_dir = None
-    for name in os.listdir(extract_dir):
-        candidate = os.path.join(extract_dir, name)
-        if os.path.isdir(candidate) and name.lower().startswith("ffmpeg-"):
-            inner_dir = candidate
-            break
-    if inner_dir is None:
-        raise RuntimeError("Downloaded FFmpeg archive had an unexpected folder layout.")
-
-    if os.path.isdir(dest_dir):
-        shutil.rmtree(dest_dir, ignore_errors=True)
-    shutil.move(inner_dir, dest_dir)
+    staged_root = _find_staged_ffmpeg_dir(extract_dir)
+    if staged_root is None:
+        raise RuntimeError(
+            "Downloaded FFmpeg archive did not contain ffmpeg.exe and ffprobe.exe."
+        )
 
     _emit("Validating FFmpeg", 0, 0)
-    result = validate_ffmpeg_install(require_probe=True)
-    if not result.ok:
-        raise RuntimeError(result.message)
+    _validate_staged_ffmpeg(staged_root)
+
+    # Swap into place with backup + rollback. Move the old install aside first;
+    # only delete it once the new one is validated in its final location.
+    if os.path.isdir(backup_dir):
+        shutil.rmtree(backup_dir, ignore_errors=True)
+    had_previous = os.path.isdir(dest_dir)
+    if had_previous:
+        _robust_move(dest_dir, backup_dir)
+    try:
+        # COPY rather than move: the just-validated ffprobe.exe is briefly
+        # locked (antivirus scan / execute handle), and a move would have to
+        # delete that locked source file (WinError 32). Copying only reads the
+        # staged tree, so the lock does not block it. Leftover staging is
+        # cleaned best-effort in the finally below.
+        _robust_copytree(staged_root, dest_dir)
+        result = validate_ffmpeg_install(require_probe=True)
+        if not result.ok:
+            raise RuntimeError(result.message)
+    except Exception:
+        # Roll back to the previous working install.
+        shutil.rmtree(dest_dir, ignore_errors=True)
+        if had_previous and os.path.isdir(backup_dir):
+            _robust_move(backup_dir, dest_dir)
+            logger.warning("Repair FFmpeg failed; restored previous FFmpeg install.")
+        raise
+    finally:
+        # Best-effort staging cleanup. A locked staged .exe here must never
+        # fail the repair: the validated install already lives in dest_dir.
+        shutil.rmtree(extract_dir, ignore_errors=True)
+
+    # Success: drop the backup.
+    shutil.rmtree(backup_dir, ignore_errors=True)
     return result

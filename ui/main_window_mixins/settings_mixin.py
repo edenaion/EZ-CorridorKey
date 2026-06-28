@@ -15,6 +15,7 @@ from ui.widgets.preferences_dialog import (
     KEY_TRACKER_MODEL, DEFAULT_TRACKER_MODEL,
     KEY_MODEL_RESOLUTION, DEFAULT_MODEL_RESOLUTION,
     KEY_INFERENCE_BACKEND, KEY_UI_LANGUAGE,
+    KEY_SHOW_UPDATE_BUTTON, DEFAULT_SHOW_UPDATE_BUTTON,
     get_setting_bool, get_setting_str, get_setting_int,
 )
 
@@ -63,6 +64,7 @@ class SettingsMixin:
         self._prefs_dialog = None
         if accepted:
             self._apply_tooltip_setting()
+            self._apply_update_button_setting()
             self._apply_sound_setting()
             self._apply_tracker_model_setting()
             self._apply_parallel_clips_setting()
@@ -320,6 +322,10 @@ class SettingsMixin:
         return f"v{version} test"
 
     def _check_for_updates(self) -> None:
+        # Respect the user's "Show update notifications" preference: when off,
+        # skip the network check entirely (no GitHub API call, no button).
+        if not get_setting_bool(KEY_SHOW_UPDATE_BUTTON, DEFAULT_SHOW_UPDATE_BUTTON):
+            return
         from ui.main_window import _UpdateChecker
         self._update_thread = _UpdateChecker(self._get_local_version())
         self._update_thread.update_available.connect(self._on_update_available)
@@ -329,8 +335,11 @@ class SettingsMixin:
     def _on_update_available(self, remote_version: str) -> None:
         # Remember what the checker found so _run_update can re-validate
         # against the local version at click time (the button can outlive
-        # an update that already completed).
+        # an update that already completed), and so a later re-enable of the
+        # preference can show the button without another network round trip.
         self._remote_version = remote_version
+        if not get_setting_bool(KEY_SHOW_UPDATE_BUTTON, DEFAULT_SHOW_UPDATE_BUTTON):
+            return  # notifications disabled — store the version but show nothing
         self._update_btn.setText(_tr("Update Available (v%s)") % remote_version)
         self._update_btn.setToolTip(
             _tr("A new version (v%s) is available.\n"
@@ -340,13 +349,38 @@ class SettingsMixin:
         self._update_btn.setVisible(True)
         self._position_update_btn()
 
+    def _apply_update_button_setting(self) -> None:
+        """Apply the 'Show update notifications' preference immediately.
+
+        Off: hide the button now. On: show a known pending update without a
+        restart, or run a fresh check if none is known yet.
+        """
+        show = get_setting_bool(KEY_SHOW_UPDATE_BUTTON, DEFAULT_SHOW_UPDATE_BUTTON)
+        if not show:
+            if hasattr(self, "_update_btn"):
+                self._update_btn.setVisible(False)
+            return
+        if getattr(self, "_remote_version", ""):
+            self._on_update_available(self._remote_version)
+        else:
+            thread = getattr(self, "_update_thread", None)
+            if thread is None or not thread.isRunning():
+                self._check_for_updates()
+
     def _position_update_btn(self) -> None:
-        """Keep the floating update button pinned to top-right, below the menu bar."""
+        """Center the floating update button in the brand bar, below the menu bar.
+
+        The brand bar has the brand mark on the far left and the GPU/VRAM meter
+        on the far right, so its horizontal center is empty. Pinning here keeps
+        the button from covering the VRAM meter (issue #176).
+        """
         if not hasattr(self, '_update_btn') or not self._update_btn.isVisible():
             return
         btn = self._update_btn
         margin = 8
-        x = self.width() - btn.width() - margin
+        centered = (self.width() - btn.width()) // 2
+        right_clamp = max(margin, self.width() - btn.width() - margin)
+        x = min(max(margin, centered), right_clamp)
         y = self.menuBar().height() + margin
         btn.move(x, y)
         btn.raise_()

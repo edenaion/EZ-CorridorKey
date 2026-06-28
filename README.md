@@ -1,15 +1,15 @@
-# EZ-CorridorKey **v2.1.1**
+# EZ-CorridorKey **v2.1.2**
 
-[![Release](https://img.shields.io/badge/Release-v2.1.1-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
+[![Release](https://img.shields.io/badge/Release-v2.1.2-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![Stars](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
 [![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
-<p><img alt="🇺🇸 English" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%B8&message=English&color=FFF203&labelColor=141300&style=flat-square"> <a href="docs/i18n/README.fr.md"><img alt="🇫🇷 Français" src="https://img.shields.io/static/v1?label=%F0%9F%87%AB%F0%9F%87%B7&message=Fran%C3%A7ais&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.de.md"><img alt="🇩🇪 Deutsch" src="https://img.shields.io/static/v1?label=%F0%9F%87%A9%F0%9F%87%AA&message=Deutsch&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.es.md"><img alt="🇪🇸 Español" src="https://img.shields.io/static/v1?label=%F0%9F%87%AA%F0%9F%87%B8&message=Espa%C3%B1ol&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.it.md"><img alt="🇮🇹 Italiano" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B9&message=Italiano&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.pt.md"><img alt="🇧🇷 Português (Brasil)" src="https://img.shields.io/static/v1?label=%F0%9F%87%A7%F0%9F%87%B7&message=Portugu%C3%AAs%20%28Brasil%29&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ja.md"><img alt="🇯🇵 日本語" src="https://img.shields.io/static/v1?label=%F0%9F%87%AF%F0%9F%87%B5&message=%E6%97%A5%E6%9C%AC%E8%AA%9E&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ko.md"><img alt="🇰🇷 한국어" src="https://img.shields.io/static/v1?label=%F0%9F%87%B0%F0%9F%87%B7&message=%ED%95%9C%EA%B5%AD%EC%96%B4&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.zh.md"><img alt="🇨🇳 简体中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%A8%F0%9F%87%B3&message=%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ru.md"><img alt="🇷🇺 Русский" src="https://img.shields.io/static/v1?label=%F0%9F%87%B7%F0%9F%87%BA&message=%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.pl.md"><img alt="🇵🇱 Polski" src="https://img.shields.io/static/v1?label=%F0%9F%87%B5%F0%9F%87%B1&message=Polski&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.tr.md"><img alt="🇹🇷 Türkçe" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%B7&message=T%C3%BCrk%C3%A7e&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.hi.md"><img alt="🇮🇳 हिन्दी" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B3&message=%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.id.md"><img alt="🇮🇩 Bahasa Indonesia" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%A9&message=Bahasa%20Indonesia&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.vi.md"><img alt="🇻🇳 Tiếng Việt" src="https://img.shields.io/static/v1?label=%F0%9F%87%BB%F0%9F%87%B3&message=Ti%E1%BA%BFng%20Vi%E1%BB%87t&color=454430&labelColor=0E0D00&style=flat-square"></a></p>
+<p><img alt="🇺🇸 English" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%B8&message=English&color=FFF203&labelColor=141300&style=flat-square"> <a href="docs/i18n/README.fr.md"><img alt="🇫🇷 Français" src="https://img.shields.io/static/v1?label=%F0%9F%87%AB%F0%9F%87%B7&message=Fran%C3%A7ais&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.de.md"><img alt="🇩🇪 Deutsch" src="https://img.shields.io/static/v1?label=%F0%9F%87%A9%F0%9F%87%AA&message=Deutsch&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.es.md"><img alt="🇪🇸 Español" src="https://img.shields.io/static/v1?label=%F0%9F%87%AA%F0%9F%87%B8&message=Espa%C3%B1ol&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.it.md"><img alt="🇮🇹 Italiano" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B9&message=Italiano&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.pt.md"><img alt="🇧🇷 Português (Brasil)" src="https://img.shields.io/static/v1?label=%F0%9F%87%A7%F0%9F%87%B7&message=Portugu%C3%AAs%20%28Brasil%29&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ja.md"><img alt="🇯🇵 日本語" src="https://img.shields.io/static/v1?label=%F0%9F%87%AF%F0%9F%87%B5&message=%E6%97%A5%E6%9C%AC%E8%AA%9E&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ko.md"><img alt="🇰🇷 한국어" src="https://img.shields.io/static/v1?label=%F0%9F%87%B0%F0%9F%87%B7&message=%ED%95%9C%EA%B5%AD%EC%96%B4&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.zh.md"><img alt="🇨🇳 简体中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%A8%F0%9F%87%B3&message=%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.ru.md"><img alt="🇷🇺 Русский" src="https://img.shields.io/static/v1?label=%F0%9F%87%B7%F0%9F%87%BA&message=%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.pl.md"><img alt="🇵🇱 Polski" src="https://img.shields.io/static/v1?label=%F0%9F%87%B5%F0%9F%87%B1&message=Polski&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.tr.md"><img alt="🇹🇷 Türkçe" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%B7&message=T%C3%BCrk%C3%A7e&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.hi.md"><img alt="🇮🇳 हिन्दी" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B3&message=%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.id.md"><img alt="🇮🇩 Bahasa Indonesia" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%A9&message=Bahasa%20Indonesia&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.vi.md"><img alt="🇻🇳 Tiếng Việt" src="https://img.shields.io/static/v1?label=%F0%9F%87%BB%F0%9F%87%B3&message=Ti%E1%BA%BFng%20Vi%E1%BB%87t&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.uk.md"><img alt="🇺🇦 Українська" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%A6&message=%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%81%D1%8C%D0%BA%D0%B0&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="docs/i18n/README.zh-Hant.md"><img alt="🇹🇼 繁體中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%BC&message=%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a></p>
 
-> **Latest release: [v2.1.1](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.1):** UI in 15 languages, Batch Pipeline folder processing, built-in MLX engine for Apple Silicon, tandem viewer pan/zoom. See the [full changelog](CHANGELOG.md).
+> **Latest release: [v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2):** Windows hotfix. Fixes video import on the latest FFmpeg ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)), makes Repair FFmpeg install a stable build, and moves the update button clear of the VRAM meter ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176)). See the [full changelog](CHANGELOG.md).
 
 A full desktop GUI for [Niko Pueringer's CorridorKey](https://github.com/nikopueringer/CorridorKey) — the AI chroma keyer by Corridor Digital that physically unmixes foreground from background, preserving hair, motion blur, and translucency.
 
@@ -92,7 +92,7 @@ The installer includes everything — Python runtime, AI models, GPU libraries �
 **Updating:**
 
 - **Windows Desktop App Installer users:** The app checks for updates automatically. When a new version is available, click the update button in the app. It downloads a lightweight patch and relaunches.
-- **macOS Desktop App users:** the in-app updater offers 2.1.1, but the macOS side of 2.1.1 is untested as a whole. Update at your own risk. The recommended path is staying on v2.0.0 and waiting for the fully native Mac app, coming to the App Store soon (see the macOS note at the top).
+- **macOS Desktop App users:** The app checks for updates automatically. When a new version is available, click the update button in the app. It downloads a lightweight patch and relaunches.
 - **CLI users:** Double-click `3-update.bat` (Windows) or run `./3-update.sh` (macOS/Linux). This pulls the latest code via git, or downloads a ZIP if git isn't available.
 
 > **Note:** The update ZIP on GitHub Releases (`EZ-CorridorKey-windows-x64.zip`) is for Windows Desktop App Installer users only. It patches an existing installation. CLI users should continue using `3-update.bat` / `3-update.sh`.
@@ -486,7 +486,7 @@ Mode is auto-detected from available VRAM. Override with `CORRIDORKEY_OPT_MODE=s
 
 ### macOS (Apple Silicon)
 
-> Applies to v2.0.0 and source installs. 2.1.1 ships no Mac installer, and the macOS side of 2.1.1 is untested as a whole (see the macOS note at the top).
+> Applies to v2.0.0 and source installs. Patch releases like 2.1.2 ship as an in-app auto-update, not a new Mac installer.
 
 |             | Minimum       | Recommended                                      |
 | ----------- | ------------- | ------------------------------------------------ |
@@ -539,7 +539,7 @@ Each release includes a `SHA256SUMS.txt` file listing the SHA-256 hash of every 
 
 ```powershell
 # In the download folder (Shift + right-click > "Open PowerShell window here")
-Get-FileHash .\EZ-CorridorKey-2.1.1-Windows-x64-Setup.exe -Algorithm SHA256
+Get-FileHash .\EZ-CorridorKey-2.1.0-Windows-x64-Setup.exe -Algorithm SHA256
 # Open SHA256SUMS.txt, find the line ending in that filename, compare the hash.
 # The two strings must match exactly. If they differ, do not run the file, download it again.
 ```
@@ -549,7 +549,7 @@ Get-FileHash .\EZ-CorridorKey-2.1.1-Windows-x64-Setup.exe -Algorithm SHA256
 ```bash
 cd ~/Downloads   # wherever you saved the files
 shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-# Expect: EZ-CorridorKey-2.1.1-macOS-arm64.dmg: OK
+# Expect: EZ-CorridorKey-2.0.0-macOS-arm64.dmg: OK
 # If it says FAILED, the file is corrupted or tampered with, download it again.
 ```
 
@@ -589,7 +589,7 @@ EZ-CorridorKey supports translation into any language. All UI strings are extrac
 
 Full instructions with examples are in [`ui/translations/TRANSLATING.md`](ui/translations/TRANSLATING.md).
 
-**Current languages:** English plus German, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese (Brazil), Russian, Turkish, Vietnamese, and Chinese (Simplified). Pick yours in Edit > Preferences. Want to see your language here or improve upon a translation? PRs welcome.
+**Current languages:** English plus German, Spanish, French, Hindi, Indonesian, Italian, Japanese, Korean, Polish, Portuguese (Brazil), Russian, Turkish, Ukrainian, Vietnamese, Chinese (Simplified), and Chinese (Traditional, Taiwan). Pick yours in Edit > Preferences. Want to see your language here or improve upon a translation? PRs welcome.
 
 ---
 

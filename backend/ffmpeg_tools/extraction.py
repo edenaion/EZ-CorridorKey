@@ -475,7 +475,12 @@ def extract_frames(
                 "-ss", f"{seek_sec:.4f}",
                 "-i", video_path,
                 "-start_number", str(start_frame),
-                "-vsync", "passthrough",
+                # -fps_mode:v passthrough replaces the legacy -vsync passthrough.
+                # -vsync was deprecated in 2023 and is removed in current FFmpeg
+                # git-master builds, which made imports fail with
+                # "Unrecognized option 'vsync'". -fps_mode exists since FFmpeg 5.1
+                # and our minimum is FFmpeg 7, so it is always available.
+                "-fps_mode:v", "passthrough",
                 *exr_args,
                 out_dir + "/" + pattern,
                 "-y",
@@ -485,7 +490,8 @@ def extract_frames(
             *hw_flags,
             "-i", video_path,
             "-start_number", "0",
-            "-vsync", "passthrough",
+            # See note above: -fps_mode:v passthrough replaces removed -vsync.
+            "-fps_mode:v", "passthrough",
             *exr_args,
             out_dir + "/" + pattern,
             "-y",

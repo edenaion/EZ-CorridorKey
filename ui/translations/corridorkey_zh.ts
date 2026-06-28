@@ -586,7 +586,7 @@ Yellow lane: inference output coverage.</source>
         </message>
         <message>
             <location filename="../widgets/io_tray_actions.py" line="89" />
-            <location filename="../widgets/io_tray_actions.py" line="232" />
+            <location filename="../widgets/io_tray_actions.py" line="241" />
             <source>Clear Mask</source>
             <translation>清除蒙版</translation>
         </message>
@@ -597,7 +597,7 @@ Yellow lane: inference output coverage.</source>
         </message>
         <message>
             <location filename="../widgets/io_tray_actions.py" line="97" />
-            <location filename="../widgets/io_tray_actions.py" line="341" />
+            <location filename="../widgets/io_tray_actions.py" line="352" />
             <source>Clear Alpha</source>
             <translation>清除 Alpha</translation>
         </message>
@@ -608,7 +608,7 @@ Yellow lane: inference output coverage.</source>
         </message>
         <message>
             <location filename="../widgets/io_tray_actions.py" line="105" />
-            <location filename="../widgets/io_tray_actions.py" line="373" />
+            <location filename="../widgets/io_tray_actions.py" line="385" />
             <source>Clear Outputs</source>
             <translation>清除输出</translation>
         </message>
@@ -619,7 +619,7 @@ Yellow lane: inference output coverage.</source>
         </message>
         <message>
             <location filename="../widgets/io_tray_actions.py" line="113" />
-            <location filename="../widgets/io_tray_actions.py" line="296" />
+            <location filename="../widgets/io_tray_actions.py" line="306" />
             <source>Clear All</source>
             <translation>全部清除</translation>
         </message>
@@ -669,7 +669,7 @@ Yellow lane: inference output coverage.</source>
             <translation>新名称：</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="233" />
+            <location filename="../widgets/io_tray_actions.py" line="242" />
             <source>Delete tracked masks for %d clip(s)?
 %s
 
@@ -680,7 +680,7 @@ This will remove all SAM2 mask frames from disk.</source>
 此操作将从磁盘移除所有 SAM2 蒙版帧。</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="297" />
+            <location filename="../widgets/io_tray_actions.py" line="307" />
             <source>Remove ALL generated data for %d clip(s)?
 %s
 
@@ -691,7 +691,7 @@ This will delete masks, alpha hints, and all output frames.</source>
 此操作将删除蒙版、Alpha 提示及所有输出帧。</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="342" />
+            <location filename="../widgets/io_tray_actions.py" line="353" />
             <source>Delete AlphaHint for %d clip(s)?
 %s
 
@@ -702,7 +702,7 @@ This will remove all generated alpha hint frames from disk.</source>
 此操作将从磁盘移除所有生成的 Alpha 提示帧。</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="374" />
+            <location filename="../widgets/io_tray_actions.py" line="386" />
             <source>Remove all output files for %d clip(s)?
 %s
 
@@ -713,29 +713,29 @@ This will delete FG, Matte, Comp, and Processed frames.</source>
 此操作将删除 FG、Matte、Comp 和 Processed 帧。</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="400" />
+            <location filename="../widgets/io_tray_actions.py" line="412" />
             <source>Remove %d clip(s)?</source>
             <translation>移除 %d 个片段？</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="404" />
+            <location filename="../widgets/io_tray_actions.py" line="416" />
             <source>
 ... and %d more</source>
             <translation>
 ... 以及另外 %d 个</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="409" />
+            <location filename="../widgets/io_tray_actions.py" line="421" />
             <source>How would you like to remove %d clip(s)?</source>
             <translation>如何移除 %d 个片段？</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="412" />
+            <location filename="../widgets/io_tray_actions.py" line="424" />
             <source>Remove from List</source>
             <translation>从列表中移除</translation>
         </message>
         <message>
-            <location filename="../widgets/io_tray_actions.py" line="413" />
+            <location filename="../widgets/io_tray_actions.py" line="425" />
             <source>Delete from Disk</source>
             <translation>从磁盘删除</translation>
         </message>
@@ -913,12 +913,12 @@ Reassign anyway? The conflicting binding will be cleared.</source>
     <context>
         <name>MainWindow</name>
         <message>
-            <location filename="../main_window.py" line="263" />
+            <location filename="../main_window.py" line="291" />
             <source>%s — Mac Performance Warning</source>
             <translation>%s — Mac 性能警告</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="265" />
+            <location filename="../main_window.py" line="293" />
             <source>GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) are very slow on Mac (Apple Silicon MPS).
 
 This may take hours for longer clips and could freeze your system.
@@ -935,47 +935,47 @@ Continue anyway? (This warning won't appear again this session.)</source>
 仍然继续？（本会话期间不再显示此警告。）</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="283" />
+            <location filename="../main_window.py" line="311" />
             <source>EZ-CorridorKey</source>
             <translation>EZ-CorridorKey</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="439" />
+            <location filename="../main_window.py" line="469" />
             <source>Detected GPU used for inference</source>
             <translation>检测到的推理 GPU</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="442" />
+            <location filename="../main_window.py" line="472" />
             <source>VRAM</source>
             <translation>VRAM</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="453" />
+            <location filename="../main_window.py" line="483" />
             <source>GPU video memory usage — updates during inference</source>
             <translation>GPU 显存占用 — 推理期间实时更新</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="459" />
+            <location filename="../main_window.py" line="489" />
             <source>Current VRAM used / total available</source>
             <translation>当前已用显存 / 总可用显存</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="651" />
+            <location filename="../main_window.py" line="681" />
             <source>No GPU</source>
             <translation>无 GPU</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="658" />
+            <location filename="../main_window.py" line="688" />
             <source>Memory</source>
             <translation>内存</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="659" />
+            <location filename="../main_window.py" line="689" />
             <source>Unified memory usage — CPU and GPU share the same pool</source>
             <translation>统一内存占用 — CPU 与 GPU 共享同一内存池</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="660" />
+            <location filename="../main_window.py" line="690" />
             <source>Current unified memory used / total available</source>
             <translation>当前已用统一内存 / 总可用统一内存</translation>
         </message>
@@ -1894,9 +1894,8 @@ Hotkey: `</source>
 快捷键：`</translation>
         </message>
         <message>
-            <location filename="../widgets/parameter_panel.py" line="166" />
             <source> Pick Screen Color</source>
-            <translation> 拾取幕布颜色</translation>
+            <translation type="vanished"> 拾取幕布颜色</translation>
         </message>
         <message>
             <location filename="../widgets/parameter_panel.py" line="169" />
@@ -2118,6 +2117,11 @@ higher = sharper edges but may introduce artifacts.</source>
             <location filename="../widgets/parameter_panel.py" line="391" />
             <source>MATANYONE2</source>
             <translation>MATANYONE2</translation>
+        </message>
+        <message>
+            <location filename="../widgets/parameter_panel.py" line="166" />
+            <source>💧 Pick Screen Color</source>
+            <translation>💧 拾取幕布颜色</translation>
         </message>
         <message>
             <location filename="../widgets/parameter_panel.py" line="395" />
@@ -2449,56 +2453,67 @@ CUDA：每个引擎约需 6-8 GB 显存。
     <context>
         <name>PreferencesDialog</name>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="152" />
+            <location filename="../widgets/preferences_dialog.py" line="154" />
             <source>Preferences</source>
             <translation>首选项</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="185" />
+            <location filename="../widgets/preferences_dialog.py" line="187" />
             <source>User Interface</source>
             <translation>用户界面</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="199" />
+            <location filename="../widgets/preferences_dialog.py" line="206" />
             <source>Select display language. Applies immediately.</source>
             <translation>选择显示语言，立即生效。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="203" />
+            <location filename="../widgets/preferences_dialog.py" line="210" />
             <source>Show tooltips on controls</source>
             <translation>在控件上显示工具提示</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="209" />
+            <location filename="../widgets/preferences_dialog.py" line="216" />
             <source>UI sounds</source>
             <translation>界面音效</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="190" />
+            <location filename="../widgets/preferences_dialog.py" line="192" />
             <source>Language</source>
             <translation>语言</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="193" />
             <source>English</source>
-            <translation>English</translation>
+            <translation type="vanished">English</translation>
         </message>
         <message>
             <source>Select display language. Restart required to apply.</source>
             <translation type="vanished">选择显示语言。需重启后生效。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="218" />
+            <location filename="../widgets/preferences_dialog.py" line="222" />
+            <source>Show update notifications</source>
+            <translation>显示更新通知</translation>
+        </message>
+        <message>
+            <location filename="../widgets/preferences_dialog.py" line="225" />
+            <source>When enabled, an Update Available button appears when a newer
+release exists. Turn off to never check for or show updates.</source>
+            <translation>启用后，当有更新版本时将显示 Update Available 按钮。
+关闭后将不再检查或提示任何更新。</translation>
+        </message>
+        <message>
+            <location filename="../widgets/preferences_dialog.py" line="237" />
             <source>Project</source>
             <translation>项目</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="221" />
+            <location filename="../widgets/preferences_dialog.py" line="240" />
             <source>Copy source videos into project folder</source>
             <translation>将源视频复制到项目文件夹</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="224" />
+            <location filename="../widgets/preferences_dialog.py" line="243" />
             <source>When enabled, imported videos are copied into the project folder.
 When disabled, the project references the original file in place.
 
@@ -2509,12 +2524,12 @@ Note: Deleting a project never touches the original source file.</source>
 注意：删除项目不会影响原始源文件。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="234" />
+            <location filename="../widgets/preferences_dialog.py" line="253" />
             <source>Copy imported image sequences into project folder</source>
             <translation>将导入的图像序列复制到项目文件夹</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="237" />
+            <location filename="../widgets/preferences_dialog.py" line="256" />
             <source>When enabled, imported image sequence files are copied into the project.
 When disabled (default), the project references the original files in place.
 
@@ -2527,17 +2542,17 @@ Original files are never modified regardless of this setting.</source>
 无论此设置如何，原始文件均不会被修改。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="251" />
+            <location filename="../widgets/preferences_dialog.py" line="270" />
             <source>Output</source>
             <translation>输出</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="254" />
+            <location filename="../widgets/preferences_dialog.py" line="273" />
             <source>EXR compression</source>
             <translation>EXR 压缩</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="265" />
+            <location filename="../widgets/preferences_dialog.py" line="284" />
             <source>Compression used when writing EXR output files.
 
 DWAB: Lossy wavelet, smallest files. Default.
@@ -2552,17 +2567,17 @@ ZIP：无损 deflate，适合干净渲染。
 无：不压缩，写入最快，文件最大。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="275" />
+            <location filename="../widgets/preferences_dialog.py" line="294" />
             <source>Default output directory</source>
             <translation>默认输出目录</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="281" />
+            <location filename="../widgets/preferences_dialog.py" line="300" />
             <source>Default (inside project)</source>
             <translation>默认（项目内部）</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="287" />
+            <location filename="../widgets/preferences_dialog.py" line="306" />
             <source>Global default directory for inference output.
 
 When set, outputs go to:
@@ -2579,38 +2594,38 @@ Per-clip overrides (right-click → Set Output Directory) take priority.</source
 逐片段覆盖（右键 → 设置输出目录）优先级更高。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="296" />
-            <location filename="../widgets/preferences_dialog.py" line="480" />
+            <location filename="../widgets/preferences_dialog.py" line="315" />
+            <location filename="../widgets/preferences_dialog.py" line="499" />
             <source>Browse...</source>
             <translation>浏览...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="301" />
+            <location filename="../widgets/preferences_dialog.py" line="320" />
             <source>Clear</source>
             <translation>清除</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="311" />
+            <location filename="../widgets/preferences_dialog.py" line="330" />
             <source>Inference</source>
             <translation>推理</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="314" />
+            <location filename="../widgets/preferences_dialog.py" line="333" />
             <source>Model resolution</source>
             <translation>模型分辨率</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="318" />
+            <location filename="../widgets/preferences_dialog.py" line="337" />
             <source>2048 — Full Quality</source>
             <translation>2048 — 完整质量</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="319" />
+            <location filename="../widgets/preferences_dialog.py" line="338" />
             <source>1024 — Faster, Less Detail</source>
             <translation>1024 — 更快，细节较少</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="325" />
+            <location filename="../widgets/preferences_dialog.py" line="344" />
             <source>Resolution the model processes internally before upscaling to your frame size.
 Applies to all backends (CUDA, MPS, MLX, CPU).
 
@@ -2635,27 +2650,27 @@ Changing this requires an engine reload (happens automatically).</source>
 更改此项需要重新加载引擎（自动执行）。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="340" />
+            <location filename="../widgets/preferences_dialog.py" line="359" />
             <source>Processing backend</source>
             <translation>处理后端</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="344" />
+            <location filename="../widgets/preferences_dialog.py" line="363" />
             <source>Auto — MLX if available, otherwise MPS</source>
             <translation>自动 — 优先 MLX，否则使用 MPS</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="345" />
+            <location filename="../widgets/preferences_dialog.py" line="364" />
             <source>MLX — Apple Metal acceleration (recommended)</source>
             <translation>MLX — Apple Metal 加速（推荐）</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="346" />
+            <location filename="../widgets/preferences_dialog.py" line="365" />
             <source>MPS — PyTorch Metal Performance Shaders</source>
             <translation>MPS — PyTorch Metal Performance Shaders</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="352" />
+            <location filename="../widgets/preferences_dialog.py" line="371" />
             <source>Choose the inference backend for Apple Silicon.
 
 MLX: Native Apple Metal — fastest on M1/M2/M3/M4.
@@ -2672,39 +2687,39 @@ MPS：PyTorch Metal Performance Shaders — 兼容回退方案。
 更改此项需要重新加载引擎（自动执行）。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="364" />
+            <location filename="../widgets/preferences_dialog.py" line="383" />
             <source>Playback</source>
             <translation>播放</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="367" />
+            <location filename="../widgets/preferences_dialog.py" line="386" />
             <source>Loop playback within in/out range</source>
             <translation>在出入点范围内循环播放</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="370" />
+            <location filename="../widgets/preferences_dialog.py" line="389" />
             <source>When enabled, playback loops back to the in-point
 after reaching the out-point (or start/end if no range).</source>
             <translation>启用后，播放到出点后将循环回到入点
 （未设置出入点范围时，从片段末尾循环回到开头）。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="382" />
+            <location filename="../widgets/preferences_dialog.py" line="401" />
             <source>Tracking</source>
             <translation>跟踪</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="385" />
+            <location filename="../widgets/preferences_dialog.py" line="404" />
             <source>SAM2 model</source>
             <translation>SAM2 模型</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="391" />
+            <location filename="../widgets/preferences_dialog.py" line="410" />
             <source>%s  (%s)</source>
             <translation>%s  (%s)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="396" />
+            <location filename="../widgets/preferences_dialog.py" line="415" />
             <source>Fast: lower VRAM, lower quality.
 Base+: best default tradeoff for this app.
 Highest Quality: slowest, heaviest tracker.</source>
@@ -2713,32 +2728,32 @@ Base+：本应用最佳默认平衡选项。
 Highest Quality：最慢，跟踪器资源占用最高。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="405" />
+            <location filename="../widgets/preferences_dialog.py" line="424" />
             <source>Models download automatically on first use. Download progress appears in the status bar.</source>
             <translation>模型在首次使用时自动下载。下载进度显示在状态栏中。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="413" />
+            <location filename="../widgets/preferences_dialog.py" line="432" />
             <source>Manage models</source>
             <translation>管理模型</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="425" />
+            <location filename="../widgets/preferences_dialog.py" line="444" />
             <source>Open Cache Folder</source>
             <translation>打开缓存文件夹</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="434" />
+            <location filename="../widgets/preferences_dialog.py" line="453" />
             <source>Video Tools</source>
             <translation>视频工具</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="437" />
+            <location filename="../widgets/preferences_dialog.py" line="456" />
             <source>FFmpeg status</source>
             <translation>FFmpeg 状态</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="448" />
+            <location filename="../widgets/preferences_dialog.py" line="467" />
             <source>Windows: Repair downloads a bundled full FFmpeg build into tools/ffmpeg without changing your system install.
 macOS: Repair installs FFmpeg via Homebrew.
 Linux: Repair copies the install command to your clipboard.</source>
@@ -2747,14 +2762,14 @@ macOS：修复通过 Homebrew 安装 FFmpeg。
 Linux：修复将安装命令复制到剪贴板。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="466" />
-            <location filename="../widgets/preferences_dialog.py" line="721" />
-            <location filename="../widgets/preferences_dialog.py" line="744" />
+            <location filename="../widgets/preferences_dialog.py" line="485" />
+            <location filename="../widgets/preferences_dialog.py" line="741" />
+            <location filename="../widgets/preferences_dialog.py" line="764" />
             <source>Repair FFmpeg</source>
             <translation>修复 FFmpeg</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="469" />
+            <location filename="../widgets/preferences_dialog.py" line="488" />
             <source>Windows: download and install a full bundled FFmpeg build into tools/ffmpeg, validate ffmpeg + ffprobe 7+, and switch CorridorKey to that local copy immediately.
 
 macOS: install FFmpeg via Homebrew and validate ffmpeg + ffprobe 7+.
@@ -2767,51 +2782,51 @@ macOS：通过 Homebrew 安装 FFmpeg，并验证 ffmpeg + ffprobe 7+。
 Linux：不修改系统包。CorridorKey 显示精确的安装命令并复制到剪贴板。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="483" />
+            <location filename="../widgets/preferences_dialog.py" line="502" />
             <source>Point CorridorKey at your own FFmpeg installation.
 Select the folder containing ffmpeg.exe and ffprobe.exe.</source>
             <translation>将 CorridorKey 指向自定义 FFmpeg 安装路径。
 选择包含 ffmpeg.exe 和 ffprobe.exe 的文件夹。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="490" />
+            <location filename="../widgets/preferences_dialog.py" line="509" />
             <source>Open FFmpeg Folder</source>
             <translation>打开 FFmpeg 文件夹</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="493" />
+            <location filename="../widgets/preferences_dialog.py" line="512" />
             <source>Open CorridorKey's bundled FFmpeg folder.
 If Repair FFmpeg has been run on Windows, this is where the local full build is stored.</source>
             <translation>打开 CorridorKey 内置的 FFmpeg 文件夹。
 在 Windows 上执行修复 FFmpeg 后，本地完整构建存储于此处。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="522" />
+            <location filename="../widgets/preferences_dialog.py" line="541" />
             <source>Cancel</source>
             <translation>取消</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="526" />
+            <location filename="../widgets/preferences_dialog.py" line="545" />
             <source>OK</source>
             <translation>确定</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="602" />
+            <location filename="../widgets/preferences_dialog.py" line="622" />
             <source>Select Default Output Directory</source>
             <translation>选择默认输出目录</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="617" />
+            <location filename="../widgets/preferences_dialog.py" line="637" />
             <source>Select FFmpeg Folder (containing ffmpeg.exe and ffprobe.exe)</source>
             <translation>选择 FFmpeg 文件夹（包含 ffmpeg.exe 和 ffprobe.exe）</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="640" />
+            <location filename="../widgets/preferences_dialog.py" line="660" />
             <source>FFmpeg Not Found</source>
             <translation>未找到 FFmpeg</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="641" />
+            <location filename="../widgets/preferences_dialog.py" line="661" />
             <source>Could not find ffmpeg%s in:
 
 %s
@@ -2824,12 +2839,12 @@ Select the folder that contains ffmpeg.exe and ffprobe.exe (usually the 'bin' fo
 请选择包含 ffmpeg.exe 和 ffprobe.exe 的文件夹（通常为 FFmpeg 下载包内的 'bin' 文件夹）。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="650" />
+            <location filename="../widgets/preferences_dialog.py" line="670" />
             <source>FFprobe Missing</source>
             <translation>缺少 FFprobe</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="651" />
+            <location filename="../widgets/preferences_dialog.py" line="671" />
             <source>Found ffmpeg%s but ffprobe%s is missing from:
 
 %s
@@ -2842,22 +2857,22 @@ CorridorKey requires both. Download a full FFmpeg build.</source>
 CorridorKey 需要两者兼备。请下载完整 FFmpeg 构建。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="664" />
+            <location filename="../widgets/preferences_dialog.py" line="684" />
             <source>FFmpeg Found</source>
             <translation>已找到 FFmpeg</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="668" />
+            <location filename="../widgets/preferences_dialog.py" line="688" />
             <source>FFmpeg Issue</source>
             <translation>FFmpeg 异常</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="710" />
+            <location filename="../widgets/preferences_dialog.py" line="730" />
             <source>FFmpeg OK</source>
             <translation>FFmpeg 正常</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="711" />
+            <location filename="../widgets/preferences_dialog.py" line="731" />
             <source>%s
 
 No repair is needed.</source>
@@ -2866,7 +2881,7 @@ No repair is needed.</source>
 无需修复。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="723" />
+            <location filename="../widgets/preferences_dialog.py" line="743" />
             <source>
 
 The install command has been copied to your clipboard.
@@ -2876,7 +2891,7 @@ Paste it into a terminal to install.</source>
 在终端中粘贴并执行以完成安装。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="731" />
+            <location filename="../widgets/preferences_dialog.py" line="751" />
             <source>CorridorKey will download and install a full bundled FFmpeg build into:
 
 %s
@@ -2893,7 +2908,7 @@ Continue?</source>
 是否继续？</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="737" />
+            <location filename="../widgets/preferences_dialog.py" line="757" />
             <source>CorridorKey will install FFmpeg via Homebrew:
 
     brew install ffmpeg
@@ -2906,22 +2921,22 @@ Continue?</source>
 是否继续？</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="751" />
+            <location filename="../widgets/preferences_dialog.py" line="771" />
             <source>Preparing repair...</source>
             <translation>正在准备修复...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="754" />
+            <location filename="../widgets/preferences_dialog.py" line="774" />
             <source>Repairing FFmpeg...</source>
             <translation>正在修复 FFmpeg...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="788" />
+            <location filename="../widgets/preferences_dialog.py" line="808" />
             <source>FFmpeg Repaired</source>
             <translation>FFmpeg 已修复</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="789" />
+            <location filename="../widgets/preferences_dialog.py" line="809" />
             <source>%s
 
 CorridorKey will use FFmpeg immediately.</source>
@@ -2930,7 +2945,7 @@ CorridorKey will use FFmpeg immediately.</source>
 CorridorKey 将立即使用 FFmpeg。</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="796" />
+            <location filename="../widgets/preferences_dialog.py" line="816" />
             <source>FFmpeg Repair Failed</source>
             <translation>FFmpeg 修复失败</translation>
         </message>
@@ -3199,84 +3214,84 @@ Steps to reproduce are very helpful.</source>
     <context>
         <name>SetupWizard</name>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="634" />
+            <location filename="../widgets/setup_wizard.py" line="652" />
             <source>EZ-CorridorKey Setup</source>
             <translation>EZ-CorridorKey 安装向导</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="656" />
+            <location filename="../widgets/setup_wizard.py" line="674" />
             <source>Select which models to download. The core CorridorKey model is required.
 Optional models can be downloaded later from Edit → Download Manager.</source>
             <translation>选择要下载的模型。核心 CorridorKey 模型为必选项。
 可选模型可稍后通过编辑 → 下载管理器下载。</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="686" />
+            <location filename="../widgets/setup_wizard.py" line="704" />
             <source>Browse...</source>
             <translation>浏览...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="695" />
+            <location filename="../widgets/setup_wizard.py" line="713" />
             <source>Default Location</source>
             <translation>默认位置</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="668" />
+            <location filename="../widgets/setup_wizard.py" line="686" />
             <source>Data directory (models, projects, frame cache):</source>
             <translation>数据目录（模型、项目、帧缓存）：</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="698" />
+            <location filename="../widgets/setup_wizard.py" line="716" />
             <source>Reset the data directory to the platform default (in case you changed it and want to return).</source>
             <translation>将数据目录重置为平台默认值（适用于已更改后想恢复的情况）。</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="739" />
+            <location filename="../widgets/setup_wizard.py" line="757" />
             <source>Create Desktop shortcut</source>
             <translation>创建桌面快捷方式</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="757" />
+            <location filename="../widgets/setup_wizard.py" line="775" />
             <source>Cancel &amp;&amp; Exit</source>
             <translation>取消并退出</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="768" />
+            <location filename="../widgets/setup_wizard.py" line="786" />
             <source>Download &amp;&amp; Install</source>
             <translation>下载并安装</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="814" />
+            <location filename="../widgets/setup_wizard.py" line="832" />
             <source>Choose Install Location</source>
             <translation>选择安装位置</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="828" />
+            <location filename="../widgets/setup_wizard.py" line="846" />
             <source>Cancelling...</source>
             <translation>正在取消...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="854" />
+            <location filename="../widgets/setup_wizard.py" line="872" />
             <source>Preparing downloads (0/%d)...</source>
             <translation>正在准备下载（0/%d）...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="869" />
+            <location filename="../widgets/setup_wizard.py" line="887" />
             <source>Downloading %d/%d: %s...</source>
             <translation>正在下载 %d/%d：%s...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="895" />
+            <location filename="../widgets/setup_wizard.py" line="913" />
             <source>All %d downloads complete!</source>
             <translation>全部 %d 个下载完成。</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="899" />
+            <location filename="../widgets/setup_wizard.py" line="917" />
             <source>Some downloads failed. You can retry from Edit → Download Manager.</source>
             <translation>部分下载失败。可通过编辑 → 下载管理器重试。</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="907" />
+            <location filename="../widgets/setup_wizard.py" line="925" />
             <source>Continue</source>
             <translation>继续</translation>
         </message>
@@ -3560,17 +3575,17 @@ Hotkey: F7</source>
     <context>
         <name>_ModelRow</name>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="585" />
+            <location filename="../widgets/setup_wizard.py" line="603" />
             <source>  — Installed</source>
             <translation>  — 已安装</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="607" />
+            <location filename="../widgets/setup_wizard.py" line="625" />
             <source>Downloading...</source>
             <translation>正在下载...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="614" />
+            <location filename="../widgets/setup_wizard.py" line="632" />
             <source>%d / %d MB</source>
             <translation>%d / %d MB</translation>
         </message>

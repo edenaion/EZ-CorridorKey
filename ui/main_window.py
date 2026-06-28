@@ -214,22 +214,49 @@ class _UpdateChecker(QThread):
 
     def run(self):
         try:
+            import json
+            import sys as _sys
             import urllib.request
+            # Read the published GitHub release, the SAME source the updater
+            # downloads from (_run_frozen_update). Reading main's pyproject.toml
+            # instead would nag for a version that has no downloadable release
+            # yet whenever main is bumped ahead of a cut release.
             url = (
-                "https://raw.githubusercontent.com/edenaion/EZ-CorridorKey"
-                "/main/pyproject.toml"
+                "https://api.github.com/repos/edenaion/EZ-CorridorKey"
+                "/releases/latest"
             )
             req = urllib.request.Request(url, headers={"User-Agent": "CorridorKey"})
             with urllib.request.urlopen(req, timeout=10) as resp:
-                text = resp.read().decode("utf-8")
-            for line in text.splitlines():
-                if line.strip().startswith("version"):
-                    remote = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    if self._is_newer(remote, self._local):
-                        self.update_available.emit(remote)
-                    return
+                release = json.loads(resp.read().decode("utf-8"))
+            tag = release.get("tag_name", "")
+            remote = tag.lstrip("v") if tag else ""
+            if not remote or not self._is_newer(remote, self._local):
+                return
+            # Frozen builds self-update by downloading a platform asset. Do not
+            # nag if that asset is missing from the release (the click would
+            # fail in _run_frozen_update). Source installs update via git pull,
+            # so they only need the version to be newer.
+            if getattr(_sys, "frozen", False) and not self._has_platform_asset(release, remote):
+                return
+            self.update_available.emit(remote)
         except Exception:
-            pass  # silently fail — no internet, no button
+            pass  # silently fail — no internet / 404 (no releases) / no button
+
+    @staticmethod
+    def _has_platform_asset(release: dict, version: str) -> bool:
+        """Whether the release carries the frozen-update asset for this platform.
+
+        Mirrors the asset name built in _run_frozen_update.
+        """
+        import sys as _sys
+        if _sys.platform == "darwin":
+            asset_platform = "macOS-arm64"
+        elif _sys.platform == "win32":
+            asset_platform = "Windows-x64"
+        else:
+            return False
+        asset_name = f"EZ-CorridorKey-{version}-{asset_platform}.zip"
+        return any(a.get("name") == asset_name for a in release.get("assets", []))
 
     @staticmethod
     def _is_newer(remote: str, local: str) -> bool:
