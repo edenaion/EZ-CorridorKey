@@ -1,15 +1,15 @@
-<p><a href="../../README.md"><img alt="🇺🇸 English" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%B8&message=English&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.fr.md"><img alt="🇫🇷 Français" src="https://img.shields.io/static/v1?label=%F0%9F%87%AB%F0%9F%87%B7&message=Fran%C3%A7ais&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.de.md"><img alt="🇩🇪 Deutsch" src="https://img.shields.io/static/v1?label=%F0%9F%87%A9%F0%9F%87%AA&message=Deutsch&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.es.md"><img alt="🇪🇸 Español" src="https://img.shields.io/static/v1?label=%F0%9F%87%AA%F0%9F%87%B8&message=Espa%C3%B1ol&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.it.md"><img alt="🇮🇹 Italiano" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B9&message=Italiano&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.pt.md"><img alt="🇧🇷 Português (Brasil)" src="https://img.shields.io/static/v1?label=%F0%9F%87%A7%F0%9F%87%B7&message=Portugu%C3%AAs%20%28Brasil%29&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ja.md"><img alt="🇯🇵 日本語" src="https://img.shields.io/static/v1?label=%F0%9F%87%AF%F0%9F%87%B5&message=%E6%97%A5%E6%9C%AC%E8%AA%9E&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ko.md"><img alt="🇰🇷 한국어" src="https://img.shields.io/static/v1?label=%F0%9F%87%B0%F0%9F%87%B7&message=%ED%95%9C%EA%B5%AD%EC%96%B4&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.zh.md"><img alt="🇨🇳 简体中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%A8%F0%9F%87%B3&message=%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ru.md"><img alt="🇷🇺 Русский" src="https://img.shields.io/static/v1?label=%F0%9F%87%B7%F0%9F%87%BA&message=%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.pl.md"><img alt="🇵🇱 Polski" src="https://img.shields.io/static/v1?label=%F0%9F%87%B5%F0%9F%87%B1&message=Polski&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.tr.md"><img alt="🇹🇷 Türkçe" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%B7&message=T%C3%BCrk%C3%A7e&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.hi.md"><img alt="🇮🇳 हिन्दी" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B3&message=%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80&color=454430&labelColor=0E0D00&style=flat-square"></a> <img alt="🇮🇩 Bahasa Indonesia" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%A9&message=Bahasa%20Indonesia&color=FFF203&labelColor=141300&style=flat-square"> <a href="README.vi.md"><img alt="🇻🇳 Tiếng Việt" src="https://img.shields.io/static/v1?label=%F0%9F%87%BB%F0%9F%87%B3&message=Ti%E1%BA%BFng%20Vi%E1%BB%87t&color=454430&labelColor=0E0D00&style=flat-square"></a></p>
+<p><a href="../../README.md"><img alt="🇺🇸 English" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%B8&message=English&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.fr.md"><img alt="🇫🇷 Français" src="https://img.shields.io/static/v1?label=%F0%9F%87%AB%F0%9F%87%B7&message=Fran%C3%A7ais&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.de.md"><img alt="🇩🇪 Deutsch" src="https://img.shields.io/static/v1?label=%F0%9F%87%A9%F0%9F%87%AA&message=Deutsch&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.es.md"><img alt="🇪🇸 Español" src="https://img.shields.io/static/v1?label=%F0%9F%87%AA%F0%9F%87%B8&message=Espa%C3%B1ol&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.it.md"><img alt="🇮🇹 Italiano" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B9&message=Italiano&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.pt.md"><img alt="🇧🇷 Português (Brasil)" src="https://img.shields.io/static/v1?label=%F0%9F%87%A7%F0%9F%87%B7&message=Portugu%C3%AAs%20%28Brasil%29&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ja.md"><img alt="🇯🇵 日本語" src="https://img.shields.io/static/v1?label=%F0%9F%87%AF%F0%9F%87%B5&message=%E6%97%A5%E6%9C%AC%E8%AA%9E&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ko.md"><img alt="🇰🇷 한국어" src="https://img.shields.io/static/v1?label=%F0%9F%87%B0%F0%9F%87%B7&message=%ED%95%9C%EA%B5%AD%EC%96%B4&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.zh.md"><img alt="🇨🇳 简体中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%A8%F0%9F%87%B3&message=%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ru.md"><img alt="🇷🇺 Русский" src="https://img.shields.io/static/v1?label=%F0%9F%87%B7%F0%9F%87%BA&message=%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.pl.md"><img alt="🇵🇱 Polski" src="https://img.shields.io/static/v1?label=%F0%9F%87%B5%F0%9F%87%B1&message=Polski&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.tr.md"><img alt="🇹🇷 Türkçe" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%B7&message=T%C3%BCrk%C3%A7e&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.hi.md"><img alt="🇮🇳 हिन्दी" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B3&message=%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80&color=454430&labelColor=0E0D00&style=flat-square"></a> <img alt="🇮🇩 Bahasa Indonesia" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%A9&message=Bahasa%20Indonesia&color=FFF203&labelColor=141300&style=flat-square"> <a href="README.vi.md"><img alt="🇻🇳 Tiếng Việt" src="https://img.shields.io/static/v1?label=%F0%9F%87%BB%F0%9F%87%B3&message=Ti%E1%BA%BFng%20Vi%E1%BB%87t&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.uk.md"><img alt="🇺🇦 Українська" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%A6&message=%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%81%D1%8C%D0%BA%D0%B0&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.zh-Hant.md"><img alt="🇹🇼 繁體中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%BC&message=%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a></p>
 
-# EZ-CorridorKey **v2.0.0**
+# EZ-CorridorKey **v2.1.2**
 
-[![Rilis](https://img.shields.io/badge/Release-v2.1.1-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
+[![Rilis](https://img.shields.io/badge/Release-v2.1.2-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![Bintang](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
 [![Lisensi](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
-> **Rilis terbaru: [v2.0.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.0.0)** - Keying layar biru, eyedropper chroma key, impor mask VideoMaMa, dukungan i18n. Lihat [changelog lengkap](CHANGELOG.md).
+> **Rilis terbaru: [v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2):** Hotfix Windows. Memperbaiki impor video pada FFmpeg terbaru ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)), membuat Repair FFmpeg menginstal build yang stabil, dan memindahkan tombol update agar tidak menimpa meter VRAM ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176)). Lihat [changelog lengkap](CHANGELOG.md).
 
 GUI desktop lengkap untuk [CorridorKey dari Niko Pueringer](https://github.com/nikopueringer/CorridorKey), chroma keyer AI dari Corridor Digital yang secara fisik memisahkan latar depan dari latar belakang sambil mempertahankan rambut, motion blur, dan transparansi.
 
@@ -116,7 +116,7 @@ Installer menyertakan semuanya: runtime Python, model AI, library GPU. Tidak per
 
 ☼ **Pengguna installer aplikasi desktop Windows:** Aplikasi memeriksa update secara otomatis. Saat versi baru tersedia, klik tombol update di aplikasi. Aplikasi mengunduh patch ringan dan meluncur ulang.
 
-☼ **Pengguna macOS Desktop App pada 1.9.x:** 1.10.0 **tidak** auto-update di Mac. Anda harus mengunduh `.pkg` baru dari Gumroad dan menjalankannya secara manual. Installer mengganti `/Applications/EZ-CorridorKey.app` yang ada di tempat. Preferensi, proyek, dan model yang sudah diunduh berada di `~/Library/Application Support/EZ-CorridorKey/` dan dipertahankan saat instal ulang. Auto-update Mac kembali di 1.11.0 atau lebih baru.
+☼ **Pengguna macOS Desktop App:** Aplikasi memeriksa update secara otomatis. Saat versi baru tersedia, klik tombol update di aplikasi. Aplikasi mengunduh patch ringan dan meluncur ulang.
 
 ☼ **Pengguna CLI:** Klik dua kali `3-update.bat` (Windows) atau jalankan `./3-update.sh` (macOS/Linux). Ini mengambil kode terbaru melalui git, atau mengunduh ZIP jika git tidak tersedia.
 
@@ -534,6 +534,8 @@ Mode terdeteksi otomatis dari VRAM yang tersedia. Override dengan `CORRIDORKEY_O
 | **Chip**    | M1 (8 GB)     | M1 Pro+ (16 GB+)                                 |
 | **Backend** | MPS (PyTorch) | MLX (terdeteksi otomatis jika corridorkey-mlx terinstal) |
 
+> Berlaku untuk v2.0.0 dan instalasi sumber. Rilis patch seperti 2.1.2 dikirimkan sebagai auto-update di dalam aplikasi, bukan sebagai installer Mac baru.
+
 Inferensi CorridorKey otomatis memilih backend tercepat yang tersedia: MLX (1,5-2x lebih cepat) saat `corridorkey-mlx` dan checkpoint `.safetensors` ada, jika tidak PyTorch MPS. Override dengan `CORRIDORKEY_BACKEND=torch|mlx|auto`.
 
 Generator alpha (SAM2, GVM, VideoMaMa, MatAnyone2) selalu berjalan di PyTorch MPS. Port MLX tidak ada untuk model-model ini. Untuk pengalaman Mac terbaik, impor matte alpha siap pakai dari After Effects, DaVinci Resolve, atau Nuke.
@@ -578,15 +580,32 @@ Kode verifikasi bersifat open source: [`backend/update_verify.py`](backend/updat
 
 ### Checksum
 
-Setiap rilis menyertakan file `SHA256SUMS.txt` yang mencantumkan hash SHA-256 dari setiap artifact rilis. Unduh file itu bersama binary dan verifikasi secara manual:
+Setiap rilis menyertakan file `SHA256SUMS.txt` yang mencantumkan hash SHA-256 dari setiap artifact rilis. Gunakan file itu untuk mengonfirmasi unduhan Anda asli dan tidak rusak. Letakkan `SHA256SUMS.txt` di folder yang sama dengan file yang Anda unduh, lalu ikuti langkah-langkah untuk sistem Anda.
+
+**Windows (PowerShell):**
+
+```powershell
+# Di folder unduhan (Shift + klik kanan > "Open PowerShell window here")
+Get-FileHash .\EZ-CorridorKey-2.1.0-Windows-x64-Setup.exe -Algorithm SHA256
+# Buka SHA256SUMS.txt, cari baris yang diakhiri nama file tersebut, bandingkan hash-nya.
+# Kedua string harus cocok persis. Jika berbeda, jangan jalankan file tersebut, unduh lagi.
+```
+
+**macOS (Terminal):**
 
 ```bash
-# macOS / Linux
-sha256sum -c SHA256SUMS.txt
+cd ~/Downloads   # ke mana pun Anda menyimpan file
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+# Expect: EZ-CorridorKey-2.0.0-macOS-arm64.dmg: OK
+# Jika hasilnya FAILED, file rusak atau telah dimanipulasi, unduh lagi.
+```
 
-# Windows PowerShell
-(Get-FileHash EZ-CorridorKey-2.0.0-Windows-x64-Setup.exe -Algorithm SHA256).Hash
-# Compare the output against the matching line in SHA256SUMS.txt
+**Linux:**
+
+```bash
+cd ~/Downloads
+sha256sum -c SHA256SUMS.txt --ignore-missing
+# Expect OK di samping setiap file yang Anda unduh.
 ```
 
 ### Integritas git
@@ -618,7 +637,7 @@ EZ-CorridorKey mendukung terjemahan ke bahasa apa pun. Semua string UI diekstrak
 
 Instruksi lengkap dengan contoh ada di [`ui/translations/TRANSLATING.md`](ui/translations/TRANSLATING.md).
 
-**Bahasa saat ini:** English (bawaan). Ingin melihat bahasa Anda di sini? PR diterima.
+**Bahasa saat ini:** English ditambah Jerman, Spanyol, Prancis, Hindi, Indonesia, Italia, Jepang, Korea, Polandia, Portugis (Brasil), Rusia, Turki, Ukraina, Vietnam, Tionghoa (Sederhana), dan Tionghoa (Tradisional, Taiwan). Pilih bahasa Anda di Edit > Preferensi. Ingin melihat bahasa Anda di sini atau menyempurnakan terjemahan? PR diterima.
 
 ---
 

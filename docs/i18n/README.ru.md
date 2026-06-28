@@ -1,15 +1,15 @@
-<p><a href="../../README.md"><img alt="🇺🇸 English" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%B8&message=English&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.fr.md"><img alt="🇫🇷 Français" src="https://img.shields.io/static/v1?label=%F0%9F%87%AB%F0%9F%87%B7&message=Fran%C3%A7ais&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.de.md"><img alt="🇩🇪 Deutsch" src="https://img.shields.io/static/v1?label=%F0%9F%87%A9%F0%9F%87%AA&message=Deutsch&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.es.md"><img alt="🇪🇸 Español" src="https://img.shields.io/static/v1?label=%F0%9F%87%AA%F0%9F%87%B8&message=Espa%C3%B1ol&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.it.md"><img alt="🇮🇹 Italiano" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B9&message=Italiano&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.pt.md"><img alt="🇧🇷 Português (Brasil)" src="https://img.shields.io/static/v1?label=%F0%9F%87%A7%F0%9F%87%B7&message=Portugu%C3%AAs%20%28Brasil%29&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ja.md"><img alt="🇯🇵 日本語" src="https://img.shields.io/static/v1?label=%F0%9F%87%AF%F0%9F%87%B5&message=%E6%97%A5%E6%9C%AC%E8%AA%9E&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ko.md"><img alt="🇰🇷 한국어" src="https://img.shields.io/static/v1?label=%F0%9F%87%B0%F0%9F%87%B7&message=%ED%95%9C%EA%B5%AD%EC%96%B4&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.zh.md"><img alt="🇨🇳 简体中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%A8%F0%9F%87%B3&message=%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a> <img alt="🇷🇺 Русский" src="https://img.shields.io/static/v1?label=%F0%9F%87%B7%F0%9F%87%BA&message=%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9&color=FFF203&labelColor=141300&style=flat-square"> <a href="README.pl.md"><img alt="🇵🇱 Polski" src="https://img.shields.io/static/v1?label=%F0%9F%87%B5%F0%9F%87%B1&message=Polski&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.tr.md"><img alt="🇹🇷 Türkçe" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%B7&message=T%C3%BCrk%C3%A7e&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.hi.md"><img alt="🇮🇳 हिन्दी" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B3&message=%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.id.md"><img alt="🇮🇩 Bahasa Indonesia" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%A9&message=Bahasa%20Indonesia&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.vi.md"><img alt="🇻🇳 Tiếng Việt" src="https://img.shields.io/static/v1?label=%F0%9F%87%BB%F0%9F%87%B3&message=Ti%E1%BA%BFng%20Vi%E1%BB%87t&color=454430&labelColor=0E0D00&style=flat-square"></a></p>
+<p><a href="../../README.md"><img alt="🇺🇸 English" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%B8&message=English&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.fr.md"><img alt="🇫🇷 Français" src="https://img.shields.io/static/v1?label=%F0%9F%87%AB%F0%9F%87%B7&message=Fran%C3%A7ais&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.de.md"><img alt="🇩🇪 Deutsch" src="https://img.shields.io/static/v1?label=%F0%9F%87%A9%F0%9F%87%AA&message=Deutsch&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.es.md"><img alt="🇪🇸 Español" src="https://img.shields.io/static/v1?label=%F0%9F%87%AA%F0%9F%87%B8&message=Espa%C3%B1ol&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.it.md"><img alt="🇮🇹 Italiano" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B9&message=Italiano&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.pt.md"><img alt="🇧🇷 Português (Brasil)" src="https://img.shields.io/static/v1?label=%F0%9F%87%A7%F0%9F%87%B7&message=Portugu%C3%AAs%20%28Brasil%29&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ja.md"><img alt="🇯🇵 日本語" src="https://img.shields.io/static/v1?label=%F0%9F%87%AF%F0%9F%87%B5&message=%E6%97%A5%E6%9C%AC%E8%AA%9E&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ko.md"><img alt="🇰🇷 한국어" src="https://img.shields.io/static/v1?label=%F0%9F%87%B0%F0%9F%87%B7&message=%ED%95%9C%EA%B5%AD%EC%96%B4&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.zh.md"><img alt="🇨🇳 简体中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%A8%F0%9F%87%B3&message=%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a> <img alt="🇷🇺 Русский" src="https://img.shields.io/static/v1?label=%F0%9F%87%B7%F0%9F%87%BA&message=%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9&color=FFF203&labelColor=141300&style=flat-square"> <a href="README.pl.md"><img alt="🇵🇱 Polski" src="https://img.shields.io/static/v1?label=%F0%9F%87%B5%F0%9F%87%B1&message=Polski&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.tr.md"><img alt="🇹🇷 Türkçe" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%B7&message=T%C3%BCrk%C3%A7e&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.hi.md"><img alt="🇮🇳 हिन्दी" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B3&message=%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.id.md"><img alt="🇮🇩 Bahasa Indonesia" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%A9&message=Bahasa%20Indonesia&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.vi.md"><img alt="🇻🇳 Tiếng Việt" src="https://img.shields.io/static/v1?label=%F0%9F%87%BB%F0%9F%87%B3&message=Ti%E1%BA%BFng%20Vi%E1%BB%87t&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.uk.md"><img alt="🇺🇦 Українська" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%A6&message=%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%81%D1%8C%D0%BA%D0%B0&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.zh-Hant.md"><img alt="🇹🇼 繁體中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%BC&message=%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a></p>
 
-# EZ-CorridorKey **v2.0.0**
+# EZ-CorridorKey **v2.1.2**
 
-[![Релиз](https://img.shields.io/badge/Release-v2.1.1-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
+[![Релиз](https://img.shields.io/badge/Release-v2.1.2-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![Звезды](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
 [![Лицензия](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
 [![Платформа](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
-> **Последний релиз: [v2.0.0](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.0.0)**: кеинг синего экрана, пипетка хромакея, импорт масок VideoMaMa, поддержка i18n. См. [полный список изменений](CHANGELOG.md).
+> **Последний релиз: [v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2):** Исправление для Windows. Исправляет импорт видео в последней версии FFmpeg ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)), делает «Repair FFmpeg» стабильной сборкой и перемещает кнопку обновления подальше от индикатора VRAM ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176)). См. [полный список изменений](CHANGELOG.md).
 
 Полноценный настольный GUI для [CorridorKey от Niko Pueringer](https://github.com/nikopueringer/CorridorKey). Это AI-хромакей от Corridor Digital, который физически отделяет передний план от фона, сохраняя волосы, размытие движения и полупрозрачные края.
 
@@ -116,7 +116,7 @@
 
 ☼ **Пользователи установщика настольного приложения Windows:** приложение автоматически проверяет обновления. Когда доступна новая версия, нажмите кнопку обновления в приложении. Оно скачает легкий патч и перезапустится.
 
-☼ **Пользователи настольного приложения macOS на 1.9.x:** 1.10.0 **не** обновляется автоматически на Mac. Нужно скачать новый `.pkg` с Gumroad и запустить вручную. Установщик заменит существующее `/Applications/EZ-CorridorKey.app` на месте. Ваши настройки, проекты и скачанные модели находятся в `~/Library/Application Support/EZ-CorridorKey/` и сохраняются при переустановке. Автообновление Mac вернется в 1.11.0 или позже.
+☼ **Пользователи настольного приложения macOS:** Приложение автоматически проверяет обновления. Когда доступна новая версия, нажмите кнопку обновления в приложении. Оно скачает легкий патч и перезапустится.
 
 ☼ **Пользователи CLI:** дважды щелкните `3-update.bat` (Windows) или выполните `./3-update.sh` (macOS/Linux). Это подтянет последний код через git или скачает ZIP, если git недоступен.
 
@@ -532,13 +532,13 @@ python main.py --log-level DEBUG
 |             | Минимум       | Рекомендуется                                   |
 | ----------- | ------------- | ------------------------------------------------ |
 | **Chip**    | M1 (8 GB)     | M1 Pro+ (16 GB+)                                 |
-| **Backend** | MPS (PyTorch) | MLX (автоопределение, если установлен corridorkey-mlx) |
+| **Backend** | MPS (PyTorch) | MLX (встроенный, автоопределение)                 |
 
-Инференс CorridorKey автоматически выбирает самый быстрый доступный backend: MLX (в 1.5–2 раза быстрее), когда есть `corridorkey-mlx` и checkpoint `.safetensors`, иначе PyTorch MPS. Переопределение: `CORRIDORKEY_BACKEND=torch|mlx|auto`.
+> Применяется к v2.0.0 и исходным установкам. Патч-релизы, такие как 2.1.2, поставляются как встроенное автообновление внутри приложения, а не в виде нового установщика для Mac.
+
+Инференс CorridorKey автоматически выбирает самый быстрый доступный backend: встроенный движок MLX (примерно в 2 раза быстрее MPS, работает в float16), если есть checkpoint `.mlx.safetensors`, иначе PyTorch MPS. Оба checkpoint — зеленый и синий MLX — скачиваются через мастер установки. Переопределение: `CORRIDORKEY_BACKEND=torch|mlx|auto`.
 
 Генераторы альфы (SAM2, GVM, VideoMaMa, MatAnyone2) всегда работают на PyTorch MPS. Для этих моделей нет портов MLX. Для лучшего опыта на Mac импортируйте заранее подготовленные альфа-маски из After Effects, DaVinci Resolve или Nuke.
-
-> **Известная проблема:** вывод MLX FG может давать блочные результаты или артефакты. Отключите вывод FG и используйте Matte + Processed. Пользователей CUDA это не касается.
 
 ---
 
@@ -578,15 +578,32 @@ python main.py --log-level DEBUG
 
 ### Контрольные суммы
 
-Каждый релиз включает файл `SHA256SUMS.txt` со списком SHA-256 хэшей всех артефактов релиза. Скачайте его вместе с бинарником и проверьте вручную:
+Каждый релиз включает файл `SHA256SUMS.txt` со списком SHA-256 хэшей всех артефактов релиза. Поместите `SHA256SUMS.txt` в ту же папку, что и скачанный файл, затем выполните следующие шаги для вашей системы.
+
+**Windows (PowerShell):**
+
+```powershell
+# В папке загрузки (Shift + правый щелчок > "Open PowerShell window here")
+Get-FileHash .\EZ-CorridorKey-2.1.0-Windows-x64-Setup.exe -Algorithm SHA256
+# Откройте SHA256SUMS.txt, найдите строку с этим именем файла и сравните хэш.
+# Две строки должны совпадать точно. Если они различаются, не запускайте файл, скачайте его снова.
+```
+
+**macOS (Terminal):**
 
 ```bash
-# macOS / Linux
-sha256sum -c SHA256SUMS.txt
+cd ~/Downloads   # туда, где вы сохранили файлы
+shasum -a 256 -c SHA256SUMS.txt --ignore-missing
+# Ожидается: EZ-CorridorKey-2.0.0-macOS-arm64.dmg: OK
+# Если написано FAILED, файл поврежден или подменен, скачайте его снова.
+```
 
-# Windows PowerShell
-(Get-FileHash EZ-CorridorKey-2.0.0-Windows-x64-Setup.exe -Algorithm SHA256).Hash
-# Compare the output against the matching line in SHA256SUMS.txt
+**Linux:**
+
+```bash
+cd ~/Downloads
+sha256sum -c SHA256SUMS.txt --ignore-missing
+# Ожидается OK рядом с каждым скачанным файлом.
 ```
 
 ### Целостность Git
@@ -618,7 +635,7 @@ EZ-CorridorKey поддерживает перевод на любой язык.
 
 Полные инструкции с примерами находятся в [`ui/translations/TRANSLATING.md`](ui/translations/TRANSLATING.md).
 
-**Текущие языки:** английский (встроен). Хотите видеть здесь свой язык? PR приветствуются.
+**Текущие языки:** английский плюс немецкий, испанский, французский, хинди, индонезийский, итальянский, японский, корейский, польский, португальский (Бразилия), русский, турецкий, украинский, вьетнамский, китайский (упрощенный) и китайский (традиционный, Тайвань). Выберите нужный в Edit > Preferences. Хотите видеть здесь свой язык или улучшить перевод? PR приветствуются.
 
 ---
 

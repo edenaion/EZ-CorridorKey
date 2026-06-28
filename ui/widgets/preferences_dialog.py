@@ -53,10 +53,12 @@ KEY_MODEL_RESOLUTION = "inference/model_resolution"
 KEY_INFERENCE_BACKEND = "inference/backend"
 KEY_OUTPUT_DIRECTORY = "output/default_directory"
 KEY_UI_LANGUAGE = "ui/language"
+KEY_SHOW_UPDATE_BUTTON = "ui/show_update_button"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
 DEFAULT_UI_SOUNDS = True
+DEFAULT_SHOW_UPDATE_BUTTON = True
 DEFAULT_COPY_SOURCE = True
 DEFAULT_COPY_SEQUENCES = False
 DEFAULT_LOOP_PLAYBACK = True
@@ -216,6 +218,18 @@ class PreferencesDialog(QDialog):
             get_setting_bool(KEY_UI_SOUNDS, DEFAULT_UI_SOUNDS)
         )
         ui_layout.addWidget(self._sounds_cb)
+
+        self._update_btn_cb = QCheckBox(self.tr("Show update notifications"))
+        self._update_btn_cb.setToolTip(
+            self.tr(
+                "When enabled, an Update Available button appears when a newer\n"
+                "release exists. Turn off to never check for or show updates."
+            )
+        )
+        self._update_btn_cb.setChecked(
+            get_setting_bool(KEY_SHOW_UPDATE_BUTTON, DEFAULT_SHOW_UPDATE_BUTTON)
+        )
+        ui_layout.addWidget(self._update_btn_cb)
 
         # (added to layout below in display order)
 
@@ -570,6 +584,8 @@ class PreferencesDialog(QDialog):
             "hi": "\u0939\u093f\u0928\u094d\u0926\u0940",
             "id": "Bahasa Indonesia",
             "vi": "Ti\u1ebfng Vi\u1ec7t",
+            "uk": "\u0423\u043a\u0440\u0430\u0457\u043d\u0441\u044c\u043a\u0430",
+            "zh_TW": "\u4e2d\u6587\uff08\u7e41\u9ad4\uff09",
         }
         for fname in sorted(os.listdir(translations_dir)):
             if not fname.startswith("corridorkey_") or not fname.endswith(".qm"):
@@ -585,6 +601,7 @@ class PreferencesDialog(QDialog):
         s = QSettings()
         s.setValue(KEY_SHOW_TOOLTIPS, self._tooltips_cb.isChecked())
         s.setValue(KEY_UI_SOUNDS, self._sounds_cb.isChecked())
+        s.setValue(KEY_SHOW_UPDATE_BUTTON, self._update_btn_cb.isChecked())
         s.setValue(KEY_UI_LANGUAGE, self._language_combo.currentData())
         s.setValue(KEY_COPY_SOURCE, self._copy_source_cb.isChecked())
         s.setValue(KEY_COPY_SEQUENCES, self._copy_sequences_cb.isChecked())
