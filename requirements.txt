@@ -1,7 +1,8 @@
 torch==2.9.1
 torchvision==0.24.1
 numpy
-opencv-python-headless
+# Pinned <5: opencv 5.0 wheels dropped OpenEXR support, breaking all EXR frame reads (#180)
+opencv-python-headless>=4.10,<5
 OpenEXR>=3.4
 timm==1.0.24
 av
