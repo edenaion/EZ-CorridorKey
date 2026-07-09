@@ -131,7 +131,10 @@ if defined GIT_CMD (
         "!GIT_CMD!" init >nul 2>&1
         "!GIT_CMD!" remote add origin https://github.com/edenaion/EZ-CorridorKey.git >nul 2>&1
         "!GIT_CMD!" fetch origin >nul 2>&1
-        "!GIT_CMD!" reset --mixed origin/main >nul 2>&1 || "!GIT_CMD!" reset --mixed origin/master >nul 2>&1
+        REM main only: origin/master froze at v1.5.2 during the master->main
+        REM switch; falling back to it would silently link a fresh install
+        REM to code 400+ commits old.
+        "!GIT_CMD!" reset --mixed origin/main >nul 2>&1
         if !errorlevel!==0 (
             echo   [OK] Linked to git — 3-update.bat will use git pull
         ) else (

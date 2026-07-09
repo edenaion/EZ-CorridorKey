@@ -7,6 +7,7 @@
 [![Lizenz](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![Website](https://img.shields.io/badge/Website-ezcorridorkey.com-FFF203?style=flat-square&labelColor=141300)](https://ezcorridorkey.com)
 [![Plattform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
 > **Neueste Version: [v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2):** Windows-Hotfix. Behebt den Videoimport mit dem neuesten FFmpeg ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)), macht die FFmpeg-Reparaturinstallation zu einem stabilen Build und verschiebt den Update-Button weg vom VRAM-Meter ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176)). Siehe das [vollständige Changelog](CHANGELOG.md).
@@ -61,6 +62,10 @@ Diese GUI ersetzt den CLI-Drag-and-drop-Workflow durch eine vollständige Deskto
 ---
 
 ## Installation
+
+**Lieber ein Video?** Schau dir das [Schritt-für-Schritt-Tutorial](https://www.youtube.com/watch?v=ezg_1oQzz7w) vom Entwickler der App an:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
 
 ### Desktop-App-Installer (empfohlen)
 

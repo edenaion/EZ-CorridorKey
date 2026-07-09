@@ -272,6 +272,10 @@ class BiRefNetProcessor:
         """
         self._ensure_loaded(on_status=on_status)
 
+        # Unicode-safe write (issue #184): raw cv2.imwrite fails on
+        # non-ASCII paths on Windows.
+        from backend.frame_io import imwrite_unicode  # Lazy import: avoid cycles
+
         if num_frames is None:
             try:
                 num_frames = len(input_frames)  # type: ignore[arg-type]
@@ -343,7 +347,7 @@ class BiRefNetProcessor:
                     out_name = f"frame_{i:06d}.png"
 
                 out_path = os.path.join(tmp_dir, out_name)
-                if not cv2.imwrite(out_path, mask_np):
+                if not imwrite_unicode(out_path, mask_np):
                     raise RuntimeError(f"Failed to write alpha frame: {out_path}")
 
                 frames_written += 1

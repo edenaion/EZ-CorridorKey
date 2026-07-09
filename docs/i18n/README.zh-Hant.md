@@ -7,6 +7,7 @@
 [![授權](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![Website](https://img.shields.io/badge/Website-ezcorridorkey.com-FFF203?style=flat-square&labelColor=141300)](https://ezcorridorkey.com)
 [![平台](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
 > **最新發布版：[v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2)**：Windows 緊急修正版。修復最新版 FFmpeg 上的影片匯入問題（[#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)），讓修復 FFmpeg 安裝功能指向穩定版本，並調整更新按鈕位置以避免與 VRAM 量表重疊（[#176](https://github.com/edenaion/EZ-CorridorKey/issues/176)）。參見[完整更新日誌](CHANGELOG.md)。
@@ -51,6 +52,10 @@
 ---
 
 ## 安裝
+
+**偏好影片教學？**觀看應用程式作者的[逐步教學影片](https://www.youtube.com/watch?v=ezg_1oQzz7w)：
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
 
 ### 桌面應用程式安裝程式（推薦）
 

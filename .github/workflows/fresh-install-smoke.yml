@@ -47,6 +47,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # Full history: the updater test pulls origin/main into the PR
+          # checkout, and a shallow clone severs the ancestry, making git
+          # refuse the pull as "divergent branches".
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -116,7 +121,9 @@ jobs:
         shell: bash
         run: |
           git checkout -B main
-          git branch --set-upstream-to=origin/main main 2>/dev/null || true
+          # No error swallowing: a missing origin/main here previously hid
+          # the real failure until the updater step.
+          git branch --set-upstream-to=origin/main main
 
       - name: Run updater (Windows)
         if: runner.os == 'Windows'

@@ -8,8 +8,11 @@ from pathlib import Path
 
 
 def _load_ffmpeg_tools():
+    # ffmpeg_tools became a package; validate_ffmpeg_install lives in its
+    # discovery submodule, which imports stdlib only, so it still loads
+    # standalone without pulling the full backend package.
     repo_root = Path(__file__).resolve().parents[1]
-    module_path = repo_root / "backend" / "ffmpeg_tools.py"
+    module_path = repo_root / "backend" / "ffmpeg_tools" / "discovery.py"
     spec = importlib.util.spec_from_file_location("corridorkey_ffmpeg_tools", module_path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader

@@ -7,6 +7,7 @@
 [![许可证](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![Website](https://img.shields.io/badge/Website-ezcorridorkey.com-FFF203?style=flat-square&labelColor=141300)](https://ezcorridorkey.com)
 [![平台](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
 > **最新发布版：[v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2)：** Windows 热修复。修复了最新版 FFmpeg 上的视频导入问题（[#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)），使"修复 FFmpeg 安装"安装稳定构建版本，并将更新按钮移出 VRAM 仪表区域（[#176](https://github.com/edenaion/EZ-CorridorKey/issues/176)）。参见[完整更新日志](CHANGELOG.md)。
@@ -61,6 +62,10 @@
 ---
 
 ## 安装
+
+**更喜欢视频教程？**观看应用作者的[分步教学视频](https://www.youtube.com/watch?v=ezg_1oQzz7w)：
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
 
 ### 桌面应用安装程序（推荐）
 

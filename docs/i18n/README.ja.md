@@ -7,6 +7,7 @@
 [![ライセンス](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![Website](https://img.shields.io/badge/Website-ezcorridorkey.com-FFF203?style=flat-square&labelColor=141300)](https://ezcorridorkey.com)
 [![プラットフォーム](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
 > **最新リリース: [v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2):** Windows 向けのホットフィックスです。最新の FFmpeg での動画インポートを修正し ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175))、FFmpeg の修復インストールを安定版ビルドに変更し、更新ボタンを VRAM メーターと重ならない位置に移動しました ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176))。[完全な changelog](../../CHANGELOG.md) を参照してください。
@@ -61,6 +62,10 @@
 ---
 
 ## インストール
+
+**動画で見たい方へ:** アプリ開発者による[ステップバイステップのチュートリアル](https://www.youtube.com/watch?v=ezg_1oQzz7w)をご覧ください。
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
 
 ### デスクトップアプリインストーラー (推奨)
 

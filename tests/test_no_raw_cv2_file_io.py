@@ -9,6 +9,12 @@ never silently regress when new code is added.
 
 AST parsing (not text grep) means cv2 calls inside comments, docstrings, or
 string literals are correctly ignored.
+
+Issue #184: the original guard only scanned backend/ and ui/, so the vendored
+AI model modules (gvm_core, modules/*, CorridorKeyModule,
+VideoMaMaInferenceModule) kept raw cv2 calls and every AI alpha-hint method
+failed for users with non-ASCII Windows usernames. All model module dirs are
+scanned now.
 """
 import ast
 import os
@@ -16,7 +22,14 @@ import os
 import pytest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCAN_DIRS = ["backend", "ui"]
+SCAN_DIRS = [
+    "backend",
+    "ui",
+    "gvm_core",
+    "modules",
+    "CorridorKeyModule",
+    "VideoMaMaInferenceModule",
+]
 
 # cv2 functions that take a filesystem path and break on non-ASCII paths.
 BANNED_ATTRS = {"imread", "imwrite", "VideoCapture", "VideoWriter"}

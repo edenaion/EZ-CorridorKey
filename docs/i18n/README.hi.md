@@ -7,6 +7,7 @@
 [![लाइसेंस](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![Website](https://img.shields.io/badge/Website-ezcorridorkey.com-FFF203?style=flat-square&labelColor=141300)](https://ezcorridorkey.com)
 [![प्लैटफ़ॉर्म](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
 > **नवीनतम रिलीज़: [v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2):** Windows hotfix। नवीनतम FFmpeg पर वीडियो इम्पोर्ट ठीक करता है ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)), Repair FFmpeg install को stable build बनाता है, और update button को VRAM meter से हटाता है ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176))। [पूरा changelog](CHANGELOG.md) देखें।
@@ -61,6 +62,10 @@
 ---
 
 ## इंस्टॉलेशन
+
+**वीडियो पसंद है?** ऐप के निर्माता का [चरण-दर-चरण ट्यूटोरियल](https://www.youtube.com/watch?v=ezg_1oQzz7w) देखें:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
 
 ### डेस्कटॉप ऐप इंस्टॉलर (अनुशंसित)
 

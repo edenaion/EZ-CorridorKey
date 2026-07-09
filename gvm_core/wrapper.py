@@ -174,8 +174,12 @@ class GVMProcessor:
         is_video = input_path.suffix.lower() in ['.mp4', '.mkv', '.gif', '.mov', '.avi']
         
         # --- Determine Resolution & Upscaling ---
+        # Unicode-safe I/O (issue #184): raw cv2 file calls fail on
+        # non-ASCII paths on Windows.
+        from backend.frame_io import imread_unicode, open_video  # Lazy import: avoid cycles
+
         if is_video:
-            cap = cv2.VideoCapture(str(input_path))
+            cap = open_video(str(input_path))
             orig_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             orig_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             cap.release()
@@ -190,9 +194,9 @@ class GVMProcessor:
                  # import cv2 # Global import used
                  if "OPENCV_IO_ENABLE_OPENEXR" not in os.environ:
                      os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
-                 img = cv2.imread(first_img_path, cv2.IMREAD_UNCHANGED)
+                 img = imread_unicode(first_img_path, cv2.IMREAD_UNCHANGED)
             else:
-                 img = cv2.imread(first_img_path)
+                 img = imread_unicode(first_img_path)
                  
             if img is not None:
                 orig_h, orig_w = img.shape[:2]

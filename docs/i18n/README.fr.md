@@ -7,6 +7,7 @@
 [![Licence](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![Website](https://img.shields.io/badge/Website-ezcorridorkey.com-FFF203?style=flat-square&labelColor=141300)](https://ezcorridorkey.com)
 [![Plateforme](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
 > **Dernière version : [v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2) :** Correctif Windows. Corrige l'import vidéo avec la dernière version de FFmpeg ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)), rend l'installation de réparation FFmpeg plus stable, et déplace le bouton de mise à jour hors de l'indicateur VRAM ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176)). Voir le [journal des modifications complet](CHANGELOG.md).
@@ -61,6 +62,10 @@ Cette interface remplace le flux CLI par glisser-déposer par une application de
 ---
 
 ## Installation
+
+**Vous préférez la vidéo ?** Regardez le [tutoriel pas à pas](https://www.youtube.com/watch?v=ezg_1oQzz7w) du créateur de l'application :
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
 
 ### Installateur d'application de bureau (recommandé)
 
