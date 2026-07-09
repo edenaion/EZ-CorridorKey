@@ -6,6 +6,24 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [2.1.3] - 2026-07-09 - AI alpha fix for non-ASCII user folders, installer repairs
+
+> 2.1.3 ships as a Windows in-app auto-update. No new full installer this release; existing Windows apps update in place.
+
+### Fixed
+
+- **AI alpha generation now works when your Windows user folder contains accented or non-Latin characters.** GVM Auto, all BiRefNet variants, Dynamic Matting, and VideoMaMa failed with "Failed to read frame" errors for usernames like "José" or "Владимир", because the AI model modules bypassed the Unicode-safe file layer added in 2.1.1. Every model now reads and writes through it, and a build guard keeps this class of bug from returning. ([#184](https://github.com/edenaion/EZ-CorridorKey/issues/184))
+- **The command-line installer's FFmpeg check works again.** An internal file reorganization left `1-install` pointing at a module that no longer exists, so the FFmpeg verification step always failed on every platform.
+- **The updater repairs a broken branch setup instead of failing.** `3-update` now reconnects a checkout whose main branch lost its upstream, instead of stopping with "no tracking information".
+- **The Windows updater reports failed updates honestly.** A scripting bug made `3-update.bat` print success and exit cleanly even when the code update failed. It now reports "Update INCOMPLETE" with a nonzero exit code, matching the Mac/Linux script.
+
+### Added
+
+- **Video tutorial in the installation guide.** The README links the creator's step-by-step walkthrough at the top of the Installation section, in all 17 languages.
+- **Official site link.** The README now carries a Website badge pointing at [ezcorridorkey.com](https://ezcorridorkey.com).
+
+---
+
 ## [2.1.2] - 2026-06-27 - FFmpeg import fix, update button, 2 new languages
 
 > 2.1.2 ships as a Windows in-app auto-update. No new full installer this release; existing Windows apps update in place.
