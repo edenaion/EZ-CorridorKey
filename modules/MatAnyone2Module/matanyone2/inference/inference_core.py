@@ -487,6 +487,10 @@ class InferenceCore:
                 new_w = int(w / min_side * max_size)
                 vframes = F.interpolate(vframes, size=(new_h, new_w), mode="area")
 
+        # Unicode-safe write (issue #184): raw cv2.imwrite fails on
+        # non-ASCII paths on Windows.
+        from backend.frame_io import imwrite_unicode
+
         os.makedirs(output_path, exist_ok=True)
         if suffix:
             video_name = f"{video_name}_{suffix}"
@@ -536,11 +540,11 @@ class InferenceCore:
                 fgrs.append(com_np)
                 phas.append(pha)
                 if save_image:
-                    cv2.imwrite(
+                    imwrite_unicode(
                         f"{output_path}/{video_name}/pha/{str(ti - n_warmup).zfill(5)}.png",
                         pha,
                     )
-                    cv2.imwrite(
+                    imwrite_unicode(
                         f"{output_path}/{video_name}/fgr/{str(ti - n_warmup).zfill(5)}.png",
                         com_np[..., [2, 1, 0]],
                     )

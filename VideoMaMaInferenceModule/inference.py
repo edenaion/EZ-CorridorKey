@@ -135,7 +135,11 @@ def extract_frames_from_video(video_path: str, max_frames: Optional[int] = None)
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
-    cap = cv2.VideoCapture(video_path)
+    # Unicode-safe open (issue #184): raw cv2.VideoCapture fails on
+    # non-ASCII paths on Windows.
+    from backend.frame_io import open_video  # Lazy import: avoid cycles
+
+    cap = open_video(video_path)
     original_fps = cap.get(cv2.CAP_PROP_FPS)
     
     all_frames = []
@@ -245,10 +249,14 @@ def save_video(frames: List[np.ndarray], output_path: str, fps: float):
     """
     if not frames:
         return
-    
+
+    # Unicode-safe write (issue #184): raw cv2.VideoWriter fails on
+    # non-ASCII paths on Windows.
+    from backend.frame_io import open_video_writer  # Lazy import: avoid cycles
+
     height, width = frames[0].shape[:2]
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    out = open_video_writer(output_path, fourcc, fps, (width, height))
     
     for frame in frames:
         # Convert RGB to BGR for OpenCV

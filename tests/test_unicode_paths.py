@@ -141,3 +141,33 @@ def test_open_video_non_ascii(workdir, label, name):
         assert frame.shape == (32, 32, 3)
     finally:
         cap.release()
+
+
+@pytest.mark.parametrize("label,name", list(SCRIPT_SAMPLES.items()))
+def test_open_video_writer_non_ascii(workdir, label, name):
+    """open_video_writer produces a readable video at a non-ASCII path.
+
+    Covers the cv2.VideoWriter half of issue #184: raw VideoWriter uses the
+    same narrow file API as imread/imwrite and silently produces nothing on
+    non-ASCII paths on Windows.
+    """
+    from backend.frame_io import open_video_writer
+
+    dst = _nested(workdir, name, ".mp4")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = open_video_writer(dst, fourcc, 10.0, (32, 32))
+    if not writer.isOpened():
+        pytest.skip("cv2.VideoWriter unavailable in this build")
+    for _ in range(5):
+        writer.write((np.random.rand(32, 32, 3) * 255).astype(np.uint8))
+    writer.release()
+
+    assert os.path.isfile(dst), f"no output file for {label}"
+    assert os.path.getsize(dst) > 0, f"empty output file for {label}"
+    cap = open_video(dst)
+    try:
+        assert cap.isOpened(), f"written video unreadable for {label}"
+        ret, frame = cap.read()
+        assert ret and frame is not None, f"frame read failed for {label}"
+    finally:
+        cap.release()

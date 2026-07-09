@@ -15,11 +15,15 @@ def read_frame_from_videos(frame_root):
         frames, _, info = torchvision.io.read_video(filename=frame_root, pts_unit='sec', output_format='TCHW') # RGB
         fps = info['video_fps']
     else:
+        # Unicode-safe read (issue #184): raw cv2.imread fails on
+        # non-ASCII paths on Windows.
+        from backend.frame_io import imread_unicode
+
         video_name = os.path.basename(frame_root)
         frames = []
         fr_lst = sorted(os.listdir(frame_root))
         for fr in fr_lst:
-            frame = cv2.imread(os.path.join(frame_root, fr))[...,[2,1,0]] # RGB, HWC
+            frame = imread_unicode(os.path.join(frame_root, fr))[...,[2,1,0]] # RGB, HWC
             frames.append(frame)
         fps = 24  # default
         frames = torch.Tensor(np.array(frames)).permute(0, 3, 1, 2).contiguous() # TCHW

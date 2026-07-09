@@ -92,9 +92,14 @@ class ImageSequenceReader(Dataset):
 
     @property
     def origin_shape(self):
-        # Use cv2 for robustness
+        # Unicode-safe read: raw cv2.imread silently returns None for
+        # non-ASCII paths on Windows (issue #184).
         import cv2
-        img = cv2.imread(os.path.join(self.path, self.files[0]), cv2.IMREAD_UNCHANGED)
+        from backend.frame_io import imread_unicode
+        fpath = os.path.join(self.path, self.files[0])
+        img = imread_unicode(fpath, cv2.IMREAD_UNCHANGED)
+        if img is None:
+            raise ValueError(f"Failed to read {fpath}")
         return img.shape[:2]
 
     def __len__(self):
@@ -102,11 +107,14 @@ class ImageSequenceReader(Dataset):
     
     def __getitem__(self, idx):
         import cv2
+        from backend.frame_io import imread_unicode
         fpath = os.path.join(self.path, self.files[idx])
         is_exr = fpath.lower().endswith('.exr')
-        
+
         if is_exr:
-            img = cv2.imread(fpath, cv2.IMREAD_UNCHANGED)
+            # Unicode-safe read (issue #184): raw cv2.imread fails on
+            # non-ASCII paths on Windows.
+            img = imread_unicode(fpath, cv2.IMREAD_UNCHANGED)
             # Convert to RGB (OpenCV is BGR)
             if img is None:
                  raise ValueError(f"Failed to read {fpath}")

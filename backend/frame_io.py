@@ -270,6 +270,62 @@ def open_video(path: str) -> cv2.VideoCapture:
     return cv2.VideoCapture(path)
 
 
+class _StagedVideoWriter:
+    """cv2.VideoWriter proxy that writes to an ASCII temp path and moves the
+    finished file to the (non-ASCII) final path on release()."""
+
+    def __init__(self, writer: cv2.VideoWriter, tmp_path: str, final_path: str):
+        self._writer = writer
+        self._tmp_path = tmp_path
+        self._final_path = final_path
+
+    def isOpened(self) -> bool:  # noqa: N802 — mirror cv2.VideoWriter API
+        return self._writer.isOpened()
+
+    def write(self, frame: np.ndarray) -> None:
+        self._writer.write(frame)
+
+    def release(self) -> None:
+        self._writer.release()
+        try:
+            shutil.move(self._tmp_path, self._final_path)
+        except OSError as e:
+            logger.error(f"Failed to move staged video to {self._final_path}: {e}")
+
+
+def open_video_writer(path: str, fourcc: int, fps: float, frame_size: tuple):
+    """Open a video writer, safe for non-ASCII paths across all OpenCV builds.
+
+    Plain VideoWriter works for ASCII paths and for builds whose FFmpeg
+    backend is wide-path aware. When it fails to open on a non-ASCII path,
+    fall back to the parent directory's Windows 8.3 short-path alias, then to
+    writing at an ASCII temp path that is moved into place on release().
+    Returns an object with the cv2.VideoWriter interface
+    (write/isOpened/release).
+    """
+    writer = cv2.VideoWriter(path, fourcc, fps, frame_size)
+    if writer.isOpened() or _is_ascii(path):
+        return writer
+    writer.release()
+
+    # The target file does not exist yet, so alias the parent dir instead.
+    parent = _short_path_windows(os.path.dirname(os.path.abspath(path)))
+    name = os.path.basename(path)
+    if parent and _is_ascii(name):
+        writer = cv2.VideoWriter(os.path.join(parent, name), fourcc, fps, frame_size)
+        if writer.isOpened():
+            return writer
+        writer.release()
+
+    # Stage at an ASCII temp path (short-path the temp dir too: %TEMP% lives
+    # under the user profile, so it inherits a non-ASCII username).
+    tmp_dir = _short_path_windows(tempfile.gettempdir()) or tempfile.gettempdir()
+    fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(path)[1] or ".mp4", dir=tmp_dir)
+    os.close(fd)
+    staged = cv2.VideoWriter(tmp_path, fourcc, fps, frame_size)
+    return _StagedVideoWriter(staged, tmp_path, path)
+
+
 def imwrite_unicode(path: str, img: np.ndarray, params: Optional[list] = None) -> bool:
     """Write an image to disk via cv2.imencode, safe for unicode paths.
 

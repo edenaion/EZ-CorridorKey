@@ -225,6 +225,10 @@ class MatAnyone2Processor:
         )
         self._ensure_loaded(on_status=on_status)
 
+        # Unicode-safe write (issue #184): raw cv2.imwrite fails on
+        # non-ASCII paths on Windows.
+        from backend.frame_io import imwrite_unicode  # Lazy import: avoid cycles
+
         # Clear memory from any previous sequence to prevent state bleed
         self.clear()
 
@@ -313,7 +317,7 @@ class MatAnyone2Processor:
                         out_name = f"frame_{frame_idx:06d}.png"
 
                     out_path = os.path.join(tmp_dir, out_name)
-                    if not cv2.imwrite(out_path, pha_u8):
+                    if not imwrite_unicode(out_path, pha_u8):
                         raise RuntimeError(f"Failed to write alpha frame: {out_path}")
 
                     frames_written += 1
