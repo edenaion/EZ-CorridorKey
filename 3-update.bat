@@ -17,10 +17,18 @@ set USE_GIT=0
 git --version >nul 2>&1
 if %errorlevel%==0 if exist ".git" set USE_GIT=1
 
+REM Track pull failure but keep going: the dependency and weights steps
+REM below still clean up partial environments. Only the final status and
+REM exit code report the failure so callers (and the in-app updater) know
+REM the code was not actually updated.
+set PULL_FAILED=0
 if !USE_GIT!==1 (
     call :migrate_git_branch
     git pull --recurse-submodules 2>&1
-    if %errorlevel% neq 0 (
+    REM !errorlevel!, not %errorlevel%: percent expands when the block is
+    REM parsed, before git pull runs, so failures were never detected.
+    if !errorlevel! neq 0 (
+        set PULL_FAILED=1
         echo   [WARN] Git pull had issues. You may have local changes.
         echo   If stuck, try: git stash ^&^& git pull ^&^& git stash pop
     ) else (
@@ -150,6 +158,16 @@ echo [3/3] Checking model weights...
 
 REM ── Done ──
 echo.
+if "!PULL_FAILED!"=="1" (
+    echo  ========================================
+    echo   Update INCOMPLETE - code was not updated
+    echo  ========================================
+    echo.
+    echo   Resolve the git issue above, then run 3-update.bat again.
+    echo.
+    pause
+    exit /b 1
+)
 echo  ========================================
 echo   Update complete!
 echo  ========================================
