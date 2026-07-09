@@ -206,6 +206,13 @@ if /i "!CURRENT_BRANCH!"=="master" (
         git fetch origin main --recurse-submodules >nul 2>&1
         git branch --set-upstream-to=origin/main main >nul 2>&1
         if !errorlevel! == 0 echo   [OK] Now tracking origin/main
+    ) else if "!CURRENT_UPSTREAM!"=="" (
+        REM main exists but tracks nothing; a bare git pull would abort
+        REM with "no tracking information", so repair the upstream first.
+        echo   [REPAIR] main has no upstream; pointing it at origin/main...
+        git fetch origin main --recurse-submodules >nul 2>&1
+        git branch --set-upstream-to=origin/main main >nul 2>&1
+        if !errorlevel! == 0 echo   [OK] Now tracking origin/main
     )
 )
 exit /b 0
