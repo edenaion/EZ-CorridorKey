@@ -63,6 +63,10 @@
 
 ## Установка
 
+**Предпочитаете видео?** Посмотрите [пошаговый видеоурок](https://www.youtube.com/watch?v=ezg_1oQzz7w) от создателя приложения:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Установщик настольного приложения (рекомендуется)
 
 **Не хотите разбираться с Python, git или командной строкой?** Доступны полный установщик Windows, портативный exe и macOS `.pkg`. Это полностью необязательно и бесплатно. Пожертвования помогают поддерживать активную разработку.

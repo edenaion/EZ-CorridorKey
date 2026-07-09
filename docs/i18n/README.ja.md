@@ -63,6 +63,10 @@
 
 ## インストール
 
+**動画で見たい方へ:** アプリ開発者による[ステップバイステップのチュートリアル](https://www.youtube.com/watch?v=ezg_1oQzz7w)をご覧ください。
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### デスクトップアプリインストーラー (推奨)
 
 **Python、git、コマンドラインを扱いたくない場合:** 完全な Windows インストーラー、ポータブル exe、macOS `.pkg` を用意しています。すべて任意で無料です。寄付は継続的な開発の支援になります。

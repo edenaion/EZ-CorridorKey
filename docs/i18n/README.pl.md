@@ -63,6 +63,10 @@ To GUI zastępuje workflow CLI drag-and-drop kompletną aplikacją desktopową, 
 
 ## Instalacja
 
+**Wolisz wideo?** Obejrzyj [samouczek krok po kroku](https://www.youtube.com/watch?v=ezg_1oQzz7w) od twórcy aplikacji:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Instalator aplikacji desktopowej (zalecane)
 
 **Nie chcesz zajmować się Pythonem, gitem ani wierszem poleceń?** Dostępny jest pełny instalator Windows, przenośny exe i macOS `.pkg`. To całkowicie opcjonalne i darmowe - darowizny pomagają utrzymać aktywny rozwój.

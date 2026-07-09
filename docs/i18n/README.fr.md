@@ -63,6 +63,10 @@ Cette interface remplace le flux CLI par glisser-déposer par une application de
 
 ## Installation
 
+**Vous préférez la vidéo ?** Regardez le [tutoriel pas à pas](https://www.youtube.com/watch?v=ezg_1oQzz7w) du créateur de l'application :
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Installateur d'application de bureau (recommandé)
 
 **Vous ne voulez pas gérer Python, git ou la ligne de commande ?** Un installateur Windows complet, un exe portable et un `.pkg` macOS sont disponibles. Ils sont entièrement optionnels et gratuits. Les dons soutiennent le développement actif.

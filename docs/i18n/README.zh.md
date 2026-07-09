@@ -63,6 +63,10 @@
 
 ## 安装
 
+**更喜欢视频教程？**观看应用作者的[分步教学视频](https://www.youtube.com/watch?v=ezg_1oQzz7w)：
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### 桌面应用安装程序（推荐）
 
 **不想处理 Python、git 或命令行？** 提供完整 Windows 安装程序、便携 exe 和 macOS `.pkg`。完全可选且免费，捐赠可支持持续开发。

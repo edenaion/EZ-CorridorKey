@@ -63,6 +63,10 @@ Diese GUI ersetzt den CLI-Drag-and-drop-Workflow durch eine vollständige Deskto
 
 ## Installation
 
+**Lieber ein Video?** Schau dir das [Schritt-für-Schritt-Tutorial](https://www.youtube.com/watch?v=ezg_1oQzz7w) vom Entwickler der App an:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Desktop-App-Installer (empfohlen)
 
 **Keine Lust auf Python, git oder Kommandozeile?** Ein vollständiger Windows-Installer, eine portable exe und ein macOS-`.pkg` sind verfügbar. Alles ist optional und kostenlos. Spenden unterstützen die aktive Entwicklung.

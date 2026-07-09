@@ -63,6 +63,10 @@
 
 ## 설치
 
+**영상이 더 편하신가요?** 앱 제작자의 [단계별 튜토리얼](https://www.youtube.com/watch?v=ezg_1oQzz7w)을 시청하세요:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### 데스크톱 앱 설치 프로그램 (권장)
 
 **Python, git, 명령줄을 다루고 싶지 않나요?** 전체 Windows 설치 프로그램, 포터블 exe, macOS `.pkg`를 제공합니다. 완전히 선택 사항이며 무료입니다. 기부는 활발한 개발을 지원합니다.

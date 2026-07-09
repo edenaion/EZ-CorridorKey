@@ -63,6 +63,10 @@ Bu GUI, CLI drag-and-drop iş akışını tam bir masaüstü uygulamasıyla değ
 
 ## Kurulum
 
+**Video mu tercih edersiniz?** Uygulamanın geliştiricisinden [adım adım eğitim videosunu](https://www.youtube.com/watch?v=ezg_1oQzz7w) izleyin:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Masaüstü uygulama yükleyicisi (önerilir)
 
 **Python, git veya komut satırıyla uğraşmak istemiyor musunuz?** Tam Windows yükleyicisi, taşınabilir exe ve macOS `.pkg` mevcut. Tamamen isteğe bağlı ve ücretsizdir. Bağışlar aktif geliştirmeyi destekler.

@@ -63,6 +63,10 @@ GUI ini menggantikan alur kerja CLI drag-and-drop dengan aplikasi desktop lengka
 
 ## Instalasi
 
+**Lebih suka video?** Tonton [tutorial langkah demi langkah](https://www.youtube.com/watch?v=ezg_1oQzz7w) dari pembuat aplikasi:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Installer aplikasi desktop (direkomendasikan)
 
 **Tidak ingin berurusan dengan Python, git, atau command line?** Installer Windows lengkap, exe portabel, dan `.pkg` macOS tersedia. Sepenuhnya opsional dan gratis, donasi membantu mendukung pengembangan aktif.

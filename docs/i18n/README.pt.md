@@ -63,6 +63,10 @@ Esta GUI substitui o fluxo CLI de arrastar e soltar por um aplicativo desktop co
 
 ## Instalação
 
+**Prefere vídeo?** Assista ao [tutorial passo a passo](https://www.youtube.com/watch?v=ezg_1oQzz7w) do criador do app:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Instalador do app desktop (recomendado)
 
 **Não quer lidar com Python, git ou linha de comando?** Há um instalador Windows completo, um exe portátil e um `.pkg` para macOS. São totalmente opcionais e gratuitos. Doações ajudam a manter o desenvolvimento ativo.

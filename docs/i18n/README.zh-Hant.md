@@ -53,6 +53,10 @@
 
 ## 安裝
 
+**偏好影片教學？**觀看應用程式作者的[逐步教學影片](https://www.youtube.com/watch?v=ezg_1oQzz7w)：
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### 桌面應用程式安裝程式（推薦）
 
 **不想處理 Python、git 或命令列？** 提供完整的 Windows 安裝程式與可攜式 exe。Mac 使用者可下載 v2.0.0 的 macOS `.pkg`，同時原生 Mac 應用程式正在開發中。完全免費自由選用，捐款可支持持續開發。

@@ -63,6 +63,10 @@ GUI này thay thế quy trình CLI kéo-thả bằng một ứng dụng desktop 
 
 ## Cài đặt
 
+**Thích xem video hơn?** Xem [hướng dẫn từng bước](https://www.youtube.com/watch?v=ezg_1oQzz7w) từ tác giả ứng dụng:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Trình cài đặt ứng dụng desktop (khuyến nghị)
 
 **Không muốn xử lý Python, git hoặc command line?** Có sẵn trình cài đặt Windows đầy đủ, exe portable và `.pkg` macOS. Hoàn toàn tùy chọn và miễn phí, phần đóng góp giúp hỗ trợ phát triển active.

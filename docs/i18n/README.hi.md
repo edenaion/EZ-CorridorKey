@@ -63,6 +63,10 @@
 
 ## इंस्टॉलेशन
 
+**वीडियो पसंद है?** ऐप के निर्माता का [चरण-दर-चरण ट्यूटोरियल](https://www.youtube.com/watch?v=ezg_1oQzz7w) देखें:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### डेस्कटॉप ऐप इंस्टॉलर (अनुशंसित)
 
 **Python, git या command line से नहीं निपटना चाहते?** पूरा Windows installer, portable exe और macOS `.pkg` उपलब्ध हैं। ये पूरी तरह optional और free हैं। Donations active development को सपोर्ट करते हैं।

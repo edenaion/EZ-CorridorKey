@@ -55,6 +55,10 @@ Official site, install guide, and downloads: **[ezcorridorkey.com](https://ezcor
 
 ## Installation
 
+**Prefer video?** Watch the [step-by-step tutorial](https://www.youtube.com/watch?v=ezg_1oQzz7w) by the app's creator:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Desktop App Installer (recommended)
 
 **Don't want to deal with Python, git, or the command line?** A full Windows installer and portable exe are available. Mac users can grab the v2.0.0 macOS `.pkg` while the native Mac app is in production. Entirely optional and free, donations help support active development.

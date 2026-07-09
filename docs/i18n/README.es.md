@@ -63,6 +63,10 @@ Esta GUI sustituye el flujo CLI de arrastrar y soltar por una aplicación de esc
 
 ## Instalación
 
+**¿Prefieres un video?** Mira el [tutorial paso a paso](https://www.youtube.com/watch?v=ezg_1oQzz7w) del creador de la app:
+
+<a href="https://www.youtube.com/watch?v=ezg_1oQzz7w"><img src="https://img.youtube.com/vi/ezg_1oQzz7w/maxresdefault.jpg" alt="EZ-CorridorKey video tutorial" width="640"></a>
+
 ### Instalador de aplicación de escritorio (recomendado)
 
 **¿No quieres lidiar con Python, git ni la línea de comandos?** Hay un instalador completo para Windows, un exe portable y un `.pkg` para macOS. Todo es opcional y gratuito. Las donaciones ayudan a sostener el desarrollo activo.
