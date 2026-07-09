@@ -7,6 +7,7 @@
 [![Ліцензія](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
 [![EZSCAPE](https://img.shields.io/badge/EZSCAPE-Plugins%20%26%20Tools-50FF80?style=flat-square&labelColor=000000)](https://www.ezscape.space)
+[![Website](https://img.shields.io/badge/Website-ezcorridorkey.com-FFF203?style=flat-square&labelColor=141300)](https://ezcorridorkey.com)
 [![Платформа](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
 > **Останній реліз: [v2.1.2](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.2):** Виправлення для Windows. Усуває проблему імпорту відео у найновішому FFmpeg ([#175](https://github.com/edenaion/EZ-CorridorKey/issues/175)), забезпечує стабільну збірку при встановленні FFmpeg через «Відновити FFmpeg», а також переміщує кнопку оновлення так, щоб вона не перекривала лічильник VRAM ([#176](https://github.com/edenaion/EZ-CorridorKey/issues/176)). Дивіться [повний журнал змін](CHANGELOG.md).
