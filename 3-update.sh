@@ -44,6 +44,15 @@ elif [ "$CURRENT_BRANCH" = "main" ] && [ "$CURRENT_UPSTREAM" = "origin/master" ]
     if git branch --set-upstream-to=origin/main main >/dev/null 2>&1; then
         echo "  [OK] Now tracking origin/main"
     fi
+elif [ "$CURRENT_BRANCH" = "main" ] && [ -z "$CURRENT_UPSTREAM" ]; then
+    # main exists but tracks nothing (partial clone, checkout -B, or a
+    # stripped .git). Bare 'git pull' below would abort with "no tracking
+    # information", so repair the upstream first.
+    echo "  [REPAIR] main has no upstream; pointing it at origin/main..."
+    git fetch origin main --recurse-submodules >/dev/null 2>&1 || true
+    if git branch --set-upstream-to=origin/main main >/dev/null 2>&1; then
+        echo "  [OK] Now tracking origin/main"
+    fi
 fi
 
 # Track pull failure but keep going: the dependency and weights steps

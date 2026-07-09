@@ -79,6 +79,9 @@ def test_matanyone2_read_frames_non_ascii(workdir, label, name):
     swizzle crashed with 'NoneType is not subscriptable'.
     """
     pytest.importorskip("torchvision")
+    # matanyone2's package init pulls omegaconf via inference_core; CI test
+    # environments install test deps only, not the full model stack.
+    pytest.importorskip("omegaconf")
     # The app puts modules/MatAnyone2Module on sys.path before importing
     # matanyone2 (backend/service/helpers.py); mirror that here.
     import sys
