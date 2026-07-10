@@ -5,7 +5,6 @@ and provides repair/install functionality per platform.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -28,92 +27,47 @@ _LOCAL_FFMPEG_BIN = os.path.join(_REPO_ROOT, "tools", "ffmpeg", "bin")
 
 # Repair pulls a Windows build from BtbN/FFmpeg-Builds. We deliberately avoid the
 # "master" nightly: nightlies remove deprecated options (the -vsync removal broke
-# imports in issue #175). BtbN ships stable n-builds in the same rolling release,
-# e.g. ffmpeg-n8.1-latest-win64-gpl-8.1.zip. We resolve the newest stable n-build
-# from the releases API, and fall back to a fixed ordered list if the API is
-# unreachable (rate-limited, offline, etc.).
-_BTBN_LATEST_API = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"
-_BTBN_DOWNLOAD_BASE = (
-    "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/"
+# imports in issue #175).
+#
+# PINNED to an exact dated autobuild, never a rolling tag. The rolling
+# "latest" stable asset burned us in issue #184: FFmpeg release/8.1 picked up
+# a vf_scale_cuda/hwcontext_cuda rework on 2026-06-29 (post n8.1.2 tag) with a
+# race that corrupts random frames when decoding with -hwaccel cuda (invalid
+# zlib chunks inside ZIP16 EXR output). Every BtbN rolling build from
+# 2026-06-30 onward ships it. The dated autobuild release below is immutable
+# and contains the tag-exact n8.1.2 build, verified clean against the issue
+# #184 reproduction clip.
+#
+# When bumping this pin: extract a known clip with -hwaccel cuda and verify
+# every EXR frame reads back (see issue #184), then update both constants AND
+# _KNOWN_BAD_BUILD_RE below.
+_BTBN_PINNED_ASSET = "ffmpeg-n8.1.2-win64-gpl-8.1.zip"
+_BTBN_PINNED_URL = (
+    "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
+    "autobuild-2026-06-27-13-21/" + _BTBN_PINNED_ASSET
 )
-# Stable win64 gpl asset, e.g. "ffmpeg-n8.1-latest-win64-gpl-8.1.zip".
-# Excludes master, -shared, lgpl, win32 and winarm64 by construction.
-_BTBN_STABLE_ASSET_RE = re.compile(
-    r"^ffmpeg-n(?P<ver>\d+(?:\.\d+)*)-latest-win64-gpl-(?P<ver2>\d+(?:\.\d+)*)\.zip$"
-)
-# Ordered fallback (newest first) used only when the API call fails.
-_BTBN_FALLBACK_ASSETS = (
-    "ffmpeg-n8.1-latest-win64-gpl-8.1.zip",
-    "ffmpeg-n7.1-latest-win64-gpl-7.1.zip",
-)
 
-
-def _version_tuple(ver: str) -> tuple[int, ...]:
-    """Parse a dotted version like '8.1' or '10.0' into an int tuple for sorting.
-
-    String sorting would rank 'n8.1' above 'n10.0'; numeric tuples fix that.
-    """
-    parts: list[int] = []
-    for piece in ver.split("."):
-        try:
-            parts.append(int(piece))
-        except ValueError:
-            parts.append(0)
-    return tuple(parts)
-
-
-def _select_stable_btbn_asset(assets: list[dict]) -> tuple[str, str] | None:
-    """Pick the newest stable win64-gpl asset from a BtbN release 'assets' list.
-
-    Returns (asset_name, download_url) for the highest version, or None if no
-    stable asset matches.
-    """
-    candidates: list[tuple[tuple[int, ...], str, str]] = []
-    for asset in assets:
-        name = asset.get("name", "")
-        match = _BTBN_STABLE_ASSET_RE.match(name)
-        if not match:
-            continue
-        url = asset.get("browser_download_url")
-        if not url:
-            continue
-        candidates.append((_version_tuple(match.group("ver")), name, url))
-    if not candidates:
-        return None
-    candidates.sort(key=lambda c: c[0])
-    _, name, url = candidates[-1]
-    return name, url
+# Installed builds known to corrupt EXR frames (issue #184): any post-tag
+# n8.1.2 rolling build (suffix "-N-g<hash>") carries the 2026-06-29 CUDA
+# commits. Tag-exact n8.1.2 builds do not match. Deliberately conservative:
+# even if upstream later fixes the race on release/8.1, a post-tag rolling
+# build remains unverifiable by us — users get pointed at Repair, which
+# installs the pinned verified build. Revisit alongside the pin above.
+_KNOWN_BAD_BUILD_RE = re.compile(r"\bn8\.1\.2-\d+-g[0-9a-f]+", re.IGNORECASE)
 
 
 def _resolve_windows_ffmpeg_asset(
     ssl_ctx: ssl.SSLContext | None,
 ) -> tuple[str, str]:
-    """Resolve (asset_name, download_url) for the newest stable BtbN n-build.
+    """Return (asset_name, download_url) for the pinned verified BtbN build.
 
-    Queries the BtbN releases API; on any failure, falls back to the first entry
-    in the fixed ordered list pointed at releases/latest/download/.
+    Always the immutable dated autobuild pinned above — never a rolling
+    "latest" tag, whose contents change under us (issue #184 frame
+    corruption). The ssl_ctx parameter is kept for signature compatibility
+    with the download step.
     """
-    try:
-        req = urllib.request.Request(
-            _BTBN_LATEST_API, headers={"User-Agent": "CorridorKey"}
-        )
-        with urllib.request.urlopen(req, timeout=30, context=ssl_ctx) as resp:
-            release = json.loads(resp.read().decode("utf-8"))
-        picked = _select_stable_btbn_asset(release.get("assets", []))
-        if picked:
-            logger.info("Repair FFmpeg: selected stable BtbN asset %s", picked[0])
-            return picked
-        logger.warning(
-            "Repair FFmpeg: no stable n-build asset found in BtbN latest release; "
-            "using fallback."
-        )
-    except Exception as exc:
-        logger.warning(
-            "Repair FFmpeg: BtbN releases API lookup failed (%s); using fallback.",
-            exc,
-        )
-    name = _BTBN_FALLBACK_ASSETS[0]
-    return name, _BTBN_DOWNLOAD_BASE + name
+    logger.info("Repair FFmpeg: using pinned verified build %s", _BTBN_PINNED_ASSET)
+    return _BTBN_PINNED_ASSET, _BTBN_PINNED_URL
 
 # QSettings key for user-configured FFmpeg directory
 _QSETTINGS_FFMPEG_DIR = "tools/ffmpeg_custom_dir"
@@ -233,6 +187,9 @@ class FFmpegValidationResult:
     ffprobe_path: str | None = None
     ffmpeg_version: FFmpegVersionInfo | None = None
     ffprobe_version: FFmpegVersionInfo | None = None
+    # True when the installed build is on the known frame-corruption list
+    # (issue #184) — the UI shows a dedicated "run Repair FFmpeg" warning.
+    known_bad: bool = False
 
 
 def _local_ffmpeg_binary(name: str) -> str | None:
@@ -366,6 +323,21 @@ def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResul
             ffmpeg_path=ffmpeg,
             ffprobe_path=ffprobe,
             ffmpeg_version=ffmpeg_version,
+        )
+
+    if _KNOWN_BAD_BUILD_RE.search(ffmpeg_version.first_line):
+        return FFmpegValidationResult(
+            ok=False,
+            message=(
+                "This FFmpeg build has a known frame-corruption bug with "
+                "NVIDIA hardware decoding (random frames written as unreadable "
+                f"EXR files). Detected {ffmpeg_version.first_line}. "
+                "Run Repair FFmpeg to install a verified build."
+            ),
+            ffmpeg_path=ffmpeg,
+            ffprobe_path=ffprobe,
+            ffmpeg_version=ffmpeg_version,
+            known_bad=True,
         )
 
     ffprobe_version: FFmpegVersionInfo | None = None

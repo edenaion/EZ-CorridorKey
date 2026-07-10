@@ -82,6 +82,27 @@ _DIAGNOSTICS: list[Diagnostic] = [
     ),
     # ── FFmpeg ────────────────────────────────────────────────────
     Diagnostic(
+        id="ffmpeg-corrupt-build",
+        title="FFmpeg Build Has a Known Frame-Corruption Bug",
+        pattern=re.compile(
+            r"known frame-corruption bug",
+            re.IGNORECASE,
+        ),
+        explanation=(
+            "The installed FFmpeg build can write unreadable frames during "
+            "video import when NVIDIA hardware decoding is active. Clips "
+            "imported with it may fail later with 'failed to read frame' "
+            "errors. Repair FFmpeg replaces it with a verified build."
+        ),
+        steps=[
+            "Go to Edit > Preferences and click Repair FFmpeg.\n"
+            "This installs a verified FFmpeg build automatically.",
+            "Delete any project that failed with a\n"
+            "'failed to read frame' error and re-import the clip.",
+        ],
+        tags=["ffmpeg", "corrupt", "exr", "repair"],
+    ),
+    Diagnostic(
         id="ffmpeg-invalid",
         title="FFmpeg Install Unsupported",
         pattern=re.compile(
@@ -501,14 +522,17 @@ def run_startup_diagnostics(device: str) -> list[StartupIssue]:
     except Exception as exc:
         logger.warning("Pascal/cu130 startup check failed: %s", exc)
 
-    # 3. FFmpeg missing, too old, or invalid build
+    # 3. FFmpeg missing, too old, invalid, or a known-corrupt build
     try:
         from backend.ffmpeg_tools import validate_ffmpeg_install
         result = validate_ffmpeg_install()
         if not result.ok:
-            # Pick the right diagnostic based on whether FFmpeg was found at all
+            # Pick the right diagnostic based on what validation found
             diag_id = "ffmpeg-missing"
-            if result.ffmpeg_path:
+            if getattr(result, "known_bad", False):
+                # Issue #184: build writes corrupt frames — dedicated warning
+                diag_id = "ffmpeg-corrupt-build"
+            elif result.ffmpeg_path:
                 diag_id = "ffmpeg-invalid"
             diag = next((d for d in _DIAGNOSTICS if d.id == diag_id), None)
             if diag:
