@@ -29,9 +29,31 @@ def main() -> int:
         action="store_true",
         help="Validate ffmpeg only (default requires both ffmpeg and ffprobe).",
     )
+    parser.add_argument(
+        "--print-pin-url",
+        action="store_true",
+        help="Print the pinned FFmpeg download URL and exit (for 1-install.bat).",
+    )
+    parser.add_argument(
+        "--print-pin-asset",
+        action="store_true",
+        help="Print the pinned FFmpeg asset filename and exit (for 1-install.bat).",
+    )
     args = parser.parse_args()
 
     ffmpeg_tools = _load_ffmpeg_tools()
+
+    # Single source of truth: the installer reads the pin straight from
+    # discovery.py so the bootstrap build and the Repair build can never
+    # drift apart (issue #184: 1-install.bat used to fetch the BtbN master
+    # nightly while Repair fetched a pinned build).
+    if args.print_pin_url:
+        print(ffmpeg_tools._PINNED_URL)
+        return 0
+    if args.print_pin_asset:
+        print(ffmpeg_tools._PINNED_ASSET)
+        return 0
+
     result = ffmpeg_tools.validate_ffmpeg_install(require_probe=not args.no_require_probe)
 
     if not args.quiet:

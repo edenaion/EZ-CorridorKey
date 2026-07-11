@@ -25,49 +25,55 @@ _MIN_FFMPEG_MAJOR = 7
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _LOCAL_FFMPEG_BIN = os.path.join(_REPO_ROOT, "tools", "ffmpeg", "bin")
 
-# Repair pulls a Windows build from BtbN/FFmpeg-Builds. We deliberately avoid the
-# "master" nightly: nightlies remove deprecated options (the -vsync removal broke
-# imports in issue #175).
-#
-# PINNED to an exact dated autobuild, never a rolling tag. The rolling
-# "latest" stable asset burned us in issue #184: FFmpeg release/8.1 picked up
-# a vf_scale_cuda/hwcontext_cuda rework on 2026-06-29 (post n8.1.2 tag) with a
-# race that corrupts random frames when decoding with -hwaccel cuda (invalid
-# zlib chunks inside ZIP16 EXR output). Every BtbN rolling build from
-# 2026-06-30 onward ships it. The dated autobuild release below is immutable
-# and contains the tag-exact n8.1.2 build, verified clean against the issue
-# #184 reproduction clip.
+# Repair installs this exact immutable asset: gyan.dev's static full build
+# of the tagged stable release 8.1.2, from the versioned GyanD GitHub mirror
+# (never a rolling URL, since rolling assets changing under us caused issue
+# #184; nightlies also remove deprecated options: -vsync broke imports in
+# issue #175, -apply_trc broke exports in the #184 regression report).
 #
 # When bumping this pin: extract a known clip with -hwaccel cuda and verify
-# every EXR frame reads back (see issue #184), then update both constants AND
-# _KNOWN_BAD_BUILD_RE below.
-_BTBN_PINNED_ASSET = "ffmpeg-n8.1.2-win64-gpl-8.1.zip"
-_BTBN_PINNED_URL = (
-    "https://github.com/BtbN/FFmpeg-Builds/releases/download/"
-    "autobuild-2026-06-27-13-21/" + _BTBN_PINNED_ASSET
+# every EXR frame reads back (see issue #184), run the full FFmpeg operation
+# matrix (probe, EXR extract, all stitch codecs) against every build in
+# _VERIFIED_BUILD_TOKEN_RES, then update the constants below together.
+_PINNED_ASSET = "ffmpeg-8.1.2-full_build.zip"
+_PINNED_URL = (
+    "https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/"
+    + _PINNED_ASSET
 )
 
-# Installed builds known to corrupt EXR frames (issue #184): any post-tag
-# n8.1.2 rolling build (suffix "-N-g<hash>") carries the 2026-06-29 CUDA
-# commits. Tag-exact n8.1.2 builds do not match. Deliberately conservative:
-# even if upstream later fixes the race on release/8.1, a post-tag rolling
-# build remains unverifiable by us — users get pointed at Repair, which
-# installs the pinned verified build. Revisit alongside the pin above.
-_KNOWN_BAD_BUILD_RE = re.compile(r"\bn8\.1\.2-\d+-g[0-9a-f]+", re.IGNORECASE)
+# On Windows, ONLY tag-exact FFmpeg 8.1.2 full builds are accepted (issue
+# #184 round two: a gyan.dev git nightly parsed as release major "2026",
+# validation passed, Repair refused to run, and export died on the removed
+# -apply_trc option). These are the same upstream source tag from the two
+# packagers Windows users actually have, so a user holding either is not
+# asked to switch. Everything else (older, newer, nightlies, essentials,
+# shared builds, post-tag rolling builds) is rejected and Repair installs
+# the pin above. Only builds actually run through the operation matrix
+# belong on this list.
+#   BtbN tag autobuild prints  "n8.1.2-20260627"  (tag plus 8-digit build
+#     date; what the 2.1.4-era Repair installed). Post-tag rolling builds
+#     print "n8.1.2-22-g94138f6973-20260710" (commit count plus hash) and
+#     must NOT match.
+#   gyan full builds print     "8.1.2-full_build-www.gyan.dev" (also what
+#     winget installs when it serves a release, and the pin above).
+_VERIFIED_BUILD_TOKEN_RES = (
+    re.compile(r"^n8\.1\.2(?:-\d{8})?$", re.IGNORECASE),
+    re.compile(r"^8\.1\.2-full_build-www\.gyan\.dev$", re.IGNORECASE),
+)
 
 
 def _resolve_windows_ffmpeg_asset(
     ssl_ctx: ssl.SSLContext | None,
 ) -> tuple[str, str]:
-    """Return (asset_name, download_url) for the pinned verified BtbN build.
+    """Return (asset_name, download_url) for the pinned verified build.
 
-    Always the immutable dated autobuild pinned above — never a rolling
-    "latest" tag, whose contents change under us (issue #184 frame
+    Always the immutable versioned release asset pinned above, never a
+    rolling URL, whose contents change under us (issue #184 frame
     corruption). The ssl_ctx parameter is kept for signature compatibility
     with the download step.
     """
-    logger.info("Repair FFmpeg: using pinned verified build %s", _BTBN_PINNED_ASSET)
-    return _BTBN_PINNED_ASSET, _BTBN_PINNED_URL
+    logger.info("Repair FFmpeg: using pinned verified build %s", _PINNED_ASSET)
+    return _PINNED_ASSET, _PINNED_URL
 
 # QSettings key for user-configured FFmpeg directory
 _QSETTINGS_FFMPEG_DIR = "tools/ffmpeg_custom_dir"
@@ -158,12 +164,41 @@ _FFMPEG_SEARCH_PATHS = (
     _FFMPEG_SEARCH_PATHS_WINDOWS if sys.platform == "win32"
     else _FFMPEG_SEARCH_PATHS_UNIX
 )
-_FFMPEG_RELEASE_RE = re.compile(
-    r"\b(?:ffmpeg|ffprobe)(?:\.exe)?\s+version\s+(?:n)?(?P<major>\d+)(?:\.\d+)*",
+# Version TOKEN is the first whitespace-delimited word after "version" in the
+# -version banner, e.g. "n8.1.2-20260627", "8.0-full_build-www.gyan.dev",
+# "2026-07-09-git-8de8405796-full_build-www.gyan.dev". Classification runs on
+# the token only, never the whole line (the Copyright suffix contains years).
+_FFMPEG_VERSION_TOKEN_RE = re.compile(
+    r"\b(?:ffmpeg|ffprobe)(?:\.exe)?\s+version\s+(?P<token>\S+)",
     re.IGNORECASE,
 )
-_FFMPEG_DEV_BUILD_RE = re.compile(
-    r"\b(?:ffmpeg|ffprobe)\s+version\s+(?:n-|git-|master-)",
+
+# ALLOWLIST (macOS/Linux only; Windows uses the verified-builds check
+# above):
+# a token is a tagged stable release only if it starts with an optional "n"
+# plus a 1-2 digit major and dotted minors, optionally followed by a -/_
+# suffix (vendor tags: "-full_build-www.gyan.dev", "-1ubuntu1", "-latest").
+# Everything else is unverifiable. The 1-2 digit major cap keeps date-style
+# versions ("2026-07-09-git-...", gyan nightlies) from parsing as major
+# 2026. That hole let issue #184 repeat on a gyan git build that sailed
+# through validation.
+_FFMPEG_RELEASE_TOKEN_RE = re.compile(
+    r"^n?(?P<major>\d{1,2})(?:\.\d+){0,3}(?:[-_].*)?$"
+)
+
+# Markers of unverifiable snapshot builds: git/master/dev/nightly/rc tags,
+# post-tag commit counts with a hash ("-22-g94138f6973"), dash-separated
+# snapshot dates ("2026-07-09"), and FFmpeg's N-<rev> master scheme.
+# NOTE: the pinned BtbN tag build prints "n8.1.2-20260627", an 8-digit
+# date WITHOUT dashes, and must not match here. "dev" gets -/_ boundaries
+# only: a dot boundary would match the ".dev" TLD in
+# "8.1.2-full_build-www.gyan.dev" and misclassify gyan stable releases.
+_FFMPEG_DEV_MARKER_RE = re.compile(
+    r"(?:^|[-_.])(?:git|master|nightly|rc\d+)(?:$|[-_.])"
+    r"|(?:^|[-_])dev(?:$|[-_])"
+    r"|-g[0-9a-f]{6,}(?:$|[-_.])"
+    r"|\d{4}-\d{2}-\d{2}"
+    r"|^N-\d+",
     re.IGNORECASE,
 )
 
@@ -175,6 +210,18 @@ class FFmpegVersionInfo:
     first_line: str
     major: int | None
     is_dev_build: bool = False
+    # True when the version token matches neither the stable-release shape
+    # nor any known dev-build marker. Treated as unverifiable, like a dev
+    # build: we cannot promise our command lines work against it.
+    is_unknown: bool = False
+    # Raw version token ("n8.1.2-20260627"), used for the Windows
+    # verified-builds check.
+    token: str = ""
+
+    @property
+    def is_verified_build(self) -> bool:
+        """True when this is one of the verified tag-exact 8.1.2 builds."""
+        return any(rx.match(self.token) for rx in _VERIFIED_BUILD_TOKEN_RES)
 
 
 @dataclass(frozen=True)
@@ -188,7 +235,7 @@ class FFmpegValidationResult:
     ffmpeg_version: FFmpegVersionInfo | None = None
     ffprobe_version: FFmpegVersionInfo | None = None
     # True when the installed build is on the known frame-corruption list
-    # (issue #184) — the UI shows a dedicated "run Repair FFmpeg" warning.
+    # (issue #184). The UI shows a dedicated "run Repair FFmpeg" warning.
     known_bad: bool = False
 
 
@@ -263,14 +310,28 @@ def _read_program_version(binary_path: str, program_name: str) -> FFmpegVersionI
     if not first_line:
         raise RuntimeError(f"{program_name} did not report a version string")
 
-    match = _FFMPEG_RELEASE_RE.search(first_line)
-    if match:
-        return FFmpegVersionInfo(first_line=first_line, major=int(match.group("major")))
-    if _FFMPEG_DEV_BUILD_RE.search(first_line):
-        return FFmpegVersionInfo(first_line=first_line, major=None, is_dev_build=True)
+    token_match = _FFMPEG_VERSION_TOKEN_RE.search(first_line)
+    if not token_match:
+        raise RuntimeError(
+            f"Could not determine {program_name} version from: {first_line}"
+        )
+    token = token_match.group("token")
 
-    raise RuntimeError(
-        f"Could not determine {program_name} version from: {first_line}"
+    # Dev markers take precedence: a gyan git nightly like
+    # "2026-07-09-git-8de8405796-full_build" must never be read as a release.
+    if _FFMPEG_DEV_MARKER_RE.search(token):
+        return FFmpegVersionInfo(
+            first_line=first_line, major=None, is_dev_build=True, token=token,
+        )
+    release_match = _FFMPEG_RELEASE_TOKEN_RE.match(token)
+    if release_match:
+        return FFmpegVersionInfo(
+            first_line=first_line,
+            major=int(release_match.group("major")),
+            token=token,
+        )
+    return FFmpegVersionInfo(
+        first_line=first_line, major=None, is_unknown=True, token=token,
     )
 
 
@@ -302,64 +363,6 @@ def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResul
     except RuntimeError as exc:
         return FFmpegValidationResult(ok=False, message=str(exc), ffmpeg_path=ffmpeg)
 
-    if ffmpeg_version.major is not None and ffmpeg_version.major < _MIN_FFMPEG_MAJOR:
-        return FFmpegValidationResult(
-            ok=False,
-            message=(
-                f"FFmpeg 7.0 or newer is required. Detected {ffmpeg_version.first_line}."
-            ),
-            ffmpeg_path=ffmpeg,
-            ffprobe_path=ffprobe,
-            ffmpeg_version=ffmpeg_version,
-        )
-
-    if sys.platform == "win32" and "essentials_build" in ffmpeg_version.first_line.lower():
-        return FFmpegValidationResult(
-            ok=False,
-            message=(
-                "CorridorKey requires a full FFmpeg build on Windows. "
-                "Detected a Gyan essentials build."
-            ),
-            ffmpeg_path=ffmpeg,
-            ffprobe_path=ffprobe,
-            ffmpeg_version=ffmpeg_version,
-        )
-
-    if _KNOWN_BAD_BUILD_RE.search(ffmpeg_version.first_line):
-        return FFmpegValidationResult(
-            ok=False,
-            message=(
-                "This FFmpeg build has a known frame-corruption bug with "
-                "NVIDIA hardware decoding (random frames written as unreadable "
-                f"EXR files). Detected {ffmpeg_version.first_line}. "
-                "Run Repair FFmpeg to install a verified build."
-            ),
-            ffmpeg_path=ffmpeg,
-            ffprobe_path=ffprobe,
-            ffmpeg_version=ffmpeg_version,
-            known_bad=True,
-        )
-
-    # Master/git nightlies are unverifiable, and recent ones carry the same
-    # frame-corruption race (issue #184: the reporter's install held a July
-    # master nightly delivered by the 2.1.0-era Repair; nothing since ever
-    # flagged it). Flag every dev build so those installs get walked to
-    # Repair, which replaces them with the pinned verified build.
-    if ffmpeg_version.is_dev_build:
-        return FFmpegValidationResult(
-            ok=False,
-            message=(
-                "This FFmpeg build is a development nightly with a known "
-                "frame-corruption bug risk (random frames written as "
-                f"unreadable EXR files). Detected {ffmpeg_version.first_line}. "
-                "Run Repair FFmpeg to install a verified build."
-            ),
-            ffmpeg_path=ffmpeg,
-            ffprobe_path=ffprobe,
-            ffmpeg_version=ffmpeg_version,
-            known_bad=True,
-        )
-
     ffprobe_version: FFmpegVersionInfo | None = None
     if require_probe and ffprobe:
         try:
@@ -373,49 +376,68 @@ def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResul
                 ffmpeg_version=ffmpeg_version,
             )
 
-        if ffprobe_version.major is not None and ffprobe_version.major < _MIN_FFMPEG_MAJOR:
-            return FFmpegValidationResult(
-                ok=False,
-                message=(
-                    f"FFprobe 7.0 or newer is required. Detected {ffprobe_version.first_line}."
-                ),
-                ffmpeg_path=ffmpeg,
-                ffprobe_path=ffprobe,
-                ffmpeg_version=ffmpeg_version,
-                ffprobe_version=ffprobe_version,
-            )
+    programs: list[tuple[str, FFmpegVersionInfo]] = [("FFmpeg", ffmpeg_version)]
+    if ffprobe_version is not None:
+        programs.append(("FFprobe", ffprobe_version))
+
+    def _fail(message: str, known_bad: bool = False) -> FFmpegValidationResult:
+        return FFmpegValidationResult(
+            ok=False,
+            message=message,
+            ffmpeg_path=ffmpeg,
+            ffprobe_path=ffprobe,
+            ffmpeg_version=ffmpeg_version,
+            ffprobe_version=ffprobe_version,
+            known_bad=known_bad,
+        )
+
+    if sys.platform == "win32":
+        # Windows: verified-builds allowlist (_VERIFIED_BUILD_TOKEN_RES).
+        # Only tag-exact 8.1.2 full builds pass. Each entry on the list has
+        # been run through the full FFmpeg operation matrix. Every other
+        # build (older, newer, nightly, essentials, unknown vendor) is
+        # rejected and routed to Repair, which installs the pin. Issue #184
+        # happened twice because validation tried to enumerate bad builds
+        # instead of allowlisting known-good ones.
+        for label, info in programs:
+            if not info.is_verified_build:
+                return _fail(
+                    f"{label} is not a build verified for CorridorKey. "
+                    f"Detected {info.first_line}. Unverified builds have "
+                    "caused corrupted frames and failed exports. "
+                    "Run Repair FFmpeg to install the verified build.",
+                    known_bad=True,
+                )
+    else:
+        # macOS/Linux: package managers cannot pin one exact build, so accept
+        # tagged stable releases meeting the version floor and reject
+        # unverifiable dev/unknown builds.
+        for label, info in programs:
+            if info.is_dev_build or info.is_unknown:
+                return _fail(
+                    f"This {label} build is not a tagged stable release and "
+                    "cannot be verified (development builds have caused "
+                    "corrupted frames and failed exports). "
+                    f"Detected {info.first_line}. "
+                    "Run Repair FFmpeg to install a supported build.",
+                    known_bad=True,
+                )
+            if info.major is not None and info.major < _MIN_FFMPEG_MAJOR:
+                return _fail(
+                    f"{label} {_MIN_FFMPEG_MAJOR}.0 or newer is required. "
+                    f"Detected {info.first_line}."
+                )
 
         if (
-            ffmpeg_version.major is not None
+            ffprobe_version is not None
+            and ffmpeg_version.major is not None
             and ffprobe_version.major is not None
             and ffmpeg_version.major != ffprobe_version.major
         ):
-            return FFmpegValidationResult(
-                ok=False,
-                message=(
-                    "FFmpeg and FFprobe major versions do not match. "
-                    f"Detected ffmpeg {ffmpeg_version.major} and ffprobe {ffprobe_version.major}."
-                ),
-                ffmpeg_path=ffmpeg,
-                ffprobe_path=ffprobe,
-                ffmpeg_version=ffmpeg_version,
-                ffprobe_version=ffprobe_version,
-            )
-
-        if (
-            sys.platform == "win32"
-            and "essentials_build" in ffprobe_version.first_line.lower()
-        ):
-            return FFmpegValidationResult(
-                ok=False,
-                message=(
-                    "CorridorKey requires a full FFmpeg build on Windows. "
-                    "Detected a Gyan essentials build."
-                ),
-                ffmpeg_path=ffmpeg,
-                ffprobe_path=ffprobe,
-                ffmpeg_version=ffmpeg_version,
-                ffprobe_version=ffprobe_version,
+            return _fail(
+                "FFmpeg and FFprobe major versions do not match. "
+                f"Detected ffmpeg {ffmpeg_version.major} and "
+                f"ffprobe {ffprobe_version.major}."
             )
 
     if ffprobe_version is not None:
@@ -516,10 +538,12 @@ def _validate_staged_ffmpeg(install_root: str) -> None:
         if not os.path.isfile(binary):
             raise RuntimeError(f"Downloaded FFmpeg build is missing {name}.exe")
         info = _read_program_version(binary, name)
-        if info.major is not None and info.major < _MIN_FFMPEG_MAJOR:
+        # The staged build must be the exact pin we asked for. A swapped or
+        # tampered download must never replace a working install.
+        if not info.is_verified_build:
             raise RuntimeError(
-                f"Downloaded {name} is version {info.major}, but CorridorKey "
-                f"requires {_MIN_FFMPEG_MAJOR}.0 or newer."
+                f"Downloaded {name} is not the pinned verified build "
+                f"(got: {info.first_line})."
             )
 
 
@@ -601,7 +625,7 @@ def repair_ffmpeg_install(
         return result
 
     if sys.platform != "win32":
-        # Linux: needs sudo, can't run from GUI — show instructions instead
+        # Linux: needs sudo, can't run from GUI, so show instructions instead
         raise RuntimeError(get_ffmpeg_install_help())
 
     def _emit(phase: str, current: int = 0, total: int = 0) -> None:
@@ -632,11 +656,11 @@ def repair_ffmpeg_install(
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = ssl.CERT_NONE
             logger.warning(
-                "SSL certificate verification disabled for FFmpeg download — "
+                "SSL certificate verification disabled for FFmpeg download: "
                 "certifi is missing and the system cert store failed."
             )
 
-    # Resolve the newest STABLE BtbN n-build (never the master nightly).
+    # Resolve the pinned verified build (immutable versioned release asset).
     asset_name, download_url = _resolve_windows_ffmpeg_asset(ssl_ctx)
     zip_path = os.path.join(temp_dir, asset_name)
 
