@@ -397,10 +397,22 @@ set "FFMPEG_DEST=%~dp0tools\ffmpeg"
 .venv\Scripts\python.exe scripts\check_ffmpeg.py
 if %errorlevel%==0 goto :ffmpeg_done
 
-echo   Existing FFmpeg install is missing FFprobe, older than 7, or not a full Windows build.
-echo   Downloading a full FFmpeg build...
-set "FFMPEG_URL=https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"
-set "FFMPEG_ZIP=%TEMP%\ffmpeg-master-latest-win64-gpl.zip"
+echo   No verified FFmpeg found (missing FFprobe, wrong version, or an
+echo   unverified build). Downloading the pinned verified build...
+
+REM Pull the pin from discovery.py so the installer and Repair install the
+REM exact same verified build (issue #184: this used to fetch the BtbN
+REM master nightly, an unverified rolling build that corrupted frames).
+set "FFMPEG_URL="
+for /f "usebackq delims=" %%u in (`.venv\Scripts\python.exe scripts\check_ffmpeg.py --print-pin-url`) do set "FFMPEG_URL=%%u"
+set "FFMPEG_ASSET="
+for /f "usebackq delims=" %%a in (`.venv\Scripts\python.exe scripts\check_ffmpeg.py --print-pin-asset`) do set "FFMPEG_ASSET=%%a"
+if not defined FFMPEG_URL (
+    echo   [WARN] Could not resolve the pinned FFmpeg URL. Install manually:
+    echo     Run Repair FFmpeg from the app, or reinstall.
+    goto :ffmpeg_done
+)
+set "FFMPEG_ZIP=%TEMP%\%FFMPEG_ASSET%"
 set "FFMPEG_EXTRACT=%TEMP%\ffmpeg-extract"
 
 REM Prefer curl to avoid PowerShell download heuristics
@@ -420,18 +432,22 @@ if not exist "%FFMPEG_ZIP%" (
     goto :ffmpeg_done
 )
 
-REM Extract and move into tools\ffmpeg
+REM Extract and move into tools\ffmpeg.
+REM Use System32 bsdtar explicitly, NOT bare "tar.exe": when Git is on PATH
+REM its GNU tar wins the lookup and reads a Windows path like C:\... as a
+REM remote host ("Cannot connect to C:"), so extraction silently fails and
+REM FFmpeg never installs. bsdtar handles drive letters; Expand-Archive is
+REM the fallback if System32 tar is absent.
 echo   Extracting...
 if exist "%FFMPEG_EXTRACT%" rmdir /s /q "%FFMPEG_EXTRACT%"
 mkdir "%FFMPEG_EXTRACT%" >nul 2>&1
-where tar.exe >nul 2>&1
-if %errorlevel%==0 (
-    tar.exe -xf "%FFMPEG_ZIP%" -C "%FFMPEG_EXTRACT%" >nul 2>&1
+if exist "%SystemRoot%\System32\tar.exe" (
+    "%SystemRoot%\System32\tar.exe" -xf "%FFMPEG_ZIP%" -C "%FFMPEG_EXTRACT%" >nul 2>&1
 ) else (
     powershell -NoProfile -Command "Expand-Archive -Path '%FFMPEG_ZIP%' -DestinationPath '%FFMPEG_EXTRACT%' -Force" >nul 2>&1
 )
 
-REM The zip contains a top-level folder like ffmpeg-master-latest-win64-gpl
+REM The zip contains a top-level folder like ffmpeg-8.1.2-full_build
 set "FFMPEG_INNER="
 for /d %%d in ("%FFMPEG_EXTRACT%\ffmpeg-*") do set "FFMPEG_INNER=%%d"
 if not defined FFMPEG_INNER (
