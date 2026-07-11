@@ -516,6 +516,12 @@ def run_model_path_check(
         result["ok"] = ok
         if errors:
             result["errors"] = errors
+            try:
+                from backend.error_reporting import capture_stage_exception
+                capture_stage_exception(
+                    "installer", RuntimeError("; ".join(errors)))
+            except Exception:
+                pass
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if ok else 1
     finally:

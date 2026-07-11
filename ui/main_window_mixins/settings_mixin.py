@@ -760,6 +760,11 @@ class SettingsMixin:
             progress.close()
         except Exception as e:
             progress.close()
+            try:
+                from backend.error_reporting import capture_stage_exception
+                capture_stage_exception("updater", e)
+            except Exception:
+                pass
             QMessageBox.critical(
                 self, _tr("Update Failed"),
                 _tr("Could not update automatically:\n\n%s\n\n"

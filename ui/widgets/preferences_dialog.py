@@ -54,6 +54,7 @@ KEY_INFERENCE_BACKEND = "inference/backend"
 KEY_OUTPUT_DIRECTORY = "output/default_directory"
 KEY_UI_LANGUAGE = "ui/language"
 KEY_SHOW_UPDATE_BUTTON = "ui/show_update_button"
+KEY_CRASH_REPORTS = "privacy/crash_reports_enabled"
 
 # Defaults
 DEFAULT_SHOW_TOOLTIPS = True
@@ -62,6 +63,7 @@ DEFAULT_SHOW_UPDATE_BUTTON = True
 DEFAULT_COPY_SOURCE = True
 DEFAULT_COPY_SEQUENCES = False
 DEFAULT_LOOP_PLAYBACK = True
+DEFAULT_CRASH_REPORTS = False
 DEFAULT_EXR_COMPRESSION = "dwab"
 DEFAULT_TRACKER_MODEL = "facebook/sam2.1-hiera-base-plus"
 DEFAULT_PARALLEL_CLIPS = 1
@@ -522,12 +524,38 @@ class PreferencesDialog(QDialog):
 
         # --- Layout order ---
         # UI > Project > Playback > Tracking > Inference > Output > Video Tools
+        # Privacy section
+        privacy_group = QGroupBox(self.tr("Privacy"))
+        privacy_layout = QVBoxLayout(privacy_group)
+
+        self._crash_reports_cb = QCheckBox(
+            self.tr("Help improve EZ-CorridorKey: send crash reports "
+                    "automatically")
+        )
+        self._crash_reports_cb.setChecked(
+            get_setting_bool(KEY_CRASH_REPORTS, DEFAULT_CRASH_REPORTS)
+        )
+        privacy_layout.addWidget(self._crash_reports_cb)
+
+        privacy_note = QLabel(
+            self.tr(
+                "Off by default. When enabled, crash details, GPU/driver "
+                "info, and the app version are sent when the app hits an "
+                "error. Never your media, files, or personal info. "
+                "Takes effect on the next launch."
+            )
+        )
+        privacy_note.setWordWrap(True)
+        privacy_note.setStyleSheet("QLabel { color: #888; font-size: 11px; }")
+        privacy_layout.addWidget(privacy_note)
+
         layout.addWidget(ui_group)
         layout.addWidget(proj_group)
         layout.addWidget(play_group)
         layout.addWidget(tracking_group)
         layout.addWidget(inference_group)
         layout.addWidget(output_group)
+        layout.addWidget(privacy_group)
         layout.addWidget(ffmpeg_group)
 
         scroll.setWidget(scroll_content)
@@ -612,6 +640,7 @@ class PreferencesDialog(QDialog):
         if self._backend_combo is not None:
             s.setValue(KEY_INFERENCE_BACKEND, self._backend_combo.currentData())
         s.setValue(KEY_OUTPUT_DIRECTORY, self._output_dir_edit.text().strip())
+        s.setValue(KEY_CRASH_REPORTS, self._crash_reports_cb.isChecked())
         # Apply sound mute immediately
         from ui.sounds.audio_manager import UIAudio
         UIAudio.set_muted(not self._sounds_cb.isChecked())
