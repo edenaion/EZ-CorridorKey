@@ -15,6 +15,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QGroupBox,
     QHBoxLayout,
@@ -113,6 +114,7 @@ class ReportIssueDialog(QDialog):
         gpu_info: dict | None = None,
         recent_errors: list[str] | None = None,
         parent=None,
+        stage: str = "runtime",
     ):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Report Issue"))
@@ -122,6 +124,7 @@ class ReportIssueDialog(QDialog):
 
         self._gpu_info = gpu_info or {}
         self._recent_errors = recent_errors or []
+        self._stage = stage
 
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
@@ -177,6 +180,20 @@ class ReportIssueDialog(QDialog):
         notice.setStyleSheet("QLabel { color: #888; font-size: 11px; }")
         layout.addWidget(notice)
 
+        # --- Direct send opt-in ---
+        self._send_cb = QCheckBox(
+            self.tr("Also send this report directly to the developer")
+        )
+        self._send_cb.setChecked(True)
+        self._send_cb.setToolTip(
+            self.tr(
+                "Sends the report shown above: crash details, GPU/driver "
+                "info, app version. Never your media, files, or personal "
+                "info."
+            )
+        )
+        layout.addWidget(self._send_cb)
+
         # --- Buttons ---
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -224,12 +241,30 @@ class ReportIssueDialog(QDialog):
             pairs.append(("PyTorch", torch.version.__version__))
             if torch.cuda.is_available():
                 pairs.append(("CUDA", torch.version.cuda or "N/A"))
+                try:
+                    major, minor = torch.cuda.get_device_capability(0)
+                    pairs.append(("GPU Arch", f"sm_{major}{minor}"))
+                except Exception:
+                    pass
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 pairs.append(("Compute", "MPS (Apple Metal)"))
             else:
                 pairs.append(("Compute", "CPU"))
         except ImportError:
             pairs.append(("PyTorch", "not installed"))
+
+        # FFmpeg
+        try:
+            from backend.ffmpeg_tools.discovery import validate_ffmpeg_install
+            result = validate_ffmpeg_install(require_probe=False)
+            if result.ffmpeg_version is not None:
+                parts = result.ffmpeg_version.first_line.split()
+                pairs.append(
+                    ("FFmpeg", parts[2] if len(parts) > 2 else "unknown"))
+            else:
+                pairs.append(("FFmpeg", "missing"))
+        except Exception:
+            pairs.append(("FFmpeg", "missing"))
 
         # GPU + VRAM
         gpu = self._gpu_info
@@ -301,6 +336,24 @@ class ReportIssueDialog(QDialog):
 
     def _on_open(self) -> None:
         body = self._build_body()
+
+        # Optional direct send. Runs on its own thread with a bounded
+        # timeout; failure or absence never affects the GitHub flow.
+        if self._send_cb.isChecked():
+            import threading
+
+            from backend.error_reporting import send_report
+
+            threading.Thread(
+                target=send_report,
+                kwargs={
+                    "bundle_text": body,
+                    "stage": self._stage,
+                    "gpu_info": self._gpu_info,
+                },
+                daemon=False,
+                name="report-send",
+            ).start()
 
         # Copy full body to clipboard so it survives GitHub login redirects
         clipboard = QApplication.clipboard()
