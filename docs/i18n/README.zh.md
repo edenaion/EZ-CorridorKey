@@ -1,8 +1,8 @@
 <p><a href="../../README.md"><img alt="🇺🇸 English" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%B8&message=English&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.fr.md"><img alt="🇫🇷 Français" src="https://img.shields.io/static/v1?label=%F0%9F%87%AB%F0%9F%87%B7&message=Fran%C3%A7ais&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.de.md"><img alt="🇩🇪 Deutsch" src="https://img.shields.io/static/v1?label=%F0%9F%87%A9%F0%9F%87%AA&message=Deutsch&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.es.md"><img alt="🇪🇸 Español" src="https://img.shields.io/static/v1?label=%F0%9F%87%AA%F0%9F%87%B8&message=Espa%C3%B1ol&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.it.md"><img alt="🇮🇹 Italiano" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B9&message=Italiano&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.pt.md"><img alt="🇧🇷 Português (Brasil)" src="https://img.shields.io/static/v1?label=%F0%9F%87%A7%F0%9F%87%B7&message=Portugu%C3%AAs%20%28Brasil%29&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ja.md"><img alt="🇯🇵 日本語" src="https://img.shields.io/static/v1?label=%F0%9F%87%AF%F0%9F%87%B5&message=%E6%97%A5%E6%9C%AC%E8%AA%9E&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.ko.md"><img alt="🇰🇷 한국어" src="https://img.shields.io/static/v1?label=%F0%9F%87%B0%F0%9F%87%B7&message=%ED%95%9C%EA%B5%AD%EC%96%B4&color=454430&labelColor=0E0D00&style=flat-square"></a> <img alt="🇨🇳 简体中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%A8%F0%9F%87%B3&message=%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87&color=FFF203&labelColor=141300&style=flat-square"> <a href="README.ru.md"><img alt="🇷🇺 Русский" src="https://img.shields.io/static/v1?label=%F0%9F%87%B7%F0%9F%87%BA&message=%D0%A0%D1%83%D1%81%D1%81%D0%BA%D0%B8%D0%B9&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.pl.md"><img alt="🇵🇱 Polski" src="https://img.shields.io/static/v1?label=%F0%9F%87%B5%F0%9F%87%B1&message=Polski&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.tr.md"><img alt="🇹🇷 Türkçe" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%B7&message=T%C3%BCrk%C3%A7e&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.hi.md"><img alt="🇮🇳 हिन्दी" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%B3&message=%E0%A4%B9%E0%A4%BF%E0%A4%A8%E0%A5%8D%E0%A4%A6%E0%A5%80&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.id.md"><img alt="🇮🇩 Bahasa Indonesia" src="https://img.shields.io/static/v1?label=%F0%9F%87%AE%F0%9F%87%A9&message=Bahasa%20Indonesia&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.vi.md"><img alt="🇻🇳 Tiếng Việt" src="https://img.shields.io/static/v1?label=%F0%9F%87%BB%F0%9F%87%B3&message=Ti%E1%BA%BFng%20Vi%E1%BB%87t&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.uk.md"><img alt="🇺🇦 Українська" src="https://img.shields.io/static/v1?label=%F0%9F%87%BA%F0%9F%87%A6&message=%D0%A3%D0%BA%D1%80%D0%B0%D1%97%D0%BD%D1%81%D1%8C%D0%BA%D0%B0&color=454430&labelColor=0E0D00&style=flat-square"></a> <a href="README.zh-Hant.md"><img alt="🇹🇼 繁體中文" src="https://img.shields.io/static/v1?label=%F0%9F%87%B9%F0%9F%87%BC&message=%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87&color=454430&labelColor=0E0D00&style=flat-square"></a></p>
 
-# EZ-CorridorKey **v2.1.3**
+# EZ-CorridorKey **v2.1.4**
 
-[![发布](https://img.shields.io/badge/Release-v2.1.3-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
+[![发布](https://img.shields.io/badge/Release-v2.1.4-FFF203?style=flat-square&labelColor=141300)](https://github.com/edenaion/EZ-CorridorKey/releases/latest)
 [![星标](https://img.shields.io/github/stars/edenaion/EZ-CorridorKey?style=flat-square&labelColor=141300&color=FFF203)](https://github.com/edenaion/EZ-CorridorKey/stargazers)
 [![许可证](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-FFF203?style=flat-square&labelColor=141300)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Discord](https://img.shields.io/badge/Discord-EZSCAPE-5865F2?style=flat-square&labelColor=000000&logo=discord&logoColor=50FF80)](https://discord.gg/TyxNjcWeF3)
@@ -10,7 +10,7 @@
 [![Website](https://img.shields.io/badge/Website-ezcorridorkey.com-FFF203?style=flat-square&labelColor=141300)](https://ezcorridorkey.com)
 [![平台](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-454430?style=flat-square&labelColor=141300)]()
 
-> **最新发布版：[v2.1.3](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.3)：** Windows 热修复。修复了用户文件夹包含重音或非拉丁字符时 AI 抠像生成失败的问题（[#184](https://github.com/edenaion/EZ-CorridorKey/issues/184)），修复了 CLI 安装程序的 FFmpeg 检查，并在安装指南中加入了新的视频教程链接。参见[完整更新日志](CHANGELOG.md)。
+> **最新发布版：[v2.1.4](https://github.com/edenaion/EZ-CorridorKey/releases/tag/v2.1.4)：** Windows 热修复。修复了导入后 AI Alpha 生成因旧版本安装的有缺陷 FFmpeg 构建而报 "failed to read frame" 的问题（[#184](https://github.com/edenaion/EZ-CorridorKey/issues/184)）；导入现在会进行完整性检查并自动重试，同时新增了默认关闭的可选崩溃报告功能。参见[完整更新日志](CHANGELOG.md)。
 
 这是 [Niko Pueringer 的 CorridorKey](https://github.com/nikopueringer/CorridorKey) 的完整桌面 GUI。它是 Corridor Digital 的 AI 色度键工具，可按像素把前景从背景中物理分离，保留发丝、运动模糊和半透明边缘。
 
@@ -534,7 +534,7 @@ python main.py --log-level DEBUG
 
 ### macOS (Apple Silicon)
 
-> 适用于 v2.0.0 和源码安装。像 2.1.3 这样的补丁版本以应用内自动更新的形式发布，不提供新的 Mac 安装包。
+> 适用于 v2.0.0 和源码安装。像 2.1.4 这样的补丁版本以应用内自动更新的形式发布，不提供新的 Mac 安装包。
 
 |             | 最低          | 推荐                                             |
 | ----------- | ------------- | ------------------------------------------------ |
@@ -624,6 +624,19 @@ sha256sum -c SHA256SUMS.txt --ignore-missing
 ☼ [**EZ-CorridorKey.exe**（v1.10.0，已签名内部可执行文件）：VirusTotal 扫描](https://www.virustotal.com/gui/file/82019d296fbc8064fcbac99e71699a0ee5d81ee2893b4d3dbbb25f265282ba0f?nocache=1)
 
 > **第三方模型：** 核心 CorridorKey checkpoint（`CorridorKey.pth`）是我们唯一可担保的模型。可选模型（SAM2、GVM、VideoMaMa、MatAnyone2、BiRefNet）会从各自作者的仓库下载，请自行判断使用。
+
+---
+
+## 隐私
+
+EZ-CorridorKey 默认不发送任何遥测数据。没有使用分析，没有追踪，永远如此。
+
+以下两项功能可能发送数据，均由您自行控制：
+
+☼ **报告问题**：从帮助菜单提交报告时，您在对话框中看到的诊断摘要也可以直接发送给开发者。每次报告都有一个可见的复选框来控制此行为。
+☼ **崩溃报告**：偏好设置 > 隐私中的可选开关，默认关闭。启用后，崩溃详情将自动发送。
+
+报告包含的内容：崩溃详情、GPU/驱动程序信息、操作系统和应用版本。报告永远不包含：您的媒体文件、文件名、项目或个人信息。文件路径在发送前会进行匿名处理。
 
 ---
 

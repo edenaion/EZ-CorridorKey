@@ -430,17 +430,17 @@ MatAnyone2: maske rehberliğiyle tek kare matting.</translation>
             <translation>Tanılama: %s</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="108" />
+            <location filename="../widgets/diagnostic_dialog.py" line="115" />
             <source>Error: %s</source>
             <translation>Hata: %s</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="122" />
+            <location filename="../widgets/diagnostic_dialog.py" line="129" />
             <source>Report Issue on GitHub</source>
             <translation>GitHub'da Sorun Bildir</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="129" />
+            <location filename="../widgets/diagnostic_dialog.py" line="136" />
             <source>OK</source>
             <translation>Tamam</translation>
         </message>
@@ -913,12 +913,12 @@ Yine de yeniden atansın mı? Çakışan bağlama temizlenecek.</translation>
     <context>
         <name>MainWindow</name>
         <message>
-            <location filename="../main_window.py" line="291" />
+            <location filename="../main_window.py" line="292" />
             <source>%s — Mac Performance Warning</source>
             <translation>%s - Mac Performans Uyarısı</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="293" />
+            <location filename="../main_window.py" line="294" />
             <source>GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) are very slow on Mac (Apple Silicon MPS).
 
 This may take hours for longer clips and could freeze your system.
@@ -935,47 +935,47 @@ Uzun klipler için bu işlem saatler alabilir ve sisteminizi dondurabilir.
 Yine de devam edilsin mi? (Bu uyarı bu oturumda bir daha görünmeyecek.)</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="311" />
+            <location filename="../main_window.py" line="312" />
             <source>EZ-CorridorKey</source>
             <translation>EZ-CorridorKey</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="469" />
+            <location filename="../main_window.py" line="470" />
             <source>Detected GPU used for inference</source>
             <translation>Çıkarım için kullanılan GPU algılandı</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="472" />
+            <location filename="../main_window.py" line="473" />
             <source>VRAM</source>
             <translation>VRAM</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="483" />
+            <location filename="../main_window.py" line="484" />
             <source>GPU video memory usage — updates during inference</source>
             <translation>GPU video belleği kullanımı: çıkarım sırasında güncellenir.</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="489" />
+            <location filename="../main_window.py" line="490" />
             <source>Current VRAM used / total available</source>
             <translation>Kullanılan VRAM / toplam kullanılabilir</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="681" />
+            <location filename="../main_window.py" line="682" />
             <source>No GPU</source>
             <translation>GPU Yok</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="688" />
+            <location filename="../main_window.py" line="689" />
             <source>Memory</source>
             <translation>Bellek</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="689" />
+            <location filename="../main_window.py" line="690" />
             <source>Unified memory usage — CPU and GPU share the same pool</source>
             <translation>Birleşik bellek kullanımı: CPU ve GPU aynı havuzu paylaşır.</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="690" />
+            <location filename="../main_window.py" line="691" />
             <source>Current unified memory used / total available</source>
             <translation>Kullanılan birleşik bellek / toplam kullanılabilir</translation>
         </message>
@@ -1860,6 +1860,18 @@ Kaynak klasörde toplamda %d görüntü var.</translation>
             <source>Alpha</source>
             <translation>Alfa</translation>
         </message>
+        <message>
+            <source>Extraction Failed</source>
+            <translation>Çıkarma Başarısız</translation>
+        </message>
+        <message>
+            <source>Frame extraction failed for '%s':
+
+%s</source>
+            <translation>'%s' için kare çıkarma başarısız oldu:
+
+%s</translation>
+        </message>
     </context>
     <context>
         <name>ParameterPanel</name>
@@ -2460,32 +2472,32 @@ sığan motor sayısına düşürür.
     <context>
         <name>PreferencesDialog</name>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="154" />
+            <location filename="../widgets/preferences_dialog.py" line="156" />
             <source>Preferences</source>
             <translation>Tercihler</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="187" />
+            <location filename="../widgets/preferences_dialog.py" line="189" />
             <source>User Interface</source>
             <translation>Kullanıcı Arayüzü</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="206" />
+            <location filename="../widgets/preferences_dialog.py" line="208" />
             <source>Select display language. Applies immediately.</source>
             <translation>Görüntüleme dilini seçin. Hemen uygulanır.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="210" />
+            <location filename="../widgets/preferences_dialog.py" line="212" />
             <source>Show tooltips on controls</source>
             <translation>Denetimlerde araç ipuçlarını göster</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="216" />
+            <location filename="../widgets/preferences_dialog.py" line="218" />
             <source>UI sounds</source>
             <translation>Arayüz sesleri</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="192" />
+            <location filename="../widgets/preferences_dialog.py" line="194" />
             <source>Language</source>
             <translation>Dil</translation>
         </message>
@@ -2498,29 +2510,29 @@ sığan motor sayısına düşürür.
             <translation type="vanished">Görüntüleme dilini seçin. Uygulamak için yeniden başlatma gereklidir.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="222" />
+            <location filename="../widgets/preferences_dialog.py" line="224" />
             <source>Show update notifications</source>
             <translation>Güncelleme bildirimlerini göster</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="225" />
+            <location filename="../widgets/preferences_dialog.py" line="227" />
             <source>When enabled, an Update Available button appears when a newer
 release exists. Turn off to never check for or show updates.</source>
             <translation>Etkinleştirildiğinde, daha yeni bir sürüm mevcut olduğunda Update Available düğmesi görünür.
 Güncellemeleri hiç kontrol etmemek veya göstermemek için kapatın.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="237" />
+            <location filename="../widgets/preferences_dialog.py" line="239" />
             <source>Project</source>
             <translation>Proje</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="240" />
+            <location filename="../widgets/preferences_dialog.py" line="242" />
             <source>Copy source videos into project folder</source>
             <translation>Kaynak videoları proje klasörüne kopyala</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="243" />
+            <location filename="../widgets/preferences_dialog.py" line="245" />
             <source>When enabled, imported videos are copied into the project folder.
 When disabled, the project references the original file in place.
 
@@ -2531,12 +2543,12 @@ Devre dışıyken, proje orijinal dosyayı yerinde referans alır.
 Not: Proje silinmesi orijinal kaynak dosyaya hiçbir zaman dokunmaz.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="253" />
+            <location filename="../widgets/preferences_dialog.py" line="255" />
             <source>Copy imported image sequences into project folder</source>
             <translation>İçe aktarılan görüntü sekanslarını proje klasörüne kopyala</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="256" />
+            <location filename="../widgets/preferences_dialog.py" line="258" />
             <source>When enabled, imported image sequence files are copied into the project.
 When disabled (default), the project references the original files in place.
 
@@ -2549,17 +2561,17 @@ Referanslama, büyük EXR/TIF sekanslarında disk alanından tasarruf sağlar.
 Bu ayardan bağımsız olarak orijinal dosyalar hiçbir zaman değiştirilmez.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="270" />
+            <location filename="../widgets/preferences_dialog.py" line="272" />
             <source>Output</source>
             <translation>Çıktı</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="273" />
+            <location filename="../widgets/preferences_dialog.py" line="275" />
             <source>EXR compression</source>
             <translation>EXR sıkıştırma</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="284" />
+            <location filename="../widgets/preferences_dialog.py" line="286" />
             <source>Compression used when writing EXR output files.
 
 DWAB: Lossy wavelet, smallest files. Default.
@@ -2574,17 +2586,17 @@ ZIP: Kayıpsız deflate, temiz render için iyi.
 Yok: Sıkıştırma yok, en hızlı yazma, en büyük dosyalar.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="294" />
+            <location filename="../widgets/preferences_dialog.py" line="296" />
             <source>Default output directory</source>
             <translation>Varsayılan çıktı klasörü</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="300" />
+            <location filename="../widgets/preferences_dialog.py" line="302" />
             <source>Default (inside project)</source>
             <translation>Varsayılan (proje içinde)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="306" />
+            <location filename="../widgets/preferences_dialog.py" line="308" />
             <source>Global default directory for inference output.
 
 When set, outputs go to:
@@ -2601,38 +2613,38 @@ Her klibin içindeki varsayılanı (Output/) kullanmak için boş bırakın.
 Klip bazlı geçersiz kılmalar (sağ tık → Çıktı Klasörünü Ayarla) öncelik alır.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="315" />
-            <location filename="../widgets/preferences_dialog.py" line="499" />
+            <location filename="../widgets/preferences_dialog.py" line="317" />
+            <location filename="../widgets/preferences_dialog.py" line="501" />
             <source>Browse...</source>
             <translation>Gözat...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="320" />
+            <location filename="../widgets/preferences_dialog.py" line="322" />
             <source>Clear</source>
             <translation>Temizle</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="330" />
+            <location filename="../widgets/preferences_dialog.py" line="332" />
             <source>Inference</source>
             <translation>Çıkarım</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="333" />
+            <location filename="../widgets/preferences_dialog.py" line="335" />
             <source>Model resolution</source>
             <translation>Model çözünürlüğü</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="337" />
+            <location filename="../widgets/preferences_dialog.py" line="339" />
             <source>2048 — Full Quality</source>
             <translation>2048 - Tam Kalite</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="338" />
+            <location filename="../widgets/preferences_dialog.py" line="340" />
             <source>1024 — Faster, Less Detail</source>
             <translation>1024 - Daha Hızlı, Daha Az Detay</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="344" />
+            <location filename="../widgets/preferences_dialog.py" line="346" />
             <source>Resolution the model processes internally before upscaling to your frame size.
 Applies to all backends (CUDA, MPS, MLX, CPU).
 
@@ -2657,27 +2669,27 @@ UYARI: Apple Silicon üzerinde çok yavaştır (20 GB+ bellek gerektirir).
 Bu değişiklik motor yeniden yüklenmesi gerektirir (otomatik gerçekleşir).</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="359" />
+            <location filename="../widgets/preferences_dialog.py" line="361" />
             <source>Processing backend</source>
             <translation>İşleme backend'i</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="363" />
+            <location filename="../widgets/preferences_dialog.py" line="365" />
             <source>Auto — MLX if available, otherwise MPS</source>
             <translation>Otomatik: MLX varsa MLX, yoksa MPS</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="364" />
+            <location filename="../widgets/preferences_dialog.py" line="366" />
             <source>MLX — Apple Metal acceleration (recommended)</source>
             <translation>MLX: Apple Metal hızlandırma (önerilir)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="365" />
+            <location filename="../widgets/preferences_dialog.py" line="367" />
             <source>MPS — PyTorch Metal Performance Shaders</source>
             <translation>MPS: PyTorch Metal Performance Shaders</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="371" />
+            <location filename="../widgets/preferences_dialog.py" line="373" />
             <source>Choose the inference backend for Apple Silicon.
 
 MLX: Native Apple Metal — fastest on M1/M2/M3/M4.
@@ -2694,39 +2706,39 @@ Otomatik: MLX yüklüyse onu kullanır, yoksa MPS'e geçer.
 Bu değişiklik motor yeniden yüklenmesi gerektirir (otomatik gerçekleşir).</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="383" />
+            <location filename="../widgets/preferences_dialog.py" line="385" />
             <source>Playback</source>
             <translation>Oynatma</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="386" />
+            <location filename="../widgets/preferences_dialog.py" line="388" />
             <source>Loop playback within in/out range</source>
             <translation>Giriş/çıkış aralığında döngülü oynat</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="389" />
+            <location filename="../widgets/preferences_dialog.py" line="391" />
             <source>When enabled, playback loops back to the in-point
 after reaching the out-point (or start/end if no range).</source>
             <translation>Etkinleştirildiğinde, çıkış noktasına ulaşıldıktan sonra
 oynatma giriş noktasına döner (aralık yoksa başa/sona).</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="401" />
+            <location filename="../widgets/preferences_dialog.py" line="403" />
             <source>Tracking</source>
             <translation>Takip</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="404" />
+            <location filename="../widgets/preferences_dialog.py" line="406" />
             <source>SAM2 model</source>
             <translation>SAM2 modeli</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="410" />
+            <location filename="../widgets/preferences_dialog.py" line="412" />
             <source>%s  (%s)</source>
             <translation>%s  (%s)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="415" />
+            <location filename="../widgets/preferences_dialog.py" line="417" />
             <source>Fast: lower VRAM, lower quality.
 Base+: best default tradeoff for this app.
 Highest Quality: slowest, heaviest tracker.</source>
@@ -2735,32 +2747,32 @@ Base+: bu uygulama için en iyi varsayılan denge.
 En Yüksek Kalite: en yavaş, en ağır takip modeli.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="424" />
+            <location filename="../widgets/preferences_dialog.py" line="426" />
             <source>Models download automatically on first use. Download progress appears in the status bar.</source>
             <translation>Modeller ilk kullanımda otomatik olarak indirilir. İndirme ilerleme durumu çubuğunda görünür.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="432" />
+            <location filename="../widgets/preferences_dialog.py" line="434" />
             <source>Manage models</source>
             <translation>Modelleri yönet</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="444" />
+            <location filename="../widgets/preferences_dialog.py" line="446" />
             <source>Open Cache Folder</source>
             <translation>Önbellek Klasörünü Aç</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="453" />
+            <location filename="../widgets/preferences_dialog.py" line="455" />
             <source>Video Tools</source>
             <translation>Video Araçları</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="456" />
+            <location filename="../widgets/preferences_dialog.py" line="458" />
             <source>FFmpeg status</source>
             <translation>FFmpeg durumu</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="467" />
+            <location filename="../widgets/preferences_dialog.py" line="469" />
             <source>Windows: Repair downloads a bundled full FFmpeg build into tools/ffmpeg without changing your system install.
 macOS: Repair installs FFmpeg via Homebrew.
 Linux: Repair copies the install command to your clipboard.</source>
@@ -2769,14 +2781,14 @@ macOS: Onarım, FFmpeg'i Homebrew aracılığıyla yükler.
 Linux: Onarım, kurulum komutunu panonuza kopyalar.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="485" />
-            <location filename="../widgets/preferences_dialog.py" line="741" />
-            <location filename="../widgets/preferences_dialog.py" line="764" />
+            <location filename="../widgets/preferences_dialog.py" line="487" />
+            <location filename="../widgets/preferences_dialog.py" line="772" />
+            <location filename="../widgets/preferences_dialog.py" line="795" />
             <source>Repair FFmpeg</source>
             <translation>FFmpeg'i Onar</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="488" />
+            <location filename="../widgets/preferences_dialog.py" line="490" />
             <source>Windows: download and install a full bundled FFmpeg build into tools/ffmpeg, validate ffmpeg + ffprobe 7+, and switch CorridorKey to that local copy immediately.
 
 macOS: install FFmpeg via Homebrew and validate ffmpeg + ffprobe 7+.
@@ -2789,51 +2801,66 @@ macOS: Homebrew aracılığıyla FFmpeg yükleyin ve ffmpeg ile ffprobe 7+ doğr
 Linux: sistem paketlerini değiştirmeyin. CorridorKey tam kurulum komutlarını gösterir ve bunları panonuza kopyalar.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="502" />
+            <location filename="../widgets/preferences_dialog.py" line="504" />
             <source>Point CorridorKey at your own FFmpeg installation.
 Select the folder containing ffmpeg.exe and ffprobe.exe.</source>
             <translation>CorridorKey'i kendi FFmpeg kurulumunuza yönlendirin.
 ffmpeg.exe ve ffprobe.exe içeren klasörü seçin.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="509" />
+            <location filename="../widgets/preferences_dialog.py" line="511" />
             <source>Open FFmpeg Folder</source>
             <translation>FFmpeg Klasörünü Aç</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="512" />
+            <location filename="../widgets/preferences_dialog.py" line="514" />
             <source>Open CorridorKey's bundled FFmpeg folder.
 If Repair FFmpeg has been run on Windows, this is where the local full build is stored.</source>
             <translation>CorridorKey'in paketlenmiş FFmpeg klasörünü açın.
 Windows'ta FFmpeg Onar çalıştırıldıysa, yerel tam yapı burada saklanır.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="541" />
+            <location filename="../widgets/preferences_dialog.py" line="528" />
+            <source>Privacy</source>
+            <translation>Gizlilik</translation>
+        </message>
+        <message>
+            <location filename="../widgets/preferences_dialog.py" line="532" />
+            <source>Help improve EZ-CorridorKey: send crash reports automatically</source>
+            <translation>EZ-CorridorKey'i geliştirmeye yardımcı olun: çökme raporlarını otomatik gönderin</translation>
+        </message>
+        <message>
+            <location filename="../widgets/preferences_dialog.py" line="542" />
+            <source>Off by default. When enabled, crash details, GPU/driver info, and the app version are sent when the app hits an error. Never your media, files, or personal info. Takes effect on the next launch.</source>
+            <translation>Varsayılan olarak kapalıdır. Etkinleştirildiğinde, uygulama bir hatayla karşılaştığında çökme ayrıntıları, GPU/sürücü bilgileri ve uygulama sürümü gönderilir. Medyalarınız, dosyalarınız veya kişisel bilgileriniz asla gönderilmez. Sonraki başlatmada geçerli olur.</translation>
+        </message>
+        <message>
+            <location filename="../widgets/preferences_dialog.py" line="569" />
             <source>Cancel</source>
             <translation>İptal</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="545" />
+            <location filename="../widgets/preferences_dialog.py" line="573" />
             <source>OK</source>
             <translation>Tamam</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="622" />
+            <location filename="../widgets/preferences_dialog.py" line="653" />
             <source>Select Default Output Directory</source>
             <translation>Varsayılan Çıktı Klasörünü Seç</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="637" />
+            <location filename="../widgets/preferences_dialog.py" line="668" />
             <source>Select FFmpeg Folder (containing ffmpeg.exe and ffprobe.exe)</source>
             <translation>FFmpeg Klasörünü Seç (ffmpeg.exe ve ffprobe.exe içeren)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="660" />
+            <location filename="../widgets/preferences_dialog.py" line="691" />
             <source>FFmpeg Not Found</source>
             <translation>FFmpeg Bulunamadı</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="661" />
+            <location filename="../widgets/preferences_dialog.py" line="692" />
             <source>Could not find ffmpeg%s in:
 
 %s
@@ -2846,12 +2873,12 @@ Select the folder that contains ffmpeg.exe and ffprobe.exe (usually the 'bin' fo
 ffmpeg.exe ve ffprobe.exe içeren klasörü seçin (genellikle FFmpeg indirmesinin içindeki 'bin' klasörü).</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="670" />
+            <location filename="../widgets/preferences_dialog.py" line="701" />
             <source>FFprobe Missing</source>
             <translation>FFprobe Eksik</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="671" />
+            <location filename="../widgets/preferences_dialog.py" line="702" />
             <source>Found ffmpeg%s but ffprobe%s is missing from:
 
 %s
@@ -2864,22 +2891,22 @@ CorridorKey requires both. Download a full FFmpeg build.</source>
 CorridorKey ikisini de gerektirir. Tam bir FFmpeg yapısı indirin.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="684" />
+            <location filename="../widgets/preferences_dialog.py" line="715" />
             <source>FFmpeg Found</source>
             <translation>FFmpeg Bulundu</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="688" />
+            <location filename="../widgets/preferences_dialog.py" line="719" />
             <source>FFmpeg Issue</source>
             <translation>FFmpeg Sorunu</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="730" />
+            <location filename="../widgets/preferences_dialog.py" line="761" />
             <source>FFmpeg OK</source>
             <translation>FFmpeg Tamam</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="731" />
+            <location filename="../widgets/preferences_dialog.py" line="762" />
             <source>%s
 
 No repair is needed.</source>
@@ -2888,7 +2915,7 @@ No repair is needed.</source>
 Onarım gerekmiyor.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="743" />
+            <location filename="../widgets/preferences_dialog.py" line="774" />
             <source>
 
 The install command has been copied to your clipboard.
@@ -2898,7 +2925,7 @@ Kurulum komutu panonuza kopyalandı.
 Yüklemek için bir terminale yapıştırın.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="751" />
+            <location filename="../widgets/preferences_dialog.py" line="782" />
             <source>CorridorKey will download and install a full bundled FFmpeg build into:
 
 %s
@@ -2915,7 +2942,7 @@ Bu işlem sistem genelindeki FFmpeg'inizi değiştirmez.
 Devam edilsin mi?</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="757" />
+            <location filename="../widgets/preferences_dialog.py" line="788" />
             <source>CorridorKey will install FFmpeg via Homebrew:
 
     brew install ffmpeg
@@ -2928,22 +2955,22 @@ Continue?</source>
 Devam edilsin mi?</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="771" />
+            <location filename="../widgets/preferences_dialog.py" line="802" />
             <source>Preparing repair...</source>
             <translation>Onarım hazırlanıyor...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="774" />
+            <location filename="../widgets/preferences_dialog.py" line="805" />
             <source>Repairing FFmpeg...</source>
             <translation>FFmpeg onarılıyor...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="808" />
+            <location filename="../widgets/preferences_dialog.py" line="839" />
             <source>FFmpeg Repaired</source>
             <translation>FFmpeg Onarıldı</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="809" />
+            <location filename="../widgets/preferences_dialog.py" line="840" />
             <source>%s
 
 CorridorKey will use FFmpeg immediately.</source>
@@ -2952,7 +2979,7 @@ CorridorKey will use FFmpeg immediately.</source>
 CorridorKey, FFmpeg'i hemen kullanmaya başlayacak.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="816" />
+            <location filename="../widgets/preferences_dialog.py" line="847" />
             <source>FFmpeg Repair Failed</source>
             <translation>FFmpeg Onarımı Başarısız Oldu</translation>
         </message>
@@ -3166,54 +3193,64 @@ Diskten Sil: proje klasörünü kalıcı olarak siler.</translation>
     <context>
         <name>ReportIssueDialog</name>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="118" />
+            <location filename="../widgets/report_issue_dialog.py" line="120" />
             <source>Report Issue</source>
             <translation>Sorun Bildir</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="130" />
+            <location filename="../widgets/report_issue_dialog.py" line="133" />
             <source>Issue title:</source>
             <translation>Sorun başlığı:</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="132" />
+            <location filename="../widgets/report_issue_dialog.py" line="135" />
             <source>Brief summary of the problem</source>
             <translation>Sorunun kısa özeti</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="140" />
+            <location filename="../widgets/report_issue_dialog.py" line="143" />
             <source>What happened?</source>
             <translation>Ne oldu?</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="144" />
+            <location filename="../widgets/report_issue_dialog.py" line="147" />
             <source>Describe what you were doing and what went wrong.
 Steps to reproduce are very helpful.</source>
             <translation>Ne yaptığınızı ve neyin yanlış gittiğini açıklayın.
 Yeniden üretme adımları çok yardımcı olur.</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="156" />
+            <location filename="../widgets/report_issue_dialog.py" line="159" />
             <source>System info (auto-collected, included in report)</source>
             <translation>Sistem bilgisi (otomatik toplanan, rapora dahil)</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="171" />
+            <location filename="../widgets/report_issue_dialog.py" line="174" />
             <source>This will open GitHub in your browser. A free GitHub account is required to submit issues. Your report is also copied to the clipboard in case you need to paste it after logging in.</source>
             <translation>Bu işlem tarayıcınızda GitHub'ı açacak. Sorun bildirmek için ücretsiz bir GitHub hesabı gereklidir. Raporunuz, giriş yaptıktan sonra yapıştırmanız için panonuza da kopyalanır.</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="184" />
+            <location filename="../widgets/report_issue_dialog.py" line="185" />
+            <source>Also send this report directly to the developer</source>
+            <translation>Bu raporu ayrıca doğrudan geliştiriciye gönderin</translation>
+        </message>
+        <message>
+            <location filename="../widgets/report_issue_dialog.py" line="190" />
+            <source>Sends the report shown above: crash details, GPU/driver info, app version. Never your media, files, or personal info.</source>
+            <translation>Yukarıdaki raporu gönderir: çökme ayrıntıları, GPU/sürücü bilgileri, uygulama sürümü. Medyalarınız, dosyalarınız veya kişisel bilgileriniz asla gönderilmez.</translation>
+        </message>
+        <message>
+            <location filename="../widgets/report_issue_dialog.py" line="201" />
             <source>Cancel</source>
             <translation>İptal</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="188" />
+            <location filename="../widgets/report_issue_dialog.py" line="205" />
             <source>Open GitHub</source>
             <translation>GitHub'ı Aç</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="293" />
+            <location filename="../widgets/report_issue_dialog.py" line="328" />
             <source>Bug Report</source>
             <translation>Hata Raporu</translation>
         </message>
@@ -3258,47 +3295,57 @@ Optional models can be downloaded later from Edit → Download Manager.</source>
             <translation>Masaüstü kısayolu oluştur</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="775" />
+            <location filename="../widgets/setup_wizard.py" line="774" />
+            <source>Send anonymous crash reports to help troubleshooting</source>
+            <translation>Sorun gidermeye yardımcı olmak için anonim çökme raporları gönderin</translation>
+        </message>
+        <message>
+            <location filename="../widgets/setup_wizard.py" line="780" />
+            <source>Crash details, GPU/driver info, app version. Never your media, files, or personal info. Change anytime in Preferences &gt; Privacy.</source>
+            <translation>Çökme ayrıntıları, GPU/sürücü bilgileri, uygulama sürümü. Medyalarınız, dosyalarınız veya kişisel bilgileriniz asla gönderilmez. Tercihler &gt; Gizlilik bölümünden istediğiniz zaman değiştirebilirsiniz.</translation>
+        </message>
+        <message>
+            <location filename="../widgets/setup_wizard.py" line="803" />
             <source>Cancel &amp;&amp; Exit</source>
             <translation>İptal &amp;&amp; Çık</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="786" />
+            <location filename="../widgets/setup_wizard.py" line="814" />
             <source>Download &amp;&amp; Install</source>
             <translation>İndir &amp;&amp; Kur</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="832" />
+            <location filename="../widgets/setup_wizard.py" line="860" />
             <source>Choose Install Location</source>
             <translation>Kurulum Konumunu Seç</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="846" />
+            <location filename="../widgets/setup_wizard.py" line="874" />
             <source>Cancelling...</source>
             <translation>İptal ediliyor...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="872" />
+            <location filename="../widgets/setup_wizard.py" line="911" />
             <source>Preparing downloads (0/%d)...</source>
             <translation>İndirmeler hazırlanıyor (0/%d)...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="887" />
+            <location filename="../widgets/setup_wizard.py" line="926" />
             <source>Downloading %d/%d: %s...</source>
             <translation>İndiriliyor %d/%d: %s...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="913" />
+            <location filename="../widgets/setup_wizard.py" line="952" />
             <source>All %d downloads complete!</source>
             <translation>Tüm indirmeler (%d) tamamlandı!</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="917" />
+            <location filename="../widgets/setup_wizard.py" line="956" />
             <source>Some downloads failed. You can retry from Edit → Download Manager.</source>
             <translation>Bazı indirmeler başarısız oldu. Düzenle → İndirme Yöneticisi'nden yeniden deneyebilirsiniz.</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="925" />
+            <location filename="../widgets/setup_wizard.py" line="964" />
             <source>Continue</source>
             <translation>Devam Et</translation>
         </message>
@@ -3319,17 +3366,17 @@ Optional models can be downloaded later from Edit → Download Manager.</source>
     <context>
         <name>StartupDiagnosticDialog</name>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="159" />
+            <location filename="../widgets/diagnostic_dialog.py" line="166" />
             <source>Startup Diagnostics</source>
             <translation>Başlangıç Tanılaması</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="169" />
+            <location filename="../widgets/diagnostic_dialog.py" line="176" />
             <source>EZ-CorridorKey detected issues with your environment that may prevent some features from working correctly.</source>
             <translation>EZ-CorridorKey, bazı özelliklerin düzgün çalışmasını engelleyebilecek ortam sorunları tespit etti.</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="197" />
+            <location filename="../widgets/diagnostic_dialog.py" line="212" />
             <source>Continue Anyway</source>
             <translation>Yine de Devam Et</translation>
         </message>

@@ -6,6 +6,24 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [2.1.4] - 2026-07-11 - Reliable video imports, verified FFmpeg builds, optional error reporting
+
+> 2.1.4 ships as a Windows in-app auto-update. No new full installer this release; existing Windows apps update in place.
+
+### Fixed
+
+- **AI alpha generation no longer fails with "failed to read frame" on freshly imported clips.** Defective FFmpeg builds installed by the Repair FFmpeg button in earlier versions could write corrupt, unreadable frames during import when NVIDIA hardware decoding was active. Repair FFmpeg now installs a pinned, verified build, and the app warns at startup when a known-bad or nightly FFmpeg build is detected so you can repair it in one click. ([#184](https://github.com/edenaion/EZ-CorridorKey/issues/184))
+- **Every import is now integrity-checked.** Each extracted frame is verified readable; if corruption is detected the import automatically re-runs in a safe mode and only completes when every frame checks out.
+- **Extraction failures are visible.** Failed imports show a dialog with fix steps instead of a stuck "Extracting frames..." viewer, and the RUN EXTRACTION button retries failed clips instead of doing nothing.
+- **4K imports no longer fail on memory-constrained machines.** Frame encoding now adapts its memory use to what the machine has free, and a genuine out-of-memory condition reports a clear message instead of a raw codec error.
+
+### Added
+
+- **Optional direct error reports.** The Report Issue dialog can now also send the diagnostic summary you already see straight to the developer, controlled by a visible checkbox. The GitHub flow is unchanged.
+- **Optional automatic crash reporting, off by default.** New users are asked once during setup; everyone can change it anytime in Preferences > Privacy. Nothing is ever sent unless you turn it on or file a report yourself, paths are anonymized, and media file names are never included. The README has a new Privacy section documenting exactly this.
+
+---
+
 ## [2.1.3] - 2026-07-09 - AI alpha fix for non-ASCII user folders, installer repairs
 
 > 2.1.3 ships as a Windows in-app auto-update. No new full installer this release; existing Windows apps update in place.
