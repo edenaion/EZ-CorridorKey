@@ -430,17 +430,17 @@ MatAnyone2: Einzelbild-Matting mit Maskenführung.</translation>
             <translation>Diagnose: %s</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="108" />
+            <location filename="../widgets/diagnostic_dialog.py" line="115" />
             <source>Error: %s</source>
             <translation>Fehler: %s</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="122" />
+            <location filename="../widgets/diagnostic_dialog.py" line="129" />
             <source>Report Issue on GitHub</source>
             <translation>Problem auf GitHub melden</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="129" />
+            <location filename="../widgets/diagnostic_dialog.py" line="136" />
             <source>OK</source>
             <translation>OK</translation>
         </message>
@@ -913,12 +913,12 @@ Trotzdem neu zuweisen? Die konflikthafte Belegung wird entfernt.</translation>
     <context>
         <name>MainWindow</name>
         <message>
-            <location filename="../main_window.py" line="291" />
+            <location filename="../main_window.py" line="292" />
             <source>%s — Mac Performance Warning</source>
             <translation>%s – Mac-Leistungswarnung</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="293" />
+            <location filename="../main_window.py" line="294" />
             <source>GPU-intensive features (SAM2, GVM, VideoMaMa, MatAnyone2) are very slow on Mac (Apple Silicon MPS).
 
 This may take hours for longer clips and could freeze your system.
@@ -935,47 +935,47 @@ Empfehlung: Importieren Sie stattdessen fertige Alpha-Mattes aus After Effects, 
 Trotzdem fortfahren? (Diese Warnung erscheint in dieser Sitzung nicht erneut.)</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="311" />
+            <location filename="../main_window.py" line="312" />
             <source>EZ-CorridorKey</source>
             <translation>EZ-CorridorKey</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="469" />
+            <location filename="../main_window.py" line="470" />
             <source>Detected GPU used for inference</source>
             <translation>Erkannte GPU für Inferenz</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="472" />
+            <location filename="../main_window.py" line="473" />
             <source>VRAM</source>
             <translation>VRAM</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="483" />
+            <location filename="../main_window.py" line="484" />
             <source>GPU video memory usage — updates during inference</source>
             <translation>GPU-Videospeicher-Auslastung – wird während der Inferenz aktualisiert</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="489" />
+            <location filename="../main_window.py" line="490" />
             <source>Current VRAM used / total available</source>
             <translation>Aktuell genutzter VRAM / insgesamt verfügbar</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="681" />
+            <location filename="../main_window.py" line="682" />
             <source>No GPU</source>
             <translation>Keine GPU</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="688" />
+            <location filename="../main_window.py" line="689" />
             <source>Memory</source>
             <translation>Speicher</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="689" />
+            <location filename="../main_window.py" line="690" />
             <source>Unified memory usage — CPU and GPU share the same pool</source>
             <translation>Gemeinsamer Speicher – CPU und GPU teilen sich denselben Speicher</translation>
         </message>
         <message>
-            <location filename="../main_window.py" line="690" />
+            <location filename="../main_window.py" line="691" />
             <source>Current unified memory used / total available</source>
             <translation>Aktuell genutzter gemeinsamer Speicher / insgesamt verfügbar</translation>
         </message>
@@ -1861,6 +1861,18 @@ Der Quellordner enthält insgesamt %d Bild(er).</translation>
             <source>Alpha</source>
             <translation>Alpha</translation>
         </message>
+        <message>
+            <source>Extraction Failed</source>
+            <translation>Extraktion fehlgeschlagen</translation>
+        </message>
+        <message>
+            <source>Frame extraction failed for '%s':
+
+%s</source>
+            <translation>Frame-Extraktion für '%s' fehlgeschlagen:
+
+%s</translation>
+        </message>
     </context>
     <context>
         <name>ParameterPanel</name>
@@ -2462,32 +2474,32 @@ Derzeit nur CUDA. Auf Apple Silicon nicht unterstützt.</translation>
     <context>
         <name>PreferencesDialog</name>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="154" />
+            <location filename="../widgets/preferences_dialog.py" line="156" />
             <source>Preferences</source>
             <translation>Einstellungen</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="187" />
+            <location filename="../widgets/preferences_dialog.py" line="189" />
             <source>User Interface</source>
             <translation>Benutzeroberfläche</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="206" />
+            <location filename="../widgets/preferences_dialog.py" line="208" />
             <source>Select display language. Applies immediately.</source>
             <translation>Anzeigesprache auswählen. Gilt sofort.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="210" />
+            <location filename="../widgets/preferences_dialog.py" line="212" />
             <source>Show tooltips on controls</source>
             <translation>Tooltips auf Bedienelementen anzeigen</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="216" />
+            <location filename="../widgets/preferences_dialog.py" line="218" />
             <source>UI sounds</source>
             <translation>UI-Sounds</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="192" />
+            <location filename="../widgets/preferences_dialog.py" line="194" />
             <source>Language</source>
             <translation>Sprache</translation>
         </message>
@@ -2500,29 +2512,29 @@ Derzeit nur CUDA. Auf Apple Silicon nicht unterstützt.</translation>
             <translation type="vanished">Anzeigesprache auswählen. Neustart zum Übernehmen erforderlich.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="222" />
+            <location filename="../widgets/preferences_dialog.py" line="224" />
             <source>Show update notifications</source>
             <translation>Update-Benachrichtigungen anzeigen</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="225" />
+            <location filename="../widgets/preferences_dialog.py" line="227" />
             <source>When enabled, an Update Available button appears when a newer
 release exists. Turn off to never check for or show updates.</source>
             <translation>Wenn aktiviert, erscheint eine Schaltfläche „Update Available“, sobald eine neuere
 Version verfügbar ist. Deaktivieren, um nie nach Updates zu suchen oder sie anzuzeigen.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="237" />
+            <location filename="../widgets/preferences_dialog.py" line="239" />
             <source>Project</source>
             <translation>Projekt</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="240" />
+            <location filename="../widgets/preferences_dialog.py" line="242" />
             <source>Copy source videos into project folder</source>
             <translation>Quellvideos in Projektordner kopieren</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="243" />
+            <location filename="../widgets/preferences_dialog.py" line="245" />
             <source>When enabled, imported videos are copied into the project folder.
 When disabled, the project references the original file in place.
 
@@ -2533,12 +2545,12 @@ Wenn deaktiviert, verweist das Projekt auf die Originaldatei am Speicherort.
 Hinweis: Das Löschen eines Projekts berührt niemals die originale Quelldatei.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="253" />
+            <location filename="../widgets/preferences_dialog.py" line="255" />
             <source>Copy imported image sequences into project folder</source>
             <translation>Importierte Bildsequenzen in Projektordner kopieren</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="256" />
+            <location filename="../widgets/preferences_dialog.py" line="258" />
             <source>When enabled, imported image sequence files are copied into the project.
 When disabled (default), the project references the original files in place.
 
@@ -2551,17 +2563,17 @@ Verweise sparen Festplattenspeicher bei großen EXR/TIF-Sequenzen.
 Originaldateien werden unabhängig von dieser Einstellung nie geändert.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="270" />
+            <location filename="../widgets/preferences_dialog.py" line="272" />
             <source>Output</source>
             <translation>Ausgabe</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="273" />
+            <location filename="../widgets/preferences_dialog.py" line="275" />
             <source>EXR compression</source>
             <translation>EXR-Komprimierung</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="284" />
+            <location filename="../widgets/preferences_dialog.py" line="286" />
             <source>Compression used when writing EXR output files.
 
 DWAB: Lossy wavelet, smallest files. Default.
@@ -2576,17 +2588,17 @@ ZIP: Verlustfreies Deflate, gut für saubere Renderings.
 None: Keine Komprimierung, schnellstes Schreiben, größte Dateien.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="294" />
+            <location filename="../widgets/preferences_dialog.py" line="296" />
             <source>Default output directory</source>
             <translation>Standardmäßiges Ausgabeverzeichnis</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="300" />
+            <location filename="../widgets/preferences_dialog.py" line="302" />
             <source>Default (inside project)</source>
             <translation>Standard (im Projekt)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="306" />
+            <location filename="../widgets/preferences_dialog.py" line="308" />
             <source>Global default directory for inference output.
 
 When set, outputs go to:
@@ -2603,38 +2615,38 @@ Leer lassen, um den Standard zu verwenden (Output/ innerhalb jedes Clips).
 Clip-spezifische Überschreibungen (Rechtsklick → Ausgabeverzeichnis festlegen) haben Vorrang.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="315" />
-            <location filename="../widgets/preferences_dialog.py" line="499" />
+            <location filename="../widgets/preferences_dialog.py" line="317" />
+            <location filename="../widgets/preferences_dialog.py" line="501" />
             <source>Browse...</source>
             <translation>Durchsuchen...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="320" />
+            <location filename="../widgets/preferences_dialog.py" line="322" />
             <source>Clear</source>
             <translation>Leeren</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="330" />
+            <location filename="../widgets/preferences_dialog.py" line="332" />
             <source>Inference</source>
             <translation>Inferenz</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="333" />
+            <location filename="../widgets/preferences_dialog.py" line="335" />
             <source>Model resolution</source>
             <translation>Modellauflösung</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="337" />
+            <location filename="../widgets/preferences_dialog.py" line="339" />
             <source>2048 — Full Quality</source>
             <translation>2048 – Volle Qualität</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="338" />
+            <location filename="../widgets/preferences_dialog.py" line="340" />
             <source>1024 — Faster, Less Detail</source>
             <translation>1024 – Schneller, weniger Detail</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="344" />
+            <location filename="../widgets/preferences_dialog.py" line="346" />
             <source>Resolution the model processes internally before upscaling to your frame size.
 Applies to all backends (CUDA, MPS, MLX, CPU).
 
@@ -2659,27 +2671,27 @@ Feine Haardetails können verloren gehen. Empfohlen für Apple Silicon / GPUs mi
 Eine Änderung erfordert ein Neuladen der Engine (geschieht automatisch).</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="359" />
+            <location filename="../widgets/preferences_dialog.py" line="361" />
             <source>Processing backend</source>
             <translation>Verarbeitungs-Backend</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="363" />
+            <location filename="../widgets/preferences_dialog.py" line="365" />
             <source>Auto — MLX if available, otherwise MPS</source>
             <translation>Auto – MLX falls verfügbar, sonst MPS</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="364" />
+            <location filename="../widgets/preferences_dialog.py" line="366" />
             <source>MLX — Apple Metal acceleration (recommended)</source>
             <translation>MLX – Apple Metal-Beschleunigung (empfohlen)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="365" />
+            <location filename="../widgets/preferences_dialog.py" line="367" />
             <source>MPS — PyTorch Metal Performance Shaders</source>
             <translation>MPS – PyTorch Metal Performance Shaders</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="371" />
+            <location filename="../widgets/preferences_dialog.py" line="373" />
             <source>Choose the inference backend for Apple Silicon.
 
 MLX: Native Apple Metal — fastest on M1/M2/M3/M4.
@@ -2696,39 +2708,39 @@ Auto: Verwendet MLX falls installiert, sonst Fallback auf MPS.
 Eine Änderung erfordert ein Neuladen der Engine (geschieht automatisch).</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="383" />
+            <location filename="../widgets/preferences_dialog.py" line="385" />
             <source>Playback</source>
             <translation>Wiedergabe</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="386" />
+            <location filename="../widgets/preferences_dialog.py" line="388" />
             <source>Loop playback within in/out range</source>
             <translation>Wiedergabe innerhalb des In-/Out-Bereichs wiederholen</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="389" />
+            <location filename="../widgets/preferences_dialog.py" line="391" />
             <source>When enabled, playback loops back to the in-point
 after reaching the out-point (or start/end if no range).</source>
             <translation>Wenn aktiviert, springt die Wiedergabe nach Erreichen des Out-Punkts
 zum In-Punkt zurück (oder zum Anfang/Ende wenn kein Bereich gesetzt).</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="401" />
+            <location filename="../widgets/preferences_dialog.py" line="403" />
             <source>Tracking</source>
             <translation>Tracking</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="404" />
+            <location filename="../widgets/preferences_dialog.py" line="406" />
             <source>SAM2 model</source>
             <translation>SAM2-Modell</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="410" />
+            <location filename="../widgets/preferences_dialog.py" line="412" />
             <source>%s  (%s)</source>
             <translation>%s  (%s)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="415" />
+            <location filename="../widgets/preferences_dialog.py" line="417" />
             <source>Fast: lower VRAM, lower quality.
 Base+: best default tradeoff for this app.
 Highest Quality: slowest, heaviest tracker.</source>
@@ -2737,32 +2749,32 @@ Base+: bester Standard-Kompromiss für diese App.
 Highest Quality: langsamster, schwerster Tracker.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="424" />
+            <location filename="../widgets/preferences_dialog.py" line="426" />
             <source>Models download automatically on first use. Download progress appears in the status bar.</source>
             <translation>Modelle werden beim ersten Einsatz automatisch heruntergeladen. Der Download-Fortschritt wird in der Statusleiste angezeigt.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="432" />
+            <location filename="../widgets/preferences_dialog.py" line="434" />
             <source>Manage models</source>
             <translation>Modelle verwalten</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="444" />
+            <location filename="../widgets/preferences_dialog.py" line="446" />
             <source>Open Cache Folder</source>
             <translation>Cache-Ordner öffnen</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="453" />
+            <location filename="../widgets/preferences_dialog.py" line="455" />
             <source>Video Tools</source>
             <translation>Video-Tools</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="456" />
+            <location filename="../widgets/preferences_dialog.py" line="458" />
             <source>FFmpeg status</source>
             <translation>FFmpeg-Status</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="467" />
+            <location filename="../widgets/preferences_dialog.py" line="469" />
             <source>Windows: Repair downloads a bundled full FFmpeg build into tools/ffmpeg without changing your system install.
 macOS: Repair installs FFmpeg via Homebrew.
 Linux: Repair copies the install command to your clipboard.</source>
@@ -2771,14 +2783,14 @@ macOS: Reparieren installiert FFmpeg über Homebrew.
 Linux: Reparieren kopiert den Installationsbefehl in Ihre Zwischenablage.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="485" />
-            <location filename="../widgets/preferences_dialog.py" line="741" />
-            <location filename="../widgets/preferences_dialog.py" line="764" />
+            <location filename="../widgets/preferences_dialog.py" line="487" />
+            <location filename="../widgets/preferences_dialog.py" line="772" />
+            <location filename="../widgets/preferences_dialog.py" line="795" />
             <source>Repair FFmpeg</source>
             <translation>FFmpeg reparieren</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="488" />
+            <location filename="../widgets/preferences_dialog.py" line="490" />
             <source>Windows: download and install a full bundled FFmpeg build into tools/ffmpeg, validate ffmpeg + ffprobe 7+, and switch CorridorKey to that local copy immediately.
 
 macOS: install FFmpeg via Homebrew and validate ffmpeg + ffprobe 7+.
@@ -2791,51 +2803,66 @@ macOS: FFmpeg über Homebrew installieren und ffmpeg + ffprobe 7+ validieren.
 Linux: Keine Systempakete ändern. CorridorKey zeigt die genauen Installationsbefehle an und kopiert sie in Ihre Zwischenablage.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="502" />
+            <location filename="../widgets/preferences_dialog.py" line="504" />
             <source>Point CorridorKey at your own FFmpeg installation.
 Select the folder containing ffmpeg.exe and ffprobe.exe.</source>
             <translation>CorridorKey auf Ihre eigene FFmpeg-Installation hinweisen.
 Ordner auswählen, der ffmpeg.exe und ffprobe.exe enthält.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="509" />
+            <location filename="../widgets/preferences_dialog.py" line="511" />
             <source>Open FFmpeg Folder</source>
             <translation>FFmpeg-Ordner öffnen</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="512" />
+            <location filename="../widgets/preferences_dialog.py" line="514" />
             <source>Open CorridorKey's bundled FFmpeg folder.
 If Repair FFmpeg has been run on Windows, this is where the local full build is stored.</source>
             <translation>CorridorKeys gebündelten FFmpeg-Ordner öffnen.
 Wenn FFmpeg reparieren unter Windows ausgeführt wurde, ist hier der lokale vollständige Build gespeichert.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="541" />
+            <location filename="../widgets/preferences_dialog.py" line="528" />
+            <source>Privacy</source>
+            <translation>Datenschutz</translation>
+        </message>
+        <message>
+            <location filename="../widgets/preferences_dialog.py" line="532" />
+            <source>Help improve EZ-CorridorKey: send crash reports automatically</source>
+            <translation>EZ-CorridorKey verbessern: Absturzberichte automatisch senden</translation>
+        </message>
+        <message>
+            <location filename="../widgets/preferences_dialog.py" line="542" />
+            <source>Off by default. When enabled, crash details, GPU/driver info, and the app version are sent when the app hits an error. Never your media, files, or personal info. Takes effect on the next launch.</source>
+            <translation>Standardmäßig deaktiviert. Wenn aktiviert, werden Absturzdetails, GPU/Treiber-Informationen und die App-Version bei einem Fehler übermittelt. Niemals Ihre Medien, Dateien oder persönlichen Daten. Gilt ab dem nächsten Start.</translation>
+        </message>
+        <message>
+            <location filename="../widgets/preferences_dialog.py" line="569" />
             <source>Cancel</source>
             <translation>Abbrechen</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="545" />
+            <location filename="../widgets/preferences_dialog.py" line="573" />
             <source>OK</source>
             <translation>OK</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="622" />
+            <location filename="../widgets/preferences_dialog.py" line="653" />
             <source>Select Default Output Directory</source>
             <translation>Standardmäßiges Ausgabeverzeichnis auswählen</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="637" />
+            <location filename="../widgets/preferences_dialog.py" line="668" />
             <source>Select FFmpeg Folder (containing ffmpeg.exe and ffprobe.exe)</source>
             <translation>FFmpeg-Ordner auswählen (mit ffmpeg.exe und ffprobe.exe)</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="660" />
+            <location filename="../widgets/preferences_dialog.py" line="691" />
             <source>FFmpeg Not Found</source>
             <translation>FFmpeg nicht gefunden</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="661" />
+            <location filename="../widgets/preferences_dialog.py" line="692" />
             <source>Could not find ffmpeg%s in:
 
 %s
@@ -2848,12 +2875,12 @@ Select the folder that contains ffmpeg.exe and ffprobe.exe (usually the 'bin' fo
 Wählen Sie den Ordner aus, der ffmpeg.exe und ffprobe.exe enthält (normalerweise der Ordner 'bin' im FFmpeg-Download).</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="670" />
+            <location filename="../widgets/preferences_dialog.py" line="701" />
             <source>FFprobe Missing</source>
             <translation>FFprobe fehlt</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="671" />
+            <location filename="../widgets/preferences_dialog.py" line="702" />
             <source>Found ffmpeg%s but ffprobe%s is missing from:
 
 %s
@@ -2866,22 +2893,22 @@ CorridorKey requires both. Download a full FFmpeg build.</source>
 CorridorKey benötigt beide. Laden Sie einen vollständigen FFmpeg-Build herunter.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="684" />
+            <location filename="../widgets/preferences_dialog.py" line="715" />
             <source>FFmpeg Found</source>
             <translation>FFmpeg gefunden</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="688" />
+            <location filename="../widgets/preferences_dialog.py" line="719" />
             <source>FFmpeg Issue</source>
             <translation>FFmpeg-Problem</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="730" />
+            <location filename="../widgets/preferences_dialog.py" line="761" />
             <source>FFmpeg OK</source>
             <translation>FFmpeg OK</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="731" />
+            <location filename="../widgets/preferences_dialog.py" line="762" />
             <source>%s
 
 No repair is needed.</source>
@@ -2890,7 +2917,7 @@ No repair is needed.</source>
 Keine Reparatur erforderlich.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="743" />
+            <location filename="../widgets/preferences_dialog.py" line="774" />
             <source>
 
 The install command has been copied to your clipboard.
@@ -2900,7 +2927,7 @@ Der Installationsbefehl wurde in Ihre Zwischenablage kopiert.
 Fügen Sie ihn in ein Terminal ein, um die Installation durchzuführen.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="751" />
+            <location filename="../widgets/preferences_dialog.py" line="782" />
             <source>CorridorKey will download and install a full bundled FFmpeg build into:
 
 %s
@@ -2917,7 +2944,7 @@ Dadurch wird Ihr systemweites FFmpeg nicht geändert.
 Fortfahren?</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="757" />
+            <location filename="../widgets/preferences_dialog.py" line="788" />
             <source>CorridorKey will install FFmpeg via Homebrew:
 
     brew install ffmpeg
@@ -2930,22 +2957,22 @@ Continue?</source>
 Fortfahren?</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="771" />
+            <location filename="../widgets/preferences_dialog.py" line="802" />
             <source>Preparing repair...</source>
             <translation>Reparatur wird vorbereitet...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="774" />
+            <location filename="../widgets/preferences_dialog.py" line="805" />
             <source>Repairing FFmpeg...</source>
             <translation>FFmpeg wird repariert...</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="808" />
+            <location filename="../widgets/preferences_dialog.py" line="839" />
             <source>FFmpeg Repaired</source>
             <translation>FFmpeg repariert</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="809" />
+            <location filename="../widgets/preferences_dialog.py" line="840" />
             <source>%s
 
 CorridorKey will use FFmpeg immediately.</source>
@@ -2954,7 +2981,7 @@ CorridorKey will use FFmpeg immediately.</source>
 CorridorKey verwendet FFmpeg ab sofort.</translation>
         </message>
         <message>
-            <location filename="../widgets/preferences_dialog.py" line="816" />
+            <location filename="../widgets/preferences_dialog.py" line="847" />
             <source>FFmpeg Repair Failed</source>
             <translation>FFmpeg-Reparatur fehlgeschlagen</translation>
         </message>
@@ -3168,54 +3195,64 @@ Von Festplatte löschen: löscht den Projektordner dauerhaft.</translation>
     <context>
         <name>ReportIssueDialog</name>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="118" />
+            <location filename="../widgets/report_issue_dialog.py" line="120" />
             <source>Report Issue</source>
             <translation>Problem melden</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="130" />
+            <location filename="../widgets/report_issue_dialog.py" line="133" />
             <source>Issue title:</source>
             <translation>Problemtitel:</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="132" />
+            <location filename="../widgets/report_issue_dialog.py" line="135" />
             <source>Brief summary of the problem</source>
             <translation>Kurze Zusammenfassung des Problems</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="140" />
+            <location filename="../widgets/report_issue_dialog.py" line="143" />
             <source>What happened?</source>
             <translation>Was ist passiert?</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="144" />
+            <location filename="../widgets/report_issue_dialog.py" line="147" />
             <source>Describe what you were doing and what went wrong.
 Steps to reproduce are very helpful.</source>
             <translation>Beschreiben Sie, was Sie getan haben und was schiefgelaufen ist.
 Schritte zur Reproduktion sind sehr hilfreich.</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="156" />
+            <location filename="../widgets/report_issue_dialog.py" line="159" />
             <source>System info (auto-collected, included in report)</source>
             <translation>Systeminformationen (automatisch gesammelt, im Bericht enthalten)</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="171" />
+            <location filename="../widgets/report_issue_dialog.py" line="174" />
             <source>This will open GitHub in your browser. A free GitHub account is required to submit issues. Your report is also copied to the clipboard in case you need to paste it after logging in.</source>
             <translation>Dies öffnet GitHub in Ihrem Browser. Für das Einreichen von Problemen ist ein kostenloses GitHub-Konto erforderlich. Ihr Bericht wird auch in die Zwischenablage kopiert, falls Sie ihn nach dem Einloggen einfügen müssen.</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="184" />
+            <location filename="../widgets/report_issue_dialog.py" line="185" />
+            <source>Also send this report directly to the developer</source>
+            <translation>Diesen Bericht auch direkt an den Entwickler senden</translation>
+        </message>
+        <message>
+            <location filename="../widgets/report_issue_dialog.py" line="190" />
+            <source>Sends the report shown above: crash details, GPU/driver info, app version. Never your media, files, or personal info.</source>
+            <translation>Sendet den oben angezeigten Bericht: Absturzdetails, GPU/Treiber-Informationen, App-Version. Niemals Ihre Medien, Dateien oder persönlichen Daten.</translation>
+        </message>
+        <message>
+            <location filename="../widgets/report_issue_dialog.py" line="201" />
             <source>Cancel</source>
             <translation>Abbrechen</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="188" />
+            <location filename="../widgets/report_issue_dialog.py" line="205" />
             <source>Open GitHub</source>
             <translation>GitHub öffnen</translation>
         </message>
         <message>
-            <location filename="../widgets/report_issue_dialog.py" line="293" />
+            <location filename="../widgets/report_issue_dialog.py" line="328" />
             <source>Bug Report</source>
             <translation>Fehlerbericht</translation>
         </message>
@@ -3260,47 +3297,57 @@ Optionale Modelle können später über Bearbeiten → Download-Manager herunter
             <translation>Desktop-Verknüpfung erstellen</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="775" />
+            <location filename="../widgets/setup_wizard.py" line="774" />
+            <source>Send anonymous crash reports to help troubleshooting</source>
+            <translation>Anonyme Absturzberichte zur Fehlerdiagnose senden</translation>
+        </message>
+        <message>
+            <location filename="../widgets/setup_wizard.py" line="780" />
+            <source>Crash details, GPU/driver info, app version. Never your media, files, or personal info. Change anytime in Preferences &gt; Privacy.</source>
+            <translation>Absturzdetails, GPU/Treiber-Informationen, App-Version. Niemals Ihre Medien, Dateien oder persönlichen Daten. Jederzeit änderbar unter Einstellungen &gt; Datenschutz.</translation>
+        </message>
+        <message>
+            <location filename="../widgets/setup_wizard.py" line="803" />
             <source>Cancel &amp;&amp; Exit</source>
             <translation>Abbrechen &amp;&amp; Beenden</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="786" />
+            <location filename="../widgets/setup_wizard.py" line="814" />
             <source>Download &amp;&amp; Install</source>
             <translation>Herunterladen &amp;&amp; Installieren</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="832" />
+            <location filename="../widgets/setup_wizard.py" line="860" />
             <source>Choose Install Location</source>
             <translation>Installationsort auswählen</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="846" />
+            <location filename="../widgets/setup_wizard.py" line="874" />
             <source>Cancelling...</source>
             <translation>Wird abgebrochen...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="872" />
+            <location filename="../widgets/setup_wizard.py" line="911" />
             <source>Preparing downloads (0/%d)...</source>
             <translation>Downloads werden vorbereitet (0/%d)...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="887" />
+            <location filename="../widgets/setup_wizard.py" line="926" />
             <source>Downloading %d/%d: %s...</source>
             <translation>%d/%d wird heruntergeladen: %s...</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="913" />
+            <location filename="../widgets/setup_wizard.py" line="952" />
             <source>All %d downloads complete!</source>
             <translation>Alle %d Downloads abgeschlossen!</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="917" />
+            <location filename="../widgets/setup_wizard.py" line="956" />
             <source>Some downloads failed. You can retry from Edit → Download Manager.</source>
             <translation>Einige Downloads sind fehlgeschlagen. Sie können es über Bearbeiten → Download-Manager erneut versuchen.</translation>
         </message>
         <message>
-            <location filename="../widgets/setup_wizard.py" line="925" />
+            <location filename="../widgets/setup_wizard.py" line="964" />
             <source>Continue</source>
             <translation>Weiter</translation>
         </message>
@@ -3321,17 +3368,17 @@ Optionale Modelle können später über Bearbeiten → Download-Manager herunter
     <context>
         <name>StartupDiagnosticDialog</name>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="159" />
+            <location filename="../widgets/diagnostic_dialog.py" line="166" />
             <source>Startup Diagnostics</source>
             <translation>Start-Diagnose</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="169" />
+            <location filename="../widgets/diagnostic_dialog.py" line="176" />
             <source>EZ-CorridorKey detected issues with your environment that may prevent some features from working correctly.</source>
             <translation>EZ-CorridorKey hat Probleme mit Ihrer Umgebung erkannt, die einige Funktionen möglicherweise am ordnungsgemäßen Betrieb hindern.</translation>
         </message>
         <message>
-            <location filename="../widgets/diagnostic_dialog.py" line="197" />
+            <location filename="../widgets/diagnostic_dialog.py" line="212" />
             <source>Continue Anyway</source>
             <translation>Trotzdem fortfahren</translation>
         </message>
