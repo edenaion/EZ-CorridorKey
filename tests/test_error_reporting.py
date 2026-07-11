@@ -151,7 +151,6 @@ class _FakeScope:
         self.user = None
         self.tags = {}
         self.extras = {}
-        self.captured = []
 
     def set_user(self, u):
         self.user = u
@@ -162,21 +161,24 @@ class _FakeScope:
     def set_extra(self, k, v):
         self.extras[k] = v
 
-    def capture_exception(self, e):
-        self.captured.append(("exception", e))
-
-    def capture_message(self, m, level=None):
-        self.captured.append(("message", m, level))
-
 
 class _FakeClient:
     instances = []
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
+        self.options = kwargs
         self.flushed = None
         self.closed = False
+        self.captured = []
         _FakeClient.instances.append(self)
+
+    def capture_event(self, event, hint=None, scope=None):
+        # Mirrors the real contract: events send ONLY through the client
+        # they were built for. Scope.capture_* resolves the global client
+        # and must not be used by send_report.
+        self.captured.append((event, hint, scope))
+        return "event-id"
 
     def flush(self, timeout=None):
         self.flushed = timeout
@@ -195,8 +197,17 @@ class TestSendReport:
             scopes.append(s)
             return s
 
-        fake = types.SimpleNamespace(Client=_FakeClient, Scope=make_scope)
+        utils = types.SimpleNamespace(
+            event_from_exception=lambda exc, client_options=None: (
+                {"exception": {"values": [{"value": str(exc)}]},
+                 "level": "error"},
+                {"exc_info": exc},
+            ),
+        )
+        fake = types.SimpleNamespace(
+            Client=_FakeClient, Scope=make_scope, utils=utils)
         monkeypatch.setitem(sys.modules, "sentry_sdk", fake)
+        monkeypatch.setitem(sys.modules, "sentry_sdk.utils", utils)
         return scopes
 
     def test_send_uses_isolated_client_and_hygiene_kwargs(self, monkeypatch):
@@ -214,21 +225,26 @@ class TestSendReport:
         assert kw["max_breadcrumbs"] == 0
         assert client.flushed == 5.0
         assert client.closed
-        scope = scopes[0]
-        assert scope.captured[0][0] == "message"
-        assert "bad thing" in scope.captured[0][1]
+        # Event must go through THIS client, carrying the prepared scope
+        assert len(client.captured) == 1
+        event, hint, scope = client.captured[0]
+        assert "bad thing" in event["message"]
+        assert event["level"] == "error"
         uuid.UUID(scope.user["id"])
         assert scope.tags["product"] == er.PRODUCT
+        assert scopes[0] is scope
 
     def test_send_with_exception(self, monkeypatch):
-        scopes = self._install_fake_sdk(monkeypatch)
+        self._install_fake_sdk(monkeypatch)
         try:
             raise ValueError("boom")
         except ValueError as e:
             ok = er.send_report("bundle", "updater", exc_info=e)
         assert ok
-        assert scopes[0].captured[0][0] == "exception"
-        assert scopes[0].tags["stage"] == "updater"
+        event, hint, scope = _FakeClient.instances[0].captured[0]
+        assert "boom" in str(event["exception"])
+        assert hint is not None
+        assert scope.tags["stage"] == "updater"
 
     def test_missing_sdk_returns_false(self, monkeypatch):
         monkeypatch.setitem(sys.modules, "sentry_sdk", None)

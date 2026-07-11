@@ -262,6 +262,7 @@ def send_report(
     """
     try:
         import sentry_sdk
+        from sentry_sdk.utils import event_from_exception
 
         client = sentry_sdk.Client(
             **_base_init_kwargs(),
@@ -269,22 +270,26 @@ def send_report(
             max_breadcrumbs=0,
         )
         try:
-            scope = sentry_sdk.Scope(client=client)
+            # Capture through this client directly: Scope.capture_* resolves
+            # the process-global client and would silently drop the event.
+            scope = sentry_sdk.Scope()
             scope.set_user({"id": get_install_id()})
             for key, value in collect_tags(gpu_info, stage).items():
                 scope.set_tag(key, value)
             scope.set_extra("bundle", scrub_text(bundle_text or ""))
 
             if exc_info is not None:
-                scope.capture_exception(exc_info)
+                event, hint = event_from_exception(
+                    exc_info, client_options=client.options)
             else:
                 headline = "User report"
                 for line in (bundle_text or "").splitlines():
                     if "ERROR" in line:
                         headline = scrub_text(line.strip())[:200]
                         break
-                scope.capture_message(headline, level="error")
+                event, hint = {"message": headline, "level": "error"}, None
 
+            client.capture_event(event, hint=hint, scope=scope)
             client.flush(timeout=timeout)
         finally:
             client.close(timeout=0)
