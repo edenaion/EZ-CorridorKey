@@ -82,7 +82,14 @@ class DiagnosticDialog(QDialog):
         steps_area = QScrollArea()
         steps_area.setWidgetResizable(True)
         steps_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        # Same viewport treatment as StartupDiagnosticDialog: no light panel.
+        steps_area.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+        )
+        steps_area.viewport().setAutoFillBackground(False)
         steps_widget = QWidget()
+        steps_widget.setObjectName("diagStepsList")
+        steps_widget.setStyleSheet("#diagStepsList { background: transparent; }")
         steps_layout = QVBoxLayout(steps_widget)
         steps_layout.setContentsMargins(8, 4, 8, 4)
         steps_layout.setSpacing(8)
@@ -178,7 +185,15 @@ class StartupDiagnosticDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        # The scroll viewport defaults to the palette base (light) — keep it
+        # on the dialog background so the list never shows a white panel.
+        scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+        )
+        scroll.viewport().setAutoFillBackground(False)
         inner = QWidget()
+        inner.setObjectName("diagIssueList")
+        inner.setStyleSheet("#diagIssueList { background: transparent; }")
         inner_layout = QVBoxLayout(inner)
         inner_layout.setContentsMargins(4, 4, 4, 4)
         inner_layout.setSpacing(16)
@@ -220,6 +235,10 @@ class StartupDiagnosticDialog(QDialog):
 
         if issue.detail:
             det = QLabel(issue.detail)
+            det.setWordWrap(True)
+            det.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
             det.setStyleSheet(
                 "QLabel { color: #999; font-size: 12px; font-style: italic; "
                 "background: transparent; border: none; }"

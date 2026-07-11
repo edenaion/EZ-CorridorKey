@@ -38,6 +38,89 @@ _HWACCEL_PRIORITY: dict[str, list[tuple[str, list[str]]]] = {
 
 _cached_hwaccel: list[str] | None = None  # cached result of detect_hwaccel()
 
+# ---------------------------------------------------------------------------
+# Adaptive EXR encoder threading — commit-headroom aware
+# ---------------------------------------------------------------------------
+# FFmpeg's EXR encoder is frame-threaded: N threads hold N complete frames
+# in flight. Measured on the pinned build with a 4K clip (issue #184 bench):
+# ~435 MB of committed memory per thread (~52 bytes/pixel/thread) plus
+# ~2 GB pipeline base. With threads=auto a 32-core machine commits ~15.6 GB
+# for one 4K import, which fails with "Cannot allocate memory" (-12) on any
+# machine whose commit headroom is smaller — a loaded 16 GB laptop can never
+# import 4K at auto threads. Cap threads to what the machine can actually
+# promise, and leave fast machines at full speed.
+_ENC_BYTES_PER_PIXEL_PER_THREAD = 52
+_ENC_COMMIT_SAFETY = 0.5    # use at most half the free commit headroom
+_ENC_MIN_THREADS = 2
+_ENC_MAX_THREADS = 64
+
+
+def _free_commit_bytes() -> int | None:
+    """Free Windows commit charge (limit - total), or None if unavailable.
+
+    Commit is the constraint malloc actually hits — physical RAM can look
+    free while the commit ledger is full (issue #184 QA finding).
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+
+        class PERFORMANCE_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("cb", ctypes.c_uint32),
+                ("CommitTotal", ctypes.c_size_t),
+                ("CommitLimit", ctypes.c_size_t),
+                ("CommitPeak", ctypes.c_size_t),
+                ("PhysicalTotal", ctypes.c_size_t),
+                ("PhysicalAvailable", ctypes.c_size_t),
+                ("SystemCache", ctypes.c_size_t),
+                ("KernelTotal", ctypes.c_size_t),
+                ("KernelPaged", ctypes.c_size_t),
+                ("KernelNonpaged", ctypes.c_size_t),
+                ("PageSize", ctypes.c_size_t),
+                ("HandleCount", ctypes.c_uint32),
+                ("ProcessCount", ctypes.c_uint32),
+                ("ThreadCount", ctypes.c_uint32),
+            ]
+
+        info = PERFORMANCE_INFORMATION()
+        info.cb = ctypes.sizeof(info)
+        if not ctypes.windll.psapi.GetPerformanceInfo(
+            ctypes.byref(info), info.cb
+        ):
+            return None
+        return (info.CommitLimit - info.CommitTotal) * info.PageSize
+    except Exception:
+        return None
+
+
+def adaptive_encoder_threads(width: int, height: int) -> list[str]:
+    """Return ["-threads:v", N] when commit headroom demands a cap, else [].
+
+    Empty list means FFmpeg picks its default (one thread per core), which
+    is correct whenever the machine can afford it.
+    """
+    if width <= 0 or height <= 0:
+        return []
+    free = _free_commit_bytes()
+    if free is None:
+        return []
+    cores = os.cpu_count() or 4
+    per_thread = _ENC_BYTES_PER_PIXEL_PER_THREAD * width * height
+    if per_thread <= 0:
+        return []
+    afford = int((free * _ENC_COMMIT_SAFETY) / per_thread)
+    threads = max(_ENC_MIN_THREADS, min(afford, cores, _ENC_MAX_THREADS))
+    if threads >= cores:
+        return []  # machine can afford full auto threading
+    logger.info(
+        f"EXR encoder threads capped at {threads} "
+        f"(free commit {free / 1e9:.1f} GB, "
+        f"~{per_thread / 1e6:.0f} MB/thread at {width}x{height})"
+    )
+    return ["-threads:v", str(threads)]
+
 
 def detect_hwaccel(ffmpeg: str | None = None) -> list[str]:
     """Detect the best FFmpeg hardware accelerator for this platform.
@@ -87,7 +170,7 @@ def _recompress_to_dwab(
     out_dir: str,
     on_progress: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
-) -> None:
+) -> list[str]:
     """Recompress FFmpeg ZIP16 EXR files to DWAB in-place.
 
     NOTE: This always uses DWAB intentionally — it's an internal storage
@@ -99,23 +182,26 @@ def _recompress_to_dwab(
     with spawn start method (requires freeze_support() in main.py).
     In dev mode, spawns a standalone subprocess for full GIL bypass.
     Both paths keep the parent process (and its Qt event loop) completely free.
+
+    Returns the list of frame filenames that could not be read back and
+    recompressed (unreadable = corrupt FFmpeg output, see issue #184).
+    The .dwab_done marker is only written when every frame succeeded.
     """
     marker = os.path.join(out_dir, ".dwab_done")
     if os.path.isfile(marker):
-        return
+        return []
 
     exr_files = sorted([f for f in os.listdir(out_dir)
                         if f.lower().endswith('.exr')])
     total = len(exr_files)
     if total == 0:
-        return
+        return []
 
     if getattr(sys, "frozen", False):
-        _recompress_multiprocess(out_dir, exr_files, total, marker,
-                                 on_progress, cancel_event)
-    else:
-        _recompress_subprocess(out_dir, exr_files, total, marker,
-                               on_progress, cancel_event)
+        return _recompress_multiprocess(out_dir, exr_files, total, marker,
+                                        on_progress, cancel_event)
+    return _recompress_subprocess(out_dir, exr_files, total, marker,
+                                  on_progress, cancel_event)
 
 
 def _recompress_one_exr(args: tuple) -> bool:
@@ -169,6 +255,51 @@ def _recompress_one_exr(args: tuple) -> bool:
         return False
 
 
+def _recompress_sequential(
+    out_dir: str,
+    on_progress: Optional[Callable[[int, int], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
+) -> list[str]:
+    """DWAB recompress in-process, one frame at a time — no worker pool.
+
+    Fallback for the safe-mode retry in extract_frames: slower than the
+    pooled paths, but immune to pool-level failures (BrokenProcessPool from
+    AV kills, OOM, worker crashes). Returns filenames that failed to read.
+    """
+    marker = os.path.join(out_dir, ".dwab_done")
+    if os.path.isfile(marker):
+        return []
+
+    exr_files = sorted([f for f in os.listdir(out_dir)
+                        if f.lower().endswith('.exr')])
+    total = len(exr_files)
+    if total == 0:
+        return []
+
+    logger.info(f"Recompressing {total} EXR frames to DWAB (sequential)...")
+    failed: list[str] = []
+    for done, fname in enumerate(exr_files, 1):
+        if cancel_event and cancel_event.is_set():
+            logger.info("DWAB recompression cancelled")
+            return []
+        src = os.path.join(out_dir, fname)
+        if not _recompress_one_exr((src, src + ".tmp")):
+            failed.append(fname)
+        if on_progress:
+            on_progress(done, total)
+
+    if failed:
+        failed.sort()
+        logger.warning(f"DWAB recompression (sequential): {len(failed)}/{total} "
+                       f"frame(s) unreadable (corrupt): {failed[:5]}")
+        return failed
+
+    with open(marker, 'w') as f:
+        f.write("done")
+    logger.info(f"DWAB recompression complete: {total} frames")
+    return []
+
+
 def _recompress_multiprocess(
     out_dir: str,
     exr_files: list[str],
@@ -176,12 +307,14 @@ def _recompress_multiprocess(
     marker: str,
     on_progress: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
-) -> None:
+) -> list[str]:
     """DWAB recompress using ProcessPoolExecutor (frozen builds).
 
     Uses multiprocessing with spawn start method so each worker is a real
     child process — no GIL contention with the parent Qt event loop.
     Requires multiprocessing.freeze_support() in main.py (already present).
+
+    Returns filenames of frames that failed to read back (corrupt).
     """
     import multiprocessing
     from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -189,6 +322,7 @@ def _recompress_multiprocess(
     logger.info(f"Recompressing {total} EXR frames to DWAB (multiprocess)...")
     workers = max(1, min((os.cpu_count() or 4) // 2, 16))
     done = 0
+    failed: list[str] = []
 
     ctx = multiprocessing.get_context("spawn")
     work = [(os.path.join(out_dir, f), os.path.join(out_dir, f + ".tmp"))
@@ -200,15 +334,32 @@ def _recompress_multiprocess(
             if cancel_event and cancel_event.is_set():
                 pool.shutdown(wait=False, cancel_futures=True)
                 logger.info("DWAB recompression cancelled")
-                return
-            fut.result()
+                return []
+            # A worker terminated abruptly (BrokenProcessPool: AV kill, OOM,
+            # native crash) must not abort the whole pass — mark the item
+            # failed so the safe-mode retry in extract_frames can heal it.
+            try:
+                ok = fut.result()
+            except Exception as exc:
+                logger.warning(f"DWAB worker failed for "
+                               f"{os.path.basename(futs[fut][0])}: {exc}")
+                ok = False
+            if not ok:
+                failed.append(os.path.basename(futs[fut][0]))
             done += 1
             if on_progress:
                 on_progress(done, total)
 
+    if failed:
+        failed.sort()
+        logger.warning(f"DWAB recompression: {len(failed)}/{total} frame(s) "
+                       f"unreadable (corrupt): {failed[:5]}")
+        return failed
+
     with open(marker, 'w') as f:
         f.write("done")
     logger.info(f"DWAB recompression complete: {total} frames")
+    return []
 
 
 def _recompress_subprocess(
@@ -218,8 +369,11 @@ def _recompress_subprocess(
     marker: str,
     on_progress: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
-) -> None:
-    """DWAB recompress using a subprocess with ProcessPoolExecutor (dev mode)."""
+) -> list[str]:
+    """DWAB recompress using a subprocess with ProcessPoolExecutor (dev mode).
+
+    Returns filenames of frames that failed to read back (corrupt).
+    """
     python = sys.executable
 
     script_content = r'''
@@ -292,7 +446,14 @@ if __name__ == "__main__":
     with ProcessPoolExecutor(max_workers=workers) as pool:
         futs = {pool.submit(recompress_one, item): item for item in work}
         for fut in as_completed(futs):
-            fut.result()
+            # Worker died abruptly (BrokenProcessPool etc.) -> mark item
+            # failed instead of aborting the whole pass.
+            try:
+                ok = fut.result()
+            except Exception:
+                ok = False
+            if not ok:
+                print(f"FAILED {os.path.basename(futs[fut][0])}", flush=True)
             done += 1
             print(f"PROGRESS {done} {total}", flush=True)
     print("DONE", flush=True)
@@ -324,6 +485,7 @@ if __name__ == "__main__":
     reader_thread = threading.Thread(target=_reader, daemon=True)
     reader_thread.start()
 
+    failed: list[str] = []
     try:
         while True:
             if cancel_event and cancel_event.is_set():
@@ -333,7 +495,7 @@ if __name__ == "__main__":
                 except subprocess.TimeoutExpired:
                     pass
                 logger.info("DWAB recompression cancelled")
-                return
+                return []
 
             try:
                 line = line_q.get(timeout=0.2)
@@ -351,6 +513,8 @@ if __name__ == "__main__":
                     done_n, total_n = int(parts[1]), int(parts[2])
                     if on_progress:
                         on_progress(done_n, total_n)
+            elif line.startswith("FAILED "):
+                failed.append(line.split(maxsplit=1)[1])
             elif line == "DONE":
                 break
 
@@ -358,7 +522,11 @@ if __name__ == "__main__":
     except subprocess.TimeoutExpired:
         proc.kill()
         logger.error("DWAB recompression subprocess timed out")
-        return
+        # The pass did not complete, so no frame is verified — report every
+        # frame as suspect so extract_frames runs the safe-mode retry
+        # (which re-validates with the pool-free sequential pass) instead of
+        # treating a crashed recompress as clean.
+        return list(exr_files)
     finally:
         try:
             os.remove(script_path)
@@ -367,13 +535,23 @@ if __name__ == "__main__":
 
     if proc.returncode != 0:
         stderr_out = proc.stderr.read() if proc.stderr else ""
+        # Log the TAIL of stderr — the actual exception sits at the bottom
+        # of a Python traceback, a head-slice hides it.
         logger.error(f"DWAB recompression failed (code {proc.returncode}): "
-                     f"{stderr_out[:500]}")
-        return
+                     f"{stderr_out[-2000:]}")
+        # Same as the timeout path: incomplete pass = nothing verified.
+        return list(exr_files)
+
+    if failed:
+        failed.sort()
+        logger.warning(f"DWAB recompression: {len(failed)}/{total} frame(s) "
+                       f"unreadable (corrupt): {failed[:5]}")
+        return failed
 
     with open(marker, 'w') as f:
         f.write("done")
     logger.info(f"DWAB recompression complete: {total} frames")
+    return []
 
 
 def extract_frames(
@@ -461,7 +639,16 @@ def extract_frames(
     # Falls back to software decode if none available
     hwaccel_flags = detect_hwaccel(ffmpeg)
 
-    def _build_cmd(hw_flags: list[str]) -> list[str]:
+    # Cap EXR encoder threads when commit headroom can't afford
+    # one full frame buffer per core (issue #184 bench).
+    enc_thread_args = adaptive_encoder_threads(
+        (video_info or {}).get("width", 0),
+        (video_info or {}).get("height", 0),
+    )
+
+    def _build_cmd(hw_flags: list[str],
+                   extra_out_args: list[str] | None = None) -> list[str]:
+        out_args = extra_out_args or []
         if start_frame > 0 and total_frames > 0:
             if video_info is None:
                 _vi = probe_video(video_path)
@@ -482,6 +669,7 @@ def extract_frames(
                 # and our minimum is FFmpeg 7, so it is always available.
                 "-fps_mode:v", "passthrough",
                 *exr_args,
+                *out_args,
                 out_dir + "/" + pattern,
                 "-y",
             ]
@@ -493,15 +681,17 @@ def extract_frames(
             # See note above: -fps_mode:v passthrough replaces removed -vsync.
             "-fps_mode:v", "passthrough",
             *exr_args,
+            *out_args,
             out_dir + "/" + pattern,
             "-y",
         ]
 
-    def _run_ffmpeg(hw_flags: list[str]) -> tuple[int, str]:
+    def _run_ffmpeg(hw_flags: list[str],
+                    extra_out_args: list[str] | None = None) -> tuple[int, str]:
         """Run FFmpeg extraction. Returns (return_code, last_stderr_lines)."""
         nonlocal last_frame
 
-        cmd = _build_cmd(hw_flags)
+        cmd = _build_cmd(hw_flags, extra_out_args)
         hwaccel_label = hw_flags[1] if hw_flags else "software"
         logger.info(f"Extracting frames (EXR half-float, decode={hwaccel_label}): "
                     f"{video_path} -> {out_dir} (start_frame={start_frame})")
@@ -573,20 +763,33 @@ def extract_frames(
         return proc.returncode, "\n".join(stderr_tail[-15:])
 
     last_frame = start_frame
-    returncode, stderr_out = _run_ffmpeg(hwaccel_flags)
+    returncode, stderr_out = _run_ffmpeg(hwaccel_flags, enc_thread_args)
 
     # If hardware decode failed, retry with software decode
     if returncode != 0 and hwaccel_flags and not (cancel_event and cancel_event.is_set()):
         logger.warning(f"Hardware decode failed (code {returncode}), "
                        f"retrying with software decode...")
-        # Clean up any partial frames from the failed attempt
+        # Clean up any partial frames from the failed attempt. ALL frames are
+        # deleted (including any pre-existing resume prefix), so the retry
+        # must restart from frame 0 — leaving start_frame > 0 here would
+        # seek past the beginning and permanently drop the prefix frames.
         for f in os.listdir(out_dir):
             if f.lower().endswith('.exr'):
                 os.remove(os.path.join(out_dir, f))
-        last_frame = start_frame
-        returncode, stderr_out = _run_ffmpeg([])  # empty = software decode
+        start_frame = 0
+        last_frame = 0
+        # empty hw flags = software decode
+        returncode, stderr_out = _run_ffmpeg([], enc_thread_args)
 
     if returncode != 0 and not (cancel_event and cancel_event.is_set()):
+        # Out-of-memory gets a human message: the raw FFmpeg error reads as
+        # a broken app, but the cause is commit exhaustion on the machine
+        # (issue #184 QA finding).
+        if stderr_out and "cannot allocate memory" in stderr_out.lower():
+            raise RuntimeError(
+                "Not enough free memory to import this clip. "
+                "Close other applications and run the extraction again."
+            )
         # Extract a meaningful error message from FFmpeg stderr
         err_detail = ""
         if stderr_out:
@@ -607,8 +810,50 @@ def extract_frames(
                      if f.lower().endswith('.exr')])
     logger.info(f"Extracted {extracted} EXR frames (ZIP16)")
 
-    # Pass 2: Recompress ZIP16 -> DWAB
+    # Pass 2: Recompress ZIP16 -> DWAB. The recompress workers read every
+    # frame back, so this pass doubles as an integrity check on FFmpeg's
+    # output — corrupt frames fail to read and are reported back here.
     if extracted > 0 and not (cancel_event and cancel_event.is_set()):
-        _recompress_to_dwab(out_dir, on_recompress_progress, cancel_event)
+        corrupt = _recompress_to_dwab(out_dir, on_recompress_progress,
+                                      cancel_event)
+
+        # Corrupt frames = FFmpeg wrote unreadable EXR data (issue #184:
+        # a race in the hwaccel-decode + threaded-EXR-encode pipeline emits
+        # invalid zlib chunks inside ZIP16 EXRs on some machines). Wipe and
+        # re-extract once with both race suspects disabled — software decode
+        # AND a single encoder thread — then re-validate. Much slower, but it
+        # only runs when the fast path provably produced corrupt output.
+        # Fail loudly rather than let inference trip over unreadable frames
+        # mid-job later.
+        retried = False
+        if corrupt and not (cancel_event and cancel_event.is_set()):
+            logger.warning(
+                f"{len(corrupt)} corrupt frame(s) in FFmpeg output "
+                f"(e.g. {corrupt[0]}) — re-extracting with software decode, "
+                f"single-threaded encode...")
+            for f in os.listdir(out_dir):
+                if f.lower().endswith('.exr'):
+                    os.remove(os.path.join(out_dir, f))
+            start_frame = 0
+            last_frame = 0
+            retried = True
+            returncode, stderr_out = _run_ffmpeg([], ["-threads:v", "1"])
+            if returncode != 0 and not (cancel_event and cancel_event.is_set()):
+                raise RuntimeError(
+                    f"FFmpeg safe-mode retry failed (code {returncode})")
+            extracted = len([f for f in os.listdir(out_dir)
+                             if f.lower().endswith('.exr')])
+            # Sequential recompress: immune to worker-pool failures, so a
+            # broken pool can't mask the state of the re-extracted frames.
+            corrupt = _recompress_sequential(out_dir, on_recompress_progress,
+                                             cancel_event)
+        if corrupt and not (cancel_event and cancel_event.is_set()):
+            raise RuntimeError(
+                f"Extraction produced {len(corrupt)} unreadable frame(s) "
+                f"even after safe-mode retry (e.g. {corrupt[0]}). "
+                f"Run Repair FFmpeg in Preferences and re-import the clip.")
+        if retried and not corrupt:
+            logger.info("Safe-mode re-extraction succeeded: all frames "
+                        "readable")
 
     return extracted
