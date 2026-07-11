@@ -676,7 +676,10 @@ class TestValidateFFmpegInstall:
         assert not result.ok
         assert "full FFmpeg build" in result.message
 
-    def test_dev_build_is_accepted(self, monkeypatch):
+    def test_dev_build_is_flagged_for_repair(self, monkeypatch):
+        # Behavior change with issue #184: nightlies used to validate OK,
+        # which left the reporter's corrupting master build undetected
+        # through two updates. Dev builds now route to Repair.
         monkeypatch.setattr(_discovery, "find_ffmpeg", lambda: "ffmpeg")
         monkeypatch.setattr(_discovery, "find_ffprobe", lambda: "ffprobe")
 
@@ -689,8 +692,9 @@ class TestValidateFFmpegInstall:
 
         result = ffmpeg_tools.validate_ffmpeg_install()
 
-        assert result.ok
-        assert "FFmpeg OK" in result.message
+        assert not result.ok
+        assert result.known_bad
+        assert "Repair FFmpeg" in result.message
 
     def test_install_help_mentions_local_windows_repair(self, monkeypatch):
         monkeypatch.setattr(_discovery.sys, "platform", "win32")
@@ -764,6 +768,33 @@ class TestKnownBadBuildDetection:
         assert not result.ok
         assert result.known_bad
         assert "Repair FFmpeg" in result.message
+
+    def test_validate_flags_master_nightly(self, monkeypatch):
+        # Issue #184: the reporter's install held a master nightly delivered
+        # by the 2.1.0-era Repair. Exact reported version string.
+        bad_line = ("ffmpeg version N-125505-gc57660fb18-20260708 "
+                    "Copyright (c) 2000-2026 the FFmpeg developers")
+        assert _discovery._FFMPEG_DEV_BUILD_RE.search(bad_line)
+        monkeypatch.setattr(_discovery, "find_ffmpeg", lambda: "/fake/ffmpeg")
+        monkeypatch.setattr(_discovery, "find_ffprobe", lambda: "/fake/ffprobe")
+        monkeypatch.setattr(
+            _discovery, "_read_program_version",
+            lambda path, name: _discovery.FFmpegVersionInfo(
+                first_line=bad_line, major=None, is_dev_build=True,
+            ),
+        )
+        result = _discovery.validate_ffmpeg_install(require_probe=True)
+        assert not result.ok
+        assert result.known_bad
+        assert "Repair FFmpeg" in result.message
+
+    def test_dev_build_regex_variants(self):
+        for line in (
+            "ffmpeg version N-125505-gc57660fb18-20260708",
+            "ffmpeg version git-2026-07-01-abcdef",
+            "ffmpeg version master-20260630",
+        ):
+            assert _discovery._FFMPEG_DEV_BUILD_RE.search(line), line
 
     def test_validate_passes_pinned_build(self, monkeypatch):
         good_line = "ffmpeg version n8.1.2-20260627"

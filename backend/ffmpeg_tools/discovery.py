@@ -340,6 +340,26 @@ def validate_ffmpeg_install(require_probe: bool = True) -> FFmpegValidationResul
             known_bad=True,
         )
 
+    # Master/git nightlies are unverifiable, and recent ones carry the same
+    # frame-corruption race (issue #184: the reporter's install held a July
+    # master nightly delivered by the 2.1.0-era Repair; nothing since ever
+    # flagged it). Flag every dev build so those installs get walked to
+    # Repair, which replaces them with the pinned verified build.
+    if ffmpeg_version.is_dev_build:
+        return FFmpegValidationResult(
+            ok=False,
+            message=(
+                "This FFmpeg build is a development nightly with a known "
+                "frame-corruption bug risk (random frames written as "
+                f"unreadable EXR files). Detected {ffmpeg_version.first_line}. "
+                "Run Repair FFmpeg to install a verified build."
+            ),
+            ffmpeg_path=ffmpeg,
+            ffprobe_path=ffprobe,
+            ffmpeg_version=ffmpeg_version,
+            known_bad=True,
+        )
+
     ffprobe_version: FFmpegVersionInfo | None = None
     if require_probe and ffprobe:
         try:
