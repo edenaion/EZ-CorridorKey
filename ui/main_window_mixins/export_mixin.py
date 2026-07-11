@@ -70,9 +70,15 @@ class ExportMixin:
         logger.info(f"Auto-extraction queued: {len(extracting)} clip(s)")
 
     def _on_extract_current_clip(self) -> None:
-        """Handle RUN EXTRACTION button — extract the currently selected clip."""
+        """Handle RUN EXTRACTION button — extract the currently selected clip.
+
+        Accepts ERROR clips too: a failed extraction must be re-runnable
+        from the button, not only from the context menu (issue #184 QA
+        found the button silently dead after a failure). The ERROR retry
+        path in _on_extract_requested wipes partial frames first.
+        """
         clip = self._current_clip
-        if not clip or clip.state != ClipState.EXTRACTING:
+        if not clip or clip.state not in (ClipState.EXTRACTING, ClipState.ERROR):
             return
         self._on_extract_requested([clip])
 
@@ -188,21 +194,44 @@ class ExportMixin:
     def _on_extract_error(self, clip_name: str, error_msg: str) -> None:
         """Handle extraction failure."""
         self._clip_model.update_clip_state(clip_name, ClipState.ERROR)
+        failed_clip = None
         for clip in self._clip_model.clips:
             if clip.name == clip_name:
                 clip.extraction_progress = 0.0
                 clip.extraction_total = 0
                 clip.error_message = error_msg
+                failed_clip = clip
                 break
         self._extract_progress.pop(clip_name, None)
-        # Clear the extraction overlay on the viewer
+        # Clear the extraction overlay AND re-render the viewer — without
+        # the re-render the viewer keeps the stale "Extracting frames..."
+        # placeholder forever (issue #184 QA finding).
         if self._current_clip and self._current_clip.name == clip_name:
             self._dual_viewer.set_extraction_progress(0.0, 0)
+            if failed_clip is not None:
+                self._dual_viewer.set_clip(failed_clip)
         if not self._extract_worker.is_busy:
             self._status_bar.reset_progress()
         from ui.sounds.audio_manager import UIAudio
         UIAudio.error()
         logger.error(f"Extraction failed for {clip_name}: {error_msg}")
+
+        # Known failure signatures get the diagnostic dialog with fix steps
+        # (e.g. the poisoned-FFmpeg build or out-of-memory guidance) instead
+        # of an error that lives only in the log. Only for the clip the user
+        # is looking at — batch failures must not stack dialogs.
+        if self._current_clip and self._current_clip.name == clip_name:
+            from ui.widgets.diagnostic_dialog import DiagnosticDialog, match_diagnostic
+            diag = match_diagnostic(error_msg)
+            if diag is not None:
+                DiagnosticDialog(diag, error_msg, parent=self).exec()
+            else:
+                QMessageBox.warning(
+                    self,
+                    _tr("Extraction Failed"),
+                    _tr("Frame extraction failed for '%s':\n\n%s") % (
+                        clip_name, error_msg),
+                )
 
     # ── Export Video ──
 

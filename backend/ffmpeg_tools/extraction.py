@@ -38,6 +38,89 @@ _HWACCEL_PRIORITY: dict[str, list[tuple[str, list[str]]]] = {
 
 _cached_hwaccel: list[str] | None = None  # cached result of detect_hwaccel()
 
+# ---------------------------------------------------------------------------
+# Adaptive EXR encoder threading — commit-headroom aware
+# ---------------------------------------------------------------------------
+# FFmpeg's EXR encoder is frame-threaded: N threads hold N complete frames
+# in flight. Measured on the pinned build with a 4K clip (issue #184 bench):
+# ~435 MB of committed memory per thread (~52 bytes/pixel/thread) plus
+# ~2 GB pipeline base. With threads=auto a 32-core machine commits ~15.6 GB
+# for one 4K import, which fails with "Cannot allocate memory" (-12) on any
+# machine whose commit headroom is smaller — a loaded 16 GB laptop can never
+# import 4K at auto threads. Cap threads to what the machine can actually
+# promise, and leave fast machines at full speed.
+_ENC_BYTES_PER_PIXEL_PER_THREAD = 52
+_ENC_COMMIT_SAFETY = 0.5    # use at most half the free commit headroom
+_ENC_MIN_THREADS = 2
+_ENC_MAX_THREADS = 64
+
+
+def _free_commit_bytes() -> int | None:
+    """Free Windows commit charge (limit - total), or None if unavailable.
+
+    Commit is the constraint malloc actually hits — physical RAM can look
+    free while the commit ledger is full (issue #184 QA finding).
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+
+        class PERFORMANCE_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("cb", ctypes.c_uint32),
+                ("CommitTotal", ctypes.c_size_t),
+                ("CommitLimit", ctypes.c_size_t),
+                ("CommitPeak", ctypes.c_size_t),
+                ("PhysicalTotal", ctypes.c_size_t),
+                ("PhysicalAvailable", ctypes.c_size_t),
+                ("SystemCache", ctypes.c_size_t),
+                ("KernelTotal", ctypes.c_size_t),
+                ("KernelPaged", ctypes.c_size_t),
+                ("KernelNonpaged", ctypes.c_size_t),
+                ("PageSize", ctypes.c_size_t),
+                ("HandleCount", ctypes.c_uint32),
+                ("ProcessCount", ctypes.c_uint32),
+                ("ThreadCount", ctypes.c_uint32),
+            ]
+
+        info = PERFORMANCE_INFORMATION()
+        info.cb = ctypes.sizeof(info)
+        if not ctypes.windll.psapi.GetPerformanceInfo(
+            ctypes.byref(info), info.cb
+        ):
+            return None
+        return (info.CommitLimit - info.CommitTotal) * info.PageSize
+    except Exception:
+        return None
+
+
+def adaptive_encoder_threads(width: int, height: int) -> list[str]:
+    """Return ["-threads:v", N] when commit headroom demands a cap, else [].
+
+    Empty list means FFmpeg picks its default (one thread per core), which
+    is correct whenever the machine can afford it.
+    """
+    if width <= 0 or height <= 0:
+        return []
+    free = _free_commit_bytes()
+    if free is None:
+        return []
+    cores = os.cpu_count() or 4
+    per_thread = _ENC_BYTES_PER_PIXEL_PER_THREAD * width * height
+    if per_thread <= 0:
+        return []
+    afford = int((free * _ENC_COMMIT_SAFETY) / per_thread)
+    threads = max(_ENC_MIN_THREADS, min(afford, cores, _ENC_MAX_THREADS))
+    if threads >= cores:
+        return []  # machine can afford full auto threading
+    logger.info(
+        f"EXR encoder threads capped at {threads} "
+        f"(free commit {free / 1e9:.1f} GB, "
+        f"~{per_thread / 1e6:.0f} MB/thread at {width}x{height})"
+    )
+    return ["-threads:v", str(threads)]
+
 
 def detect_hwaccel(ffmpeg: str | None = None) -> list[str]:
     """Detect the best FFmpeg hardware accelerator for this platform.
@@ -556,6 +639,13 @@ def extract_frames(
     # Falls back to software decode if none available
     hwaccel_flags = detect_hwaccel(ffmpeg)
 
+    # Cap EXR encoder threads when commit headroom can't afford
+    # one full frame buffer per core (issue #184 bench).
+    enc_thread_args = adaptive_encoder_threads(
+        (video_info or {}).get("width", 0),
+        (video_info or {}).get("height", 0),
+    )
+
     def _build_cmd(hw_flags: list[str],
                    extra_out_args: list[str] | None = None) -> list[str]:
         out_args = extra_out_args or []
@@ -673,7 +763,7 @@ def extract_frames(
         return proc.returncode, "\n".join(stderr_tail[-15:])
 
     last_frame = start_frame
-    returncode, stderr_out = _run_ffmpeg(hwaccel_flags)
+    returncode, stderr_out = _run_ffmpeg(hwaccel_flags, enc_thread_args)
 
     # If hardware decode failed, retry with software decode
     if returncode != 0 and hwaccel_flags and not (cancel_event and cancel_event.is_set()):
@@ -688,9 +778,18 @@ def extract_frames(
                 os.remove(os.path.join(out_dir, f))
         start_frame = 0
         last_frame = 0
-        returncode, stderr_out = _run_ffmpeg([])  # empty = software decode
+        # empty hw flags = software decode
+        returncode, stderr_out = _run_ffmpeg([], enc_thread_args)
 
     if returncode != 0 and not (cancel_event and cancel_event.is_set()):
+        # Out-of-memory gets a human message: the raw FFmpeg error reads as
+        # a broken app, but the cause is commit exhaustion on the machine
+        # (issue #184 QA finding).
+        if stderr_out and "cannot allocate memory" in stderr_out.lower():
+            raise RuntimeError(
+                "Not enough free memory to import this clip. "
+                "Close other applications and run the extraction again."
+            )
         # Extract a meaningful error message from FFmpeg stderr
         err_detail = ""
         if stderr_out:

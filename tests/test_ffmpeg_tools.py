@@ -301,6 +301,9 @@ class TestCorruptFrameRetry:
         })
         monkeypatch.setattr(_extraction, "_recompress_to_dwab", fake_recompress)
         monkeypatch.setattr(_extraction.subprocess, "Popen", fake_popen)
+        # Hermetic: adaptive threading must not depend on this machine's
+        # live commit headroom during unrelated tests.
+        monkeypatch.setattr(_extraction, "_free_commit_bytes", lambda: None)
         return commands
 
     def test_corrupt_frames_trigger_software_retry(self, monkeypatch, tmp_path):
@@ -424,6 +427,130 @@ class TestCorruptFrameRetry:
         assert "-ss" not in commands[1], "software retry must not seek"
         sn = commands[1].index("-start_number")
         assert commands[1][sn + 1] == "0", "software retry must restart at 0"
+
+
+class TestAdaptiveEncoderThreads:
+    """Issue #184: EXR encode is frame-threaded (~52 B/px/thread measured);
+    cap threads to commit headroom so 4K imports survive loaded machines."""
+
+    def test_no_cap_when_headroom_large(self, monkeypatch):
+        monkeypatch.setattr(_extraction, "_free_commit_bytes",
+                            lambda: 64 * 1024**3)
+        monkeypatch.setattr(_extraction.os, "cpu_count", lambda: 16)
+        assert _extraction.adaptive_encoder_threads(3840, 2160) == []
+
+    def test_caps_when_headroom_small(self, monkeypatch):
+        # 4 GB free, 4K: afford = 4GB*0.5 / (52*3840*2160 B ~ 431 MB) = 4
+        monkeypatch.setattr(_extraction, "_free_commit_bytes",
+                            lambda: 4 * 1024**3)
+        monkeypatch.setattr(_extraction.os, "cpu_count", lambda: 32)
+        args = _extraction.adaptive_encoder_threads(3840, 2160)
+        assert args[0] == "-threads:v"
+        assert 2 <= int(args[1]) < 32
+
+    def test_floor_of_two_threads(self, monkeypatch):
+        monkeypatch.setattr(_extraction, "_free_commit_bytes",
+                            lambda: 256 * 1024**2)  # 256 MB free
+        monkeypatch.setattr(_extraction.os, "cpu_count", lambda: 8)
+        args = _extraction.adaptive_encoder_threads(3840, 2160)
+        assert args == ["-threads:v", "2"]
+
+    def test_no_probe_no_cap(self, monkeypatch):
+        monkeypatch.setattr(_extraction, "_free_commit_bytes", lambda: None)
+        assert _extraction.adaptive_encoder_threads(3840, 2160) == []
+
+    def test_small_resolution_uncapped_on_modest_machine(self, monkeypatch):
+        # 1080p on 6 GB free, 8 cores: per-thread ~108 MB, afford ~27 > cores
+        monkeypatch.setattr(_extraction, "_free_commit_bytes",
+                            lambda: 6 * 1024**3)
+        monkeypatch.setattr(_extraction.os, "cpu_count", lambda: 8)
+        assert _extraction.adaptive_encoder_threads(1920, 1080) == []
+
+    def test_cap_args_reach_ffmpeg_command(self, monkeypatch, tmp_path):
+        out_dir = tmp_path / "frames"
+        out_dir.mkdir()
+        commands = []
+
+        class _P(TestCorruptFrameRetry._FakeProc):
+            pass
+
+        def fake_popen(cmd, **kwargs):
+            commands.append(cmd)
+            for i in range(3):
+                (out_dir / f"frame_{i:06d}.exr").write_bytes(b"x")
+            return _P(cmd)
+
+        fake_validation = ffmpeg_tools.FFmpegValidationResult(
+            ok=True, message="ok", ffmpeg_path="ffmpeg", ffprobe_path="ffprobe",
+        )
+        monkeypatch.setattr(
+            _extraction, "require_ffmpeg_install",
+            lambda require_probe=True: fake_validation,
+        )
+        monkeypatch.setattr(_extraction, "probe_video", lambda path: {
+            "fps": 25.0, "width": 3840, "height": 2160, "frame_count": 3,
+            "pix_fmt": "yuv420p", "color_space": "bt709",
+            "color_primaries": "", "color_transfer": "", "color_range": "tv",
+        })
+        monkeypatch.setattr(_extraction, "detect_hwaccel", lambda ffmpeg=None: [])
+        monkeypatch.setattr(_extraction, "_recompress_to_dwab",
+                            lambda *a, **k: [])
+        monkeypatch.setattr(_extraction.subprocess, "Popen", fake_popen)
+        monkeypatch.setattr(_extraction, "adaptive_encoder_threads",
+                            lambda w, h: ["-threads:v", "6"])
+
+        ffmpeg_tools.extract_frames("clip.mp4", str(out_dir), total_frames=3)
+        thr = commands[0].index("-threads:v")
+        assert commands[0][thr + 1] == "6"
+
+
+class TestOutOfMemoryMessage:
+    """FFmpeg -12 'Cannot allocate memory' must surface as a human message,
+    not a raw codec error (issue #184 QA)."""
+
+    def test_oom_stderr_raises_human_message(self, monkeypatch, tmp_path):
+        out_dir = tmp_path / "frames"
+        out_dir.mkdir()
+
+        class _OOMProc:
+            def __init__(self, cmd, **kwargs):
+                self.stdin = None
+                self.stderr = io.StringIO(
+                    "[vf#0:0] Error while filtering: Cannot allocate memory\n"
+                )
+                self.returncode = 1
+
+            def poll(self):
+                return 1
+
+            def wait(self, timeout=None):
+                return 1
+
+            def kill(self):
+                pass
+
+        fake_validation = ffmpeg_tools.FFmpegValidationResult(
+            ok=True, message="ok", ffmpeg_path="ffmpeg", ffprobe_path="ffprobe",
+        )
+        monkeypatch.setattr(
+            _extraction, "require_ffmpeg_install",
+            lambda require_probe=True: fake_validation,
+        )
+        monkeypatch.setattr(_extraction, "probe_video", lambda path: {
+            "fps": 25.0, "width": 3840, "height": 2160, "frame_count": 3,
+            "pix_fmt": "yuv420p", "color_space": "bt709",
+            "color_primaries": "", "color_transfer": "", "color_range": "tv",
+        })
+        monkeypatch.setattr(_extraction, "detect_hwaccel", lambda ffmpeg=None: [])
+        monkeypatch.setattr(_extraction, "_free_commit_bytes", lambda: None)
+        monkeypatch.setattr(_extraction.subprocess, "Popen", _OOMProc)
+
+        try:
+            ffmpeg_tools.extract_frames("clip.mp4", str(out_dir), total_frames=3)
+            assert False, "OOM must raise"
+        except RuntimeError as exc:
+            assert "Not enough free memory" in str(exc)
+            assert "Close other applications" in str(exc)
 
 
 class TestRecompressSubprocessFailure:
