@@ -276,11 +276,21 @@ class GPUJobWorker(QThread):
 
         except CorridorKeyError as e:
             logger.error(f"Job failed [{job_id}]: {job.clip_name} — {e}")
+            try:
+                from backend.error_reporting import capture_stage_exception
+                capture_stage_exception("inference", e)
+            except Exception:
+                pass
             self._queue.fail_job(job, str(e))
             self.error.emit(job_id, job.clip_name, str(e))
 
         except Exception as e:
             msg = f"Unexpected error: {e}"
+            try:
+                from backend.error_reporting import capture_stage_exception
+                capture_stage_exception("inference", e)
+            except Exception:
+                pass
             self._queue.fail_job(job, msg)
             self.error.emit(job_id, job.clip_name, msg)
             logger.exception(msg)

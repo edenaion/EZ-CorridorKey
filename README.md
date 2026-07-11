@@ -582,6 +582,19 @@ Independent scans:
 
 ---
 
+## Privacy
+
+EZ-CorridorKey sends no telemetry by default. No usage analytics, no tracking, ever.
+
+Two things can send data, both under your control:
+
+☼ **Report Issue**: when you file a report from the Help menu, the diagnostic summary you see in the dialog can also be sent directly to the developer. A visible checkbox controls it per report.
+☼ **Crash reporting**: an optional toggle in Preferences > Privacy, off by default. When you enable it, crash details are sent automatically.
+
+What a report contains: crash details, GPU/driver info, OS and app version. What it never contains: your media, file names, projects, or personal info. File paths are anonymized before sending.
+
+---
+
 ## Localization
 
 EZ-CorridorKey supports translation into any language. All UI strings are extracted into standard Qt `.ts` files that translators can edit with [Qt Linguist](https://doc.qt.io/qt-6/linguist-translators.html) (free) or any text editor.

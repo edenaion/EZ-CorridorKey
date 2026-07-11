@@ -44,4 +44,5 @@ The following are **out of scope**:
 - All `torch.load()` calls use `weights_only=True` to prevent pickle deserialization attacks
 - Subprocess calls use list-based arguments (no `shell=True`)
 - No network-facing services in the desktop application
+- No telemetry by default; error reporting only happens when the user files a report or enables the Preferences toggle, with paths anonymized and media names removed
 - Docker ports are bound to localhost only

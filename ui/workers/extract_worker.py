@@ -224,6 +224,11 @@ class ExtractWorker(QThread):
 
         except Exception as e:
             logger.error(f"Extraction failed for {job.clip_name}: {e}")
+            try:
+                from backend.error_reporting import capture_stage_exception
+                capture_stage_exception("runtime", e)
+            except Exception:
+                pass
             self.error.emit(job.clip_name, str(e))
 
     # ------------------------------------------------------------------

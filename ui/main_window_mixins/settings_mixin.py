@@ -499,8 +499,9 @@ class SettingsMixin:
                 return
 
             # Fetch latest release info from GitHub API
+            from backend.update_verify import UPDATE_ORIGIN
             api_url = (
-                "https://api.github.com/repos/edenaion/EZ-CorridorKey"
+                f"https://api.github.com/repos/{UPDATE_ORIGIN}"
                 "/releases/latest"
             )
             req = urllib.request.Request(
@@ -760,6 +761,11 @@ class SettingsMixin:
             progress.close()
         except Exception as e:
             progress.close()
+            try:
+                from backend.error_reporting import capture_stage_exception
+                capture_stage_exception("updater", e)
+            except Exception:
+                pass
             QMessageBox.critical(
                 self, _tr("Update Failed"),
                 _tr("Could not update automatically:\n\n%s\n\n"

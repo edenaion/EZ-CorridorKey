@@ -221,8 +221,9 @@ class _UpdateChecker(QThread):
             # downloads from (_run_frozen_update). Reading main's pyproject.toml
             # instead would nag for a version that has no downloadable release
             # yet whenever main is bumped ahead of a cut release.
+            from backend.update_verify import UPDATE_ORIGIN
             url = (
-                "https://api.github.com/repos/edenaion/EZ-CorridorKey"
+                f"https://api.github.com/repos/{UPDATE_ORIGIN}"
                 "/releases/latest"
             )
             req = urllib.request.Request(url, headers={"User-Agent": "CorridorKey"})

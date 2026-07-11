@@ -248,6 +248,14 @@ def create_app(argv: list[str] | None = None) -> QApplication:
     # (Corridor Digital\CorridorKey → EZSCAPE\EZ-CorridorKey)
     _migrate_legacy_settings()
 
+    # Optional crash reporting — does nothing unless the user enabled it
+    # in Preferences (off by default) and this is an installed build.
+    try:
+        from backend.error_reporting import init_crash_reporting
+        init_crash_reporting()
+    except Exception as exc:
+        logger.debug("Crash reporting init skipped: %s", exc)
+
     # Keep the Windows Apps & Features version in sync with the bundled build
     # after a skinny update. No-op on non-Windows and in dev mode.
     try:
