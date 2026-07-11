@@ -256,6 +256,29 @@ class TestSendReport:
         assert er.send_report("bundle", "runtime") is False
 
 
+class TestOriginGate:
+    def test_send_blocked_when_origin_differs(self, monkeypatch):
+        import backend.update_verify as uv
+        monkeypatch.setattr(uv, "UPDATE_ORIGIN", "someone/their-fork")
+        called = []
+        monkeypatch.setitem(
+            sys.modules, "sentry_sdk",
+            types.SimpleNamespace(Client=lambda **k: called.append(k)),
+        )
+        assert er.send_report("bundle", "runtime") is False
+        assert called == []
+
+    def test_init_blocked_when_origin_differs(self, monkeypatch):
+        import backend.update_verify as uv
+        monkeypatch.setattr(uv, "UPDATE_ORIGIN", "someone/their-fork")
+        monkeypatch.setattr(er, "is_crash_reporting_enabled", lambda: True)
+        monkeypatch.setattr(er.sys, "frozen", True, raising=False)
+        assert er.init_crash_reporting() is False
+
+    def test_origin_matches_this_repo(self):
+        assert er._origin_ok() is True
+
+
 class TestCrashReportingGates:
     def test_toggle_off_no_init(self, monkeypatch):
         monkeypatch.setattr(er, "is_crash_reporting_enabled", lambda: False)

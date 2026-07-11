@@ -763,6 +763,34 @@ class SetupWizard(QDialog):
         )
         layout.addWidget(self._shortcut_check)
 
+        # One-time crash reporting ask for new users. Off unless they opt
+        # in here; never shown again once answered. Same setting as
+        # Preferences > Privacy.
+        self._crash_check: QCheckBox | None = None
+        from PySide6.QtCore import QSettings
+        if not QSettings().value("privacy/crash_reports_prompted",
+                                 False, type=bool):
+            self._crash_check = QCheckBox(
+                self.tr("Send anonymous crash reports to help "
+                        "troubleshooting")
+            )
+            self._crash_check.setChecked(False)
+            self._crash_check.setToolTip(
+                self.tr(
+                    "Crash details, GPU/driver info, app version. Never "
+                    "your media, files, or personal info. Change anytime "
+                    "in Preferences > Privacy."
+                )
+            )
+            self._crash_check.setStyleSheet(
+                "QCheckBox { color: #CCCCCC; }"
+                "QCheckBox::indicator:checked { background: #FFF203; "
+                "border: 1px solid #FFF203; border-radius: 2px; }"
+                "QCheckBox::indicator { border: 1px solid #555; "
+                "border-radius: 2px; width: 14px; height: 14px; }"
+            )
+            layout.addWidget(self._crash_check)
+
         self._overall_label = QLabel("")
         self._overall_label.setAlignment(Qt.AlignCenter)
         self._overall_label.setStyleSheet("color: #999;")
@@ -850,7 +878,18 @@ class SetupWizard(QDialog):
         else:
             self.reject()
 
+    def _persist_crash_consent(self) -> None:
+        """Record the one-time crash reporting answer, if it was shown."""
+        if self._crash_check is None:
+            return
+        from PySide6.QtCore import QSettings
+        s = QSettings()
+        s.setValue("privacy/crash_reports_enabled",
+                   self._crash_check.isChecked())
+        s.setValue("privacy/crash_reports_prompted", True)
+
     def _on_install(self):
+        self._persist_crash_consent()
         selected = [key for key, row in self._rows.items() if row.is_selected()]
         if not selected:
             self.accept()

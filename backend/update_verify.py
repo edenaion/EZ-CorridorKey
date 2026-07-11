@@ -20,6 +20,9 @@ from cryptography.exceptions import InvalidSignature
 
 logger = logging.getLogger(__name__)
 
+# GitHub repository this build updates from.
+UPDATE_ORIGIN = "edenaion/EZ-CorridorKey"
+
 # Paste the contents of ezck_signing_public.pem here after running
 # scripts/generate_signing_key.py. This key ships with every installed
 # copy of the app and is used to verify that updates came from edenaion.

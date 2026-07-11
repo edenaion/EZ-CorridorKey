@@ -499,8 +499,9 @@ class SettingsMixin:
                 return
 
             # Fetch latest release info from GitHub API
+            from backend.update_verify import UPDATE_ORIGIN
             api_url = (
-                "https://api.github.com/repos/edenaion/EZ-CorridorKey"
+                f"https://api.github.com/repos/{UPDATE_ORIGIN}"
                 "/releases/latest"
             )
             req = urllib.request.Request(

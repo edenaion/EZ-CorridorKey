@@ -23,6 +23,16 @@ _DSN = "".join([
     "@", "ingest.", "ezscape.space", "/9",
 ])
 
+_ORIGIN = "/".join(["edenaion", "EZ-CorridorKey"])
+
+
+def _origin_ok() -> bool:
+    try:
+        from backend.update_verify import UPDATE_ORIGIN
+        return UPDATE_ORIGIN == _ORIGIN
+    except Exception:
+        return False
+
 # Stage values: installer, updater, runtime, inference.
 # Extraction/import failures map to runtime; GPU job failures to inference.
 VALID_STAGES = frozenset({"installer", "updater", "runtime", "inference"})
@@ -260,6 +270,8 @@ def send_report(
     Uses its own client so nothing stays active afterwards. Must never
     raise: the caller's clipboard/GitHub flow proceeds regardless.
     """
+    if not _origin_ok():
+        return False
     try:
         import sentry_sdk
         from sentry_sdk.utils import event_from_exception
@@ -317,6 +329,8 @@ def init_crash_reporting() -> bool:
     global _crash_reporting_active
     if _crash_reporting_active:
         return True
+    if not _origin_ok():
+        return False
     if not getattr(sys, "frozen", False):
         return False
     if not is_crash_reporting_enabled():
