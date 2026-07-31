@@ -175,10 +175,15 @@ class MLXCorridorKeyEngine:
         res_alpha = cv2.resize(pred_alpha, (w, h), interpolation=cv2.INTER_LANCZOS4)
         res_fg = cv2.resize(pred_fg, (w, h), interpolation=cv2.INTER_LANCZOS4)
 
+        # Lanczos overshoots at sharp edges, pushing alpha outside [0, 1].
+        # Out-of-range alpha corrupts premultiply and any downstream
+        # composite, so clamp before the alpha is used.
+        np.clip(res_alpha, 0.0, 1.0, out=res_alpha)
+
         if res_alpha.ndim == 2:
             res_alpha = res_alpha[:, :, np.newaxis]
 
-        # Refiner additive guard (shell-aware, see cu.refiner_additive_guard)
+        # Refiner additive guard (reconstruction-based, see cu.refiner_additive_guard)
         res_alpha = cu.refiner_additive_guard(res_alpha, mask_linear)
 
         # Source passthrough

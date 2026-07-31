@@ -197,42 +197,160 @@ def dilate_mask(mask, radius):
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
         return cv2.dilate(mask, kernel)
 
-def refiner_additive_guard(model_alpha, hint_mask, shell_px=4):
+_GUARD_PROPAGATION_KERNEL = 9
+_GUARD_MAX_ITERS = 256
+
+
+def _geodesic_reconstruct(marker, mask, max_iters=_GUARD_MAX_ITERS):
+    """Grayscale morphological reconstruction of ``mask`` from ``marker``.
+
+    Repeats ``g = min(dilate(g), mask)`` until it stops changing. Every
+    pixel ends up at the largest value reachable from the marker without
+    ever exceeding the mask along the way, so a region cut off from the
+    marker by a dark gap is clamped to that gap's value.
+
+    Each pass propagates by the structuring element's radius, so a wider
+    element reaches convergence in proportionally fewer passes. The width
+    also sets how large a dark gap the fill can step over, which only ever
+    makes the guard more permissive, never less: stepping a gap can restore
+    hint detail, and it cannot create one.
+
+    ``max_iters`` bounds the work. Convergence normally arrives well inside
+    it; stopping early only under-fills structures far from the marker and
+    can never open a gap.
     """
-    Per-pixel max of model alpha and hint, except in a thin shell just
-    outside the model's solid silhouette.
+    import cv2
 
-    The plain max() guard protects guide detail the refiner erodes (hair
-    wisps), but it also burns the hint's edge over-coverage into the
-    output: alpha hints routinely extend 1-3px past the true subject edge
-    (generator slack, hint resizing), and max() resurrects that band even
-    though the model correctly rejected it. Once the garbage matte clears
-    the surrounding gunk, the band reads as a ~1px white outline around
-    the subject.
+    k = _GUARD_PROPAGATION_KERNEL
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
+    current = np.minimum(marker, mask)
+    for _ in range(int(max_iters)):
+        grown = np.minimum(cv2.dilate(current, kernel), mask)
+        if np.array_equal(grown, current):
+            break
+        current = grown
+    return current
 
-    Inside the shell (within shell_px of the solid body) the model's edge
-    is trusted as-is; beyond it the additive guard applies in full, so
-    detached hair strands and wisps stay protected.
+
+# Long edge the reconstruction is computed at. The suppression weight it
+# produces is smooth and is upsampled back, so running it on a reduced copy
+# costs a fraction of full resolution without changing which regions survive.
+_GUARD_RECONSTRUCT_LONG_EDGE = 1024
+
+# Alpha above which the model is treated as vouching for a pixel, so the hint
+# is allowed to build on it. Deliberately near zero: the refiner thins hair
+# rather than erasing it, and a trace of alpha is enough corroboration.
+_GUARD_MODEL_SUPPORT = 0.02
+
+
+def refiner_additive_guard(model_alpha, hint_mask):
+    """
+    Raise the model's alpha towards the hint, but only where the hint is
+    corroborated by the model's own prediction.
+
+    The refiner was trained to tighten rough green-screen alphas, so when it
+    is fed an already-good guide (GVM Auto, VideoMaMa, BiRefNet) it can erode
+    wispy hair the guide captured correctly. A per-pixel max with the hint
+    restores that detail: the guard may add confidence, never subtract it.
+
+    A plain max also drags in whatever the hint got wrong, so the hint's
+    contribution is first restricted to what morphological reconstruction can
+    reach. Reconstruction starts from every pixel the model itself vouches
+    for: the subject's solid body, plus anywhere the model kept even a trace
+    of alpha. Hair connected to the subject survives, and so does a fly-away
+    strand separated from it by a gap, as long as the model left some alpha
+    on the strand for the fill to start from. Spill and stray blobs that the
+    model drove to zero everywhere have nothing to start from, so they are
+    suppressed instead of being burned in.
+
+    Reconstruction replaces an earlier fixed-radius trust shell that switched
+    hard between "use the model" and "use the hint". That switch could leave a
+    dark ring, with opaque alpha on both sides, tracing the subject at a
+    constant offset once the hint over-covered the edge by more than the
+    shell's width (issue #179). Reconstruction does not switch, so it cannot
+    print that ring: anything it restores it reaches by filling through, and a
+    region it cannot reach is clamped down to the gap that blocked it rather
+    than left bright behind a dark band. The fill does step over gaps narrower
+    than its structuring element, which only restores more of the hint. Being
+    topological rather than metric, it needs no radius to tune and so no
+    resolution scaling.
+
+    The tradeoff this accepts: hint over-coverage that is contiguous with the
+    subject is no longer trimmed, so the matte sits very slightly wider than
+    the model alone would put it, in line with the hint. That is the softer of
+    the two failure modes. The shell traded it for a hard dark ring offset
+    from the edge, which is far more damaging in a composite than a marginally
+    generous edge.
 
     model_alpha: float alpha [H, W] or [H, W, 1], model prediction.
     hint_mask: float alpha hint, same spatial size.
-    shell_px: width of the trust-the-model shell around the solid body.
     """
     if hint_mask is None:
         return model_alpha
 
     import cv2
 
-    m2 = model_alpha[:, :, 0] if model_alpha.ndim == 3 else model_alpha
-    solid = (m2 > 0.5).astype(np.uint8)
-    k = 2 * int(shell_px) + 1
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
-    shell = (cv2.dilate(solid, kernel) > 0) & (solid == 0)
-    if model_alpha.ndim == 3:
-        shell = shell[:, :, np.newaxis]
+    is_3d = model_alpha.ndim == 3
+    m2 = model_alpha[:, :, 0] if is_3d else model_alpha
+    h2 = hint_mask[:, :, 0] if hint_mask.ndim == 3 else hint_mask
+    m2 = np.ascontiguousarray(m2, dtype=np.float32)
+    h2 = np.ascontiguousarray(h2, dtype=np.float32)
 
-    guarded = np.maximum(model_alpha, hint_mask)
-    return np.where(shell, model_alpha, guarded)
+    # Everything the guard is allowed to reach, and the seeds it starts from:
+    # every pixel the model itself vouched for, however faintly. A fly-away
+    # strand the model kept a trace of seeds its own fill even with no path
+    # back to the body; spill the model zeroed out seeds nothing.
+    ceiling = np.maximum(m2, h2)
+    supported = m2 > _GUARD_MODEL_SUPPORT
+    if not supported.any():
+        # The model found no foreground at all, so there is nothing to
+        # corroborate the hint. Trust the model.
+        return model_alpha
+
+    h, w = m2.shape[:2]
+    long_edge = max(h, w)
+    if long_edge > _GUARD_RECONSTRUCT_LONG_EDGE:
+        scale = _GUARD_RECONSTRUCT_LONG_EDGE / float(long_edge)
+        small = (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+        ceiling_s = cv2.resize(ceiling, small, interpolation=cv2.INTER_AREA)
+        # Grow the seeds by the sampling step before dropping resolution, so a
+        # one pixel strand still lands on a seed. Averaging would dilute it
+        # away and lose the very detail the guard exists to protect.
+        step = max(1, int(np.ceil(1.0 / scale)))
+        grown = cv2.dilate(supported.astype(np.uint8),
+                           cv2.getStructuringElement(cv2.MORPH_RECT,
+                                                     (2 * step + 1, 2 * step + 1)))
+        supported_s = cv2.resize(grown, small,
+                                 interpolation=cv2.INTER_NEAREST) > 0
+    else:
+        ceiling_s, supported_s = ceiling, supported
+
+    marker_s = np.where(supported_s, ceiling_s, 0.0).astype(np.float32)
+    reachable_s = _geodesic_reconstruct(marker_s, ceiling_s)
+
+    # Fraction of the hint's proposal that survived, as a smooth 0-1 weight.
+    weight_s = np.divide(reachable_s, np.maximum(ceiling_s, 1e-6),
+                         dtype=np.float32)
+    np.clip(weight_s, 0.0, 1.0, out=weight_s)
+
+    if weight_s.shape != m2.shape:
+        # Widen the weight by one reduced-resolution pixel before upsampling.
+        # Bilinear interpolation otherwise samples a hair-width structure
+        # according to where it happens to fall between samples, which makes
+        # how much of a strand is restored depend on sub-pixel phase and
+        # shimmer as the subject moves. Widening only ever admits more of the
+        # hint, so it cannot reintroduce a gap.
+        weight_s = cv2.dilate(weight_s,
+                              cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+        weight = cv2.resize(weight_s, (w, h), interpolation=cv2.INTER_LINEAR)
+    else:
+        weight = weight_s
+
+    # Additive by construction: the guard can only ever raise alpha.
+    boost = np.maximum(h2 - m2, 0.0) * weight
+    if is_3d:
+        boost = boost[:, :, np.newaxis]
+    return np.clip(model_alpha + boost, 0.0, 1.0)
 
 def apply_garbage_matte(predicted_matte, hint_mask, dilation_px, feather_px=3,
                         hint_threshold=0.1):

@@ -548,22 +548,26 @@ class CorridorKeyEngine:
         res_fg = pred_fg[0].permute(1, 2, 0).float().cpu().numpy()
         res_alpha = cv2.resize(res_alpha, (w, h), interpolation=cv2.INTER_LANCZOS4)
         res_fg = cv2.resize(res_fg, (w, h), interpolation=cv2.INTER_LANCZOS4)
-        
+
+        # Lanczos overshoots at sharp edges, pushing alpha outside [0, 1].
+        # Out-of-range alpha corrupts premultiply and any downstream
+        # composite, so clamp before the alpha is used.
+        np.clip(res_alpha, 0.0, 1.0, out=res_alpha)
+
         if res_alpha.ndim == 2: res_alpha = res_alpha[:, :, np.newaxis]
 
         # --- REFINER ADDITIVE GUARD ---
         # CorridorKey's refiner was trained to tighten rough green-screen
         # alphas, so when it is fed an already-good input mask (e.g. from
         # GVM Auto or VideoMaMa), it can erode wispy hair strands the guide
-        # had captured correctly. Take the per-pixel maximum between the
-        # refiner output and the original input guide: the refiner may
-        # *add* confidence (extend into areas the guide missed) but may
-        # never *subtract* confidence the guide already had. mask_linear is
-        # already at full (h, w) resolution and in [0, 1] float space, so
-        # no resize or normalization is needed here.
-        # The guard skips a thin shell around the solid silhouette so the
-        # hint's edge over-coverage is not burned in as a 1px outline
-        # around the subject (see refiner_additive_guard).
+        # had captured correctly. The guard raises the refiner's alpha back
+        # towards the guide: it may *add* confidence but never *subtract*
+        # it. mask_linear is already at full (h, w) resolution and in
+        # [0, 1] float space, so no resize or normalization is needed here.
+        # The guide only counts where the model itself vouched for a pixel
+        # or where it connects to something the model vouched for, so spill
+        # and stray blobs the model rejected stay rejected
+        # (see refiner_additive_guard).
         res_alpha = cu.refiner_additive_guard(res_alpha, mask_linear)
 
         # --- SOURCE PASSTHROUGH ---
