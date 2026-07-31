@@ -6,6 +6,15 @@ All notable changes to EZ-CorridorKey are documented here.
 
 ---
 
+## [2.1.5] - 2026-07-31 - Clean matte edges on high-resolution footage
+
+### Fixed
+
+- **AI alpha mattes no longer trace a dark band around the subject on high-resolution footage.** The edge refiner kept the model's alpha inside a fixed-width shell around the silhouette and used the alpha hint everywhere outside it. Hint generators run at a fixed working resolution, so on 4K and other high-resolution footage the hint overshot the true edge past that shell, leaving a thin dark band of opaque alpha tracing the subject that no despill, despeckle, or refiner setting could remove. The refiner now grows the hint's contribution outward only where the model itself found the subject, so the band is gone at every resolution while fine detail like fly-away hair strands stays protected. ([#179](https://github.com/edenaion/EZ-CorridorKey/issues/179))
+- **Alpha values are clamped to the valid range after upscaling.** The upscale filter can overshoot at sharp edges, pushing alpha slightly outside the 0 to 1 range, which corrupts premultiplied output. Alpha is now clamped after upscaling in both engines.
+
+---
+
 ## [2.1.4] - 2026-07-11 - Reliable video imports, verified FFmpeg builds, optional error reporting
 
 > 2.1.4 ships as a Windows in-app auto-update. No new full installer this release; existing Windows apps update in place.
