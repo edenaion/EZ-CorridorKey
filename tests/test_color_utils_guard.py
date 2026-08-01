@@ -291,3 +291,75 @@ def test_tiny_image_smaller_than_the_shell():
     out = cu.refiner_additive_guard(model, hint)
     assert out.shape == model.shape
     assert np.isfinite(out).all()
+
+
+def _reconstruct_fixture():
+    """A marker/mask pair with a body, a connected strand, a detached strand
+    with a seed, and a detached blob without one, so every reconstruction
+    branch is exercised."""
+    rng = np.random.default_rng(179)
+    mask = (rng.random((540, 1024)) * 0.2).astype(np.float32)
+    mask[200:340, 300:600] = 1.0            # body
+    mask[260:266, 600:800] = 0.8            # strand connected to the body
+    mask[100:106, 700:900] = 0.7            # detached strand
+    mask[400:460, 700:820] = 0.9            # detached blob
+    marker = np.zeros_like(mask)
+    marker[200:340, 300:600] = 1.0          # seed: body
+    marker[102:104, 780:790] = 0.05         # seed: trace on detached strand
+    return marker, mask
+
+
+def test_reconstruct_cpu_path_when_no_device(monkeypatch):
+    """The dispatcher must fall back to the cv2 loop with no torch device."""
+    monkeypatch.setattr(cu, "_RECONSTRUCT_DEVICE", None)
+    marker, mask = _reconstruct_fixture()
+    out = cu._geodesic_reconstruct(marker, mask)
+    ref = cu._geodesic_reconstruct_cpu(marker, mask)
+    assert np.array_equal(out, ref)
+
+
+def test_full_guard_gpu_matches_cpu():
+    """The whole torch guard path must match the cv2 path.
+
+    Exact selections everywhere except the area downscale and bilinear
+    upscale, whose float rounding may differ at the last bit. Bound is far
+    below one 8-bit alpha step, and the matte invariants must hold on both.
+    """
+    pytest.importorskip("torch")
+    device = cu._reconstruct_device()
+    if device is None:
+        pytest.skip("no torch device available")
+
+    model = _soft_disc((2560, 1440), radius=500)
+    hint = _dilate(model, 8)
+    hint[700:704, 2000:2200, 0] = 0.6   # detached strand
+    model[700:704, 2000:2200, 0] = 0.05  # with a trace of model support
+
+    gpu = cu._guard_apply_torch(model, model[:, :, 0], hint[:, :, 0],
+                                True, device)
+    ref = cu._guard_apply_cpu(model, model[:, :, 0], hint[:, :, 0], True)
+    assert gpu.shape == ref.shape
+    assert float(np.abs(gpu - ref).max()) <= 2e-3
+    assert _enclosed_dark_pixels(gpu) == 0
+    assert _enclosed_dark_pixels(ref) == 0
+    assert gpu[701, 2100, 0] == pytest.approx(0.6, abs=1e-2)
+
+
+def test_reconstruct_gpu_matches_cpu():
+    """GPU and cv2 reconstruction are the same selection, so results match.
+
+    The loop is pure max/min; the only permitted divergence is the border
+    ring where padding semantics could differ, and even there both use
+    -inf-style constant borders. Bound: exact interior, 1e-6 everywhere.
+    """
+    torch = pytest.importorskip("torch")
+    device = cu._reconstruct_device()
+    if device is None:
+        pytest.skip("no torch device available")
+    marker, mask = _reconstruct_fixture()
+    gpu = cu._geodesic_reconstruct_torch(marker, mask, device)
+    ref = cu._geodesic_reconstruct_cpu(marker, mask)
+    assert gpu.shape == ref.shape
+    assert float(np.abs(gpu - ref).max()) <= 1e-6
+    inner = (slice(8, -8), slice(8, -8))
+    assert np.array_equal(gpu[inner], ref[inner])

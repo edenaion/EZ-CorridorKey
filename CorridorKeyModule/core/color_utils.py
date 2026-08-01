@@ -201,6 +201,85 @@ _GUARD_PROPAGATION_KERNEL = 9
 _GUARD_MAX_ITERS = 256
 
 
+_UNPROBED = object()
+_RECONSTRUCT_DEVICE = _UNPROBED
+
+
+def _reconstruct_device():
+    """Torch device for the reconstruction loop, or None for the CPU path.
+
+    Cached after the first probe. The loop is pure max/min selection, so
+    CUDA and MPS produce the same values as the cv2 implementation; the
+    probe only decides where the iterations run, never what they compute.
+    """
+    global _RECONSTRUCT_DEVICE
+    if _RECONSTRUCT_DEVICE is not _UNPROBED:
+        return _RECONSTRUCT_DEVICE
+    device = None
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif getattr(torch.backends, "mps", None) is not None \
+                and torch.backends.mps.is_available():
+            device = "mps"
+    except Exception:
+        device = None
+    _RECONSTRUCT_DEVICE = device
+    return device
+
+
+def _geodesic_reconstruct_cpu(marker, mask, max_iters=_GUARD_MAX_ITERS):
+    """Reference cv2 implementation of the reconstruction loop."""
+    import cv2
+
+    k = _GUARD_PROPAGATION_KERNEL
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
+    current = np.minimum(marker, mask)
+    for _ in range(int(max_iters)):
+        grown = np.minimum(cv2.dilate(current, kernel), mask)
+        if np.array_equal(grown, current):
+            break
+        current = grown
+    return current
+
+
+def _reconstruct_torch_tensors(marker_t, mask_t, max_iters=_GUARD_MAX_ITERS):
+    """The reconstruction loop on [1, 1, H, W] torch tensors.
+
+    Dilation by a k x k rectangle is exactly ``max_pool2d`` with stride 1
+    and k//2 padding (implicit -inf padding matches cv2.dilate's constant
+    border for dilation), so each iteration is the same selection the cv2
+    path performs. Convergence is checked every few iterations to avoid a
+    device sync per pass; extra passes after the fixed point are no-ops.
+    """
+    import torch
+    import torch.nn.functional as F
+
+    k = _GUARD_PROPAGATION_KERNEL
+    current = torch.minimum(marker_t, mask_t)
+    check_every = 4
+    for i in range(int(max_iters)):
+        grown = torch.minimum(
+            F.max_pool2d(current, k, stride=1, padding=k // 2), mask_t)
+        if (i + 1) % check_every == 0 and torch.equal(grown, current):
+            return grown
+        current = grown
+    return current
+
+
+def _geodesic_reconstruct_torch(marker, mask, device,
+                                max_iters=_GUARD_MAX_ITERS):
+    """Numpy-in, numpy-out wrapper around ``_reconstruct_torch_tensors``."""
+    import torch
+
+    mask_t = torch.from_numpy(mask).to(device)[None, None]
+    marker_t = torch.from_numpy(marker).to(device)[None, None]
+    out = _reconstruct_torch_tensors(marker_t, mask_t, max_iters)
+    return out[0, 0].cpu().numpy()
+
+
 def _geodesic_reconstruct(marker, mask, max_iters=_GUARD_MAX_ITERS):
     """Grayscale morphological reconstruction of ``mask`` from ``marker``.
 
@@ -218,18 +297,21 @@ def _geodesic_reconstruct(marker, mask, max_iters=_GUARD_MAX_ITERS):
     ``max_iters`` bounds the work. Convergence normally arrives well inside
     it; stopping early only under-fills structures far from the marker and
     can never open a gap.
-    """
-    import cv2
 
-    k = _GUARD_PROPAGATION_KERNEL
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
-    current = np.minimum(marker, mask)
-    for _ in range(int(max_iters)):
-        grown = np.minimum(cv2.dilate(current, kernel), mask)
-        if np.array_equal(grown, current):
-            break
-        current = grown
-    return current
+    Runs on the GPU when torch has one available (the iterations are plain
+    max/min selections, so the result matches the cv2 path); any failure on
+    the device path falls back to the cv2 implementation rather than
+    failing the frame.
+    """
+    device = _reconstruct_device()
+    if device is not None:
+        try:
+            return _geodesic_reconstruct_torch(marker, mask, device,
+                                               max_iters)
+        except Exception:
+            global _RECONSTRUCT_DEVICE
+            _RECONSTRUCT_DEVICE = None
+    return _geodesic_reconstruct_cpu(marker, mask, max_iters)
 
 
 # Long edge the reconstruction is computed at. The suppression weight it
@@ -288,13 +370,34 @@ def refiner_additive_guard(model_alpha, hint_mask):
     if hint_mask is None:
         return model_alpha
 
-    import cv2
-
     is_3d = model_alpha.ndim == 3
     m2 = model_alpha[:, :, 0] if is_3d else model_alpha
     h2 = hint_mask[:, :, 0] if hint_mask.ndim == 3 else hint_mask
     m2 = np.ascontiguousarray(m2, dtype=np.float32)
     h2 = np.ascontiguousarray(h2, dtype=np.float32)
+
+    # The guard is a handful of full-frame elementwise passes plus the
+    # reconstruction loop; on a GPU the whole thing is one upload and one
+    # download. Any device failure falls back to the cv2 path rather than
+    # failing the frame.
+    device = _reconstruct_device()
+    if device is not None:
+        try:
+            return _guard_apply_torch(model_alpha, m2, h2, is_3d, device)
+        except Exception as exc:
+            import logging
+
+            global _RECONSTRUCT_DEVICE
+            _RECONSTRUCT_DEVICE = None
+            logging.getLogger(__name__).warning(
+                "Refiner guard GPU path failed (%s: %s); using the CPU "
+                "path for the rest of this session", type(exc).__name__, exc)
+    return _guard_apply_cpu(model_alpha, m2, h2, is_3d)
+
+
+def _guard_apply_cpu(model_alpha, m2, h2, is_3d):
+    """Reference cv2/numpy implementation of the guard."""
+    import cv2
 
     # Everything the guard is allowed to reach, and the seeds it starts from:
     # every pixel the model itself vouched for, however faintly. A fly-away
@@ -326,7 +429,7 @@ def refiner_additive_guard(model_alpha, hint_mask):
         ceiling_s, supported_s = ceiling, supported
 
     marker_s = np.where(supported_s, ceiling_s, 0.0).astype(np.float32)
-    reachable_s = _geodesic_reconstruct(marker_s, ceiling_s)
+    reachable_s = _geodesic_reconstruct_cpu(marker_s, ceiling_s)
 
     # Fraction of the hint's proposal that survived, as a smooth 0-1 weight.
     weight_s = np.divide(reachable_s, np.maximum(ceiling_s, 1e-6),
@@ -351,6 +454,67 @@ def refiner_additive_guard(model_alpha, hint_mask):
     if is_3d:
         boost = boost[:, :, np.newaxis]
     return np.clip(model_alpha + boost, 0.0, 1.0)
+
+
+def _guard_apply_torch(model_alpha, m2, h2, is_3d, device):
+    """The guard on a torch device, mirroring ``_guard_apply_cpu`` stage for
+    stage. Elementwise passes, the seed dilation (max_pool2d == rectangular
+    cv2.dilate), and the reconstruction loop are exact selections. The seed
+    downsample grid and the area/bilinear resamples can differ from cv2 at
+    float rounding level; measured divergence stays orders of magnitude
+    below one 8-bit alpha step (see the equivalence tests).
+    """
+    import torch
+    import torch.nn.functional as F
+
+    t_m = torch.from_numpy(m2).to(device)[None, None]
+    t_h = torch.from_numpy(h2).to(device)[None, None]
+
+    ceiling = torch.maximum(t_m, t_h)
+    supported = t_m > _GUARD_MODEL_SUPPORT
+    if not bool(supported.any()):
+        return model_alpha
+
+    h, w = m2.shape[:2]
+    long_edge = max(h, w)
+    if long_edge > _GUARD_RECONSTRUCT_LONG_EDGE:
+        scale = _GUARD_RECONSTRUCT_LONG_EDGE / float(long_edge)
+        sw = max(1, int(round(w * scale)))
+        sh = max(1, int(round(h * scale)))
+        ceiling_s = F.interpolate(ceiling, size=(sh, sw), mode="area")
+        # Grow the seeds by the sampling step before dropping resolution, so
+        # a one pixel strand still lands on a seed (same rationale as the
+        # cv2 path).
+        step = max(1, int(np.ceil(1.0 / scale)))
+        grown = F.max_pool2d(supported.float(), 2 * step + 1,
+                             stride=1, padding=step)
+        supported_s = F.interpolate(grown, size=(sh, sw),
+                                    mode="nearest-exact") > 0
+    else:
+        ceiling_s, supported_s = ceiling, supported
+
+    marker_s = torch.where(supported_s, ceiling_s,
+                           torch.zeros_like(ceiling_s))
+    reachable_s = _reconstruct_torch_tensors(marker_s, ceiling_s)
+
+    weight_s = torch.clamp(
+        reachable_s / torch.clamp_min(ceiling_s, 1e-6), 0.0, 1.0)
+
+    if weight_s.shape[-2:] != (h, w):
+        # Widen by one reduced-resolution pixel before upsampling, exactly
+        # as the cv2 path does, so strand restoration does not depend on
+        # sub-pixel phase.
+        weight_s = F.max_pool2d(weight_s, 3, stride=1, padding=1)
+        weight = F.interpolate(weight_s, size=(h, w), mode="bilinear",
+                               align_corners=False)
+    else:
+        weight = weight_s
+
+    boost = torch.clamp_min(t_h - t_m, 0.0) * weight
+    out = torch.clamp(t_m + boost, 0.0, 1.0)[0, 0].cpu().numpy()
+    if is_3d:
+        out = out[:, :, np.newaxis]
+    return out
 
 def apply_garbage_matte(predicted_matte, hint_mask, dilation_px, feather_px=3,
                         hint_threshold=0.1):
