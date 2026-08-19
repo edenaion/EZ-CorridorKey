@@ -42,7 +42,7 @@
 
 ☼ [योगदान और सपोर्ट](#यगदन-और-सपरट) - कैसे मदद करें और मदद लें
 
-[![स्टार हिस्ट्री चार्ट](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![स्टार हिस्ट्री चार्ट](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | क्षमता                | CLI (Upstream)              | GUI (यह प्रोजेक्ट)                                  |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

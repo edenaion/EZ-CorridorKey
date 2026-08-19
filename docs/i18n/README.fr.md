@@ -42,7 +42,7 @@ Cette interface remplace le flux CLI par glisser-déposer par une application de
 
 ☼ [Contribution](#contribution--support) - Aider et obtenir de l'aide
 
-[![Graphique de l'historique des étoiles](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Graphique de l'historique des étoiles](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Fonctionnalité      | CLI (amont)                 | GUI (ce projet)                                      |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

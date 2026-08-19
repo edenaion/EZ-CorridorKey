@@ -42,7 +42,7 @@
 
 ☼ [貢献](#貢献とサポート) - 支援とヘルプの方法
 
-[![スター履歴グラフ](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![スター履歴グラフ](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | 機能                | CLI (upstream)             | GUI (このプロジェクト)                              |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

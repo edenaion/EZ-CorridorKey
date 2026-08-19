@@ -42,7 +42,7 @@ Diese GUI ersetzt den CLI-Drag-and-drop-Workflow durch eine vollständige Deskto
 
 ☼ [Mitwirken](#mitwirken--support) - Helfen und Hilfe erhalten
 
-[![Sternhistorie](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Sternhistorie](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Funktion            | CLI (Upstream)              | GUI (dieses Projekt)                                 |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

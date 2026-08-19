@@ -42,7 +42,7 @@ GUI này thay thế quy trình CLI kéo-thả bằng một ứng dụng desktop 
 
 ☼ [Đóng góp & hỗ trợ](#đóng-góp--hỗ-trợ) - Cách giúp đỡ và nhận trợ giúp
 
-[![Biểu đồ lịch sử sao](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Biểu đồ lịch sử sao](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Khả năng          | CLI (Upstream)              | GUI (Dự án này)                                   |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

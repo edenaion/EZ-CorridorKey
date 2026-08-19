@@ -42,7 +42,7 @@ Bu GUI, CLI drag-and-drop iş akışını tam bir masaüstü uygulamasıyla değ
 
 ☼ [Katkı ve destek](#katkı-ve-destek) - nasıl yardım edilir ve destek alınır
 
-[![Yıldız geçmişi grafiği](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Yıldız geçmişi grafiği](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Yetenek             | CLI (upstream)             | GUI (bu proje)                                      |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

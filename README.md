@@ -33,7 +33,7 @@ Official site, install guide, and downloads: **[ezcorridorkey.com](https://ezcor
 - [Localization](#localization) — Translate EZ-CorridorKey into your language
 - [Contributing](#contributing--support) — How to help and get help
 
-[![Star History Chart](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Capability          | CLI (Upstream)              | GUI (This Project)                                   |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

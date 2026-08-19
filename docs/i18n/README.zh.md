@@ -42,7 +42,7 @@
 
 ☼ [贡献与支持](#贡献与支持)：如何帮助和获取支持
 
-[![星标历史图](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![星标历史图](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | 能力                | CLI (上游)                  | GUI (本项目)                                         |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

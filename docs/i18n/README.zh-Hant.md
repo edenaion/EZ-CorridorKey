@@ -32,7 +32,7 @@
 - [在地化](#在地化) — 將 EZ-CorridorKey 翻譯為您的語言
 - [貢獻與支援](#貢獻與支援) — 如何協助及獲得支援
 
-[![星標歷史圖表](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![星標歷史圖表](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | 功能                | CLI（上游）                  | GUI（本專案）                                           |
 | ------------------- | ---------------------------- | ------------------------------------------------------- |

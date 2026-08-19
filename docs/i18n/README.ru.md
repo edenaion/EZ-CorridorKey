@@ -42,7 +42,7 @@
 
 ☼ [Участие и поддержка](#участие-и-поддержка): как помочь и получить помощь
 
-[![График истории звезд](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![График истории звезд](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Возможность         | CLI (апстрим)              | GUI (этот проект)                                   |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

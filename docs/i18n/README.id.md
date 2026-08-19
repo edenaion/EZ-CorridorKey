@@ -42,7 +42,7 @@ GUI ini menggantikan alur kerja CLI drag-and-drop dengan aplikasi desktop lengka
 
 ☼ [Kontribusi](#kontribusi--dukungan) - Cara membantu dan mendapatkan bantuan
 
-[![Grafik riwayat bintang](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Grafik riwayat bintang](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Kemampuan          | CLI (Upstream)              | GUI (Proyek ini)                                      |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

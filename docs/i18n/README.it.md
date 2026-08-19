@@ -42,7 +42,7 @@ Questa GUI sostituisce il flusso CLI drag-and-drop con un'applicazione desktop c
 
 ☼ [Contribuire](#contribuire-e-supporto) - Come aiutare e ricevere supporto
 
-[![Grafico storico delle stelle](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Grafico storico delle stelle](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Funzionalità        | CLI (upstream)              | GUI (questo progetto)                                |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

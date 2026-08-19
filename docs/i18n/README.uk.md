@@ -42,7 +42,7 @@
 
 ☼ [Участь у проекті](#участь-у-проекті--підтримка) — Як допомогти та отримати допомогу
 
-[![Графік зростання зірок](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Графік зростання зірок](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Функція                | CLI (оригінал)              | GUI (цей проект)                                     |
 | ---------------------- | --------------------------- | ---------------------------------------------------- |

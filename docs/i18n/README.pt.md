@@ -42,7 +42,7 @@ Esta GUI substitui o fluxo CLI de arrastar e soltar por um aplicativo desktop co
 
 ☼ [Contribuição](#contribuição-e-suporte) - Como ajudar e obter ajuda
 
-[![Gráfico histórico de estrelas](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Gráfico histórico de estrelas](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Capacidade          | CLI (upstream)             | GUI (este projeto)                                  |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

@@ -42,7 +42,7 @@ To GUI zastępuje workflow CLI drag-and-drop kompletną aplikacją desktopową, 
 
 ☼ [Współtworzenie](#współtworzenie-i-wsparcie) - jak pomóc i gdzie dostać pomoc
 
-[![Wykres historii gwiazdek](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![Wykres historii gwiazdek](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | Możliwość           | CLI (upstream)             | GUI (ten projekt)                                  |
 | ------------------- | --------------------------- | ---------------------------------------------------- |

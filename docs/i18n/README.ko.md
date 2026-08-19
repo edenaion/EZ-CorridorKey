@@ -42,7 +42,7 @@
 
 ☼ [기여 및 지원](#기여-및-지원): 돕는 방법과 도움받는 방법
 
-[![스타 기록 차트](https://api.star-history.com/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.com/#edenaion/EZ-CorridorKey&Date)
+[![스타 기록 차트](https://star-history.dera.page/svg?repos=edenaion/EZ-CorridorKey&type=Date)](https://star-history.dera.page/#edenaion/EZ-CorridorKey&Date)
 
 | 기능                | CLI (업스트림)             | GUI (이 프로젝트)                                    |
 | ------------------- | --------------------------- | ---------------------------------------------------- |
